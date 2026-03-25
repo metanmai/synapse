@@ -173,6 +173,7 @@ server.tool(
       project,
       path,
       content: encrypted,
+      source: "claude",
       tags: tags || [],
     });
     return { content: [{ type: "text", text: `Wrote ${path} (${content.length} chars, encrypted)` }] };
