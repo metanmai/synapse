@@ -74,6 +74,8 @@ Response:
 - Batch support for backfilling (accepts array of texts).
 - Model loaded once at startup, held in memory.
 - Secured with a shared API key.
+- Error response: `{ "error": "message" }` with appropriate HTTP status (400 for bad input, 500 for model errors).
+- Health check: `GET /health` returns `{ "status": "ok", "model": "nomic-embed-text-v1.5" }`. Verifies model is loaded. Used by Railway for health monitoring.
 
 **Files**:
 
@@ -95,13 +97,47 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ALTER TABLE entries ADD COLUMN embedding vector(768);
 
 CREATE INDEX entries_embedding_idx ON entries
-  USING ivfflat (embedding vector_cosine_ops) WITH (lists = 10);
+  USING hnsw (embedding vector_cosine_ops);
+
+-- RPC function for semantic search (Supabase JS client cannot use <=> operator directly)
+CREATE OR REPLACE FUNCTION match_entries(
+  query_embedding vector(768),
+  match_project_id uuid,
+  match_threshold float DEFAULT 0.3,
+  match_count int DEFAULT 10
+) RETURNS TABLE (
+  id uuid,
+  project_id uuid,
+  path text,
+  content text,
+  content_type text,
+  author_id uuid,
+  source text,
+  tags text[],
+  google_doc_id text,
+  created_at timestamptz,
+  updated_at timestamptz,
+  similarity float
+) LANGUAGE sql STABLE AS $$
+  SELECT
+    entries.id, entries.project_id, entries.path, entries.content,
+    entries.content_type, entries.author_id, entries.source, entries.tags,
+    entries.google_doc_id, entries.created_at, entries.updated_at,
+    1 - (entries.embedding <=> query_embedding) AS similarity
+  FROM entries
+  WHERE entries.project_id = match_project_id
+    AND entries.embedding IS NOT NULL
+    AND 1 - (entries.embedding <=> query_embedding) > match_threshold
+  ORDER BY entries.embedding <=> query_embedding
+  LIMIT match_count;
+$$;
 ```
 
 - 768 dimensions matches `nomic-embed-text-v1.5`.
-- `ivfflat` with 10 lists is appropriate for hundreds of entries.
+- HNSW index — better recall than ivfflat at small scale, no re-indexing needed as data grows.
 - Column is nullable — entries without embeddings work fine, they just don't appear in semantic results.
 - `embedding` is internal only — not exposed in the API `Entry` type.
+- `match_entries` RPC function is required because the Supabase JS client does not support the `<=>` operator. Called via `db.rpc('match_entries', { ... })`.
 
 ## Search Logic Changes
 
@@ -113,15 +149,12 @@ New: semantic + full-text + ILIKE in parallel, merge, deduplicate.
 ```
 1. Call Railway POST /embed { texts: [query], type: "search_query" }
 2. In parallel against Supabase:
-   a. Semantic: SELECT *, embedding <=> $vector AS distance
-      WHERE project_id = $1 AND embedding IS NOT NULL
-      ORDER BY distance LIMIT 10
-      Filter: distance < 0.7
+   a. Semantic: db.rpc('match_entries', { query_embedding, match_project_id, match_threshold: 0.3 })
    b. Full-text: existing websearch query (unchanged)
-   c. ILIKE: split query into individual words, OR match each word
-      against path and content (fixes current whole-phrase bug)
+   c. ILIKE: split query on whitespace (/\s+/), filter out words < 2 chars,
+      OR match each word against path and content
 3. Merge by entry ID — best score wins
-4. Return deduplicated, ranked results
+4. Return Entry[] sorted by score (same return type as today, backward-compatible)
 ```
 
 ### Scoring
@@ -133,9 +166,13 @@ Normalize scores to 0-1 range for merging:
 
 For entries that appear in multiple result sets, keep the highest score.
 
+### Return type
+
+`searchEntries()` continues to return `Entry[]` — sorted by score internally but no score field exposed. This is backward-compatible with both callers (REST API in `context.ts` and MCP tool in `context-retrieval.ts`).
+
 ### Graceful degradation
 
-If the embedding service is unreachable (network error, timeout), skip the semantic tier entirely. Search falls back to full-text + ILIKE — same as today but with the ILIKE word-splitting fix.
+If the embedding service is unreachable (network error, timeout > 3s), skip the semantic tier entirely. Search falls back to full-text + ILIKE — same as today but with the ILIKE word-splitting fix.
 
 ## Write Path Changes
 
@@ -147,11 +184,15 @@ After the entry is saved to Supabase:
 2. Update the entry's `embedding` column with the returned vector
 3. If the embedding call fails, log the error and continue — the entry is saved, just not embedded
 
-This is fire-and-forget from the API response perspective. The client gets the response as soon as the entry is saved. The embedding update happens after.
+This is fire-and-forget from the API response perspective. The client gets the response as soon as the entry is saved. The embedding update runs via `ctx.waitUntil(embedAndUpdate(...))` — Cloudflare Workers require `waitUntil` for background work after the response is sent, otherwise the runtime kills pending promises.
+
+### Content handling
+
+`nomic-embed-text-v1.5` has an 8192-token context window. For entries exceeding this, prepend the `path` to the content before embedding (so paths like `decisions/chose-svelte.md` always contribute semantic signal), then let the model truncate the tail. This is acceptable for v1 — most Synapse entries are well under 8K tokens.
 
 ### Environment
 
-New env var in `wrangler.jsonc`:
+New env vars in `wrangler.jsonc` and the `Env` interface in `backend/src/lib/env.ts`:
 - `EMBEDDING_SERVICE_URL` — Railway service URL
 - `EMBEDDING_SERVICE_KEY` — shared API key
 
