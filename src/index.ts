@@ -7,14 +7,14 @@ import { context } from "./api/context";
 import { projects } from "./api/projects";
 import { sync } from "./api/sync";
 import { share } from "./api/share";
-import { McpSyncAgent } from "./mcp/agent";
+import { SynapseAgent } from "./mcp/agent";
 import { runScheduledGoogleSync } from "./sync/from-google";
 
 const app = new Hono<{ Bindings: Env }>();
 
 // CORS for frontend
 app.use("*", cors({
-  origin: ["http://localhost:5173", "https://app.mcp-sync.dev"],
+  origin: ["http://localhost:5173", "https://app.synapse.dev"],
   allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization"],
   credentials: true,
@@ -28,7 +28,7 @@ app.onError((err, c) => {
   return c.json({ error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
 });
 
-app.get("/health", (c) => c.json({ status: "ok", service: "mcp-sync" }));
+app.get("/health", (c) => c.json({ status: "ok", service: "synapse" }));
 
 // Auth routes (no auth middleware)
 app.route("/auth", auth);
@@ -41,10 +41,10 @@ app.route("/api/share", share);
 app.route("/api/account", account);
 
 // Mount MCP server (Streamable HTTP transport)
-app.mount("/mcp", McpSyncAgent.serve("/mcp").fetch);
+app.mount("/mcp", SynapseAgent.serve("/mcp").fetch);
 
 // Export Durable Object class (required by Wrangler)
-export { McpSyncAgent };
+export { SynapseAgent };
 
 // Default export for Cloudflare Workers
 export default {
