@@ -27,7 +27,7 @@ if (args[0] === "login") {
     const label = labelIdx !== -1 ? args[labelIdx + 1] : "cli";
 
     if (!email || !password) {
-      console.error("Usage: synapse-mcp login --email <email> --password <password> [--label <label>]");
+      console.error("Usage: synapsesync-mcp login --email <email> --password <password> [--label <label>]");
       process.exit(1);
     }
 
@@ -53,12 +53,12 @@ if (args[0] === "login") {
         mcpServers: {
           synapse: {
             command: "npx",
-            args: ["synapse-mcp"],
+            args: ["synapsesync-mcp"],
             env: { SYNAPSE_API_KEY: data.api_key }
           }
         }
       }, null, 2));
-      console.log(`\nOr run: claude mcp add synapse npx synapse-mcp --env SYNAPSE_API_KEY=${data.api_key}`);
+      console.log(`\nOr run: claude mcp add synapse npx synapsesync-mcp --env SYNAPSE_API_KEY=${data.api_key}`);
     } catch (err) {
       console.error(`Login failed: ${err.message}`);
       process.exit(1);
@@ -75,7 +75,7 @@ if (args[0] === "signup") {
     const email = emailIdx !== -1 ? args[emailIdx + 1] : null;
 
     if (!email) {
-      console.error("Usage: synapse-mcp signup --email <email>");
+      console.error("Usage: synapsesync-mcp signup --email <email>");
       process.exit(1);
     }
 
@@ -100,7 +100,7 @@ if (args[0] === "signup") {
         mcpServers: {
           synapse: {
             command: "npx",
-            args: ["synapse-mcp"],
+            args: ["synapsesync-mcp"],
             env: { SYNAPSE_API_KEY: data.api_key }
           }
         }
@@ -116,7 +116,7 @@ if (args[0] === "signup") {
 }
 
 if (!API_KEY) {
-  console.error("SYNAPSE_API_KEY is required. Run 'npx synapse-mcp login --email <email> --password <password>' to get one.");
+  console.error("SYNAPSE_API_KEY is required. Run 'npx synapsesync-mcp login --email <email> --password <password>' to get one.");
   process.exit(1);
 }
 
