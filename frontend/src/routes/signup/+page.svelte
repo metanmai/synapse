@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
 
   let { form } = $props();
+  let loading = $state(false);
 
   // Poll for email confirmation when showing "check your email" screen
   onMount(() => {
@@ -69,7 +70,13 @@
         </div>
       </div>
 
-      <form method="POST" action="?/signup" use:enhance class="space-y-4">
+      <form method="POST" action="?/signup" use:enhance={() => {
+        loading = true;
+        return async ({ update }) => {
+          loading = false;
+          await update();
+        };
+      }} class="space-y-4">
         <input type="email" name="email" placeholder="Email" required
           value={form?.email ?? ""}
           class="w-full rounded-lg px-3 py-2.5 text-sm"
@@ -83,11 +90,11 @@
         {#if form?.error}
           <p class="text-sm" style="color: var(--color-danger);">{form.error}</p>
         {/if}
-        <button type="submit"
+        <button type="submit" disabled={loading}
           class="w-full rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
-          style="background-color: var(--color-accent); color: white;"
+          style="background-color: var(--color-accent); color: white; opacity: {loading ? 0.6 : 1};"
         >
-          Create account
+          {loading ? "Creating account..." : "Create account"}
         </button>
       </form>
 
