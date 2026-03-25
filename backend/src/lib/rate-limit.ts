@@ -1,10 +1,10 @@
-import { Context, Next } from "hono";
-import { AppError } from "./errors";
+import type { Context, Next } from "hono";
 import type { Env } from "./env";
+import { AppError } from "./errors";
 
 const requests = new Map<string, { count: number; resetAt: number }>();
 
-export function rateLimit(limit: number = 60, windowMs: number = 60000) {
+export function rateLimit(limit = 60, windowMs = 60000) {
   return async (c: Context<{ Bindings: Env }>, next: Next) => {
     const key = c.req.header("Authorization") || c.req.header("cf-connecting-ip") || "anonymous";
     const now = Date.now();
@@ -25,7 +25,7 @@ export function rateLimit(limit: number = 60, windowMs: number = 60000) {
     if (entry.count > limit) {
       const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
       c.header("Retry-After", String(retryAfter));
-      throw new AppError("Too many requests. Please try again later.", 429 as any, "RATE_LIMIT");
+      throw new AppError("Too many requests. Please try again later.", 429, "RATE_LIMIT");
     }
 
     await next();

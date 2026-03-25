@@ -1,11 +1,16 @@
 import { Hono } from "hono";
+import { createSupabaseClient } from "../db/client";
+import {
+  getActiveSubscription,
+  getSubscriptionByProviderId,
+  getSubscriptionByUserId,
+  upsertSubscription,
+} from "../db/queries";
 import { authMiddleware } from "../lib/auth";
 import { creemRequest, verifyCreemWebhook } from "../lib/creem";
-import { createSupabaseClient } from "../db/client";
-import { getSubscriptionByUserId, upsertSubscription, getSubscriptionByProviderId, getActiveSubscription } from "../db/queries";
-import { AppError } from "../lib/errors";
 import { envOr } from "../lib/env";
 import type { Env } from "../lib/env";
+import { AppError } from "../lib/errors";
 
 const billing = new Hono<{ Bindings: Env }>();
 
@@ -125,7 +130,11 @@ billing.post("/checkout", async (c) => {
   // Guard against duplicate subscriptions
   const existingSub = await getActiveSubscription(db, user.id);
   if (existingSub) {
-    throw new AppError("You already have an active subscription. Manage it from the billing portal.", 400, "VALIDATION_ERROR");
+    throw new AppError(
+      "You already have an active subscription. Manage it from the billing portal.",
+      400,
+      "VALIDATION_ERROR",
+    );
   }
 
   const result = await creemRequest<{ checkout_url: string }>(c.env, "POST", "/checkouts", {

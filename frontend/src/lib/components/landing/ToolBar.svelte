@@ -1,23 +1,23 @@
 <script>
-  import ScrollReveal from "./ScrollReveal.svelte";
+import ScrollReveal from "./ScrollReveal.svelte";
 
-  const tools = [
-    "Claude",
-    "ChatGPT",
-    "Cursor",
-    "Windsurf",
-    "GitHub Copilot",
-    "VS Code",
-    "Zed",
-    "JetBrains",
-    "Neovim",
-    "Warp",
-    "iTerm",
-    "Any MCP Client",
-  ];
+const tools = [
+  "Claude",
+  "ChatGPT",
+  "Cursor",
+  "Windsurf",
+  "GitHub Copilot",
+  "VS Code",
+  "Zed",
+  "JetBrains",
+  "Neovim",
+  "Warp",
+  "iTerm",
+  "Any MCP Client",
+];
 
-  // Duplicate for seamless infinite scroll
-  const scrollTools = [...tools, ...tools, ...tools];
+// Duplicate for seamless infinite scroll
+const scrollTools = [...tools, ...tools, ...tools];
 </script>
 
 <section class="toolbar">

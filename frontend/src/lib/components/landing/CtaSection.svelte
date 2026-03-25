@@ -1,5 +1,5 @@
 <script>
-  import ScrollReveal from "./ScrollReveal.svelte";
+import ScrollReveal from "./ScrollReveal.svelte";
 </script>
 
 <section class="cta">
