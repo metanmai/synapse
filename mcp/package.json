@@ -1,6 +1,6 @@
 {
   "name": "synapsesync-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for Synapse — shared AI context across tools and devices",
   "main": "index.js",
   "bin": {
@@ -15,6 +15,7 @@
   "type": "commonjs",
   "files": ["index.js"],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1"
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "zod": "^3.23.0"
   }
 }
