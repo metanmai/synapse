@@ -269,26 +269,33 @@
     width: 100%;
     appearance: none;
     -webkit-appearance: none;
-    padding: 0.625rem 2.5rem 0.625rem 1rem;
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px solid rgba(199, 183, 163, 0.25);
+    padding: 0.75rem 2.5rem 0.75rem 1rem;
+    background: rgba(199, 183, 163, 0.15);
+    border: 2px solid rgba(199, 183, 163, 0.4);
     border-radius: 10px;
-    font-size: 0.9375rem;
-    font-weight: 600;
+    font-size: 1rem;
+    font-weight: 700;
     font-family: inherit;
     color: var(--color-cream);
     cursor: pointer;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .tool-select:hover {
+    background: rgba(199, 183, 163, 0.25);
+    border-color: rgba(199, 183, 163, 0.6);
   }
 
   .tool-select:focus {
     outline: none;
-    border-color: rgba(199, 183, 163, 0.5);
+    border-color: var(--color-tan);
+    background: rgba(199, 183, 163, 0.25);
   }
 
   .tool-select option {
-    background: var(--color-burgundy);
+    background: #3d1018;
     color: var(--color-cream);
+    padding: 0.5rem;
   }
 
   .select-arrow {
@@ -296,8 +303,8 @@
     right: 0.875rem;
     top: 50%;
     transform: translateY(-50%);
-    font-size: 0.75rem;
-    color: var(--color-tan);
+    font-size: 0.875rem;
+    color: var(--color-cream);
     pointer-events: none;
   }
 
