@@ -6,7 +6,7 @@ const { z } = require("zod");
 
 const crypto = require("crypto");
 
-const API_URL = process.env.SYNAPSE_API_URL || "https://synapse.tanmai.workers.dev";
+const API_URL = process.env.SYNAPSE_API_URL || "https://api.synapsesync.app";
 const API_KEY = process.env.SYNAPSE_API_KEY;
 const PASSPHRASE = process.env.SYNAPSE_PASSPHRASE;
 const USER_EMAIL = process.env.SYNAPSE_USER_EMAIL;

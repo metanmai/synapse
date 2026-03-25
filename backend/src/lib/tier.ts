@@ -14,7 +14,7 @@ export function requirePro(c: Context<{ Bindings: Env }>, feature: string) {
   const tier = c.get("tier") ?? "free";
   if (tier !== "pro") {
     const price = envOr(c.env, "TIER_PRO_PRICE", "5.99");
-    const appUrl = envOr(c.env, "APP_URL", "https://app.synapse.dev");
+    const appUrl = envOr(c.env, "APP_URL", "https://synapsesync.app");
     throw new AppError(
       `${feature} requires a Pro subscription ($${price}/mo). Upgrade at ${appUrl}/account`,
       403,
