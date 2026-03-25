@@ -5,6 +5,7 @@ import { createSupabaseClient } from "../db/client";
 import { getProjectByName, upsertEntry, getEntry, listEntries, searchEntries, getRecentEntries, getAllEntries, getEntryHistory, restoreEntry, getPreferences, deleteEntry, countEntries, countUniqueConnections } from "../db/queries";
 import { logActivity } from "../db/activity-logger";
 import { NotFoundError, AppError } from "../lib/errors";
+import { envList } from "../lib/env";
 import { enforceFileLimit, enforceConnectionLimit, requirePro } from "../lib/tier";
 
 import type { Env } from "../lib/env";
@@ -20,7 +21,7 @@ context.post("/save", async (c) => {
     throw new AppError("project, path, and content are required", 400, "VALIDATION_ERROR");
   }
 
-  const validSources = ["human", "claude", "chatgpt", "cursor", "copilot", "windsurf", "google_docs"];
+  const validSources = envList(c.env, "VALID_SOURCES", "human,claude,chatgpt,cursor,copilot,windsurf,google_docs");
   const entrySource = validSources.includes(source) ? source : "human";
 
   const db = createSupabaseClient(c.env);

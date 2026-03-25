@@ -175,7 +175,8 @@ projects.delete("/:id/share-links/:token", async (c) => {
 projects.get("/:id/activity", async (c) => {
   const user = c.get("user");
   const projectId = c.req.param("id");
-  const limit = parseInt(c.req.query("limit") ?? "50");
+  const defaultLimit = (c.env as unknown as Record<string, string>).ACTIVITY_PAGE_LIMIT ?? "50";
+  const limit = parseInt(c.req.query("limit") ?? defaultLimit);
   const offset = parseInt(c.req.query("offset") ?? "0");
 
   const db = createSupabaseClient(c.env);
