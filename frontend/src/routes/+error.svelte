@@ -8,7 +8,7 @@
       {$page.status}
     </h1>
     <p style="color: var(--color-text-muted);">{$page.error?.message}</p>
-    <a href="/" class="inline-block mt-4 text-sm" style="color: var(--color-accent);">
+    <a href="/" class="inline-block mt-4 text-sm" style="color: var(--color-link);">
       Go home
     </a>
   </div>
