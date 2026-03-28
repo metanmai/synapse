@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { EntryListItem } from "$lib/types";
+import type { Entry, EntryListItem } from "$lib/types";
 
 let { entries, selectedPath, projectName, onSelect, onAction } = $props<{
   entries: EntryListItem[];
@@ -10,40 +10,31 @@ let { entries, selectedPath, projectName, onSelect, onAction } = $props<{
 }>();
 
 let searchQuery = $state("");
+let searchResults = $state<Entry[] | null>(null);
+let searchLoading = $state(false);
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-// Fuzzy match: all query chars must appear in order in the target
-function fuzzyMatch(query: string, target: string): { match: boolean; score: number } {
-  const q = query.toLowerCase();
-  const t = target.toLowerCase();
-  let qi = 0;
-  let score = 0;
-  let prevMatchIdx = -2;
-
-  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
-    if (t[ti] === q[qi]) {
-      score += 1;
-      // Bonus for consecutive matches
-      if (ti === prevMatchIdx + 1) score += 2;
-      // Bonus for matching after separator
-      if (ti === 0 || t[ti - 1] === "/" || t[ti - 1] === "-" || t[ti - 1] === "_" || t[ti - 1] === ".") score += 3;
-      prevMatchIdx = ti;
-      qi++;
-    }
+function onSearchInput() {
+  if (debounceTimer) clearTimeout(debounceTimer);
+  if (searchQuery.length < 2) {
+    searchResults = null;
+    return;
   }
-  return { match: qi === q.length, score };
+  searchLoading = true;
+  debounceTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(
+        `/projects/${encodeURIComponent(projectName)}/api/search?q=${encodeURIComponent(searchQuery)}`
+      );
+      if (res.ok) {
+        searchResults = await res.json();
+      }
+    } catch {
+      searchResults = [];
+    }
+    searchLoading = false;
+  }, 300);
 }
-
-let searchResults = $derived.by(() => {
-  if (searchQuery.length < 1) return null;
-  const results: { path: string; name: string; score: number }[] = [];
-  for (const entry of entries) {
-    const { match, score } = fuzzyMatch(searchQuery, entry.path);
-    if (match) {
-      results.push({ path: entry.path, name: entry.path.split("/").pop() || entry.path, score });
-    }
-  }
-  return results.sort((a, b) => b.score - a.score);
-});
 
 interface TreeNode {
   name: string;
@@ -197,21 +188,48 @@ function handleWindowClick() {
   <!-- Search bar -->
   <div class="mb-2 px-1">
     <input type="text" placeholder="Search files..." bind:value={searchQuery}
+      oninput={onSearchInput}
       class="w-full rounded-md px-2 py-1.5"
       style="font-size: 12px; border: 1px solid var(--color-border); background: var(--color-bg);
         outline: none;"
       onfocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-pink)')}
       onblur={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
     />
+    <p style="font-size: 10px; color: var(--color-text-muted); margin-top: 3px; padding: 0 2px;">
+      Semantic search — finds by meaning
+    </p>
   </div>
 
-  {#if searchResults !== null}
-    <!-- Fuzzy search results -->
+  {#if searchLoading}
+    <div class="flex items-center gap-2 px-2 py-1">
+      <div class="spinner" style="width: 12px; height: 12px; border-width: 1.5px;"></div>
+      <span style="color: var(--color-text-muted); font-size: 12px;">Searching...</span>
+    </div>
+  {:else if searchResults !== null}
+    <!-- Semantic search results -->
     {#if searchResults.length === 0}
       <p class="px-2 py-1" style="color: var(--color-text-muted); font-size: 12px;">No matches</p>
     {:else}
       {#each searchResults as result}
-        {@render fileRow(result.path, result.path, 0)}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="cursor-pointer"
+          onclick={() => onSelect(result.path)}
+          style="padding: 6px 8px; border-radius: 8px; transition: all 150ms ease;
+            {selectedPath === result.path
+              ? `background: rgba(86, 28, 36, 0.08); border-left: 3px solid var(--color-pink-dark);`
+              : `border-left: 3px solid transparent;`}"
+          onmouseenter={(e) => { if (selectedPath !== result.path) e.currentTarget.style.background = 'rgba(86, 28, 36, 0.05)'; }}
+          onmouseleave={(e) => { if (selectedPath !== result.path) e.currentTarget.style.background = ''; }}
+        >
+          <div class="truncate" style="font-size: 12px; color: {selectedPath === result.path ? 'var(--color-pink-dark)' : 'var(--color-text)'}; font-weight: {selectedPath === result.path ? '500' : '400'};">
+            {result.path}
+          </div>
+          {#if result.content}
+            <div class="truncate" style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px;">
+              {result.content.slice(0, 100)}
+            </div>
+          {/if}
+        </div>
       {/each}
     {/if}
   {:else}
