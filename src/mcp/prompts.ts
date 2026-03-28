@@ -13,7 +13,7 @@ export function registerPrompts(server: McpServer, env: Env) {
           role: "user" as const,
           content: {
             type: "text" as const,
-            text: `You have the mcp-sync context server connected. Project: "${project}".
+            text: `You have the Synapse context server connected. Project: "${project}".
 
 To load this project's context, call the \`load_project_context\` tool with project="${project}".
 
