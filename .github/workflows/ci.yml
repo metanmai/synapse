@@ -25,6 +25,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Frontend env for typecheck
+        run: cp frontend/.env.example frontend/.env
+
       - name: Lint
         run: npm run lint
 
