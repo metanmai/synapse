@@ -151,6 +151,51 @@ billing.post("/checkout", async (c) => {
   return c.json({ url: result.checkout_url });
 });
 
+// POST /api/billing/verify — verify checkout completion via Creem API (fallback for webhooks)
+billing.post("/verify", async (c) => {
+  const user = c.get("user");
+  const db = createSupabaseClient(c.env);
+
+  // Already activated?
+  const existingSub = await getActiveSubscription(db, user.id);
+  if (existingSub) {
+    return c.json({ status: "active" });
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as { checkout_id?: string };
+  if (!body.checkout_id) {
+    throw new AppError("Missing checkout_id", 400, "VALIDATION_ERROR");
+  }
+
+  // Ask Creem directly for the checkout status
+  const checkout = await creemRequest<{
+    status: string;
+    subscription?: { id: string; current_period_end_date?: string } | string;
+    customer?: { id: string } | string;
+  }>(c.env, "GET", `/checkouts?checkout_id=${encodeURIComponent(body.checkout_id)}`);
+
+  if (checkout.status !== "completed") {
+    return c.json({ status: "pending" });
+  }
+
+  const subId = typeof checkout.subscription === "string" ? checkout.subscription : checkout.subscription?.id;
+  const custId = typeof checkout.customer === "string" ? checkout.customer : checkout.customer?.id;
+  const periodEnd =
+    typeof checkout.subscription === "object" ? checkout.subscription?.current_period_end_date ?? null : null;
+
+  await upsertSubscription(db, {
+    user_id: user.id,
+    provider: "creem",
+    provider_subscription_id: subId ?? body.checkout_id,
+    provider_customer_id: custId ?? null,
+    status: "active",
+    current_period_end: periodEnd,
+    cancel_at_period_end: false,
+  });
+
+  return c.json({ status: "active" });
+});
+
 // POST /api/billing/portal
 billing.post("/portal", async (c) => {
   const user = c.get("user");
