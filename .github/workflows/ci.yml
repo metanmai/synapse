@@ -53,6 +53,15 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Check secrets are set
+        run: |
+          if [ -z "$TEST_SUPABASE_URL" ]; then echo "::error::TEST_SUPABASE_URL is not set"; exit 1; fi
+          if [ -z "$TEST_SUPABASE_SERVICE_KEY" ]; then echo "::error::TEST_SUPABASE_SERVICE_KEY is not set"; exit 1; fi
+          echo "Secrets are configured"
+        env:
+          TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+          TEST_SUPABASE_SERVICE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_KEY }}
+
       - name: E2E tests
         working-directory: mcp
         run: npx vitest run test/e2e/
