@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { detectAdapter, getAdapter } from "../../src/lib/adapters";
 import { anthropicAdapter } from "../../src/lib/adapters/anthropic";
 import { openaiAdapter } from "../../src/lib/adapters/openai";
 import { rawAdapter } from "../../src/lib/adapters/raw";
-import { getAdapter, detectAdapter } from "../../src/lib/adapters";
 import type { CanonicalMessage } from "../../src/lib/adapters/types";
 
 // ============================================================
@@ -81,17 +81,11 @@ describe("Format detection", () => {
 
   describe("individual adapter detect()", () => {
     it("anthropic detects content block arrays", () => {
-      expect(
-        anthropicAdapter.detect([
-          { role: "assistant", content: [{ type: "text", text: "Hi" }] },
-        ])
-      ).toBe(true);
+      expect(anthropicAdapter.detect([{ role: "assistant", content: [{ type: "text", text: "Hi" }] }])).toBe(true);
     });
 
     it("anthropic rejects string content", () => {
-      expect(
-        anthropicAdapter.detect([{ role: "user", content: "Hello" }])
-      ).toBe(false);
+      expect(anthropicAdapter.detect([{ role: "user", content: "Hello" }])).toBe(false);
     });
 
     it("anthropic rejects non-array input", () => {
@@ -99,23 +93,15 @@ describe("Format detection", () => {
     });
 
     it("openai detects string content", () => {
-      expect(
-        openaiAdapter.detect([{ role: "user", content: "Hello" }])
-      ).toBe(true);
+      expect(openaiAdapter.detect([{ role: "user", content: "Hello" }])).toBe(true);
     });
 
     it("openai detects null content", () => {
-      expect(
-        openaiAdapter.detect([{ role: "assistant", content: null }])
-      ).toBe(true);
+      expect(openaiAdapter.detect([{ role: "assistant", content: null }])).toBe(true);
     });
 
     it("openai rejects content block arrays", () => {
-      expect(
-        openaiAdapter.detect([
-          { role: "user", content: [{ type: "text", text: "Hi" }] },
-        ])
-      ).toBe(false);
+      expect(openaiAdapter.detect([{ role: "user", content: [{ type: "text", text: "Hi" }] }])).toBe(false);
     });
 
     it("raw adapter never auto-detects", () => {
@@ -192,8 +178,8 @@ describe("Anthropic adapter", () => {
       expect(result[0].role).toBe("assistant");
       expect(result[1].role).toBe("assistant");
       expect(result[1].toolInteraction).toBeDefined();
-      expect(result[1].toolInteraction!.name).toBe("web_search");
-      expect(result[1].toolInteraction!.input).toEqual({ query: "test" });
+      expect(result[1].toolInteraction?.name).toBe("web_search");
+      expect(result[1].toolInteraction?.input).toEqual({ query: "test" });
     });
 
     it("handles tool_result blocks", () => {
@@ -215,7 +201,7 @@ describe("Anthropic adapter", () => {
       expect(result[0].role).toBe("tool");
       expect(result[0].content).toBe("Search returned 5 results");
       expect(result[0].toolInteraction).toBeDefined();
-      expect(result[0].toolInteraction!.output).toBe("Search returned 5 results");
+      expect(result[0].toolInteraction?.output).toBe("Search returned 5 results");
     });
 
     it("handles tool_result with content block array", () => {
@@ -258,11 +244,7 @@ describe("Anthropic adapter", () => {
     });
 
     it("skips invalid entries in the array", () => {
-      const raw = [
-        null,
-        42,
-        { role: "user", content: [{ type: "text", text: "Valid" }] },
-      ];
+      const raw = [null, 42, { role: "user", content: [{ type: "text", text: "Valid" }] }];
 
       const result = anthropicAdapter.toCanonical(raw);
       expect(result).toHaveLength(1);
@@ -500,8 +482,8 @@ describe("OpenAI adapter", () => {
       expect(result).toHaveLength(2);
       expect(result[0].content).toBe("Let me search for that");
       expect(result[1].toolInteraction).toBeDefined();
-      expect(result[1].toolInteraction!.name).toBe("web_search");
-      expect(result[1].toolInteraction!.input).toEqual({ query: "vitest" });
+      expect(result[1].toolInteraction?.name).toBe("web_search");
+      expect(result[1].toolInteraction?.input).toEqual({ query: "vitest" });
     });
 
     it("handles tool_calls with null content", () => {
@@ -522,7 +504,7 @@ describe("OpenAI adapter", () => {
       const result = openaiAdapter.toCanonical(raw);
       // Only tool call message, no text message (content was null)
       expect(result).toHaveLength(1);
-      expect(result[0].toolInteraction!.name).toBe("get_weather");
+      expect(result[0].toolInteraction?.name).toBe("get_weather");
     });
 
     it("handles multiple tool_calls in one message", () => {
@@ -547,8 +529,8 @@ describe("OpenAI adapter", () => {
 
       const result = openaiAdapter.toCanonical(raw);
       expect(result).toHaveLength(2);
-      expect(result[0].toolInteraction!.name).toBe("search");
-      expect(result[1].toolInteraction!.name).toBe("read");
+      expect(result[0].toolInteraction?.name).toBe("search");
+      expect(result[1].toolInteraction?.name).toBe("read");
     });
 
     it("handles tool role messages (tool results)", () => {
@@ -565,8 +547,8 @@ describe("OpenAI adapter", () => {
       expect(result).toHaveLength(1);
       expect(result[0].role).toBe("tool");
       expect(result[0].content).toBe("Search returned 3 results");
-      expect(result[0].toolInteraction!.name).toBe("call_abc");
-      expect(result[0].toolInteraction!.output).toBe("Search returned 3 results");
+      expect(result[0].toolInteraction?.name).toBe("call_abc");
+      expect(result[0].toolInteraction?.output).toBe("Search returned 3 results");
     });
 
     it("handles invalid JSON in tool arguments gracefully", () => {
@@ -586,7 +568,7 @@ describe("OpenAI adapter", () => {
 
       const result = openaiAdapter.toCanonical(raw);
       expect(result).toHaveLength(1);
-      expect(result[0].toolInteraction!.input).toEqual({ raw: "not valid json {" });
+      expect(result[0].toolInteraction?.input).toEqual({ raw: "not valid json {" });
     });
 
     it("returns empty array for non-array input", () => {
@@ -648,7 +630,7 @@ describe("OpenAI adapter", () => {
       expect(result).toHaveLength(1);
       expect(result[0].content).toBe("Searching...");
       expect(result[0].tool_calls).toHaveLength(1);
-      expect(result[0].tool_calls![0]).toMatchObject({
+      expect(result[0].tool_calls?.[0]).toMatchObject({
         type: "function",
         function: {
           name: "search",
@@ -750,12 +732,7 @@ describe("Raw adapter", () => {
   });
 
   it("filters out invalid entries in toCanonical", () => {
-    const mixed = [
-      makeCanonical({ role: "user", content: "Valid" }),
-      { notAMessage: true },
-      null,
-      42,
-    ];
+    const mixed = [makeCanonical({ role: "user", content: "Valid" }), { notAMessage: true }, null, 42];
 
     const result = rawAdapter.toCanonical(mixed);
     expect(result).toHaveLength(1);
@@ -806,9 +783,7 @@ describe("Adapter registry", () => {
 
   it("detectAdapter prioritizes anthropic over openai for ambiguous input", () => {
     // Anthropic format — should detect anthropic first
-    const anthropicMsgs = [
-      { role: "user", content: [{ type: "text", text: "Hi" }] },
-    ];
+    const anthropicMsgs = [{ role: "user", content: [{ type: "text", text: "Hi" }] }];
     expect(detectAdapter(anthropicMsgs)).toBe("anthropic");
   });
 });
@@ -958,8 +933,8 @@ describe("Fidelity modes", () => {
       expect(result).toHaveLength(1);
       const toolBlock = result[0].content.find((b) => b.type === "tool_use");
       expect(toolBlock).toBeDefined();
-      expect(toolBlock!.name).toBe("file_read");
-      expect(toolBlock!.input).toEqual({ path: "/src/index.ts" });
+      expect(toolBlock?.name).toBe("file_read");
+      expect(toolBlock?.input).toEqual({ path: "/src/index.ts" });
     });
 
     it("OpenAI full: tool becomes tool_calls array", () => {
@@ -971,7 +946,7 @@ describe("Fidelity modes", () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].tool_calls).toHaveLength(1);
-      expect(result[0].tool_calls![0].function.name).toBe("file_read");
+      expect(result[0].tool_calls?.[0].function.name).toBe("file_read");
     });
   });
 });
@@ -1088,7 +1063,7 @@ describe("Additional edge cases", () => {
       expect(result[0].content).toBe("First thought.\nSecond thought.");
       expect(result[0].role).toBe("assistant");
       expect(result[1].toolInteraction).toBeDefined();
-      expect(result[1].toolInteraction!.name).toBe("search");
+      expect(result[1].toolInteraction?.name).toBe("search");
     });
 
     it("handles multiple tool_use blocks in one message", () => {
@@ -1107,24 +1082,22 @@ describe("Additional edge cases", () => {
       // 1 text message + 2 tool messages
       expect(result).toHaveLength(3);
       expect(result[0].content).toBe("Running both tools");
-      expect(result[1].toolInteraction!.name).toBe("search");
-      expect(result[2].toolInteraction!.name).toBe("read_file");
+      expect(result[1].toolInteraction?.name).toBe("search");
+      expect(result[2].toolInteraction?.name).toBe("read_file");
     });
 
     it("handles tool_use with no preceding text blocks", () => {
       const raw = [
         {
           role: "assistant",
-          content: [
-            { type: "tool_use", id: "t1", name: "calc", input: { x: 42 } },
-          ],
+          content: [{ type: "tool_use", id: "t1", name: "calc", input: { x: 42 } }],
         },
       ];
 
       const result = anthropicAdapter.toCanonical(raw);
       // Only the tool message, no empty text message
       expect(result).toHaveLength(1);
-      expect(result[0].toolInteraction!.name).toBe("calc");
+      expect(result[0].toolInteraction?.name).toBe("calc");
       expect(result[0].content).toBe("");
     });
   });
@@ -1182,8 +1155,8 @@ describe("Additional edge cases", () => {
 
       const result = openaiAdapter.toCanonical(raw);
       expect(result).toHaveLength(1);
-      expect(result[0].toolInteraction!.name).toBe("no_args_tool");
-      expect(result[0].toolInteraction!.input).toEqual({});
+      expect(result[0].toolInteraction?.name).toBe("no_args_tool");
+      expect(result[0].toolInteraction?.input).toEqual({});
     });
 
     it("handles assistant message with content AND multiple tool_calls", () => {
@@ -1211,8 +1184,8 @@ describe("Additional edge cases", () => {
       expect(result).toHaveLength(3);
       expect(result[0].content).toBe("I'll run two tools at once.");
       expect(result[0].role).toBe("assistant");
-      expect(result[1].toolInteraction!.name).toBe("tool_a");
-      expect(result[2].toolInteraction!.name).toBe("tool_b");
+      expect(result[1].toolInteraction?.name).toBe("tool_a");
+      expect(result[2].toolInteraction?.name).toBe("tool_b");
     });
   });
 
@@ -1333,7 +1306,7 @@ describe("Additional edge cases", () => {
       expect(result).toHaveLength(1);
       expect(result[0].tool_calls).toBeDefined();
       expect(result[0].tool_calls).toHaveLength(1);
-      expect(result[0].tool_calls![0].function.name).toBe("search");
+      expect(result[0].tool_calls?.[0].function.name).toBe("search");
     });
   });
 });
