@@ -10,7 +10,8 @@
 <div class="min-h-screen" style="background-color: var(--color-bg);">
   <header class="px-6 py-3 flex items-center justify-between"
     style="background-color: var(--color-accent);">
-    <a href="/" class="text-lg font-semibold" style="color: white;">
+    <a href="/" class="flex items-center gap-2 text-lg font-semibold" style="color: white;">
+      <img src="/logo.svg" alt="" class="w-7 h-7" />
       synapse
     </a>
     <div class="flex items-center gap-4">
