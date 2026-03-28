@@ -14,7 +14,31 @@ let loading = $state(false);
 
   <div class="glass w-full max-w-md rounded-xl" style="padding: 2rem;">
 
-    {#if data.authenticated && !data.hasCli}
+    {#if data.authenticated && data.hasCli}
+      <!-- Authenticated + CLI params but switch=1 was set — show account picker -->
+      <div class="text-center mb-6">
+        <div style="font-size: 1.5rem; color: var(--color-accent); margin-bottom: 0.5rem;">&#9670;</div>
+        <h1 class="text-xl font-semibold" style="color: var(--color-accent);">Continue to Synapse</h1>
+        <p class="text-sm mt-1" style="color: var(--color-text-muted);">Connecting from the terminal</p>
+      </div>
+
+      <a href="/cli-auth?challenge={data.challenge}&state={data.state}&port={data.port}"
+        class="btn-primary w-full cursor-pointer block text-center" style="text-decoration: none;">
+        Continue as {data.email}
+      </a>
+
+      <div class="mt-4 text-center">
+        <form method="POST" action="?/switchAccount" use:enhance>
+          <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
+          <input type="hidden" name="cli_state" value={data.state ?? ""} />
+          <input type="hidden" name="cli_port" value={data.port ?? ""} />
+          <button type="submit" class="cursor-pointer text-sm" style="color: var(--color-link);">
+            Use a different account
+          </button>
+        </form>
+      </div>
+
+    {:else if data.authenticated && !data.hasCli}
       <!-- Authenticated but no CLI params — just show success -->
       <div class="text-center">
         <div style="font-size: 2rem; color: var(--color-accent); margin-bottom: 1rem;">&#9670;</div>
