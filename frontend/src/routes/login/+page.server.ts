@@ -19,10 +19,9 @@ export const actions: Actions = {
     });
 
     if (error) {
-      // User exists via OAuth but has no password
       if (error.message.includes("Invalid login credentials")) {
         return fail(400, {
-          error: "An account with this email exists but was created with a different sign-in method (e.g. GitHub). Try signing in with that method, or use \"Forgot password\" to set a password.",
+          error: "Incorrect email or password. If you signed up with Google or GitHub, try that method instead.",
           email,
         });
       }
