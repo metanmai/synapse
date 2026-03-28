@@ -7,11 +7,13 @@ import { logActivity } from "../db/activity-logger";
 import { NotFoundError, AppError } from "../lib/errors";
 import { envList } from "../lib/env";
 import { enforceFileLimit, enforceConnectionLimit, getHistoryLimit } from "../lib/tier";
+import { idempotency } from "../lib/idempotency";
 
 import type { Env } from "../lib/env";
 
 const context = new Hono<{ Bindings: Env }>();
 context.use("*", authMiddleware);
+context.use("*", idempotency);
 
 // POST /api/context/save
 context.post("/save", async (c) => {
