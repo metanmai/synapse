@@ -193,5 +193,24 @@ export function createApi(token: string | null) {
       }
       return res.json() as Promise<{ imported: number; updated: number; skipped: number }>;
     },
+
+    // Insights
+    listInsights: (projectId: string, type?: string, limit = 20, offset = 0) =>
+      request<{ insights: import("$lib/types").InsightListItem[]; total: number }>(
+        `/api/insights?project_id=${projectId}${type ? `&type=${type}` : ""}&limit=${limit}&offset=${offset}`,
+        token,
+      ),
+    createInsight: (projectId: string, type: string, summary: string, detail?: string) =>
+      request<import("$lib/types").Insight>("/api/insights", token, {
+        method: "POST",
+        body: JSON.stringify({ project_id: projectId, type, summary, detail }),
+      }),
+    updateInsight: (insightId: string, updates: { type?: string; summary?: string; detail?: string | null }) =>
+      request<import("$lib/types").Insight>(`/api/insights/${insightId}`, token, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+      }),
+    deleteInsight: (insightId: string) =>
+      request<{ ok: true }>(`/api/insights/${insightId}`, token, { method: "DELETE" }),
   };
 }
