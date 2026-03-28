@@ -1,11 +1,8 @@
 import { fail } from "@sveltejs/kit";
-import type { Actions, PageServerLoad } from "./$types";
+import type { Actions } from "./$types";
 import { createApi } from "$lib/server/api";
 
-// shareLinks comes from parent layout — no extra fetch needed
-export const load: PageServerLoad = async () => {
-  return {};
-};
+// No load function — shareLinks and project come from parent layout
 
 export const actions: Actions = {
   addMember: async ({ request, locals }) => {
