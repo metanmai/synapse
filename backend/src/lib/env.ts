@@ -18,6 +18,8 @@ export interface Env {
   // Tier limits
   TIER_FREE_MAX_FILES?: string;       // Default: "50"
   TIER_FREE_MAX_CONNECTIONS?: string;  // Default: "3"
+  TIER_FREE_MAX_HISTORY?: string;     // Default: "3" (last 3 versions)
+  TIER_FREE_MAX_MEMBERS?: string;     // Default: "2" (share with up to 2 others)
   TIER_PRO_MAX_FILES?: string;         // Default: "500"
   TIER_PRO_MAX_CONNECTIONS?: string;   // Default: "0" (unlimited)
   TIER_PRO_PRICE?: string;             // Default: "5.99"
