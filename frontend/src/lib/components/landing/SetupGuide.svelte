@@ -2,8 +2,21 @@
   import ScrollReveal from "./ScrollReveal.svelte";
 
   let copied = $state(false);
+  let selectedTool = $state("claude-code");
 
-  const mcpConfig = `{
+  const tools = [
+    {
+      id: "claude-code",
+      name: "Claude Code",
+      method: "cli",
+      command: `claude mcp add synapse npx synapse-mcp --env SYNAPSE_API_KEY=your-key`,
+      hint: "Run this in your terminal. Done in one command.",
+    },
+    {
+      id: "cursor",
+      name: "Cursor",
+      method: "json",
+      config: `{
   "mcpServers": {
     "synapse": {
       "command": "npx",
@@ -13,12 +26,73 @@
       }
     }
   }
-}`;
+}`,
+      file: ".cursor/mcp.json",
+      hint: "Create this file in your project root.",
+    },
+    {
+      id: "windsurf",
+      name: "Windsurf",
+      method: "json",
+      config: `{
+  "mcpServers": {
+    "synapse": {
+      "command": "npx",
+      "args": ["synapse-mcp"],
+      "env": {
+        "SYNAPSE_API_KEY": "your-api-key"
+      }
+    }
+  }
+}`,
+      file: "~/.codeium/windsurf/mcp_config.json",
+      hint: "Add to your Windsurf MCP config.",
+    },
+    {
+      id: "vscode",
+      name: "VS Code",
+      method: "json",
+      config: `{
+  "mcp": {
+    "servers": {
+      "synapse": {
+        "command": "npx",
+        "args": ["synapse-mcp"],
+        "env": {
+          "SYNAPSE_API_KEY": "your-api-key"
+        }
+      }
+    }
+  }
+}`,
+      file: ".vscode/settings.json",
+      hint: "Add to your VS Code settings. Requires the MCP extension.",
+    },
+    {
+      id: "generic",
+      name: "Other MCP Client",
+      method: "json",
+      config: `{
+  "mcpServers": {
+    "synapse": {
+      "command": "npx",
+      "args": ["synapse-mcp"],
+      "env": {
+        "SYNAPSE_API_KEY": "your-api-key"
+      }
+    }
+  }
+}`,
+      file: ".mcp.json",
+      hint: "Standard MCP config. Works with any MCP-compatible tool.",
+    },
+  ];
 
-  const cliCommand = `claude mcp add synapse npx synapse-mcp --env SYNAPSE_API_KEY=your-key`;
+  const currentTool = $derived(tools.find((t) => t.id === selectedTool)!);
 
-  async function copyConfig() {
-    await navigator.clipboard.writeText(mcpConfig);
+  async function copySnippet() {
+    const text = currentTool.method === "cli" ? currentTool.command : currentTool.config;
+    await navigator.clipboard.writeText(text);
     copied = true;
     setTimeout(() => (copied = false), 2000);
   }
@@ -32,41 +106,48 @@
   <div class="setup-inner">
     <ScrollReveal>
       <h2 class="setup-headline">Set up in 30 seconds</h2>
-      <p class="setup-sub">Add Synapse to any MCP-compatible AI tool with one config file.</p>
+      <p class="setup-sub">Pick your tool, copy the config, and you're connected.</p>
     </ScrollReveal>
 
-    <div class="setup-cards">
-      <ScrollReveal delay={100} direction="up">
-        <div class="setup-card">
-          <div class="card-header">
-            <span class="card-badge">Option 1</span>
-            <h3 class="card-title">.mcp.json</h3>
+    <ScrollReveal delay={100} direction="up">
+      <div class="setup-card">
+        <div class="card-top">
+          <label for="tool-select" class="select-label">I'm using</label>
+          <div class="select-wrap">
+            <select id="tool-select" class="tool-select" bind:value={selectedTool}>
+              {#each tools as tool}
+                <option value={tool.id}>{tool.name}</option>
+              {/each}
+            </select>
+            <span class="select-arrow">&#9662;</span>
           </div>
+        </div>
+
+        {#if currentTool.method === "cli"}
           <div class="code-block">
-            <button class="copy-btn" onclick={copyConfig}>
+            <button class="copy-btn" onclick={copySnippet}>
               {copied ? "Copied!" : "Copy"}
             </button>
-            <pre><code>{mcpConfig}</code></pre>
+            <pre><code>{currentTool.command}</code></pre>
           </div>
-          <p class="card-hint">Add this to your project root. Works with Claude Code, Cursor, and any MCP client.</p>
-        </div>
-      </ScrollReveal>
+        {:else}
+          <div class="file-label">
+            <span class="file-icon">&#128196;</span>
+            <span class="file-path">{currentTool.file}</span>
+          </div>
+          <div class="code-block">
+            <button class="copy-btn" onclick={copySnippet}>
+              {copied ? "Copied!" : "Copy"}
+            </button>
+            <pre><code>{currentTool.config}</code></pre>
+          </div>
+        {/if}
 
-      <ScrollReveal delay={200} direction="up">
-        <div class="setup-card">
-          <div class="card-header">
-            <span class="card-badge">Option 2</span>
-            <h3 class="card-title">Claude Code CLI</h3>
-          </div>
-          <div class="code-block code-block-single">
-            <pre><code>{cliCommand}</code></pre>
-          </div>
-          <p class="card-hint">One command. That's it.</p>
-        </div>
-      </ScrollReveal>
-    </div>
+        <p class="card-hint">{currentTool.hint}</p>
+      </div>
+    </ScrollReveal>
 
-    <ScrollReveal delay={300}>
+    <ScrollReveal delay={200}>
       <div class="setup-steps">
         <div class="mini-step">
           <span class="mini-num">1</span>
@@ -75,7 +156,7 @@
         <div class="mini-arrow">→</div>
         <div class="mini-step">
           <span class="mini-num">2</span>
-          <span class="mini-text">Add the config above</span>
+          <span class="mini-text">Pick your tool above and paste</span>
         </div>
         <div class="mini-arrow">→</div>
         <div class="mini-step">
@@ -128,7 +209,7 @@
   .setup-inner {
     position: relative;
     z-index: 1;
-    max-width: 900px;
+    max-width: 640px;
     margin: 0 auto;
     text-align: center;
   }
@@ -147,54 +228,100 @@
     font-weight: 400;
   }
 
-  .setup-cards {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
-    margin-bottom: 3rem;
-  }
-
   .setup-card {
     background: rgba(255, 253, 248, 0.08);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(199, 183, 163, 0.15);
     border-radius: 16px;
-    padding: 1.5rem;
+    padding: 2rem;
     text-align: left;
-    transition: transform 0.3s ease, border-color 0.3s ease;
+    margin-bottom: 3rem;
+    transition: border-color 0.3s ease;
   }
 
   .setup-card:hover {
-    transform: translateY(-2px);
     border-color: rgba(199, 183, 163, 0.3);
   }
 
-  .card-header {
+  /* Tool selector */
+  .card-top {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    margin-bottom: 1rem;
+    margin-bottom: 1.5rem;
   }
 
-  .card-badge {
-    font-size: 0.6875rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--color-tan);
-    padding: 0.25rem 0.625rem;
-    background: rgba(199, 183, 163, 0.15);
-    border-radius: 9999px;
-  }
-
-  .card-title {
-    font-size: 1.125rem;
-    font-weight: 700;
+  .select-label {
+    font-size: 1rem;
+    font-weight: 600;
     color: var(--color-cream);
-    margin: 0;
+    white-space: nowrap;
   }
 
+  .select-wrap {
+    position: relative;
+    flex: 1;
+    max-width: 240px;
+  }
+
+  .tool-select {
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 0.625rem 2.5rem 0.625rem 1rem;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(199, 183, 163, 0.25);
+    border-radius: 10px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--color-cream);
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .tool-select:focus {
+    outline: none;
+    border-color: rgba(199, 183, 163, 0.5);
+  }
+
+  .tool-select option {
+    background: var(--color-burgundy);
+    color: var(--color-cream);
+  }
+
+  .select-arrow {
+    position: absolute;
+    right: 0.875rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.75rem;
+    color: var(--color-tan);
+    pointer-events: none;
+  }
+
+  /* File label */
+  .file-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .file-icon {
+    font-size: 0.875rem;
+    line-height: 1;
+  }
+
+  .file-path {
+    font-size: 0.8125rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--color-tan);
+    opacity: 0.8;
+  }
+
+  /* Code block */
   .code-block {
     position: relative;
     background: rgba(0, 0, 0, 0.3);
@@ -211,16 +338,6 @@
     line-height: 1.6;
     color: var(--color-cream);
     white-space: pre;
-  }
-
-  .code-block-single {
-    display: flex;
-    align-items: center;
-  }
-
-  .code-block-single pre {
-    font-size: 0.8125rem;
-    white-space: nowrap;
   }
 
   .copy-btn {
@@ -293,10 +410,6 @@
   }
 
   @media (max-width: 768px) {
-    .setup-cards {
-      grid-template-columns: 1fr;
-    }
-
     .setup-steps {
       flex-direction: column;
       gap: 0.5rem;
@@ -308,6 +421,15 @@
 
     .setup {
       padding: 4rem 1.5rem;
+    }
+
+    .card-top {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .select-wrap {
+      max-width: 100%;
     }
   }
 </style>
