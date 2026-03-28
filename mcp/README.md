@@ -13,23 +13,29 @@ The published package talks to the public API at **`https://api.synapsesync.app`
 
 ## Quick start
 
-### 1. Interactive setup (recommended)
+### 1. Commands & help
 
-In a terminal, from the directory where you want config files (e.g. your repo root):
-
-```bash
-npx synapsesync-mcp
-```
-
-This wizard can **sign you up**, **log you in**, or **accept an API key** you already have, then writes **`.mcp.json`** and, when detected, editor-specific snippets for Claude Code, Cursor, Windsurf, or VS Code. The wizard only runs in an interactive TTY; when your editor launches the server over stdio, it runs as a normal MCP server.
-
-Explicit wizard:
+From your project directory:
 
 ```bash
-npx synapsesync-mcp wizard
+npx synapsesync-mcp           # lists commands (interactive terminal)
+npx synapsesync-mcp --help
 ```
 
-### 2. Manual MCP config
+### 2. Interactive setup (recommended)
+
+Use **arrow keys** and **Enter** in menus (powered by [@clack/prompts](https://github.com/bombshell-dev/clack)).
+
+```bash
+npx synapsesync-mcp login     # sign in → writes .mcp.json + editor configs
+npx synapsesync-mcp signup    # new account (email) → writes configs
+npx synapsesync-mcp init      # paste an API key → writes configs
+npx synapsesync-mcp wizard    # menu: sign up, log in, or API key
+```
+
+These write **`.mcp.json`** and, when detected, editor-specific files for Claude Code, Cursor, Windsurf, or VS Code. **Editors** launch the same package **without a TTY** and **`SYNAPSE_API_KEY` set** — that starts the MCP server, not the setup UI.
+
+### 3. Manual MCP config
 
 Create or extend your MCP configuration (e.g. Cursor **`.cursor/mcp.json`**, Claude **`.mcp.json`**, or your host’s equivalent):
 
@@ -53,13 +59,12 @@ Get an API key from **[synapsesync.app](https://synapsesync.app)** → **Account
 
 | Command | Purpose |
 |--------|---------|
-| `npx synapsesync-mcp` | Interactive wizard when run in a TTY; otherwise starts the MCP server (requires `SYNAPSE_API_KEY`). |
-| `npx synapsesync-mcp wizard` | Same wizard, explicit. |
-| `npx synapsesync-mcp login --email … --password …` | Non-interactive login; prints API key / config hints. |
-| `npx synapsesync-mcp signup --email …` | Non-interactive signup where supported. |
-| `npx synapsesync-mcp init --key <api-key>` | Write MCP config files using an existing key. |
-
-Use `--help` on a command if your version supports it.
+| `npx synapsesync-mcp` | In a **TTY**: show command list. With **no TTY** + `SYNAPSE_API_KEY`: MCP server. |
+| `npx synapsesync-mcp --help` / `-h` / `help` | Show commands and usage. |
+| `login` | **Interactive**: sign in → writes configs. **Flags** `--email` / `--password`: print JSON only; then run `init --key`. |
+| `signup` | **Interactive**: new account → writes configs. **`--email`**: print JSON only; then `init --key`. |
+| `init` | **`--key`** or `SYNAPSE_API_KEY`: write configs. **Interactive** with no key: prompt for key. |
+| `wizard` | Interactive menu (signup / login / API key) → writes configs. Requires TTY. |
 
 ## Environment variables
 
