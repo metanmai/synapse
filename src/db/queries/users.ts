@@ -45,3 +45,18 @@ export async function findUserByEmail(
   if (error) throw error;
   return data as User;
 }
+
+export async function findUserBySupabaseAuthId(
+  db: SupabaseClient,
+  supabaseAuthId: string
+): Promise<User | null> {
+  const { data, error } = await db
+    .from("users")
+    .select("*")
+    .eq("supabase_auth_id", supabaseAuthId)
+    .single();
+
+  if (error && error.code === "PGRST116") return null;
+  if (error) throw error;
+  return data as User;
+}
