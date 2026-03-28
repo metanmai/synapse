@@ -1,10 +1,18 @@
+export type Tier = "free" | "pro";
+
 export interface User {
   id: string;
   email: string;
   api_key_hash: string;
+  tier: Tier;
   google_oauth_tokens: GoogleOAuthTokens | null;
   created_at: string;
 }
+
+export const TIER_LIMITS = {
+  free: { maxFiles: 50, maxConnections: 3, history: false },
+  pro: { maxFiles: 500, maxConnections: Infinity, history: true },
+} as const;
 
 export interface GoogleOAuthTokens {
   access_token: string;
