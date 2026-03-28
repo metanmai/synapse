@@ -10,7 +10,7 @@
     "start": "node index.js"
   },
   "keywords": ["mcp", "synapse", "ai", "context", "claude", "chatgpt", "cursor"],
-  "author": "tanmain",
+  "author": "tanmai",
   "license": "MIT",
   "type": "commonjs",
   "files": ["index.js"],
