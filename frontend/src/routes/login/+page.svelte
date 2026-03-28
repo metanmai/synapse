@@ -3,6 +3,7 @@
 
   let { form } = $props();
   let mode = $state<"password" | "magic">("password");
+  let loading = $state(false);
 </script>
 
 <div class="min-h-screen flex items-center justify-center" style="background-color: var(--color-bg);">
@@ -49,7 +50,13 @@
       </div>
 
       {#if mode === "password"}
-        <form method="POST" action="?/login" use:enhance class="space-y-4">
+        <form method="POST" action="?/login" use:enhance={() => {
+          loading = true;
+          return async ({ update }) => {
+            loading = false;
+            await update();
+          };
+        }} class="space-y-4">
           <input type="email" name="email" placeholder="Email" required
             value={form?.email ?? ""}
             class="w-full rounded-lg px-3 py-2.5 text-sm"
@@ -62,15 +69,21 @@
           {#if form?.error}
             <p class="text-sm" style="color: var(--color-danger);">{form.error}</p>
           {/if}
-          <button type="submit"
+          <button type="submit" disabled={loading}
             class="w-full rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
-            style="background-color: var(--color-accent); color: white;"
+            style="background-color: var(--color-accent); color: white; opacity: {loading ? 0.6 : 1};"
           >
-            Sign in
+            {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
       {:else}
-        <form method="POST" action="?/magicLink" use:enhance class="space-y-4">
+        <form method="POST" action="?/magicLink" use:enhance={() => {
+          loading = true;
+          return async ({ update }) => {
+            loading = false;
+            await update();
+          };
+        }} class="space-y-4">
           <input type="email" name="email" placeholder="Email" required
             value={form?.email ?? ""}
             class="w-full rounded-lg px-3 py-2.5 text-sm"
@@ -79,11 +92,11 @@
           {#if form?.error}
             <p class="text-sm" style="color: var(--color-danger);">{form.error}</p>
           {/if}
-          <button type="submit"
+          <button type="submit" disabled={loading}
             class="w-full rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
-            style="background-color: var(--color-accent); color: white;"
+            style="background-color: var(--color-accent); color: white; opacity: {loading ? 0.6 : 1};"
           >
-            Send magic link
+            {loading ? "Sending..." : "Send magic link"}
           </button>
         </form>
       {/if}
