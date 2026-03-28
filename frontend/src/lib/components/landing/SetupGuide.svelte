@@ -88,7 +88,7 @@
     },
   ];
 
-  const currentTool = $derived(tools.find((t) => t.id === selectedTool)!);
+  const currentTool = $derived(tools.find((t) => t.id === selectedTool) ?? tools[0]);
 
   async function copySnippet() {
     const text = currentTool.method === "cli" ? currentTool.command : currentTool.config;
