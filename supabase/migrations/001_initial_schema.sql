@@ -5,7 +5,6 @@ create extension if not exists "pgcrypto";
 create table users (
   id uuid primary key default gen_random_uuid(),
   email text unique not null,
-  api_key_hash text unique not null,
   google_oauth_tokens jsonb,
   created_at timestamptz default now() not null
 );
