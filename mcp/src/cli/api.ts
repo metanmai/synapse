@@ -48,10 +48,7 @@ export interface ExchangeResponse {
   email: string;
 }
 
-export async function cliExchangeCode(
-  code: string,
-  codeVerifier: string,
-): Promise<AuthResult<ExchangeResponse>> {
+export async function cliExchangeCode(code: string, codeVerifier: string): Promise<AuthResult<ExchangeResponse>> {
   const res = await fetch(`${API_URL}/auth/cli-exchange`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
