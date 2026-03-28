@@ -18,6 +18,7 @@
     "read": true,
     "write": true,
     "search": true,
+    "semantic_search": true,
     "versioning": true,
     "sharing": true,
     "export": true

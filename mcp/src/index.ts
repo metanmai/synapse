@@ -359,7 +359,7 @@ if (args[0] === "login") {
   // --- search: search file contents ---
   server.tool(
     "search",
-    "Search across all files by content. Like `grep -r` on a local filesystem. Returns matching files with their content.",
+    "Search across all files using semantic + full-text + keyword search. Understands meaning — e.g., 'auth flow' finds 'login and session tokens'. Returns matching files ranked by relevance.",
     {
       query: z.string().describe("Search query (searches file contents)"),
       folder: z.string().optional().describe("Limit search to a specific directory"),
