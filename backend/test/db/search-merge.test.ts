@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeSearchResults, buildIlikeWords } from "../../src/db/search-helpers";
+import { buildIlikeWords, mergeSearchResults } from "../../src/db/search-helpers";
 import type { Entry } from "../../src/db/types";
 
 const BASE_ENTRY: Entry = {
@@ -57,11 +57,7 @@ describe("mergeSearchResults", () => {
 
 describe("buildIlikeWords", () => {
   it("splits on whitespace and filters short words", () => {
-    expect(buildIlikeWords("code structure a overview")).toEqual([
-      "code",
-      "structure",
-      "overview",
-    ]);
+    expect(buildIlikeWords("code structure a overview")).toEqual(["code", "structure", "overview"]);
   });
 
   it("returns empty array for empty/whitespace input", () => {
