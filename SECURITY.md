@@ -10,7 +10,7 @@ Security updates are applied on a best-effort basis to the **default branch** (`
 
 Preferred:
 
-1. Open a **[GitHub Security Advisory (private report)](https://github.com/tanmain/synapse/security/advisories/new)** for this repository, if you have access to that feature.
+1. Open a **[GitHub Security Advisory (private report)](https://github.com/metanmai/synapse/security/advisories/new)** for this repository, if you have access to that feature.
 
 If GitHub reporting is not available:
 
