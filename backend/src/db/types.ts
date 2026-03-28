@@ -27,6 +27,7 @@ export interface GoogleOAuthTokens {
 export interface UserRow {
   id: string;
   email: string;
+  supabase_auth_id: string | null;
   google_oauth_tokens: GoogleOAuthTokens | null;
   created_at: string;
 }
