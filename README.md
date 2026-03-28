@@ -15,6 +15,7 @@ AI tools don't remember anything between sessions, and they certainly don't shar
 
 - **Captures decisions, conventions, and session summaries** from any AI tool, automatically or on demand
 - **Shares context across all your Claude, ChatGPT, and Cursor sessions** — no more re-explaining your stack, preferences, or prior decisions
+- **Semantic search** — find context by meaning, not just keywords. "auth flow" finds documents about "login and session tokens"
 - **Team collaboration** — invite members to projects, share context via links, keep everyone's AI on the same page
 - **Browse and edit context in a web UI**, or enable Google Docs bidirectional sync to manage it in your existing workflow
 
@@ -25,8 +26,9 @@ Synapse is a lightweight backend that any AI tool can talk to over HTTP or MCP. 
 | Layer | Technology |
 |---|---|
 | Backend | Cloudflare Worker — MCP server + Hono REST API |
-| Frontend | React 19 SPA (Vite + Tailwind CSS) |
-| Database | Supabase (Postgres) |
+| Frontend | SvelteKit 5 + Tailwind CSS 4 |
+| Database | Supabase (Postgres + pgvector) |
+| Search | 3-tier: semantic (nomic-embed-text-v1.5) + full-text + keyword |
 | Auth | Supabase Auth — email, magic link, Google, GitHub + API keys for AI tools |
 | Sync | Google Docs bidirectional sync |
 
