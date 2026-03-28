@@ -35,6 +35,50 @@ auth.post("/signup", async (c) => {
   }, 201);
 });
 
+// POST /auth/login — authenticate with email+password, return an API key
+auth.post("/login", async (c) => {
+  const body = await c.req.json<{ email?: string; password?: string; label?: string }>();
+
+  if (!body.email || !body.password) {
+    throw new AppError("email and password are required", 400, "VALIDATION_ERROR");
+  }
+
+  // Authenticate via Supabase Auth
+  const { createClient } = await import("@supabase/supabase-js");
+  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    email: body.email,
+    password: body.password,
+  });
+
+  if (authError || !authData.user) {
+    throw new AppError("Invalid email or password", 401, "AUTH_ERROR");
+  }
+
+  // Find the user in our users table
+  const db = createSupabaseClient(c.env);
+  const user = await findUserByEmail(db, body.email);
+  if (!user) {
+    throw new AppError("User not found. Please sign up first.", 404, "NOT_FOUND");
+  }
+
+  // Create a new API key for this login
+  const keyLabel = body.label || "cli";
+  const apiKey = crypto.randomUUID() + "-" + crypto.randomUUID();
+  const apiKeyHash = await hashApiKey(apiKey);
+  await createApiKey(db, user.id, apiKeyHash, keyLabel);
+
+  return c.json({
+    id: user.id,
+    email: user.email,
+    api_key: apiKey,
+    label: keyLabel,
+  });
+});
+
 // Google OAuth connect flow — requires auth so we know which user to link
 auth.get("/google/connect", authMiddleware, async (c) => {
   const user = c.get("user");
