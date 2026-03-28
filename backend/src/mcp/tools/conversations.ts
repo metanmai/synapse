@@ -21,10 +21,7 @@ import type { GetMcpContext } from "../agent";
 import { requireMcpUserId } from "../mcp-context";
 
 /** Helper: check if user has Plus tier with sync enabled. Returns error text or null. */
-async function requirePlusSync(
-  db: ReturnType<typeof createSupabaseClient>,
-  userId: string,
-): Promise<string | null> {
+async function requirePlusSync(db: ReturnType<typeof createSupabaseClient>, userId: string): Promise<string | null> {
   const sub = await getActiveSubscription(db, userId);
   const tier = sub ? "plus" : "free";
   const limits = await getConversationLimits(db, tier);
@@ -50,7 +47,10 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
     "Push messages to a conversation. Creates a new conversation if no conversationId is provided, otherwise appends messages to the existing one. Plus only.",
     {
       project: z.string().describe("Project name"),
-      conversationId: z.string().optional().describe("Existing conversation ID to append to. Omit to create a new conversation."),
+      conversationId: z
+        .string()
+        .optional()
+        .describe("Existing conversation ID to append to. Omit to create a new conversation."),
       title: z.string().optional().describe("Conversation title (used when creating a new conversation)"),
       systemPrompt: z.string().optional().describe("System prompt for the conversation"),
       workingContext: z
@@ -106,7 +106,11 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
           return { content: [{ type: "text" as const, text: `Conversation "${convId}" not found.` }] };
         }
         if (existing.project_id !== proj.id) {
-          return { content: [{ type: "text" as const, text: `Conversation "${convId}" does not belong to project "${project}".` }] };
+          return {
+            content: [
+              { type: "text" as const, text: `Conversation "${convId}" does not belong to project "${project}".` },
+            ],
+          };
         }
         action = "Updated";
       }
@@ -177,7 +181,12 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
       }
       if (conv.project_id !== proj.id) {
         return {
-          content: [{ type: "text" as const, text: `Conversation "${conversationId}" does not belong to project "${project}".` }],
+          content: [
+            {
+              type: "text" as const,
+              text: `Conversation "${conversationId}" does not belong to project "${project}".`,
+            },
+          ],
         };
       }
 
@@ -190,7 +199,9 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
 
       parts.push(`# Conversation: ${conv.title ?? "(untitled)"}`);
       parts.push(`**ID:** ${conv.id}`);
-      parts.push(`**Status:** ${conv.status} | **Fidelity:** ${fidelity ?? conv.fidelity_mode} | **Messages:** ${conv.message_count}`);
+      parts.push(
+        `**Status:** ${conv.status} | **Fidelity:** ${fidelity ?? conv.fidelity_mode} | **Messages:** ${conv.message_count}`,
+      );
       parts.push("");
 
       if (conv.system_prompt) {
@@ -211,7 +222,9 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
         parts.push("## Messages");
         parts.push("");
         for (const msg of messages) {
-          const agent = msg.source_agent ? ` (${msg.source_agent}${msg.source_model ? ` / ${msg.source_model}` : ""})` : "";
+          const agent = msg.source_agent
+            ? ` (${msg.source_agent}${msg.source_model ? ` / ${msg.source_model}` : ""})`
+            : "";
           parts.push(`### [${msg.sequence}] ${msg.role}${agent}`);
           if (msg.content) {
             parts.push(msg.content);
@@ -256,10 +269,7 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
     "List conversations in a project, with optional status filter. Returns titles, message counts, dates, and IDs. Plus only.",
     {
       project: z.string().describe("Project name"),
-      status: z
-        .enum(["active", "archived"])
-        .optional()
-        .describe("Filter by status (default: all non-deleted)"),
+      status: z.enum(["active", "archived"]).optional().describe("Filter by status (default: all non-deleted)"),
       limit: z.number().optional().describe("Maximum number of conversations to return (default 20)"),
     },
     async ({ project, status, limit }) => {
