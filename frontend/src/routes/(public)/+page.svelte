@@ -8,7 +8,6 @@
   import FeatureCards from "$lib/components/landing/FeatureCards.svelte";
   import SetupGuide from "$lib/components/landing/SetupGuide.svelte";
   import Comparison from "$lib/components/landing/Comparison.svelte";
-  import BuiltForBuilders from "$lib/components/landing/BuiltForBuilders.svelte";
   import Faq from "$lib/components/landing/Faq.svelte";
   import CtaSection from "$lib/components/landing/CtaSection.svelte";
   import LandingFooter from "$lib/components/landing/LandingFooter.svelte";
@@ -23,7 +22,6 @@
 <SetupGuide />
 <FeatureCards />
 <Comparison />
-<BuiltForBuilders />
 <Faq />
 <CtaSection />
 <LandingFooter />
