@@ -151,17 +151,20 @@ function handleWindowClick() {
 {#snippet fileRow(filePath: string, fileName: string, depth: number)}
   {@const isSelected = selectedPath === filePath}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="group flex items-center gap-1 rounded-md cursor-pointer"
+  <div class="group flex items-center gap-1 cursor-pointer"
     onclick={() => onSelect(filePath)}
-    style="padding: 3px 6px 3px {depth * 12 + 6}px; font-size: 11px;
+    style="padding: 6px 8px 6px {depth * 12 + 8}px; font-size: 12px;
+      border-radius: 8px; transition: all 150ms ease;
       {isSelected
-        ? `background-color: var(--color-pink-dark); color: white; font-weight: 500;`
-        : `color: var(--color-text);`}"
+        ? `background: rgba(86, 28, 36, 0.08); color: var(--color-pink-dark); font-weight: 500; border-left: 3px solid var(--color-pink-dark);`
+        : `color: var(--color-text); border-left: 3px solid transparent;`}"
+    onmouseenter={(e) => { if (!isSelected) e.currentTarget.style.background = 'rgba(86, 28, 36, 0.05)'; }}
+    onmouseleave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
   >
     <span class="flex-1 min-w-0 truncate">{fileName}</span>
     <button onclick={(e) => { e.stopPropagation(); toggleMenu(e, filePath); }}
       class="opacity-0 group-hover:opacity-100 shrink-0 px-0.5 rounded cursor-pointer"
-      style="font-size: 11px; color: {isSelected ? 'rgba(255,255,255,0.7)' : 'var(--color-text-muted)'}; line-height: 1;"
+      style="font-size: 12px; color: {isSelected ? 'var(--color-pink-dark)' : 'var(--color-text-muted)'}; line-height: 1;"
     >...</button>
   </div>
 {/snippet}
@@ -169,14 +172,16 @@ function handleWindowClick() {
 {#snippet folder(node: TreeNode, depth: number)}
   {#each Object.values(node.children).sort((a, b) => a.name.localeCompare(b.name)) as child}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="group flex items-center gap-1 rounded-md cursor-pointer"
+    <div class="group flex items-center gap-1 cursor-pointer"
       onclick={() => toggle(child.path)}
-      style="padding: 3px 6px 3px {depth * 12 + 6}px;">
-      <span class="opacity-60 shrink-0" style="font-size: 9px; color: var(--color-accent);">{expanded.has(child.path) ? "▼" : "▶"}</span>
-      <span class="flex-1 min-w-0 truncate" style="color: var(--color-accent); font-size: 11px; font-weight: 500;">{child.name}</span>
+      style="padding: 6px 8px 6px {depth * 12 + 8}px; border-radius: 8px; transition: all 150ms ease; border-left: 3px solid transparent;"
+      onmouseenter={(e) => { e.currentTarget.style.background = 'rgba(86, 28, 36, 0.05)'; }}
+      onmouseleave={(e) => { e.currentTarget.style.background = ''; }}>
+      <span class="opacity-60 shrink-0" style="font-size: 10px; color: var(--color-accent);">{expanded.has(child.path) ? "▼" : "▶"}</span>
+      <span class="flex-1 min-w-0 truncate" style="color: var(--color-accent); font-size: 12px; font-weight: 500;">{child.name}</span>
       <button onclick={(e) => { e.stopPropagation(); toggleMenu(e, child.path); }}
         class="opacity-0 group-hover:opacity-100 shrink-0 px-0.5 rounded cursor-pointer"
-        style="font-size: 11px; color: var(--color-text-muted); line-height: 1;"
+        style="font-size: 12px; color: var(--color-text-muted); line-height: 1;"
       >...</button>
     </div>
     {#if expanded.has(child.path)}
@@ -193,7 +198,7 @@ function handleWindowClick() {
   <div class="mb-2 px-1">
     <input type="text" placeholder="Search files..." bind:value={searchQuery}
       class="w-full rounded-md px-2 py-1.5"
-      style="font-size: 11px; border: 1px solid var(--color-border); background: var(--color-bg);
+      style="font-size: 12px; border: 1px solid var(--color-border); background: var(--color-bg);
         outline: none;"
       onfocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-pink)')}
       onblur={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
@@ -203,7 +208,7 @@ function handleWindowClick() {
   {#if searchResults !== null}
     <!-- Fuzzy search results -->
     {#if searchResults.length === 0}
-      <p class="px-2 py-1" style="color: var(--color-text-muted); font-size: 11px;">No matches</p>
+      <p class="px-2 py-1" style="color: var(--color-text-muted); font-size: 12px;">No matches</p>
     {:else}
       {#each searchResults as result}
         {@render fileRow(result.path, result.path, 0)}
@@ -216,7 +221,7 @@ function handleWindowClick() {
     {/each}
     {@render folder(tree, 0)}
     {#if entries.length === 0}
-      <p class="px-1" style="color: var(--color-text-muted); font-size: 11px;">No entries yet</p>
+      <p class="px-1" style="color: var(--color-text-muted); font-size: 12px;">No entries yet</p>
     {/if}
   {/if}
 </div>
