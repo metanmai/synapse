@@ -1,4 +1,4 @@
-import type { CanonicalMessage, FidelityMode, AgentAdapter } from "./types";
+import type { AgentAdapter, CanonicalMessage, FidelityMode } from "./types";
 
 // --- Anthropic API message format types ---
 
@@ -20,10 +20,7 @@ interface AnthropicToolResultBlock {
   content?: string | AnthropicContentBlock[];
 }
 
-type AnthropicContentBlock =
-  | AnthropicTextBlock
-  | AnthropicToolUseBlock
-  | AnthropicToolResultBlock;
+type AnthropicContentBlock = AnthropicTextBlock | AnthropicToolUseBlock | AnthropicToolResultBlock;
 
 interface AnthropicMessage {
   role: "user" | "assistant";
@@ -39,7 +36,7 @@ function isContentBlockArray(content: unknown): content is AnthropicContentBlock
       typeof block === "object" &&
       block !== null &&
       "type" in block &&
-      typeof (block as Record<string, unknown>).type === "string"
+      typeof (block as Record<string, unknown>).type === "string",
   );
 }
 
@@ -102,14 +99,10 @@ export const anthropicAdapter: AgentAdapter = {
       const textContent = extractTextFromBlocks(blocks);
 
       // Extract tool_use blocks
-      const toolUseBlocks = blocks.filter(
-        (b): b is AnthropicToolUseBlock => b.type === "tool_use"
-      );
+      const toolUseBlocks = blocks.filter((b): b is AnthropicToolUseBlock => b.type === "tool_use");
 
       // Extract tool_result blocks
-      const toolResultBlocks = blocks.filter(
-        (b): b is AnthropicToolResultBlock => b.type === "tool_result"
-      );
+      const toolResultBlocks = blocks.filter((b): b is AnthropicToolResultBlock => b.type === "tool_result");
 
       if (toolUseBlocks.length > 0) {
         // For messages with tool_use, create a message for each tool call
@@ -176,10 +169,7 @@ export const anthropicAdapter: AgentAdapter = {
     return messages;
   },
 
-  fromCanonical(
-    messages: CanonicalMessage[],
-    fidelity: FidelityMode
-  ): AnthropicMessage[] {
+  fromCanonical(messages: CanonicalMessage[], fidelity: FidelityMode): AnthropicMessage[] {
     const result: AnthropicMessage[] = [];
 
     for (const msg of messages) {
@@ -198,9 +188,7 @@ export const anthropicAdapter: AgentAdapter = {
             content: [
               {
                 type: "text",
-                text: msg.toolInteraction
-                  ? `[Tool Result: ${msg.toolInteraction.summary}]`
-                  : msg.content,
+                text: msg.toolInteraction ? `[Tool Result: ${msg.toolInteraction.summary}]` : msg.content,
               },
             ],
           });
@@ -220,8 +208,7 @@ export const anthropicAdapter: AgentAdapter = {
         continue;
       }
 
-      const anthropicRole: "user" | "assistant" =
-        msg.role === "user" ? "user" : "assistant";
+      const anthropicRole: "user" | "assistant" = msg.role === "user" ? "user" : "assistant";
 
       if (msg.toolInteraction && fidelity === "full") {
         // Full fidelity — reconstruct tool_use blocks

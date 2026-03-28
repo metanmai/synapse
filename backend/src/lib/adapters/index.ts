@@ -1,7 +1,7 @@
-import type { AgentAdapter } from "./types";
 import { anthropicAdapter } from "./anthropic";
 import { openaiAdapter } from "./openai";
 import { rawAdapter } from "./raw";
+import type { AgentAdapter } from "./types";
 
 export type { AgentAdapter } from "./types";
 export type { CanonicalMessage, FidelityMode, ToolInteraction, MessageSource, MediaAttachment } from "./types";
