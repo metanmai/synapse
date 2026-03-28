@@ -16,14 +16,14 @@
         </p>
       </div>
     {:else}
-      <h1 class="text-xl font-semibold mb-6">Sign in to Synapse</h1>
+      <h1 class="text-xl font-semibold mb-6" style="color: var(--color-accent);">Sign in to Synapse</h1>
 
       <div class="space-y-3 mb-6">
         <form method="POST" action="?/oauth" use:enhance>
           <input type="hidden" name="provider" value="google" />
           <button type="submit"
             class="w-full rounded-lg px-4 py-2.5 text-sm cursor-pointer"
-            style="border: 1px solid var(--color-border); background: var(--color-bg-raised);"
+            style="border: 1px solid var(--color-pink); color: var(--color-pink-dark); background: var(--color-bg-raised);"
           >
             Continue with Google
           </button>
@@ -32,7 +32,7 @@
           <input type="hidden" name="provider" value="github" />
           <button type="submit"
             class="w-full rounded-lg px-4 py-2.5 text-sm cursor-pointer"
-            style="border: 1px solid var(--color-border); background: var(--color-bg-raised);"
+            style="border: 1px solid var(--color-pink); color: var(--color-pink-dark); background: var(--color-bg-raised);"
           >
             Continue with GitHub
           </button>
