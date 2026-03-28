@@ -106,13 +106,17 @@ auth.post("/verify-email", async (c) => {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const { data: authData, error: verifyError } = await supabase.auth.verifyOtp({
-    email: body.email,
-    token: body.code,
-    type: "email",
-  });
+  // Try both OTP types — signInWithOtp sends "magiclink" tokens, but users may also have email OTP
+  let authData: { user: { id: string } | null } = { user: null };
+  for (const type of ["magiclink", "email"] as const) {
+    const result = await supabase.auth.verifyOtp({ email: body.email, token: body.code, type });
+    if (!result.error && result.data?.user) {
+      authData = result.data;
+      break;
+    }
+  }
 
-  if (verifyError || !authData.user) {
+  if (!authData.user) {
     throw new AppError("Invalid or expired verification code", 400, "VERIFICATION_FAILED");
   }
 
