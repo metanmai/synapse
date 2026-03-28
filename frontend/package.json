@@ -15,6 +15,7 @@
     "@sveltejs/kit": "^2.55.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@tailwindcss/vite": "^4.2.2",
+    "@types/dompurify": "^3.0.5",
     "svelte": "^5.54.0",
     "svelte-check": "^4.4.5",
     "tailwindcss": "^4.2.2",
@@ -22,9 +23,10 @@
     "vite": "^6.0.0"
   },
   "dependencies": {
-    "@synapse/shared": "*",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.99.2",
+    "@synapse/shared": "*",
+    "dompurify": "^3.3.3",
     "marked": "^17.0.5"
   },
   "type": "module"
