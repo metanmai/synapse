@@ -1,12 +1,21 @@
-import { fail, redirect } from "@sveltejs/kit";
-import type { Actions, PageServerLoad } from "./$types";
 import { createApi } from "$lib/server/api";
 import { getSupabase } from "$lib/server/auth";
+import { fail, redirect } from "@sveltejs/kit";
+import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ locals }) => {
   const api = createApi(locals.token);
-  let billing: { tier: "free" | "pro"; subscription: { status: string; current_period_end: string | null; cancel_at_period_end: boolean } | null } = { tier: "free", subscription: null };
-  let keys: { id: string; label: string; expires_at: string | null; last_used_at: string | null; created_at: string }[] = [];
+  let billing: {
+    tier: "free" | "pro";
+    subscription: { status: string; current_period_end: string | null; cancel_at_period_end: boolean } | null;
+  } = { tier: "free", subscription: null };
+  let keys: {
+    id: string;
+    label: string;
+    expires_at: string | null;
+    last_used_at: string | null;
+    created_at: string;
+  }[] = [];
 
   try {
     billing = await api.getBillingStatus();

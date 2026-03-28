@@ -1,44 +1,44 @@
 <script lang="ts">
-  import ScrollReveal from "./ScrollReveal.svelte";
+import ScrollReveal from "./ScrollReveal.svelte";
 
-  interface FaqItem {
-    question: string;
-    answer: string;
-  }
+interface FaqItem {
+  question: string;
+  answer: string;
+}
 
-  const faqs: FaqItem[] = [
-    {
-      question: "What AI tools does Synapse work with?",
-      answer:
-        "Synapse works with any AI tool that supports the Model Context Protocol (MCP), including Claude, ChatGPT, Cursor, Windsurf, and GitHub Copilot. If your tool supports MCP servers, it works with Synapse.",
-    },
-    {
-      question: "Is my data encrypted?",
-      answer:
-        "Yes. All data is encrypted in transit with TLS. You can also enable end-to-end encryption with a passphrase, which means even we cannot read your files. Your passphrase never leaves your device.",
-    },
-    {
-      question: "Can I use Synapse with my team?",
-      answer:
-        "Absolutely. The Pro plan supports team workspaces where multiple people can share context, decisions, and architecture notes. Every team member's AI tools stay in sync automatically.",
-    },
-    {
-      question: "What happens when I hit the free tier limit?",
-      answer:
-        "The free tier includes 50 files and 3 connected devices. When you hit the limit, your existing files remain accessible. You just cannot create new ones until you upgrade to Pro or delete some files.",
-    },
-    {
-      question: "How does the MCP server work?",
-      answer:
-        "The MCP server runs locally on your machine via npx. It exposes your Synapse workspace as a filesystem that AI tools can read from and write to. Setup takes one line in your tool's config file.",
-    },
-  ];
+const faqs: FaqItem[] = [
+  {
+    question: "What AI tools does Synapse work with?",
+    answer:
+      "Synapse works with any AI tool that supports the Model Context Protocol (MCP), including Claude, ChatGPT, Cursor, Windsurf, and GitHub Copilot. If your tool supports MCP servers, it works with Synapse.",
+  },
+  {
+    question: "Is my data encrypted?",
+    answer:
+      "Yes. All data is encrypted in transit with TLS. You can also enable end-to-end encryption with a passphrase, which means even we cannot read your files. Your passphrase never leaves your device.",
+  },
+  {
+    question: "Can I use Synapse with my team?",
+    answer:
+      "Absolutely. The Pro plan supports team workspaces where multiple people can share context, decisions, and architecture notes. Every team member's AI tools stay in sync automatically.",
+  },
+  {
+    question: "What happens when I hit the free tier limit?",
+    answer:
+      "The free tier includes 50 files and 3 connected devices. When you hit the limit, your existing files remain accessible. You just cannot create new ones until you upgrade to Pro or delete some files.",
+  },
+  {
+    question: "How does the MCP server work?",
+    answer:
+      "The MCP server runs locally on your machine via npx. It exposes your Synapse workspace as a filesystem that AI tools can read from and write to. Setup takes one line in your tool's config file.",
+  },
+];
 
-  let openIndex = $state<number | null>(null);
+let openIndex = $state<number | null>(null);
 
-  function toggle(index: number) {
-    openIndex = openIndex === index ? null : index;
-  }
+function toggle(index: number) {
+  openIndex = openIndex === index ? null : index;
+}
 </script>
 
 <section class="faq">
