@@ -28,7 +28,7 @@
     </button>
   </form>
   {#if apiKey}
-    <p class="text-xs mt-2" style="color: var(--color-accent);">
+    <p class="text-xs mt-2" style="color: var(--color-link);">
       Save this key now — it won't be shown again.
     </p>
   {/if}
