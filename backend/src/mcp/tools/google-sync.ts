@@ -8,6 +8,7 @@ import { syncProjectToGoogle } from "../../sync/to-google";
 
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
+import { requireMcpUserId } from "../mcp-context";
 
 export function registerGoogleSyncTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   server.tool(
@@ -18,7 +19,7 @@ export function registerGoogleSyncTools(server: McpServer, env: Env, getContext:
     },
     async ({ project }) => {
       const db = createSupabaseClient(env);
-      const userId = getContext().userId!;
+      const userId = requireMcpUserId(getContext);
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -45,7 +46,7 @@ export function registerGoogleSyncTools(server: McpServer, env: Env, getContext:
     },
     async ({ project }) => {
       const db = createSupabaseClient(env);
-      const userId = getContext().userId!;
+      const userId = requireMcpUserId(getContext);
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
