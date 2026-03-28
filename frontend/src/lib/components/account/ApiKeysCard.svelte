@@ -30,16 +30,13 @@ function isExpired(expiresAt: string | null): boolean {
 }
 </script>
 
-<div
-  class="p-4 rounded-xl"
-  style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border);"
->
+<div class="glass rounded-xl" style="padding: 2rem;">
   <div class="flex items-center justify-between mb-2">
-    <h3 class="font-medium" style="color: var(--color-accent);">API Keys</h3>
+    <h3 style="font-size: 18px; font-weight: 700; color: var(--color-accent);">API Keys</h3>
     <button
       type="button"
-      class="rounded-lg px-3 py-1.5 text-sm cursor-pointer"
-      style="border: 1px solid var(--color-pink); color: var(--color-pink-dark);"
+      class="btn-primary cursor-pointer"
+      style="font-size: 13px;"
       onclick={() => (showCreateForm = !showCreateForm)}
     >
       {showCreateForm ? "Cancel" : "Create Key"}
@@ -58,8 +55,8 @@ function isExpired(expiresAt: string | null): boolean {
 
   {#if newKey}
     <div
-      class="rounded-lg p-3 mb-3"
-      style="background-color: var(--color-bg-muted); border: 1px solid var(--color-border);"
+      class="glass rounded-lg p-3 mb-3"
+      style="background-color: var(--color-bg-muted);"
     >
       <p class="text-sm font-medium mb-1" style="color: var(--color-accent);">
         Key created: {newKey.label}
@@ -94,8 +91,8 @@ function isExpired(expiresAt: string | null): boolean {
           type="text"
           required
           placeholder="e.g. MacBook Pro, CI server"
-          class="w-full rounded-lg px-3 py-2 text-sm"
-          style="background-color: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text);"
+          class="w-full text-sm"
+          style="border-radius: 12px; padding: 12px 16px; transition: all 150ms ease; background-color: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text);"
         />
       </div>
       <div class="mb-3">
@@ -106,15 +103,11 @@ function isExpired(expiresAt: string | null): boolean {
           id="key-expires"
           name="expires_at"
           type="datetime-local"
-          class="w-full rounded-lg px-3 py-2 text-sm"
-          style="background-color: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text);"
+          class="w-full text-sm"
+          style="border-radius: 12px; padding: 12px 16px; transition: all 150ms ease; background-color: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text);"
         />
       </div>
-      <button
-        type="submit"
-        class="rounded-lg px-4 py-2 text-sm font-medium cursor-pointer"
-        style="background-color: var(--color-pink); color: white; border: none;"
-      >
+      <button type="submit" class="btn-primary cursor-pointer">
         Create Key
       </button>
     </form>
@@ -125,13 +118,13 @@ function isExpired(expiresAt: string | null): boolean {
       No API keys yet. Create one to connect your tools.
     </p>
   {:else}
-    <div class="space-y-2">
-      {#each keys as key (key.id)}
+    <div class="space-y-1">
+      {#each keys as key, i (key.id)}
         <div
-          class="flex items-center justify-between rounded-lg p-3 text-sm"
-          style="background-color: var(--color-bg-muted); {isExpired(key.expires_at)
-            ? 'opacity: 0.5;'
-            : ''}"
+          class="flex items-center justify-between text-sm"
+          style="border-radius: 8px; padding: 10px 12px; {i % 2 === 0
+            ? 'background: rgba(86, 28, 36, 0.02);'
+            : ''} {isExpired(key.expires_at) ? 'opacity: 0.5;' : ''}"
         >
           <div class="flex-1 min-w-0">
             <div class="font-medium" style={isExpired(key.expires_at) ? 'text-decoration: line-through;' : ''}>
@@ -148,8 +141,8 @@ function isExpired(expiresAt: string | null): boolean {
             <input type="hidden" name="keyId" value={key.id} />
             <button
               type="submit"
-              class="rounded px-2 py-1 text-xs cursor-pointer ml-3"
-              style="border: 1px solid var(--color-danger); color: var(--color-danger);"
+              class="cursor-pointer ml-3 text-xs font-medium"
+              style="border-radius: 9999px; padding: 4px 12px; border: 1px solid var(--color-danger); color: var(--color-danger); background: transparent;"
             >
               Revoke
             </button>
