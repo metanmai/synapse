@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
+import type { ShareLink } from "../../types";
 
 interface Props { projectId: string; }
 
 export function ShareLinkManager({ projectId }: Props) {
   const qc = useQueryClient();
-  const { data: links = [] } = useQuery({
+  const { data: links = [] } = useQuery<ShareLink[]>({
     queryKey: ["share-links", projectId],
     queryFn: () => api.listShareLinks(projectId),
   });
@@ -43,7 +44,7 @@ export function ShareLinkManager({ projectId }: Props) {
         </button>
       </div>
       <div className="space-y-2">
-        {links.map((link: any) => (
+        {links.map((link) => (
           <div key={link.id} className="flex items-center justify-between bg-white border rounded p-3 text-sm">
             <div>
               <span className="font-mono text-xs">{link.token.slice(0, 12)}...</span>
