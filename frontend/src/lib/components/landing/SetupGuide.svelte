@@ -165,6 +165,39 @@
         </div>
       </div>
     </ScrollReveal>
+
+    <ScrollReveal delay={300} direction="up">
+      <div class="commands-section">
+        <h3 class="commands-title">Available commands</h3>
+        <p class="commands-sub">Once connected, use these slash commands in Claude Code:</p>
+        <div class="commands-grid">
+          <div class="cmd">
+            <code class="cmd-name">/synapse:init</code>
+            <span class="cmd-desc">Set up Synapse in your project</span>
+          </div>
+          <div class="cmd">
+            <code class="cmd-name">/synapse:search</code>
+            <span class="cmd-desc">Search across your workspace</span>
+          </div>
+          <div class="cmd">
+            <code class="cmd-name">/synapse:tree</code>
+            <span class="cmd-desc">View your workspace file tree</span>
+          </div>
+          <div class="cmd">
+            <code class="cmd-name">/synapse:sync</code>
+            <span class="cmd-desc">Sync settings across devices</span>
+          </div>
+          <div class="cmd">
+            <code class="cmd-name">/synapse:clean</code>
+            <span class="cmd-desc">Remove duplicates and stale files</span>
+          </div>
+          <div class="cmd">
+            <code class="cmd-name">/synapse:whoami</code>
+            <span class="cmd-desc">Show your account info</span>
+          </div>
+        </div>
+      </div>
+    </ScrollReveal>
   </div>
 </section>
 
@@ -416,6 +449,63 @@
     opacity: 0.4;
   }
 
+  /* Commands section */
+  .commands-section {
+    margin-top: 3rem;
+    padding-top: 3rem;
+    border-top: 1px solid rgba(199, 183, 163, 0.15);
+  }
+
+  .commands-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-cream);
+    margin: 0 0 0.5rem;
+  }
+
+  .commands-sub {
+    font-size: 0.9375rem;
+    color: var(--color-tan);
+    opacity: 0.7;
+    margin: 0 0 1.5rem;
+  }
+
+  .commands-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    text-align: left;
+  }
+
+  .cmd {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.875rem 1rem;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(199, 183, 163, 0.1);
+    border-radius: 10px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .cmd:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(199, 183, 163, 0.25);
+  }
+
+  .cmd-name {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--color-cream);
+  }
+
+  .cmd-desc {
+    font-size: 0.75rem;
+    color: var(--color-tan);
+    opacity: 0.7;
+  }
+
   @media (max-width: 768px) {
     .setup-steps {
       flex-direction: column;
@@ -437,6 +527,10 @@
 
     .select-wrap {
       max-width: 100%;
+    }
+
+    .commands-grid {
+      grid-template-columns: 1fr;
     }
   }
 </style>
