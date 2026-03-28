@@ -7,7 +7,11 @@ let loading = $state(false);
 </script>
 
 <div class="min-h-screen flex items-center justify-center" style="background-color: var(--color-bg);">
-  <div class="w-full max-w-sm p-8 rounded-xl" style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border);">
+  <div style="position: fixed; inset: 0; pointer-events: none; overflow: hidden;">
+    <div style="position: absolute; top: 20%; right: 20%; width: 350px; height: 350px; border-radius: 50%; background: rgba(86, 28, 36, 0.04); filter: blur(80px); animation: float-orb 20s ease-in-out infinite;"></div>
+  </div>
+
+  <div class="glass w-full max-w-md rounded-xl" style="padding: 2rem;">
 
     {#if form?.magicLinkSent}
       <div class="text-center">
@@ -22,19 +26,13 @@ let loading = $state(false);
       <div class="space-y-3 mb-6">
         <form method="POST" action="?/oauth" use:enhance>
           <input type="hidden" name="provider" value="google" />
-          <button type="submit"
-            class="w-full rounded-lg px-4 py-2.5 text-sm cursor-pointer"
-            style="border: 1px solid var(--color-pink); color: var(--color-pink-dark); background: var(--color-bg-raised);"
-          >
+          <button type="submit" class="btn-secondary w-full cursor-pointer">
             Continue with Google
           </button>
         </form>
         <form method="POST" action="?/oauth" use:enhance>
           <input type="hidden" name="provider" value="github" />
-          <button type="submit"
-            class="w-full rounded-lg px-4 py-2.5 text-sm cursor-pointer"
-            style="border: 1px solid var(--color-pink); color: var(--color-pink-dark); background: var(--color-bg-raised);"
-          >
+          <button type="submit" class="btn-secondary w-full cursor-pointer">
             Continue with GitHub
           </button>
         </form>
@@ -45,7 +43,7 @@ let loading = $state(false);
           <div class="w-full" style="border-top: 1px solid var(--color-border);"></div>
         </div>
         <div class="relative flex justify-center text-xs">
-          <span class="px-2" style="background-color: var(--color-bg-raised); color: var(--color-text-muted);">or</span>
+          <span class="px-2" style="background-color: transparent; color: var(--color-text-muted);">or</span>
         </div>
       </div>
 
@@ -59,12 +57,12 @@ let loading = $state(false);
         }} class="space-y-4">
           <input type="email" name="email" placeholder="Email" required
             value={form?.email ?? ""}
-            class="w-full rounded-lg px-3 py-2.5 text-sm"
-            style="border: 1px solid var(--color-border);"
+            class="w-full text-sm"
+            style="border-radius: 12px; padding: 12px 16px; transition: all 150ms ease; border: 1px solid var(--color-border); background-color: var(--color-bg); color: var(--color-text);"
           />
           <input type="password" name="password" placeholder="Password" required
-            class="w-full rounded-lg px-3 py-2.5 text-sm"
-            style="border: 1px solid var(--color-border);"
+            class="w-full text-sm"
+            style="border-radius: 12px; padding: 12px 16px; transition: all 150ms ease; border: 1px solid var(--color-border); background-color: var(--color-bg); color: var(--color-text);"
           />
           <div class="text-right">
             <a href="/forgot-password" class="text-xs" style="color: var(--color-link);">Forgot password?</a>
@@ -73,8 +71,8 @@ let loading = $state(false);
             <p class="text-sm" style="color: var(--color-danger);">{form.error}</p>
           {/if}
           <button type="submit" disabled={loading}
-            class="w-full rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
-            style="background-color: var(--color-accent); color: white; opacity: {loading ? 0.6 : 1};"
+            class="btn-primary w-full cursor-pointer"
+            style={loading ? 'opacity: 0.6;' : ''}
           >
             {loading ? "Signing in..." : "Sign in"}
           </button>
@@ -89,15 +87,15 @@ let loading = $state(false);
         }} class="space-y-4">
           <input type="email" name="email" placeholder="Email" required
             value={form?.email ?? ""}
-            class="w-full rounded-lg px-3 py-2.5 text-sm"
-            style="border: 1px solid var(--color-border);"
+            class="w-full text-sm"
+            style="border-radius: 12px; padding: 12px 16px; transition: all 150ms ease; border: 1px solid var(--color-border); background-color: var(--color-bg); color: var(--color-text);"
           />
           {#if form?.error}
             <p class="text-sm" style="color: var(--color-danger);">{form.error}</p>
           {/if}
           <button type="submit" disabled={loading}
-            class="w-full rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
-            style="background-color: var(--color-accent); color: white; opacity: {loading ? 0.6 : 1};"
+            class="btn-primary w-full cursor-pointer"
+            style={loading ? 'opacity: 0.6;' : ''}
           >
             {loading ? "Sending..." : "Send magic link"}
           </button>
