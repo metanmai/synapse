@@ -49,3 +49,26 @@ describe("Insights API — auth enforcement", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("Insights API — all endpoints require auth", () => {
+  const endpoints: [string, string][] = [
+    ["GET", "/api/insights?project_id=test"],
+    ["POST", "/api/insights"],
+    ["PATCH", "/api/insights/some-id"],
+    ["DELETE", "/api/insights/some-id"],
+  ];
+
+  for (const [method, path] of endpoints) {
+    it(`${method} ${path} → 401 without auth`, async () => {
+      const req = new Request(`http://localhost${path}`, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: method !== "GET" ? JSON.stringify({}) : undefined,
+      });
+      const ctx = createExecutionContext();
+      const res = await worker.fetch(req, env, ctx);
+      await waitOnExecutionContext(ctx);
+      expect(res.status).toBe(401);
+    });
+  }
+});
