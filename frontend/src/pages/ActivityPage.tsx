@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
-import { Sidebar } from "../components/layout/Sidebar";
-import { ActivityFeed } from "../components/activity/ActivityFeed";
+
+import { Sidebar } from "../components/layout";
+import { ActivityFeed } from "../components/activity";
 import { useActivity } from "../hooks/useActivity";
 import { useProjects } from "../hooks/useProjects";
 
