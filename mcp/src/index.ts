@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as clack from "@clack/prompts";
@@ -8,25 +7,16 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import { cliAuthLogin, cliAuthSignup } from "./cli/api.js";
+import { writeAllDetected } from "./cli/editors.js";
+import { createGlyphSpinner } from "./cli/spinner.js";
+import { accent, bold, muted, success } from "./cli/theme.js";
+import { runWizard } from "./cli/wizard.js";
+
 /** Public Synapse API — same for all published `synapsesync-mcp` users. Self-host: change this and `npm run build`. */
 const API_URL = "https://api.synapsesync.app";
 
-// --- Interfaces for API response shapes ---
-
-interface LoginResponse {
-  email: string;
-  api_key: string;
-  label: string;
-}
-
-interface SignupResponse {
-  email: string;
-  api_key: string;
-}
-
-interface ErrorResponse {
-  error?: string;
-}
+// --- Interfaces for MCP server response shapes ---
 
 interface ProjectResponse {
   name: string;
@@ -52,6 +42,8 @@ interface HistoryResponse {
   content: string;
 }
 
+// --- CLI utilities ---
+
 function isInteractiveTerminal(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
 }
@@ -68,9 +60,11 @@ function readPackageVersion(): string {
 
 const CLI_SUBCOMMANDS = new Set(["login", "signup", "init", "wizard", "help"]);
 
+// --- CLI help ---
+
 function printHelpPlain(): void {
   const v = readPackageVersion();
-  console.log(`synapsesync-mcp v${v} — Synapse MCP server & CLI
+  console.log(`synapsesync-mcp v${v} \u2014 Synapse MCP server & CLI
 
 ${bold("Usage")}
   npx synapsesync-mcp              Show help (interactive terminal only)
@@ -78,7 +72,7 @@ ${bold("Usage")}
   npx synapsesync-mcp -h
   npx synapsesync-mcp help
 
-${bold("Setup (interactive — keyboard ↑/↓ in menus)")}
+${bold("Setup (interactive \u2014 keyboard \u2191/\u2193 in menus)")}
   login              Sign in, then write .mcp.json and editor configs here
   signup             Create account (email), then write configs
   init               Paste an API key, then write configs
@@ -99,32 +93,20 @@ ${bold("More")}
 `);
 }
 
-function bold(s: string): string {
-  return `\x1b[1m${s}\x1b[22m`;
-}
-
-function dim(s: string): string {
-  return `\x1b[2m${s}\x1b[22m`;
-}
-
-function green(s: string): string {
-  return `\x1b[32m${s}\x1b[39m`;
-}
-
 function printHelpTTY(): void {
-  clack.intro("◆ Synapse · synapsesync-mcp");
+  clack.intro(`${accent("\u25C6")} Synapse \u00B7 synapsesync-mcp`);
   clack.log.message(
     [
-      `${bold("Commands")} ${dim("(use ↑/↓ Enter in menus)")}`,
+      `${bold("Commands")} ${muted("(use \u2191/\u2193 Enter in menus)")}`,
       "",
-      `  ${green("login")}     Sign in · writes MCP config in this folder`,
-      `  ${green("signup")}    New account (email only) · writes config`,
-      `  ${green("init")}      You already have an API key · writes config`,
-      `  ${green("wizard")}    Pick sign up, log in, or API key`,
+      `  ${accent("login")}     Sign in \u00B7 writes MCP config in this folder`,
+      `  ${accent("signup")}    New account (email only) \u00B7 writes config`,
+      `  ${accent("init")}      You already have an API key \u00B7 writes config`,
+      `  ${accent("wizard")}    Pick sign up, log in, or API key`,
       "",
-      `${dim("Scripted:")} login/signup with flags print JSON; then ${dim("init --key …")}`,
+      `${muted("Scripted:")} login/signup with flags print JSON; then ${muted("init --key \u2026")}`,
       "",
-      `${dim("Editors")} run with no TTY + SYNAPSE_API_KEY → MCP tools (read, write, search, …).`,
+      `${muted("Editors")} run with no TTY + SYNAPSE_API_KEY \u2192 MCP tools (read, write, search, \u2026).`,
     ].join("\n"),
   );
   clack.outro("Run from your project root so .mcp.json sits next to your code.");
@@ -145,313 +127,11 @@ function isVersionArgv(args: string[]): boolean {
   return a === "-v" || a === "--version";
 }
 
-async function cliAuthSignup(
-  email: string,
-): Promise<{ ok: true; data: SignupResponse } | { ok: false; message: string }> {
-  const res = await fetch(`${API_URL}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as ErrorResponse;
-    return { ok: false, message: body.error || res.statusText };
-  }
-  return { ok: true, data: (await res.json()) as SignupResponse };
-}
+// --- CLI standalone interactive commands ---
 
-async function cliAuthLogin(
-  email: string,
-  password: string,
-  label: string,
-): Promise<{ ok: true; data: LoginResponse } | { ok: false; message: string }> {
-  const res = await fetch(`${API_URL}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, label }),
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as ErrorResponse;
-    return { ok: false, message: body.error || res.statusText };
-  }
-  return { ok: true, data: (await res.json()) as LoginResponse };
-}
+async function runInteractiveLogin(): Promise<void> {
+  clack.intro(`${accent("\u25C6")} ${bold("Sign in to Synapse")}`);
 
-/** Write MCP config and helper files for detected editors (same as `init --key`). */
-function runCliInit(apiKey: string): void {
-  const home = os.homedir();
-  const cwd = process.cwd();
-
-  const SYNAPSE_INSTRUCTIONS = `# Synapse — Shared Context Layer
-
-You have access to a Synapse MCP server — a remote workspace for storing and retrieving context across sessions.
-
-## Available Tools
-- search — Semantic search across all files (finds by meaning, not just keywords)
-- read — Read a file's content
-- write — Create or update a file
-- ls — List files in a directory
-- tree — Show full directory tree
-- history — View version history
-- rm — Delete a file
-
-## How to Use
-1. BEFORE starting any task, search Synapse for existing context: search({ query: "topic" })
-2. AFTER completing work, save important context: write({ path: "decisions/topic.md", content: "..." })
-3. Use directory prefixes: decisions/, notes/, bugs/, architecture/, projects/<name>/
-
-## Key Behaviors
-- Always check Synapse before scanning the codebase — context may already exist
-- Save decisions, architecture notes, bug diagnoses, and session summaries to Synapse
-- Use semantic search — "auth flow" will find documents about "login and session tokens"
-- Never write context to local files unless explicitly asked
-`;
-
-  function setupGeneric(): void {
-    const mcpConfig = path.join(cwd, ".mcp.json");
-    const config = {
-      mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } } },
-    };
-
-    let existing: Record<string, unknown> = {};
-    if (fs.existsSync(mcpConfig)) {
-      try {
-        existing = JSON.parse(fs.readFileSync(mcpConfig, "utf-8"));
-      } catch {
-        /* ignore */
-      }
-    }
-    existing.mcpServers = { ...((existing.mcpServers as Record<string, unknown>) || {}), ...config.mcpServers };
-    fs.writeFileSync(mcpConfig, `${JSON.stringify(existing, null, 2)}\n`);
-
-    const gitignore = path.join(cwd, ".gitignore");
-    if (fs.existsSync(gitignore)) {
-      const content = fs.readFileSync(gitignore, "utf-8");
-      if (!content.includes(".mcp.json")) {
-        fs.appendFileSync(gitignore, "\n.mcp.json\n");
-      }
-    }
-    console.log("  ✓ .mcp.json");
-  }
-
-  function setupCursor(): void {
-    const configDir = path.join(cwd, ".cursor");
-    fs.mkdirSync(configDir, { recursive: true });
-    const mcpConfig = path.join(configDir, "mcp.json");
-    const config = {
-      mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } } },
-    };
-    let existing: Record<string, unknown> = {};
-    if (fs.existsSync(mcpConfig)) {
-      try {
-        existing = JSON.parse(fs.readFileSync(mcpConfig, "utf-8"));
-      } catch {
-        /* ignore */
-      }
-    }
-    existing.mcpServers = { ...((existing.mcpServers as Record<string, unknown>) || {}), ...config.mcpServers };
-    fs.writeFileSync(mcpConfig, `${JSON.stringify(existing, null, 2)}\n`);
-    console.log("  ✓ .cursor/mcp.json");
-
-    const rulesFile = path.join(cwd, ".cursorrules");
-    let rulesContent = "";
-    if (fs.existsSync(rulesFile)) {
-      rulesContent = fs.readFileSync(rulesFile, "utf-8");
-    }
-    if (!rulesContent.includes("Synapse")) {
-      fs.appendFileSync(rulesFile, `\n${SYNAPSE_INSTRUCTIONS}`);
-      console.log("  ✓ .cursorrules");
-    } else {
-      console.log("  ○ .cursorrules (already has Synapse)");
-    }
-  }
-
-  function setupWindsurf(): void {
-    const configDir = path.join(home, ".codeium", "windsurf");
-    fs.mkdirSync(configDir, { recursive: true });
-    const mcpConfig = path.join(configDir, "mcp_config.json");
-    const config = {
-      mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } } },
-    };
-    let existing: Record<string, unknown> = {};
-    if (fs.existsSync(mcpConfig)) {
-      try {
-        existing = JSON.parse(fs.readFileSync(mcpConfig, "utf-8"));
-      } catch {
-        /* ignore */
-      }
-    }
-    existing.mcpServers = { ...((existing.mcpServers as Record<string, unknown>) || {}), ...config.mcpServers };
-    fs.writeFileSync(mcpConfig, `${JSON.stringify(existing, null, 2)}\n`);
-    console.log("  ✓ ~/.codeium/windsurf/mcp_config.json");
-
-    const rulesFile = path.join(cwd, ".windsurfrules");
-    let rulesContent = "";
-    if (fs.existsSync(rulesFile)) {
-      rulesContent = fs.readFileSync(rulesFile, "utf-8");
-    }
-    if (!rulesContent.includes("Synapse")) {
-      fs.appendFileSync(rulesFile, `\n${SYNAPSE_INSTRUCTIONS}`);
-      console.log("  ✓ .windsurfrules");
-    } else {
-      console.log("  ○ .windsurfrules (already has Synapse)");
-    }
-  }
-
-  function setupVSCode(): void {
-    const settingsFile = path.join(cwd, ".vscode", "settings.json");
-    let settings: Record<string, unknown> = {};
-    if (fs.existsSync(settingsFile)) {
-      try {
-        settings = JSON.parse(fs.readFileSync(settingsFile, "utf-8"));
-      } catch {
-        /* ignore */
-      }
-    }
-    if (!settings.mcp) settings.mcp = {};
-    const mcp = settings.mcp as Record<string, unknown>;
-    if (!mcp.servers) mcp.servers = {};
-    (mcp.servers as Record<string, unknown>).synapse = {
-      command: "npx",
-      args: ["synapsesync-mcp"],
-      env: { SYNAPSE_API_KEY: apiKey },
-    };
-    fs.writeFileSync(settingsFile, `${JSON.stringify(settings, null, 2)}\n`);
-    console.log("  ✓ .vscode/settings.json");
-
-    const ghDir = path.join(cwd, ".github");
-    fs.mkdirSync(ghDir, { recursive: true });
-    const instrFile = path.join(ghDir, "copilot-instructions.md");
-    let instrContent = "";
-    if (fs.existsSync(instrFile)) {
-      instrContent = fs.readFileSync(instrFile, "utf-8");
-    }
-    if (!instrContent.includes("Synapse")) {
-      fs.appendFileSync(instrFile, `\n${SYNAPSE_INSTRUCTIONS}`);
-      console.log("  ✓ .github/copilot-instructions.md");
-    } else {
-      console.log("  ○ .github/copilot-instructions.md (already has Synapse)");
-    }
-  }
-
-  function setupClaudeCode(): void {
-    const claudeMd = path.join(home, ".claude", "CLAUDE.md");
-    let claudeContent = "";
-    if (fs.existsSync(claudeMd)) {
-      claudeContent = fs.readFileSync(claudeMd, "utf-8");
-    }
-    if (!claudeContent.includes("Synapse")) {
-      fs.appendFileSync(claudeMd, `\n${SYNAPSE_INSTRUCTIONS}`);
-      console.log("  ✓ ~/.claude/CLAUDE.md");
-    } else {
-      console.log("  ○ ~/.claude/CLAUDE.md (already has Synapse)");
-    }
-
-    const cmdDir = path.join(home, ".claude", "commands", "synapse");
-    fs.mkdirSync(cmdDir, { recursive: true });
-
-    const commands: Record<string, string> = {
-      "search.md": `Search the Synapse workspace. The search query is: $ARGUMENTS\n\nUses semantic search — understands meaning, not just keywords.\n\nRun \`mcp__synapse__search({ query: "$ARGUMENTS" })\` and display results. If not connected, say "Not connected."\n`,
-      "tree.md": `Show the full Synapse workspace file tree.\n\nRun \`mcp__synapse__tree()\` and display the tree. If not connected, say "Not connected."\n`,
-      "sync.md":
-        "Sync project context to Synapse.\n\n1. Run `mcp__synapse__tree()` to check connection\n2. Summarize recent git changes\n3. Write project overview and recent changes to Synapse\n",
-      "whoami.md": `Show current Synapse account info.\n\n1. Run \`mcp__synapse__ls()\` to verify connection\n2. Run \`mcp__synapse__tree()\` to count files\n3. Show: "Connected. Files: [count]."\n`,
-      "clean.md":
-        "Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Run `mcp__synapse__tree()`\n2. Identify duplicates, test files, empty entries\n3. Confirm with user before deleting\n4. Delete confirmed entries with `mcp__synapse__rm()`\n",
-    };
-
-    for (const [filename, content] of Object.entries(commands)) {
-      const filepath = path.join(cmdDir, filename);
-      if (!fs.existsSync(filepath)) {
-        fs.writeFileSync(filepath, content);
-        console.log(`  ✓ ~/.claude/commands/synapse/${filename}`);
-      } else {
-        console.log(`  ○ ~/.claude/commands/synapse/${filename} (exists)`);
-      }
-    }
-
-    setupGeneric();
-  }
-
-  const tools: { name: string; detected: boolean; setup: () => void }[] = [];
-
-  const claudeDir = path.join(home, ".claude");
-  if (fs.existsSync(claudeDir)) {
-    tools.push({ name: "Claude Code", detected: true, setup: setupClaudeCode });
-  }
-
-  const cursorDir = path.join(cwd, ".cursor");
-  if (fs.existsSync(cursorDir) || fs.existsSync(path.join(cwd, ".cursorrules"))) {
-    tools.push({ name: "Cursor", detected: true, setup: setupCursor });
-  }
-
-  const windsurfDir = path.join(home, ".codeium");
-  if (fs.existsSync(windsurfDir)) {
-    tools.push({ name: "Windsurf", detected: true, setup: setupWindsurf });
-  }
-
-  const vscodeDir = path.join(cwd, ".vscode");
-  if (fs.existsSync(vscodeDir)) {
-    tools.push({ name: "VS Code", detected: true, setup: setupVSCode });
-  }
-
-  tools.push({ name: "Generic MCP (.mcp.json)", detected: true, setup: setupGeneric });
-
-  console.log("\n🧠 Synapse Init\n");
-  console.log("Detecting AI tools...\n");
-
-  if (tools.length === 0) {
-    console.log("No AI tools detected. Writing generic .mcp.json...");
-    setupGeneric();
-  } else {
-    console.log(`Found ${tools.length} tool(s):\n`);
-    for (const tool of tools) {
-      console.log(`${tool.name}`);
-      tool.setup();
-      console.log();
-    }
-  }
-
-  console.log("Done! Restart your AI tools to connect to Synapse.\n");
-}
-
-async function collectApiKeyFromPrompt(): Promise<string> {
-  clack.log.info("Create a key at synapsesync.app → Account → API keys");
-  const key = await clack.password({
-    message: "API key",
-    validate: (v) => (v?.trim() ? undefined : "Required"),
-  });
-  if (clack.isCancel(key)) {
-    clack.cancel("Cancelled.");
-    process.exit(0);
-  }
-  return key.trim();
-}
-
-async function collectSignupApiKey(): Promise<string> {
-  const email = await clack.text({
-    message: "Email",
-    placeholder: "you@example.com",
-    validate: (v) => (v?.trim() ? undefined : "Required"),
-  });
-  if (clack.isCancel(email)) {
-    clack.cancel("Cancelled.");
-    process.exit(0);
-  }
-
-  const spin = clack.spinner();
-  spin.start("Creating account…");
-  const r = await cliAuthSignup(email.trim());
-  if (!r.ok) {
-    spin.stop("Signup failed");
-    clack.log.error(r.message);
-    process.exit(1);
-  }
-  spin.stop(`Welcome — ${r.data.email}`);
-  return r.data.api_key;
-}
-
-async function collectLoginApiKey(): Promise<string> {
   const email = await clack.text({
     message: "Email",
     placeholder: "you@example.com",
@@ -471,8 +151,8 @@ async function collectLoginApiKey(): Promise<string> {
     process.exit(0);
   }
 
-  const spin = clack.spinner();
-  spin.start("Signing in…");
+  const spin = createGlyphSpinner();
+  spin.start("Signing in\u2026");
   const r = await cliAuthLogin(email.trim(), pw, "cli");
   if (!r.ok) {
     spin.stop("Could not sign in");
@@ -480,62 +160,62 @@ async function collectLoginApiKey(): Promise<string> {
     process.exit(1);
   }
   spin.stop(`Signed in as ${r.data.email}`);
-  return r.data.api_key;
+
+  const written = writeAllDetected(r.data.api_key);
+  const summary = written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
+  clack.log.message(summary);
+  clack.outro("Restart your editor to connect.");
 }
 
-async function runInteractiveLoginThenInit(): Promise<void> {
-  clack.intro("◆ Sign in to Synapse");
-  clack.log.info(`Working directory: ${process.cwd()}`);
-  const apiKey = await collectLoginApiKey();
-  runCliInit(apiKey);
-  clack.outro("MCP config written. Restart your editor to connect.");
-}
+async function runInteractiveSignup(): Promise<void> {
+  clack.intro(`${accent("\u25C6")} ${bold("Create a Synapse account")}`);
 
-async function runInteractiveSignupThenInit(): Promise<void> {
-  clack.intro("◆ Create a Synapse account");
-  clack.log.info(`Working directory: ${process.cwd()}`);
-  const apiKey = await collectSignupApiKey();
-  runCliInit(apiKey);
-  clack.outro("MCP config written. Restart your editor to connect.");
-}
-
-async function runInteractiveInitFromPrompt(): Promise<void> {
-  clack.intro("◆ Connect with an API key");
-  clack.log.info(`Working directory: ${process.cwd()}`);
-  const apiKey = await collectApiKeyFromPrompt();
-  runCliInit(apiKey);
-  clack.outro("MCP config written. Restart your editor to connect.");
-}
-
-async function runInteractiveWizard(): Promise<void> {
-  clack.intro("◆ Synapse setup");
-  clack.log.info(`Working directory: ${process.cwd()}`);
-
-  const choice = await clack.select({
-    message: "How do you want to connect?",
-    options: [
-      { value: "signup" as const, label: "Create account", hint: "email only" },
-      { value: "login" as const, label: "Log in", hint: "email + password" },
-      { value: "key" as const, label: "I have an API key", hint: "paste from the dashboard" },
-    ],
+  const email = await clack.text({
+    message: "Email",
+    placeholder: "you@example.com",
+    validate: (v) => (v?.trim() ? undefined : "Required"),
   });
-
-  if (clack.isCancel(choice)) {
+  if (clack.isCancel(email)) {
     clack.cancel("Cancelled.");
     process.exit(0);
   }
 
-  let apiKey: string;
-  if (choice === "signup") apiKey = await collectSignupApiKey();
-  else if (choice === "login") apiKey = await collectLoginApiKey();
-  else apiKey = await collectApiKeyFromPrompt();
+  const spin = createGlyphSpinner();
+  spin.start("Creating account\u2026");
+  const r = await cliAuthSignup(email.trim());
+  if (!r.ok) {
+    spin.stop("Signup failed");
+    clack.log.error(r.message);
+    process.exit(1);
+  }
+  spin.stop(`Welcome \u2014 ${r.data.email}`);
 
-  runCliInit(apiKey);
-  clack.outro("MCP config written. Restart your editor to connect.");
+  const written = writeAllDetected(r.data.api_key);
+  const summary = written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
+  clack.log.message(summary);
+  clack.outro("Restart your editor to connect.");
 }
 
-// --- CLI commands (run before MCP server starts, no SDK needed) ---
-const args = process.argv.slice(2);
+async function runInteractiveInit(): Promise<void> {
+  clack.intro(`${accent("\u25C6")} ${bold("Connect with an API key")}`);
+  clack.log.info("Create a key at synapsesync.app \u2192 Account \u2192 API keys");
+
+  const key = await clack.password({
+    message: "API key",
+    validate: (v) => (v?.trim() ? undefined : "Required"),
+  });
+  if (clack.isCancel(key)) {
+    clack.cancel("Cancelled.");
+    process.exit(0);
+  }
+
+  const written = writeAllDetected(key.trim());
+  const summary = written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
+  clack.log.message(summary);
+  clack.outro("Restart your editor to connect.");
+}
+
+// --- CLI handler ---
 
 function isMcpServerMode(raw: string[]): boolean {
   return raw.length === 0 && !isInteractiveTerminal();
@@ -592,44 +272,38 @@ async function handleCli(raw: string[]): Promise<void> {
         console.error("Or run interactively: synapsesync-mcp login");
         process.exit(1);
       }
-      await runInteractiveLoginThenInit();
+      await runInteractiveLogin();
       process.exit(0);
     }
 
-    try {
-      const auth = await cliAuthLogin(email, password, label);
-      if (!auth.ok) {
-        console.error(`Login failed: ${auth.message}`);
-        process.exit(1);
-      }
-
-      const data = auth.data;
-      console.log(`\nLogged in as ${data.email}`);
-      console.log(`API Key: ${data.api_key}`);
-      console.log(`Label: ${data.label}`);
-      console.log("\nAdd this to your .mcp.json:");
-      console.log(
-        JSON.stringify(
-          {
-            mcpServers: {
-              synapse: {
-                command: "npx",
-                args: ["synapsesync-mcp"],
-                env: { SYNAPSE_API_KEY: data.api_key },
-              },
-            },
-          },
-          null,
-          2,
-        ),
-      );
-      console.log("\nThen run: synapsesync-mcp init --key <your-api-key>");
-      console.log(`Or: claude mcp add synapse npx synapsesync-mcp --env SYNAPSE_API_KEY=${data.api_key}`);
-    } catch (err) {
-      console.error(`Login failed: ${(err as Error).message}`);
+    const auth = await cliAuthLogin(email, password, label);
+    if (!auth.ok) {
+      console.error(`Login failed: ${auth.message}`);
       process.exit(1);
     }
 
+    const data = auth.data;
+    console.log(`\nLogged in as ${data.email}`);
+    console.log(`API Key: ${data.api_key}`);
+    console.log(`Label: ${data.label}`);
+    console.log("\nAdd this to your .mcp.json:");
+    console.log(
+      JSON.stringify(
+        {
+          mcpServers: {
+            synapse: {
+              command: "npx",
+              args: ["synapsesync-mcp"],
+              env: { SYNAPSE_API_KEY: data.api_key },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    console.log("\nThen run: synapsesync-mcp init --key <your-api-key>");
+    console.log(`Or: claude mcp add synapse npx synapsesync-mcp --env SYNAPSE_API_KEY=${data.api_key}`);
     process.exit(0);
   }
 
@@ -643,42 +317,36 @@ async function handleCli(raw: string[]): Promise<void> {
         console.error("Or run interactively: synapsesync-mcp signup");
         process.exit(1);
       }
-      await runInteractiveSignupThenInit();
+      await runInteractiveSignup();
       process.exit(0);
     }
 
-    try {
-      const auth = await cliAuthSignup(email);
-      if (!auth.ok) {
-        console.error(`Signup failed: ${auth.message}`);
-        process.exit(1);
-      }
-
-      const data = auth.data;
-      console.log(`\nAccount created for ${data.email}`);
-      console.log(`API Key: ${data.api_key}`);
-      console.log("\nAdd this to your .mcp.json:");
-      console.log(
-        JSON.stringify(
-          {
-            mcpServers: {
-              synapse: {
-                command: "npx",
-                args: ["synapsesync-mcp"],
-                env: { SYNAPSE_API_KEY: data.api_key },
-              },
-            },
-          },
-          null,
-          2,
-        ),
-      );
-      console.log("\nThen run: synapsesync-mcp init --key <your-api-key>");
-    } catch (err) {
-      console.error(`Signup failed: ${(err as Error).message}`);
+    const auth = await cliAuthSignup(email);
+    if (!auth.ok) {
+      console.error(`Signup failed: ${auth.message}`);
       process.exit(1);
     }
 
+    const data = auth.data;
+    console.log(`\nAccount created for ${data.email}`);
+    console.log(`API Key: ${data.api_key}`);
+    console.log("\nAdd this to your .mcp.json:");
+    console.log(
+      JSON.stringify(
+        {
+          mcpServers: {
+            synapse: {
+              command: "npx",
+              args: ["synapsesync-mcp"],
+              env: { SYNAPSE_API_KEY: data.api_key },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    console.log("\nThen run: synapsesync-mcp init --key <your-api-key>");
     process.exit(0);
   }
 
@@ -692,17 +360,21 @@ async function handleCli(raw: string[]): Promise<void> {
         console.error("  Or set SYNAPSE_API_KEY, or run interactively: synapsesync-mcp init");
         process.exit(1);
       }
-      await runInteractiveInitFromPrompt();
+      await runInteractiveInit();
       process.exit(0);
     }
 
     if (isInteractiveTerminal()) {
-      clack.intro("◆ Writing MCP config");
-      clack.log.info(`Working directory: ${process.cwd()}`);
+      clack.intro(`${accent("\u25C6")} ${bold("Writing MCP config")}`);
     }
-    runCliInit(apiKey);
+    const written = writeAllDetected(apiKey);
     if (isInteractiveTerminal()) {
-      clack.outro("MCP config written. Restart your editor to connect.");
+      const summary = written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
+      clack.log.message(summary);
+      clack.outro("Restart your editor to connect.");
+    } else {
+      for (const f of written) console.log(`  \u2713 ${f}`);
+      console.log("\nDone! Restart your AI tools to connect to Synapse.");
     }
     process.exit(0);
   }
@@ -712,7 +384,7 @@ async function handleCli(raw: string[]): Promise<void> {
       console.error("synapsesync-mcp wizard requires an interactive terminal (TTY).");
       process.exit(1);
     }
-    await runInteractiveWizard();
+    await runWizard(readPackageVersion());
     process.exit(0);
   }
 
@@ -720,6 +392,9 @@ async function handleCli(raw: string[]): Promise<void> {
   printHelp();
   process.exit(0);
 }
+
+// --- Entry point ---
+const args = process.argv.slice(2);
 
 if (!isMcpServerMode(args)) {
   handleCli(args).catch((err) => {
@@ -892,7 +567,7 @@ if (!isMcpServerMode(args)) {
   // --- write: create or update a file ---
   server.tool(
     "write",
-    "Write content to a file. Creates the file if it doesn't exist, updates it if it does. IMPORTANT: Always use the correct directory prefix: decisions/ for decisions, notes/ for meeting notes, bugs/ for bug diagnoses, architecture/ for architecture docs, retrospectives/ for retrospectives, projects/<name>/ for project-specific context, settings/ for settings. Never write to the root — always use a directory.",
+    "Write content to a file. Creates the file if it doesn't exist, updates it if it does. IMPORTANT: Always use the correct directory prefix: decisions/ for decisions, notes/ for meeting notes, bugs/ for bug diagnoses, architecture/ for architecture docs, retrospectives/ for retrospectives, projects/<name>/ for project-specific context, settings/ for settings. Never write to the root \u2014 always use a directory.",
     {
       path: z
         .string()
@@ -931,7 +606,7 @@ if (!isMcpServerMode(args)) {
   // --- search: search file contents ---
   server.tool(
     "search",
-    "Search across all files using semantic + full-text + keyword search. Understands meaning — e.g., 'auth flow' finds 'login and session tokens'. Returns matching files ranked by relevance.",
+    "Search across all files using semantic + full-text + keyword search. Understands meaning \u2014 e.g., 'auth flow' finds 'login and session tokens'. Returns matching files ranked by relevance.",
     {
       query: z.string().describe("Search query (searches file contents)"),
       folder: z.string().optional().describe("Limit search to a specific directory"),
