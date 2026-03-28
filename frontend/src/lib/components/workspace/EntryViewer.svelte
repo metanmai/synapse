@@ -11,26 +11,26 @@ let { entry, projectName, onEdit } = $props<{
 let html = $derived(marked.parse(entry.content, { async: false }) as string);
 </script>
 
-<div>
+<div class="glass" style="padding: 2rem;">
   <div class="flex items-center justify-between mb-4">
     <div>
-      <h2 class="text-lg font-medium">{entry.path}</h2>
+      <h2 style="font-size: 16px; font-weight: 600;">{entry.path}</h2>
       <div class="text-xs mt-1" style="color: var(--color-text-muted);">
-        <span class="inline-block rounded-full px-2 py-0.5 text-xs"
-          style="background-color: var(--color-pink); color: white;">
+        <span class="inline-block px-3 py-1"
+          style="background-color: var(--color-pink); color: white; border-radius: 9999px; padding: 4px 12px;">
           {entry.source}
         </span>
         <span class="ml-2">{new Date(entry.updated_at).toLocaleString()}</span>
         {#each entry.tags as tag}
-          <span class="ml-1 inline-block rounded-full px-2 py-0.5"
-            style="background-color: var(--color-accent); color: white;">
+          <span class="ml-1 inline-block"
+            style="background-color: var(--color-accent); color: white; border-radius: 9999px; padding: 4px 12px;">
             {tag}
           </span>
         {/each}
       </div>
     </div>
     <button onclick={() => onEdit()}
-      class="text-sm cursor-pointer" style="color: var(--color-link);">
+      class="btn-secondary cursor-pointer">
       Edit
     </button>
   </div>

@@ -25,7 +25,7 @@ let filtered = $derived(
 );
 </script>
 
-<div>
+<div class="glass" style="padding: 2rem;">
   <div class="flex items-center justify-between mb-4">
     <div>
       <h2 class="text-lg font-medium" style="color: var(--color-accent);">Activity</h2>
@@ -33,7 +33,7 @@ let filtered = $derived(
         {path}{isFolder ? "/" : ""}
       </p>
     </div>
-    <button onclick={onClose} class="text-sm cursor-pointer" style="color: var(--color-text-muted);">
+    <button onclick={onClose} class="btn-secondary cursor-pointer">
       Close
     </button>
   </div>
