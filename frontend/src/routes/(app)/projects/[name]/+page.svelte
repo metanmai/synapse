@@ -5,11 +5,14 @@
   import PathActivityPanel from "$lib/components/workspace/PathActivityPanel.svelte";
   import PathSharePanel from "$lib/components/workspace/PathSharePanel.svelte";
   import PassphrasePrompt from "$lib/components/PassphrasePrompt.svelte";
+  import { enhance } from "$app/forms";
   import { hasPassphrase, isEncrypted, decrypt, encrypt } from "$lib/crypto";
   import type { Entry } from "$lib/types";
 
   let { data, form } = $props();
   let needsPassphrase = $state(false);
+  let importInput: HTMLInputElement;
+  let importForm: HTMLFormElement;
 
   let mode = $state<"view" | "edit" | "new" | "activity" | "share" | "empty">("empty");
   let selectedPath = $state<string | null>(null);
@@ -123,8 +126,15 @@
     <div class="flex items-center justify-between mb-2 px-1">
       <span class="font-medium uppercase tracking-wide"
         style="color: var(--color-text-muted); font-size: 10px;">Files</span>
-      <button onclick={() => startNew()}
-        class="cursor-pointer" style="color: var(--color-link); font-size: 10px;">+ New</button>
+      <div class="flex items-center gap-1">
+        <button onclick={() => startNew()}
+          class="cursor-pointer" style="color: var(--color-link); font-size: 10px;">+ New</button>
+        <a href={`/projects/${encodeURIComponent(data.project.name)}/api/export`}
+          class="cursor-pointer" style="color: var(--color-link); font-size: 10px;"
+          download>Export</a>
+        <button onclick={() => importInput?.click()}
+          class="cursor-pointer" style="color: var(--color-link); font-size: 10px;">Import</button>
+      </div>
     </div>
     <FolderTree entries={data.entries} {selectedPath}
       projectName={data.project.name} onSelect={selectEntry} onAction={handleAction} />
@@ -173,5 +183,20 @@
     {#if form?.error}
       <p class="mt-4 text-sm" style="color: var(--color-danger);">{form.error}</p>
     {/if}
+
+    {#if form?.importResult}
+      <div class="rounded-lg p-3 text-sm mt-4"
+        style="background-color: var(--color-success-bg, #ecfdf5); color: var(--color-success, #065f46);">
+        Import complete: {form.importResult.imported} new, {form.importResult.updated} updated, {form.importResult.skipped} skipped
+      </div>
+    {/if}
   </div>
 </div>
+
+<!-- Hidden import form -->
+<form method="POST" action="?/importProject" enctype="multipart/form-data" use:enhance
+  class="hidden" bind:this={importForm}>
+  <input type="hidden" name="projectId" value={data.project.id} />
+  <input type="file" name="file" accept=".zip" bind:this={importInput}
+    onchange={() => importForm?.requestSubmit()} />
+</form>
