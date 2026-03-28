@@ -10,6 +10,7 @@ import { share } from "./api/share";
 import { sync } from "./api/sync";
 import type { Env } from "./lib/env";
 import { envList } from "./lib/env";
+import { dbMiddleware } from "./middleware/db";
 import { AppError } from "./lib/errors";
 import { rateLimit } from "./lib/rate-limit";
 import { SynapseAgent } from "./mcp/agent";
@@ -34,6 +35,7 @@ app.use("*", (c, next) => {
 
 // Rate limiting — 120 requests per minute per key/IP
 app.use("*", rateLimit(120, 60000));
+app.use("*", dbMiddleware);
 
 app.onError((err, c) => {
   if (err instanceof AppError) {
