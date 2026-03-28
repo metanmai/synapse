@@ -6,8 +6,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-import { API_URL } from "./cli/config.js";
 import { runRefresh, runStatus, runTree, runUpgrade, runWhoami } from "./cli/commands.js";
+import { API_URL } from "./cli/config.js";
 import { runStats } from "./cli/stats.js";
 import { accent, bold, muted } from "./cli/theme.js";
 import { runWizard } from "./cli/wizard.js";
