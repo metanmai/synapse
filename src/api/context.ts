@@ -3,8 +3,9 @@ import type { Env } from "../lib/env";
 import { authMiddleware } from "../lib/auth";
 import { createSupabaseClient } from "../db/client";
 import { getProjectByName } from "../db/queries/projects";
-import { upsertEntry, getEntry, listEntries, searchEntries, getRecentEntries, getAllEntries } from "../db/queries/entries";
+import { upsertEntry, getEntry, listEntries, searchEntries, getRecentEntries, getAllEntries, getEntryHistory, restoreEntry } from "../db/queries/entries";
 import { getPreferences } from "../db/queries/preferences";
+import { logActivity } from "../db/activity-logger";
 import { NotFoundError, AppError } from "../lib/errors";
 
 const context = new Hono<{ Bindings: Env }>();
@@ -24,6 +25,13 @@ context.post("/save", async (c) => {
 
   const entry = await upsertEntry(db, {
     project_id: proj.id, path, content, tags, author_id: user.id, source: "human",
+  });
+  await logActivity(db, {
+    project_id: proj.id,
+    user_id: user.id,
+    action: entry.created_at === entry.updated_at ? "entry_created" : "entry_updated",
+    target_path: path,
+    source: "human",
   });
   return c.json(entry, 201);
 });
@@ -53,6 +61,13 @@ context.post("/session-summary", async (c) => {
     project_id: proj.id, path, content: fullContent, tags: ["session-summary"],
     author_id: user.id, source: "human",
   });
+  await logActivity(db, {
+    project_id: proj.id,
+    user_id: user.id,
+    action: entry.created_at === entry.updated_at ? "entry_created" : "entry_updated",
+    target_path: path,
+    source: "human",
+  });
 
   return c.json(entry, 201);
 });
@@ -72,6 +87,13 @@ context.post("/file", async (c) => {
   const entry = await upsertEntry(db, {
     project_id: proj.id, path, content, content_type: content_type ?? "markdown",
     author_id: user.id, source: "human",
+  });
+  await logActivity(db, {
+    project_id: proj.id,
+    user_id: user.id,
+    action: entry.created_at === entry.updated_at ? "entry_created" : "entry_updated",
+    target_path: path,
+    source: "human",
   });
   return c.json(entry, 201);
 });
@@ -138,6 +160,48 @@ context.get("/:project/load", async (c) => {
       return c.json({ mode: "summary_only", summary });
     }
   }
+});
+
+// GET /api/context/:project/history/:path{.+}
+context.get("/:project/history/:path{.+}", async (c) => {
+  const user = c.get("user");
+  const projectName = c.req.param("project");
+  const path = c.req.param("path") ?? "";
+
+  const db = createSupabaseClient(c.env);
+  const proj = await getProjectByName(db, projectName, user.id);
+  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
+
+  const history = await getEntryHistory(db, proj.id, path);
+  return c.json(history);
+});
+
+// POST /api/context/:project/restore — body: { path, historyId }
+context.post("/:project/restore", async (c) => {
+  const user = c.get("user");
+  const projectName = c.req.param("project");
+  const { path, historyId } = await c.req.json();
+  if (!path || !historyId) {
+    throw new AppError("path and historyId are required", 400, "VALIDATION_ERROR");
+  }
+
+  const db = createSupabaseClient(c.env);
+  const proj = await getProjectByName(db, projectName, user.id);
+  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
+
+  const entry = await restoreEntry(db, proj.id, path, historyId);
+  if (!entry) throw new NotFoundError("Entry or history record not found");
+
+  await logActivity(db, {
+    project_id: proj.id,
+    user_id: user.id,
+    action: "entry_updated",
+    target_path: path,
+    source: "human",
+    metadata: { restored_from: historyId },
+  });
+
+  return c.json(entry);
 });
 
 // GET /api/context/:project/:path{.+} — must be last (catch-all)
