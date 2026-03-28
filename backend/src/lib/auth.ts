@@ -29,7 +29,7 @@ function isJwt(token: string): boolean {
   return parts.length === 3 && parts.every((p) => p.length > 0);
 }
 
-export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next): Promise<Response | undefined> {
+export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next): Promise<Response | void> {
   const authHeader = c.req.header("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     throw new UnauthorizedError();
