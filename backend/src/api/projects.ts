@@ -1,15 +1,31 @@
 import { Hono } from "hono";
 
-import { authMiddleware } from "../lib/auth";
-import { createSupabaseClient } from "../db/client";
-import { createProject, listProjectsForUser, getProjectByName, getMemberRole, addMember, removeMember, countMembers, findUserByEmail, setPreference, getPreferences, createShareLink, listShareLinks, deleteShareLink, getActivityLog, getAllEntries, countEntries } from "../db/queries";
 import { logActivity } from "../db/activity-logger";
-import { AppError, NotFoundError, ForbiddenError } from "../lib/errors";
-import { enforceMemberLimit } from "../lib/tier";
+import { createSupabaseClient } from "../db/client";
+import {
+  addMember,
+  countEntries,
+  countMembers,
+  createProject,
+  createShareLink,
+  deleteShareLink,
+  findUserByEmail,
+  getActivityLog,
+  getAllEntries,
+  getMemberRole,
+  getProjectByName,
+  listProjectsForUser,
+  listShareLinks,
+  removeMember,
+  setPreference,
+} from "../db/queries";
+import { authMiddleware } from "../lib/auth";
+import { AppError, ForbiddenError, NotFoundError } from "../lib/errors";
 import { buildProjectZip } from "../lib/export";
-import { parseZipEntries, importEntries } from "../lib/import";
-import { getTierLimits } from "../lib/tier";
 import { idempotency } from "../lib/idempotency";
+import { importEntries, parseZipEntries } from "../lib/import";
+import { enforceMemberLimit } from "../lib/tier";
+import { getTierLimits } from "../lib/tier";
 
 import type { Env } from "../lib/env";
 
@@ -186,8 +202,8 @@ projects.get("/:id/activity", async (c) => {
   const user = c.get("user");
   const projectId = c.req.param("id");
   const defaultLimit = (c.env as unknown as Record<string, string>).ACTIVITY_PAGE_LIMIT ?? "50";
-  const limit = parseInt(c.req.query("limit") ?? defaultLimit);
-  const offset = parseInt(c.req.query("offset") ?? "0");
+  const limit = Number.parseInt(c.req.query("limit") ?? defaultLimit);
+  const offset = Number.parseInt(c.req.query("offset") ?? "0");
 
   const db = createSupabaseClient(c.env);
   const callerRole = await getMemberRole(db, projectId, user.id);
@@ -207,11 +223,7 @@ projects.get("/:id/export", async (c) => {
   if (!callerRole) throw new NotFoundError("Project not found");
 
   // Get project name for the zip filename
-  const { data: project } = await db
-    .from("projects")
-    .select("name")
-    .eq("id", projectId)
-    .single();
+  const { data: project } = await db.from("projects").select("name").eq("id", projectId).single();
 
   const entries = await getAllEntries(db, projectId);
   const zip = buildProjectZip(project?.name ?? "export", entries);
@@ -247,7 +259,7 @@ projects.post("/:id/import", async (c) => {
   const arrayBuffer = await file.arrayBuffer();
   const zipData = new Uint8Array(arrayBuffer);
 
-  let parsed;
+  let parsed: ReturnType<typeof parseZipEntries>;
   try {
     parsed = parseZipEntries(zipData);
   } catch {
@@ -262,10 +274,7 @@ projects.post("/:id/import", async (c) => {
   // Tier enforcement: check if import would exceed file limit
   const currentCount = await countEntries(db, projectId);
   const existingPaths = new Set<string>();
-  const { data: existingEntries } = await db
-    .from("entries")
-    .select("path")
-    .eq("project_id", projectId);
+  const { data: existingEntries } = await db.from("entries").select("path").eq("project_id", projectId);
   if (existingEntries) {
     for (const e of existingEntries) existingPaths.add(e.path);
   }
@@ -276,7 +285,7 @@ projects.post("/:id/import", async (c) => {
     throw new AppError(
       `Import would exceed file limit (${currentCount} existing + ${newEntryCount} new = ${currentCount + newEntryCount}, limit: ${limits.maxFiles})`,
       403,
-      "TIER_LIMIT"
+      "TIER_LIMIT",
     );
   }
 

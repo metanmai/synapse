@@ -1,5 +1,5 @@
 <script>
-  import { page } from "$app/stores";
+import { page } from "$app/stores";
 </script>
 
 <div class="min-h-screen flex items-center justify-center p-8" style="background-color: var(--color-bg);">
