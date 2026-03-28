@@ -1,9 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpAgent } from "agents/mcp";
-import type { Env } from "../lib/env";
+
 import { createSupabaseClient } from "../db/client";
-import { findUserByApiKeyHash } from "../db/queries/users";
+import { findUserByApiKeyHash } from "../db/queries";
 import { hashApiKey } from "../lib/auth";
+
+import type { Env } from "../lib/env";
 import { registerProjectManagementTools } from "./tools/project-management";
 import { registerContextCaptureTools } from "./tools/context-capture";
 import { registerContextRetrievalTools } from "./tools/context-retrieval";
