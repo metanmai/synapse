@@ -89,6 +89,38 @@ describe("authMiddleware", () => {
 
   function createMockContext(authHeader?: string): MockAuthContext {
     const vars: Record<string, unknown> = {};
+    // Pre-populate db (normally set by dbMiddleware before authMiddleware runs)
+    vars.db = {
+      from: (table: string) => {
+        mockFrom(table);
+        return {
+          select: (...args: unknown[]) => {
+            mockSelect(...args);
+            const chainable: Record<string, unknown> = {};
+            chainable.eq = (...eqArgs: unknown[]) => {
+              mockEq(...eqArgs);
+              return {
+                single: mockSingle,
+                limit: (..._limitArgs: unknown[]) => ({
+                  maybeSingle: mockMaybeSingle,
+                }),
+                in: (..._inArgs: unknown[]) => ({
+                  order: (..._orderArgs: unknown[]) => ({
+                    limit: (..._limitArgs: unknown[]) => ({
+                      maybeSingle: () => mockSubscriptionQuery(),
+                    }),
+                  }),
+                }),
+              };
+            };
+            return chainable;
+          },
+          update: () => ({
+            eq: () => Promise.resolve({ error: null }),
+          }),
+        };
+      },
+    };
     return {
       req: {
         header: (name: string) => {
@@ -100,6 +132,7 @@ describe("authMiddleware", () => {
         SUPABASE_URL: "https://test.supabase.co",
         SUPABASE_SERVICE_KEY: "test-service-key",
       },
+      get: (key: string) => vars[key],
       set: (key: string, value: unknown) => {
         vars[key] = value;
       },
