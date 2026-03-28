@@ -66,6 +66,9 @@
             class="w-full rounded-lg px-3 py-2.5 text-sm"
             style="border: 1px solid var(--color-border);"
           />
+          <div class="text-right">
+            <a href="/forgot-password" class="text-xs" style="color: var(--color-link);">Forgot password?</a>
+          </div>
           {#if form?.error}
             <p class="text-sm" style="color: var(--color-danger);">{form.error}</p>
           {/if}
