@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Env } from "./lib/env";
+import { envList } from "./lib/env";
 import { AppError } from "./lib/errors";
 import { auth, account } from "./api/auth";
 import { context } from "./api/context";
@@ -13,12 +14,15 @@ import { runScheduledGoogleSync } from "./sync/from-google";
 const app = new Hono<{ Bindings: Env }>();
 
 // CORS for frontend
-app.use("*", cors({
-  origin: ["http://localhost:5173", "https://app.synapse.dev"],
-  allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
-}));
+app.use("*", (c, next) => {
+  const origins = envList(c.env, "CORS_ORIGINS", "http://localhost:5173,https://app.synapse.dev");
+  return cors({
+    origin: origins,
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })(c, next);
+});
 
 app.onError((err, c) => {
   if (err instanceof AppError) {
