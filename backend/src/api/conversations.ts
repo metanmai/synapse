@@ -1,14 +1,12 @@
 import { Hono } from "hono";
 
 import { logActivity } from "../db/activity-logger";
-import { createSupabaseClient } from "../db/client";
 import {
   appendMessages,
   createConversation,
   getConversation,
   getConversationContext,
   getMediaForConversation,
-  getMemberRole,
   getMessages,
   insertMedia,
   listConversations,
@@ -23,6 +21,7 @@ import { idempotency } from "../lib/idempotency";
 import { getSignedUrl, uploadMedia } from "../lib/storage";
 import { requireConversationSync } from "../lib/tier";
 import { parseBody, schemas } from "../lib/validate";
+import { requireRole } from "../middleware/project-auth";
 
 const conversations = new Hono<{ Bindings: Env }>();
 conversations.use("*", authMiddleware);
@@ -34,12 +33,10 @@ conversations.post("/", async (c) => {
   const user = c.get("user");
   const body = await parseBody(c, schemas.createConversation);
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
-  // Verify the user is a member of the project
-  const callerRole = await getMemberRole(db, body.project_id, user.id);
-  if (!callerRole) throw new NotFoundError("Project not found");
-  if (callerRole === "viewer") throw new ForbiddenError("Viewers cannot create conversations");
+  // Verify the user is at least an editor on the project
+  await requireRole(db, body.project_id, user.id, "editor");
 
   const conversation = await createConversation(db, {
     project_id: body.project_id,
@@ -76,11 +73,10 @@ conversations.get("/", async (c) => {
   const limit = limitStr ? Number.parseInt(limitStr) : undefined;
   const offset = offsetStr ? Number.parseInt(offsetStr) : undefined;
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   // Verify the user is a member of the project
-  const callerRole = await getMemberRole(db, projectId, user.id);
-  if (!callerRole) throw new NotFoundError("Project not found");
+  await requireRole(db, projectId, user.id);
 
   const result = await listConversations(db, projectId, { status, limit, offset });
   return c.json(result);
@@ -94,12 +90,10 @@ conversations.post("/import", async (c) => {
   const user = c.get("user");
   const body = await parseBody(c, schemas.importConversation);
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
-  // Verify the user is a member of the project
-  const callerRole = await getMemberRole(db, body.project_id, user.id);
-  if (!callerRole) throw new NotFoundError("Project not found");
-  if (callerRole === "viewer") throw new ForbiddenError("Viewers cannot import conversations");
+  // Verify the user is at least an editor on the project
+  await requireRole(db, body.project_id, user.id, "editor");
 
   // Detect or use specified format
   const format = body.format ?? detectAdapter(body.messages);
@@ -158,14 +152,13 @@ conversations.get("/:id", async (c) => {
   const fromSequence = fromSequenceStr ? Number.parseInt(fromSequenceStr) : undefined;
   const msgLimit = msgLimitStr ? Number.parseInt(msgLimitStr) : undefined;
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   const conversation = await getConversation(db, conversationId);
   if (!conversation) throw new NotFoundError("Conversation not found");
 
   // Verify the user is a member of the project
-  const callerRole = await getMemberRole(db, conversation.project_id, user.id);
-  if (!callerRole) throw new NotFoundError("Conversation not found");
+  await requireRole(db, conversation.project_id, user.id);
 
   // Fetch messages, context, and media in parallel
   const [messages, context, media] = await Promise.all([
@@ -189,7 +182,7 @@ conversations.patch("/:id", async (c) => {
   const conversationId = c.req.param("id");
   const body = await parseBody(c, schemas.updateConversation);
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   const existing = await getConversation(db, conversationId);
   if (!existing) throw new NotFoundError("Conversation not found");
@@ -219,7 +212,7 @@ conversations.post("/:id/messages", async (c) => {
   const conversationId = c.req.param("id");
   const body = await parseBody(c, schemas.appendMessages);
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   const existing = await getConversation(db, conversationId);
   if (!existing) throw new NotFoundError("Conversation not found");
@@ -258,7 +251,7 @@ conversations.post("/:id/media", async (c) => {
   const user = c.get("user");
   const conversationId = c.req.param("id");
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   const existing = await getConversation(db, conversationId);
   if (!existing) throw new NotFoundError("Conversation not found");
@@ -320,14 +313,13 @@ conversations.get("/:id/media/:mediaId", async (c) => {
   const conversationId = c.req.param("id");
   const mediaId = c.req.param("mediaId");
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   const existing = await getConversation(db, conversationId);
   if (!existing) throw new NotFoundError("Conversation not found");
 
   // Verify the user is a member of the project
-  const callerRole = await getMemberRole(db, existing.project_id, user.id);
-  if (!callerRole) throw new NotFoundError("Conversation not found");
+  await requireRole(db, existing.project_id, user.id);
 
   // Find the media record
   const allMedia = await getMediaForConversation(db, conversationId);
@@ -345,14 +337,13 @@ conversations.get("/:id/export/:format", async (c) => {
   const conversationId = c.req.param("id");
   const format = c.req.param("format");
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   const existing = await getConversation(db, conversationId);
   if (!existing) throw new NotFoundError("Conversation not found");
 
   // Verify the user is a member of the project
-  const callerRole = await getMemberRole(db, existing.project_id, user.id);
-  if (!callerRole) throw new NotFoundError("Conversation not found");
+  await requireRole(db, existing.project_id, user.id);
 
   // Get all messages
   const messages = await getMessages(db, conversationId);
