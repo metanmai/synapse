@@ -1,5 +1,5 @@
-import type { RequestHandler } from "./$types";
 import { API_URL } from "$env/static/private";
+import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = async ({ locals, params }) => {
   const projectsRes = await fetch(`${API_URL}/api/projects`, {

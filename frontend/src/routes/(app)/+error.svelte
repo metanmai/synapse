@@ -1,5 +1,5 @@
 <script>
-  import { page } from "$app/stores";
+import { page } from "$app/stores";
 </script>
 
 <div class="max-w-3xl mx-auto p-8">

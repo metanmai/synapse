@@ -1,42 +1,42 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+import { onMount } from "svelte";
 
-  let {
-    children,
-    threshold = 0.15,
-    delay = 0,
-    direction = "up",
-  } = $props<{
-    children: import("svelte").Snippet;
-    threshold?: number;
-    delay?: number;
-    direction?: "up" | "down" | "left" | "right" | "none";
-  }>();
+let {
+  children,
+  threshold = 0.15,
+  delay = 0,
+  direction = "up",
+} = $props<{
+  children: import("svelte").Snippet;
+  threshold?: number;
+  delay?: number;
+  direction?: "up" | "down" | "left" | "right" | "none";
+}>();
 
-  let element: HTMLDivElement;
-  let visible = $state(false);
+let element: HTMLDivElement;
+let visible = $state(false);
 
-  onMount(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          visible = true;
-          observer.unobserve(element);
-        }
-      },
-      { threshold }
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  });
+onMount(() => {
+  const observer = new IntersectionObserver(
+    ([entry]) => {
+      if (entry.isIntersecting) {
+        visible = true;
+        observer.unobserve(element);
+      }
+    },
+    { threshold },
+  );
+  observer.observe(element);
+  return () => observer.disconnect();
+});
 
-  const transforms: Record<string, string> = {
-    up: "translateY(40px)",
-    down: "translateY(-40px)",
-    left: "translateX(40px)",
-    right: "translateX(-40px)",
-    none: "none",
-  };
+const transforms: Record<string, string> = {
+  up: "translateY(40px)",
+  down: "translateY(-40px)",
+  left: "translateX(40px)",
+  right: "translateX(-40px)",
+  none: "none",
+};
 </script>
 
 <div

@@ -1,9 +1,9 @@
 <script>
-  import MemberList from "$lib/components/sharing/MemberList.svelte";
-  import InviteDialog from "$lib/components/sharing/InviteDialog.svelte";
-  import ShareLinkManager from "$lib/components/sharing/ShareLinkManager.svelte";
+import InviteDialog from "$lib/components/sharing/InviteDialog.svelte";
+import MemberList from "$lib/components/sharing/MemberList.svelte";
+import ShareLinkManager from "$lib/components/sharing/ShareLinkManager.svelte";
 
-  let { data, form } = $props();
+let { data, form } = $props();
 </script>
 
 <div class="max-w-3xl p-6">
