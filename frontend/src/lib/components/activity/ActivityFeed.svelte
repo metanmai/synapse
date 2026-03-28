@@ -22,7 +22,7 @@
       <div class="flex items-center gap-2">
         <span class="font-medium">{actionLabels[entry.action] ?? entry.action}</span>
         <span class="text-xs rounded-full px-2 py-0.5"
-          style="background-color: var(--color-bg-muted);">
+          style="background-color: var(--color-pink); color: white;">
           {entry.source}
         </span>
         <span class="text-xs ml-auto" style="color: var(--color-text-muted);">
