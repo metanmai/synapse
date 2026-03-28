@@ -14,6 +14,7 @@ let { keys, newKey, keyError } = $props<{
 }>();
 
 let showCreateForm = $state(false);
+let createLoading = $state(false);
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "Never";
@@ -73,7 +74,9 @@ function isExpired(expiresAt: string | null): boolean {
       method="POST"
       action="?/createKey"
       use:enhance={() => {
+        createLoading = true;
         return async ({ update }) => {
+          createLoading = false;
           await update();
           showCreateForm = false;
         };
@@ -107,8 +110,15 @@ function isExpired(expiresAt: string | null): boolean {
           style="border-radius: 12px; padding: 12px 16px; transition: all 150ms ease; background-color: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text);"
         />
       </div>
-      <button type="submit" class="btn-primary cursor-pointer">
-        Create Key
+      <button type="submit" disabled={createLoading} class="btn-primary cursor-pointer">
+        {#if createLoading}
+          <span class="flex items-center justify-center gap-2">
+            <span class="spinner spinner-sm spinner-white"></span>
+            Creating...
+          </span>
+        {:else}
+          Create Key
+        {/if}
       </button>
     </form>
   {/if}
