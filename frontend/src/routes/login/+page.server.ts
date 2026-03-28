@@ -12,7 +12,7 @@ export const actions: Actions = {
     const email = data.get("email") as string;
     const password = data.get("password") as string;
 
-    const supabase = getSupabase();
+    const supabase = getSupabase(cookies);
     const { data: authData, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -30,11 +30,11 @@ export const actions: Actions = {
     redirect(303, redirectTo);
   },
 
-  magicLink: async ({ request }) => {
+  magicLink: async ({ request, cookies }) => {
     const data = await request.formData();
     const email = data.get("email") as string;
 
-    const supabase = getSupabase();
+    const supabase = getSupabase(cookies);
     const { error } = await supabase.auth.signInWithOtp({ email });
 
     if (error) return fail(400, { error: error.message, email });
@@ -42,12 +42,12 @@ export const actions: Actions = {
     return { magicLinkSent: true, email };
   },
 
-  oauth: async ({ request, url }) => {
+  oauth: async ({ request, cookies, url }) => {
     const data = await request.formData();
     const provider = data.get("provider") as "google" | "github";
     const redirectTo = url.searchParams.get("redirect") || "/";
 
-    const supabase = getSupabase();
+    const supabase = getSupabase(cookies);
     const { data: oauthData, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
