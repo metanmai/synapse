@@ -174,9 +174,9 @@ function closePanel() {
         onClose={closePanel}
       />
     {:else if mode === "new"}
-      <EntryEditor projectName={data.project.name} isNew />
+      <EntryEditor projectName={data.project.name} isNew onCancel={closePanel} />
     {:else if mode === "edit" && entry}
-      <EntryEditor {entry} projectName={data.project.name} />
+      <EntryEditor {entry} projectName={data.project.name} onCancel={closePanel} />
     {:else if mode === "view" && entry}
       <EntryViewer {entry} projectName={data.project.name} onEdit={startEdit} />
     {:else}
