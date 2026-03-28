@@ -30,6 +30,11 @@ export const schemas = {
     label: z.string().optional().default("cli"),
   }),
 
+  verifyEmail: z.object({
+    email: z.string().email("Valid email is required"),
+    code: z.string().min(1, "Verification code is required"),
+  }),
+
   cliSession: z.object({
     code_challenge: z.string().min(1, "Code challenge is required"),
   }),
