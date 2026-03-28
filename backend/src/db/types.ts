@@ -3,7 +3,6 @@ export type Tier = "free" | "pro";
 export interface User {
   id: string;
   email: string;
-  api_key_hash: string;
   stripe_customer_id: string | null;
   google_oauth_tokens: GoogleOAuthTokens | null;
   created_at: string;
@@ -108,4 +107,14 @@ export interface Subscription {
   cancel_at_period_end: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface ApiKey {
+  id: string;
+  user_id: string;
+  key_hash: string;
+  label: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+  created_at: string;
 }
