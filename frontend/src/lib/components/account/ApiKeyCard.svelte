@@ -6,7 +6,7 @@
 
 <div class="p-4 rounded-xl"
   style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border);">
-  <h3 class="font-medium mb-2">API Key</h3>
+  <h3 class="font-medium mb-2" style="color: var(--color-accent);">API Key</h3>
   <p class="text-sm mb-3" style="color: var(--color-text-muted);">
     Use this key to connect Claude, ChatGPT, or other AI tools.
   </p>
@@ -23,7 +23,7 @@
   {/if}
   <form method="POST" action="?/regenerateKey" use:enhance>
     <button type="submit" class="rounded-lg px-3 py-2 text-sm cursor-pointer"
-      style="border: 1px solid var(--color-border);">
+      style="border: 1px solid var(--color-pink); color: var(--color-pink-dark);">
       {apiKey ? "Regenerate" : "Generate API Key"}
     </button>
   </form>
