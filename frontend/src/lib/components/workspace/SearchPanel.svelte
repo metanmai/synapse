@@ -16,8 +16,8 @@
       style="border: 1px solid var(--color-border);"
     />
     <button type="submit"
-      class="rounded-lg px-4 py-2.5 text-sm font-medium text-white cursor-pointer"
-      style="background-color: var(--color-accent);">
+      class="rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
+      style="background-color: var(--color-accent); color: var(--color-text);">
       Search
     </button>
   </form>
