@@ -1301,10 +1301,8 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
     "create_project",
     "Create a new project workspace for organizing context. You become the owner.",
     { name: z.string().describe("Project name") },
-    async ({ name }, extra) => {
+    async ({ name }) => {
       const db = createSupabaseClient(env);
-      // TODO: extract userId from MCP auth context
-      // For now, this will be wired up when auth is integrated with MCP
       const userId = getContext().userId!;
       const project = await createProject(db, name, userId);
       return {
@@ -1421,6 +1419,7 @@ Create `src/mcp/tools/context-capture.ts`:
 ```typescript
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Env } from "../../lib/env";
+import type { GetMcpContext } from "../agent";
 
 export function registerContextCaptureTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   // Implemented in Task 8
@@ -1431,6 +1430,7 @@ Create `src/mcp/tools/context-retrieval.ts`:
 ```typescript
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Env } from "../../lib/env";
+import type { GetMcpContext } from "../agent";
 
 export function registerContextRetrievalTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   // Implemented in Task 9
@@ -1441,6 +1441,7 @@ Create `src/mcp/tools/google-sync.ts`:
 ```typescript
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Env } from "../../lib/env";
+import type { GetMcpContext } from "../agent";
 
 export function registerGoogleSyncTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   // Implemented in Task 12
