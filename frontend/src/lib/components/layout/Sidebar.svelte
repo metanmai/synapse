@@ -40,12 +40,22 @@ const navSections = $derived([
 <style>
   .sidebar {
     width: 11rem;
+    min-width: 0;
     padding: 0.75rem;
     background: rgba(232, 216, 196, 0.15);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border-right: 1px solid rgba(199, 183, 163, 0.2);
     flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  @media (max-width: 768px) {
+    .sidebar {
+      width: 100%;
+      border-right: none;
+      border-bottom: 1px solid rgba(199, 183, 163, 0.2);
+    }
   }
 
   .sidebar-section {
