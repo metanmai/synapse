@@ -171,3 +171,34 @@ h3 {
 .btn-secondary:hover {
   background: rgba(86, 28, 36, 0.1);
 }
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(86, 28, 36, 0.15);
+  border-top-color: var(--color-pink);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.spinner-sm {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+.spinner-white {
+  border-color: rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none !important;
+}
