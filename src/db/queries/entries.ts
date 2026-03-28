@@ -166,3 +166,70 @@ export async function deleteEntry(
     .eq("path", path);
   if (error) throw error;
 }
+
+export async function getEntryHistory(
+  db: SupabaseClient,
+  projectId: string,
+  path: string
+): Promise<EntryHistory[]> {
+  // First get the entry ID
+  const { data: entry } = await db
+    .from("entries")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("path", path)
+    .single();
+
+  if (!entry) return [];
+
+  const { data, error } = await db
+    .from("entry_history")
+    .select("*")
+    .eq("entry_id", entry.id)
+    .order("changed_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as EntryHistory[];
+}
+
+export async function restoreEntry(
+  db: SupabaseClient,
+  projectId: string,
+  path: string,
+  historyId: string
+): Promise<Entry | null> {
+  // Get the history record
+  const { data: historyRecord, error: histError } = await db
+    .from("entry_history")
+    .select("*")
+    .eq("id", historyId)
+    .single();
+  if (histError) throw histError;
+  if (!historyRecord) return null;
+
+  // Upsert restores the content (upsertEntry handles versioning)
+  const { data: existing } = await db
+    .from("entries")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("path", path)
+    .single();
+
+  if (!existing) return null;
+
+  // Save current to history
+  await db.from("entry_history").insert({
+    entry_id: existing.id,
+    content: existing.content,
+    source: existing.source,
+  });
+
+  // Restore old content
+  const { data, error } = await db
+    .from("entries")
+    .update({ content: historyRecord.content, source: "human" })
+    .eq("id", existing.id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Entry;
+}
