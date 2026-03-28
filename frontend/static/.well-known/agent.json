@@ -4,6 +4,7 @@
   "url": "https://synapsesync.app",
   "api": {
     "base_url": "https://api.synapsesync.app",
+    "openapi": "https://synapsesync.app/openapi.json",
     "auth": {
       "type": "bearer",
       "description": "API key from account page or CLI login"
@@ -20,6 +21,14 @@
     "versioning": true,
     "sharing": true,
     "export": true
+  },
+  "errors": {
+    "format": "json",
+    "schema": {
+      "error": "string - human-readable message",
+      "code": "string - machine-readable error code"
+    },
+    "codes": ["VALIDATION_ERROR", "TIER_LIMIT", "NOT_FOUND", "RATE_LIMIT", "AUTH_ERROR", "KEY_LIMIT", "INTERNAL_ERROR"]
   },
   "npm_package": "synapsesync-mcp"
 }
