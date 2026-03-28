@@ -176,5 +176,23 @@ export function createApi(token: string | null) {
       request<{ url: string }>("/api/billing/portal", token, {
         method: "POST",
       }),
+
+    // Import/Export
+    importProject: async (projectId: string, file: File) => {
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch(`${API_URL}/api/projects/${projectId}/import`, {
+        method: "POST",
+        headers,
+        body,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: res.statusText }));
+        throw new ApiError(res.status, data.error || `Import failed: ${res.status}`);
+      }
+      return res.json() as Promise<{ imported: number; updated: number; skipped: number }>;
+    },
   };
 }
