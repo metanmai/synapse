@@ -6,7 +6,7 @@ declare global {
     }
 
     interface Locals {
-      user: { id: string; email: string } | null;
+      user: { id: string; email: string; providers: string[] } | null;
       token: string | null;
     }
   }
