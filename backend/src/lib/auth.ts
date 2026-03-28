@@ -1,6 +1,5 @@
 import type { Context, Next } from "hono";
 
-import { createSupabaseClient } from "../db/client";
 import { ApiKeyExpiredError, findUserByApiKeyHash, updateApiKeyLastUsed } from "../db/queries";
 import { findUserBySupabaseAuthId, getActiveSubscription } from "../db/queries";
 import { UnauthorizedError } from "./errors";
@@ -36,7 +35,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next):
   }
 
   const token = authHeader.slice(7);
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
   let user: UserRow | null = null;
 
   // Try JWT by verifying with Supabase auth
