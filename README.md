@@ -20,7 +20,17 @@ Synapse stores your AI context as **files in a cloud workspace** so the same mem
 Connect Claude Code, Cursor, Windsurf, VS Code (MCP), or any client that supports **Model Context Protocol**.
 
 1. **Get an API key** — Sign up at **[synapsesync.app](https://synapsesync.app)**, open **Account → API keys**, and create a key.
-2. **Register the server** — Add the published **`synapsesync-mcp`** package to your MCP config:
+2. **Guided setup (recommended)** — In a terminal, `cd` to your project and run:
+
+   ```bash
+   npx synapsesync-mcp
+   ```
+
+   This interactive wizard can sign you up, log you in, or accept a key you already have, then writes `.mcp.json` (and editor-specific config when it detects Claude Code, Cursor, Windsurf, or VS Code). Editors that spawn the MCP with a pipe still run the server directly — only an interactive terminal runs the wizard.
+
+   Same wizard explicitly: `npx synapsesync-mcp wizard`.
+
+3. **Or register the server yourself** — Add the published **`synapsesync-mcp`** package to your MCP config:
 
 ```json
 {
@@ -36,7 +46,7 @@ Connect Claude Code, Cursor, Windsurf, VS Code (MCP), or any client that support
 }
 ```
 
-3. **CLI helpers** — From a terminal you can run `npx synapsesync-mcp` with `login` / `signup` subcommands to create an account or key and print a ready-to-paste config snippet (see package output for flags).
+4. **CLI helpers** — You can also run `npx synapsesync-mcp login`, `signup`, or `init --key <key>` for non-interactive flows (see package output for flags).
 
 Your assistant gets tools such as **`read`**, **`write`**, **`search`**, **`tree`**, **`ls`**, and **`history`** against your project paths (e.g. `decisions/`, `notes/`, `architecture/`).
 
@@ -44,8 +54,9 @@ Your assistant gets tools such as **`read`**, **`write`**, **`search`**, **`tree
 
 | Variable | When to set |
 |----------|----------------|
-| `SYNAPSE_API_URL` | Only if your workspace is **not** on the default cloud API (advanced / custom deployments). |
 | `SYNAPSE_PASSPHRASE` + `SYNAPSE_USER_EMAIL` | Optional client-side encryption for content at rest (see package documentation). |
+
+The MCP always talks to the public API at `https://api.synapsesync.app`. Self-hosting your own API requires building `synapsesync-mcp` from source and changing the `API_URL` constant in `mcp/src/index.ts`.
 
 Restart the editor or MCP host after changing config.
 
