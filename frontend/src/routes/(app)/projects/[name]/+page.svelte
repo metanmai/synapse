@@ -130,12 +130,26 @@ function closePanel() {
         style="color: var(--color-text-muted); font-size: 11px;">Files</span>
       <div class="flex items-center gap-1">
         <button onclick={() => startNew()}
-          class="cursor-pointer" style="color: var(--color-link); font-size: 12px;">+ New</button>
+          class="cursor-pointer"
+          style="font-size: 11px; padding: 3px 10px; border-radius: 9999px; border: 1px solid var(--color-border); background: rgba(86, 28, 36, 0.04); color: var(--color-text); cursor: pointer; transition: all 150ms ease;"
+          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
+          onmouseleave={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.04)')}>
+          + New
+        </button>
         <a href={`/projects/${encodeURIComponent(data.project.name)}/api/export`}
-          class="cursor-pointer" style="color: var(--color-link); font-size: 12px;"
-          download>Export</a>
+          download
+          style="font-size: 11px; padding: 3px 10px; border-radius: 9999px; border: 1px solid var(--color-border); background: rgba(86, 28, 36, 0.04); color: var(--color-text); cursor: pointer; transition: all 150ms ease; text-decoration: none; display: inline-block;"
+          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
+          onmouseleave={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.04)')}>
+          ↓ Export
+        </a>
         <button onclick={() => importInput?.click()}
-          class="cursor-pointer" style="color: var(--color-link); font-size: 12px;">Import</button>
+          class="cursor-pointer"
+          style="font-size: 11px; padding: 3px 10px; border-radius: 9999px; border: 1px solid var(--color-border); background: rgba(86, 28, 36, 0.04); color: var(--color-text); cursor: pointer; transition: all 150ms ease;"
+          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
+          onmouseleave={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.04)')}>
+          ↑ Import
+        </button>
       </div>
     </div>
     <FolderTree entries={data.entries} {selectedPath}
