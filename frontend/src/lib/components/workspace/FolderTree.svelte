@@ -1,12 +1,13 @@
 <script lang="ts">
 import type { Entry, EntryListItem } from "$lib/types";
 
-let { entries, selectedPath, projectName, onSelect, onAction } = $props<{
+let { entries, selectedPath, projectName, onSelect, onAction, onNewInFolder } = $props<{
   entries: EntryListItem[];
   selectedPath: string | null;
   projectName: string;
   onSelect: (path: string) => void;
-  onAction: (action: "activity" | "share" | "delete", path: string, isFolder: boolean) => void;
+  onAction: (action: "activity" | "share" | "delete" | "export", path: string, isFolder: boolean) => void;
+  onNewInFolder?: (folderPath: string) => void;
 }>();
 
 let searchQuery = $state("");
@@ -129,6 +130,13 @@ function handleWindowClick() {
       style="font-size: 11px; color: var(--color-text);">
       Share
     </button>
+    <a href={`/projects/${encodeURIComponent(projectName)}/api/export`}
+      download
+      class="block w-full text-left px-3 py-1.5 cursor-pointer hover:opacity-80"
+      style="font-size: 11px; color: var(--color-text); text-decoration: none;"
+      onclick={() => { menuOpen = null; }}>
+      Export
+    </a>
     {#if entries.some(e => e.path === menuOpen)}
       <button onclick={() => handleAction("delete", menuOpen!, false)}
         class="block w-full text-left px-3 py-1.5 cursor-pointer hover:opacity-80"
@@ -170,6 +178,11 @@ function handleWindowClick() {
       onmouseleave={(e) => { e.currentTarget.style.background = ''; }}>
       <span class="opacity-60 shrink-0" style="font-size: 10px; color: var(--color-accent);">{expanded.has(child.path) ? "▼" : "▶"}</span>
       <span class="flex-1 min-w-0 truncate" style="color: var(--color-accent); font-size: 12px; font-weight: 500;">{child.name}</span>
+      <button onclick={(e) => { e.stopPropagation(); onNewInFolder?.(child.path); }}
+        class="opacity-0 group-hover:opacity-100 shrink-0 rounded cursor-pointer"
+        style="font-size: 14px; color: var(--color-text-muted); line-height: 1; padding: 0 3px;"
+        title="New file in {child.name}"
+      >+</button>
       <button onclick={(e) => { e.stopPropagation(); toggleMenu(e, child.path); }}
         class="opacity-0 group-hover:opacity-100 shrink-0 px-0.5 rounded cursor-pointer"
         style="font-size: 12px; color: var(--color-text-muted); line-height: 1;"
