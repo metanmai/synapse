@@ -25,7 +25,7 @@ function onSearchInput() {
   debounceTimer = setTimeout(async () => {
     try {
       const res = await fetch(
-        `/projects/${encodeURIComponent(projectName)}/api/search?q=${encodeURIComponent(searchQuery)}`
+        `/projects/${encodeURIComponent(projectName)}/api/search?q=${encodeURIComponent(searchQuery)}`,
       );
       if (res.ok) {
         searchResults = await res.json();
@@ -101,13 +101,21 @@ function toggleMenu(e: MouseEvent, path: string) {
   }
 }
 
-function handleAction(action: "activity" | "share" | "delete", path: string, isFolder: boolean) {
+function handleAction(action: "activity" | "share" | "delete" | "export", path: string, isFolder: boolean) {
   menuOpen = null;
   onAction(action, path, isFolder);
 }
 
 function handleWindowClick() {
   if (menuOpen) menuOpen = null;
+}
+
+function menuPathIsFolder(menuPath: string): boolean {
+  return menuPath.indexOf(".") === -1 && entries.some((item: EntryListItem) => item.path.startsWith(`${menuPath}/`));
+}
+
+function menuPathIsFile(menuPath: string): boolean {
+  return entries.some((item: EntryListItem) => item.path === menuPath);
 }
 </script>
 
@@ -120,12 +128,12 @@ function handleWindowClick() {
     class="fixed rounded-lg shadow-lg py-1"
     style="left: {menuPos.x}px; top: {menuPos.y}px; z-index: 9999;
       background-color: var(--color-bg-raised); border: 1px solid var(--color-border); min-width: 120px;">
-    <button onclick={() => handleAction("activity", menuOpen!, menuOpen!.indexOf(".") === -1 && entries.some(e => e.path.startsWith(menuOpen! + "/")))}
+    <button onclick={() => handleAction("activity", menuOpen!, menuPathIsFolder(menuOpen!))}
       class="block w-full text-left px-3 py-1.5 cursor-pointer hover:opacity-80"
       style="font-size: 11px; color: var(--color-text);">
       Activity
     </button>
-    <button onclick={() => handleAction("share", menuOpen!, menuOpen!.indexOf(".") === -1 && entries.some(e => e.path.startsWith(menuOpen! + "/")))}
+    <button onclick={() => handleAction("share", menuOpen!, menuPathIsFolder(menuOpen!))}
       class="block w-full text-left px-3 py-1.5 cursor-pointer hover:opacity-80"
       style="font-size: 11px; color: var(--color-text);">
       Share
@@ -137,7 +145,7 @@ function handleWindowClick() {
       onclick={() => { menuOpen = null; }}>
       Export
     </a>
-    {#if entries.some(e => e.path === menuOpen)}
+    {#if menuOpen && menuPathIsFile(menuOpen)}
       <button onclick={() => handleAction("delete", menuOpen!, false)}
         class="block w-full text-left px-3 py-1.5 cursor-pointer hover:opacity-80"
         style="font-size: 11px; color: var(--color-danger);">
