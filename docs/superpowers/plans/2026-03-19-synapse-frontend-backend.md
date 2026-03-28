@@ -1,14 +1,14 @@
-# MCP-Sync Frontend Backend Changes Implementation Plan
+# Synapse Frontend Backend Changes Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add JWT auth, share links, activity logging, version history, CORS, and API key management to the existing MCP-Sync backend — preparing it for the frontend SPA.
+**Goal:** Add JWT auth, share links, activity logging, version history, CORS, and API key management to the existing Synapse backend — preparing it for the frontend SPA.
 
 **Architecture:** Extend the existing Cloudflare Worker with dual auth (JWT + API key), two new DB tables (share_links, activity_log), new REST endpoints, and activity logging in all mutation handlers. CORS middleware for frontend access.
 
 **Tech Stack:** TypeScript, Cloudflare Workers, Hono, Supabase (Postgres + Auth), existing stack
 
-**Spec:** `docs/superpowers/specs/2026-03-19-mcp-sync-frontend-design.md`
+**Spec:** `docs/superpowers/specs/2026-03-19-synapse-frontend-design.md`
 
 ---
 
@@ -671,14 +671,14 @@ import { context } from "./api/context";
 import { projects } from "./api/projects";
 import { sync } from "./api/sync";
 import { share } from "./api/share";
-import { McpSyncAgent } from "./mcp/agent";
+import { SynapseAgent } from "./mcp/agent";
 import { runScheduledGoogleSync } from "./sync/from-google";
 
 const app = new Hono<{ Bindings: Env }>();
 
 // CORS for frontend
 app.use("*", cors({
-  origin: ["http://localhost:5173", "https://app.mcp-sync.dev"],
+  origin: ["http://localhost:5173", "https://app.synapse.dev"],
   allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization"],
   credentials: true,
@@ -692,7 +692,7 @@ app.onError((err, c) => {
   return c.json({ error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
 });
 
-app.get("/health", (c) => c.json({ status: "ok", service: "mcp-sync" }));
+app.get("/health", (c) => c.json({ status: "ok", service: "synapse" }));
 
 // Auth routes (no auth middleware)
 app.route("/auth", auth);
@@ -705,10 +705,10 @@ app.route("/api/share", share);
 app.route("/api/account", account);
 
 // Mount MCP server (Streamable HTTP transport)
-app.mount("/mcp", McpSyncAgent.serve("/mcp").fetch);
+app.mount("/mcp", SynapseAgent.serve("/mcp").fetch);
 
 // Export Durable Object class (required by Wrangler)
-export { McpSyncAgent };
+export { SynapseAgent };
 
 // Default export for Cloudflare Workers
 export default {
