@@ -8,25 +8,7 @@ import { parseBody, schemas } from "../lib/validate";
 
 import type { Env } from "../lib/env";
 
-interface CliSession {
-  code: string;
-  code_challenge: string;
-  api_key: string;
-  email: string;
-  created_at: number;
-}
-
 const CLI_SESSION_TTL = 5 * 60 * 1000; // 5 minutes
-const cliSessions = new Map<string, CliSession>();
-
-function cleanExpiredSessions(): void {
-  const now = Date.now();
-  for (const [code, session] of cliSessions) {
-    if (now - session.created_at > CLI_SESSION_TTL) {
-      cliSessions.delete(code);
-    }
-  }
-}
 
 async function sha256hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
@@ -34,6 +16,50 @@ async function sha256hex(input: string): Promise<string> {
   return Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+// Stateless encrypted session tokens — no in-memory storage needed across Workers isolates
+async function deriveSessionKey(secret: string): Promise<CryptoKey> {
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(secret), "HKDF", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name: "HKDF", hash: "SHA-256", salt: encoder.encode("synapse-cli-session"), info: new Uint8Array(0) },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
+}
+
+interface CliSessionPayload {
+  api_key: string;
+  email: string;
+  code_challenge: string;
+  exp: number;
+}
+
+async function encryptSession(payload: CliSessionPayload, secret: string): Promise<string> {
+  const key = await deriveSessionKey(secret);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(JSON.stringify(payload));
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  const combined = new Uint8Array(iv.length + ciphertext.byteLength);
+  combined.set(iv);
+  combined.set(new Uint8Array(ciphertext), iv.length);
+  return btoa(String.fromCharCode(...combined));
+}
+
+async function decryptSession(code: string, secret: string): Promise<CliSessionPayload | null> {
+  try {
+    const key = await deriveSessionKey(secret);
+    const raw = Uint8Array.from(atob(code), (c) => c.charCodeAt(0));
+    const iv = raw.slice(0, 12);
+    const ciphertext = raw.slice(12);
+    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+    return JSON.parse(new TextDecoder().decode(plaintext)) as CliSessionPayload;
+  } catch {
+    return null;
+  }
 }
 
 const auth = new Hono<{ Bindings: Env }>();
@@ -112,11 +138,10 @@ auth.post("/login", async (c) => {
 });
 
 // POST /auth/cli-session — create a CLI auth session after browser login
+// Returns an encrypted code containing the API key + PKCE challenge (stateless — no server-side storage)
 auth.post("/cli-session", authMiddleware, async (c) => {
   const body = await parseBody(c, schemas.cliSession);
   const user = c.get("user");
-
-  cleanExpiredSessions();
 
   const db = createSupabaseClient(c.env);
 
@@ -131,30 +156,31 @@ auth.post("/cli-session", authMiddleware, async (c) => {
   const apiKeyHash = await hashApiKey(apiKey);
   await createApiKey(db, user.id, apiKeyHash, "cli");
 
-  const code = crypto.randomUUID();
-  cliSessions.set(code, {
-    code,
-    code_challenge: body.code_challenge,
-    api_key: apiKey,
-    email: user.email ?? "",
-    created_at: Date.now(),
-  });
+  const code = await encryptSession(
+    {
+      api_key: apiKey,
+      email: user.email ?? "",
+      code_challenge: body.code_challenge,
+      exp: Date.now() + CLI_SESSION_TTL,
+    },
+    c.env.SUPABASE_SERVICE_KEY,
+  );
 
   return c.json({ code });
 });
 
-// POST /auth/cli-exchange — exchange code + verifier for API key (no auth required)
+// POST /auth/cli-exchange — exchange encrypted code + PKCE verifier for API key (no auth required)
+// Stateless: decrypts the code, verifies PKCE, returns the API key. No server-side session lookup.
 auth.post("/cli-exchange", async (c) => {
   const body = await parseBody(c, schemas.cliExchange);
 
-  const session = cliSessions.get(body.code);
+  const session = await decryptSession(body.code, c.env.SUPABASE_SERVICE_KEY);
   if (!session) {
     throw new AppError("Invalid or expired code", 404, "NOT_FOUND");
   }
 
   // Check expiry
-  if (Date.now() - session.created_at > CLI_SESSION_TTL) {
-    cliSessions.delete(body.code);
+  if (Date.now() > session.exp) {
     throw new AppError("Code expired", 404, "NOT_FOUND");
   }
 
@@ -163,9 +189,6 @@ auth.post("/cli-exchange", async (c) => {
   if (challengeFromVerifier !== session.code_challenge) {
     throw new AppError("Invalid code verifier", 401, "AUTH_ERROR");
   }
-
-  // Single-use: delete after successful exchange
-  cliSessions.delete(body.code);
 
   return c.json({
     api_key: session.api_key,
