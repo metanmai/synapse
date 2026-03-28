@@ -1,11 +1,8 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { Sidebar } from "../components/layout/Sidebar";
-import { FolderTree } from "../components/workspace/FolderTree";
-import { EntryViewer } from "../components/workspace/EntryViewer";
-import { EntryEditor } from "../components/workspace/EntryEditor";
-import { SearchPanel } from "../components/workspace/SearchPanel";
-import { NewEntryDialog } from "../components/workspace/NewEntryDialog";
+
+import { Sidebar } from "../components/layout";
+import { FolderTree, EntryViewer, EntryEditor, SearchPanel, NewEntryDialog } from "../components/workspace";
 import { useEntryList, useEntry, useSaveEntry } from "../hooks/useEntries";
 
 export function ProjectWorkspace() {

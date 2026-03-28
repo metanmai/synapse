@@ -1,21 +1,12 @@
 import { Hono } from "hono";
-import type { Env } from "../lib/env";
+
 import { authMiddleware } from "../lib/auth";
 import { createSupabaseClient } from "../db/client";
-import {
-  createProject,
-  listProjectsForUser,
-  getProjectByName,
-  getMemberRole,
-  addMember,
-  removeMember,
-} from "../db/queries/projects";
-import { findUserByEmail } from "../db/queries/users";
-import { setPreference, getPreferences } from "../db/queries/preferences";
-import { createShareLink, listShareLinks, deleteShareLink } from "../db/queries/share-links";
-import { getActivityLog } from "../db/queries/activity";
+import { createProject, listProjectsForUser, getProjectByName, getMemberRole, addMember, removeMember, findUserByEmail, setPreference, getPreferences, createShareLink, listShareLinks, deleteShareLink, getActivityLog } from "../db/queries";
 import { logActivity } from "../db/activity-logger";
 import { AppError, NotFoundError, ForbiddenError } from "../lib/errors";
+
+import type { Env } from "../lib/env";
 
 const projects = new Hono<{ Bindings: Env }>();
 projects.use("*", authMiddleware);
