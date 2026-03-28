@@ -88,7 +88,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next):
 
   // Resolve tier from subscription status
   const sub = await getActiveSubscription(db, user.id);
-  const tier = sub?.status === "active" || sub?.status === "past_due" ? "pro" : "free";
+  const tier = sub?.status === "active" || sub?.status === "past_due" ? "plus" : "free";
   c.set("tier", tier);
 
   await next();
