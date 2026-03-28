@@ -29,16 +29,10 @@
         {/each}
       </div>
     </div>
-    <div class="flex gap-3">
-      <a href="/projects/{encodeURIComponent(projectName)}/history/{encodeURIComponent(entry.path)}"
-        class="text-sm" style="color: var(--color-text-muted);">
-        History
-      </a>
-      <button onclick={() => onEdit()}
-        class="text-sm cursor-pointer" style="color: var(--color-link);">
-        Edit
-      </button>
-    </div>
+    <button onclick={() => onEdit()}
+      class="text-sm cursor-pointer" style="color: var(--color-link);">
+      Edit
+    </button>
   </div>
   <div class="prose rounded-xl p-5 text-sm"
     style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border); line-height: 1.7;">
