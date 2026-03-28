@@ -4,17 +4,14 @@ import { createSupabaseClient } from "../db/client";
 import { countApiKeys, createApiKey, createUser, deleteApiKey, findUserByEmail, listApiKeys } from "../db/queries";
 import { authMiddleware, hashApiKey } from "../lib/auth";
 import { AppError, ConflictError } from "../lib/errors";
+import { parseBody, schemas } from "../lib/validate";
 
 import type { Env } from "../lib/env";
 
 const auth = new Hono<{ Bindings: Env }>();
 
 auth.post("/signup", async (c) => {
-  const body = await c.req.json<{ email?: string }>();
-
-  if (!body.email || typeof body.email !== "string") {
-    throw new AppError("Email is required", 400, "VALIDATION_ERROR");
-  }
+  const body = await parseBody(c, schemas.signup);
 
   const db = createSupabaseClient(c.env);
   const existing = await findUserByEmail(db, body.email);
@@ -40,11 +37,7 @@ auth.post("/signup", async (c) => {
 
 // POST /auth/login — authenticate with email+password, return an API key
 auth.post("/login", async (c) => {
-  const body = await c.req.json<{ email?: string; password?: string; label?: string }>();
-
-  if (!body.email || !body.password) {
-    throw new AppError("email and password are required", 400, "VALIDATION_ERROR");
-  }
+  const body = await parseBody(c, schemas.login);
 
   // Authenticate via Supabase Auth
   const { createClient } = await import("@supabase/supabase-js");
@@ -69,7 +62,7 @@ auth.post("/login", async (c) => {
   }
 
   // Check if user already has a key with this label
-  const keyLabel = body.label || "cli";
+  const keyLabel = body.label;
   const existingKeys = await listApiKeys(db, user.id);
   const existingKey = existingKeys.find((k) => k.label === keyLabel);
 
@@ -167,11 +160,7 @@ account.use("*", authMiddleware);
 // POST /api/account/keys — create a new API key
 account.post("/keys", async (c) => {
   const user = c.get("user");
-  const body = await c.req.json<{ label?: string; expires_at?: string | null }>();
-
-  if (!body.label || typeof body.label !== "string" || !body.label.trim()) {
-    throw new AppError("label is required", 400, "VALIDATION_ERROR");
-  }
+  const body = await parseBody(c, schemas.createApiKey);
 
   const db = createSupabaseClient(c.env);
 
@@ -183,7 +172,7 @@ account.post("/keys", async (c) => {
   const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
   const apiKeyHash = await hashApiKey(apiKey);
 
-  const created = await createApiKey(db, user.id, apiKeyHash, body.label.trim(), body.expires_at);
+  const created = await createApiKey(db, user.id, apiKeyHash, body.label, body.expires_at);
 
   return c.json(
     {
