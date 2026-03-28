@@ -28,9 +28,9 @@ export async function runWizard(version: string): Promise<void> {
         spin.stop(themeError("API key expired or revoked"));
         keyExpired = true;
       } else if (keyStatus.status === "valid") {
-        spin.stop(success("Connected"));
+        spin.stop(`${success("\u2713")} Connected`);
       } else {
-        spin.stop(muted("Could not verify (offline?)"));
+        spin.stop(muted("Could not verify connection"));
       }
     }
 
