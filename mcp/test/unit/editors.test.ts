@@ -420,7 +420,7 @@ describe("editors", () => {
       expect(fs.existsSync(cmdDir)).toBe(true);
       const files = fs.readdirSync(cmdDir);
       const synapseFiles = files.filter((f) => f.startsWith("synapse-") && f.endsWith(".md"));
-      expect(synapseFiles.length).toBe(6);
+      expect(synapseFiles.length).toBe(5);
     });
 
     it("command files have content", () => {
@@ -461,7 +461,7 @@ describe("editors", () => {
       expect(fs.existsSync(promptDir)).toBe(true);
       const files = fs.readdirSync(promptDir);
       const synapseFiles = files.filter((f) => f.startsWith("synapse-") && f.endsWith(".prompt.md"));
-      expect(synapseFiles.length).toBe(6);
+      expect(synapseFiles.length).toBe(5);
 
       // Verify YAML frontmatter
       for (const file of synapseFiles) {
@@ -496,7 +496,7 @@ describe("editors", () => {
       expect(fs.existsSync(workflowDir)).toBe(true);
       const files = fs.readdirSync(workflowDir);
       const synapseFiles = files.filter((f) => f.startsWith("synapse-") && f.endsWith(".md"));
-      expect(synapseFiles.length).toBe(6);
+      expect(synapseFiles.length).toBe(5);
     });
 
     it("skips existing files (idempotent)", () => {
@@ -683,7 +683,7 @@ describe("editors", () => {
       const cmdDir = path.join(tmpHomeDir, ".claude", "commands", "synapse");
       expect(fs.existsSync(cmdDir)).toBe(true);
       const files = fs.readdirSync(cmdDir);
-      expect(files.length).toBe(6);
+      expect(files.length).toBe(5);
       expect(files).toContain("search.md");
       expect(files).toContain("tree.md");
       expect(files).toContain("sync.md");
