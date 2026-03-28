@@ -4,6 +4,9 @@
   import ProblemSection from "$lib/components/landing/ProblemSection.svelte";
   import HowItWorks from "$lib/components/landing/HowItWorks.svelte";
   import FeatureCards from "$lib/components/landing/FeatureCards.svelte";
+  import BuiltForBuilders from "$lib/components/landing/BuiltForBuilders.svelte";
+  import CtaSection from "$lib/components/landing/CtaSection.svelte";
+  import LandingFooter from "$lib/components/landing/LandingFooter.svelte";
 </script>
 
 <LandingNav />
@@ -11,3 +14,6 @@
 <ProblemSection />
 <HowItWorks />
 <FeatureCards />
+<BuiltForBuilders />
+<CtaSection />
+<LandingFooter />
