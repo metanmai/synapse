@@ -10,11 +10,7 @@ export interface ScoredEntry {
  * Deduplicates by entry ID, keeping the highest score.
  * Returns Entry[] sorted by score descending.
  */
-export function mergeSearchResults(
-  semantic: ScoredEntry[],
-  fulltext: ScoredEntry[],
-  ilike: ScoredEntry[],
-): Entry[] {
+export function mergeSearchResults(semantic: ScoredEntry[], fulltext: ScoredEntry[], ilike: ScoredEntry[]): Entry[] {
   const bestByid = new Map<string, ScoredEntry>();
 
   for (const scored of [...semantic, ...fulltext, ...ilike]) {
