@@ -12,6 +12,9 @@ import {
 } from "../db/queries/projects";
 import { findUserByEmail } from "../db/queries/users";
 import { setPreference, getPreferences } from "../db/queries/preferences";
+import { createShareLink, listShareLinks, deleteShareLink } from "../db/queries/share-links";
+import { getActivityLog } from "../db/queries/activity";
+import { logActivity } from "../db/activity-logger";
 import { AppError, NotFoundError, ForbiddenError } from "../lib/errors";
 
 const projects = new Hono<{ Bindings: Env }>();
@@ -86,6 +89,88 @@ projects.put("/preferences/:project", async (c) => {
 
   const prefs = await setPreference(db, user.id, proj.id, key, value);
   return c.json(prefs);
+});
+
+// POST /api/projects/:id/share-links
+projects.post("/:id/share-links", async (c) => {
+  const user = c.get("user");
+  const projectId = c.req.param("id");
+  const { role, expires_at } = await c.req.json();
+
+  if (!role || !["editor", "viewer"].includes(role)) {
+    throw new AppError("role must be 'editor' or 'viewer'", 400, "VALIDATION_ERROR");
+  }
+
+  const db = createSupabaseClient(c.env);
+  const callerRole = await getMemberRole(db, projectId, user.id);
+  if (!callerRole || callerRole === "viewer") {
+    throw new ForbiddenError("Only owners and editors can create share links");
+  }
+
+  const link = await createShareLink(db, projectId, role, user.id, expires_at);
+  await logActivity(db, {
+    project_id: projectId,
+    user_id: user.id,
+    action: "share_link_created",
+    source: "human",
+    metadata: { role, token: link.token },
+  });
+
+  return c.json(link, 201);
+});
+
+// GET /api/projects/:id/share-links
+projects.get("/:id/share-links", async (c) => {
+  const user = c.get("user");
+  const projectId = c.req.param("id");
+
+  const db = createSupabaseClient(c.env);
+  const callerRole = await getMemberRole(db, projectId, user.id);
+  if (!callerRole || callerRole === "viewer") {
+    throw new ForbiddenError("Only owners and editors can view share links");
+  }
+
+  const links = await listShareLinks(db, projectId);
+  return c.json(links);
+});
+
+// DELETE /api/projects/:id/share-links/:token
+projects.delete("/:id/share-links/:token", async (c) => {
+  const user = c.get("user");
+  const projectId = c.req.param("id");
+  const token = c.req.param("token");
+
+  const db = createSupabaseClient(c.env);
+  const callerRole = await getMemberRole(db, projectId, user.id);
+  if (callerRole !== "owner") {
+    throw new ForbiddenError("Only owners can revoke share links");
+  }
+
+  await deleteShareLink(db, projectId, token);
+  await logActivity(db, {
+    project_id: projectId,
+    user_id: user.id,
+    action: "share_link_revoked",
+    source: "human",
+    metadata: { token },
+  });
+
+  return c.json({ ok: true });
+});
+
+// GET /api/projects/:id/activity
+projects.get("/:id/activity", async (c) => {
+  const user = c.get("user");
+  const projectId = c.req.param("id");
+  const limit = parseInt(c.req.query("limit") ?? "50");
+  const offset = parseInt(c.req.query("offset") ?? "0");
+
+  const db = createSupabaseClient(c.env);
+  const callerRole = await getMemberRole(db, projectId, user.id);
+  if (!callerRole) throw new NotFoundError("Project not found");
+
+  const activity = await getActivityLog(db, projectId, limit, offset);
+  return c.json(activity);
 });
 
 export { projects };
