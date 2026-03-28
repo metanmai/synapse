@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
+import { enhance } from "$app/forms";
 
-  let { error, projectId } = $props<{ error?: string | null; projectId: string }>();
+let { error, projectId } = $props<{ error?: string | null; projectId: string }>();
 </script>
 
 <form method="POST" action="?/addMember" use:enhance class="flex gap-2 items-end">
