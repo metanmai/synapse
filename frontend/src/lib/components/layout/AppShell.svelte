@@ -15,7 +15,7 @@
     </a>
     <div class="flex items-center gap-4">
       <span class="text-sm" style="color: var(--color-text-muted);">{user.email}</span>
-      <a href="/account" class="text-sm" style="color: var(--color-accent);">Account</a>
+      <a href="/account" class="text-sm" style="color: var(--color-link);">Account</a>
       <form method="POST" action="/logout" use:enhance>
         <button type="submit" class="text-sm cursor-pointer"
           style="color: var(--color-text-muted);">
