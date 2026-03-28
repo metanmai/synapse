@@ -7,13 +7,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const challenge = url.searchParams.get("challenge");
   const state = url.searchParams.get("state");
   const port = url.searchParams.get("port");
+  const hasCli = Boolean(challenge && state && port);
 
-  if (!challenge || !state || !port) {
-    return { error: "This page should be opened from the Synapse CLI.", challenge: null, state: null, port: null };
-  }
-
-  // If user is already authenticated, create CLI session and redirect to localhost
-  if (locals.user && locals.token) {
+  // If user is already authenticated and we have CLI params, create session + redirect
+  if (locals.user && locals.token && hasCli) {
     const res = await fetch(`${API_URL}/auth/cli-session`, {
       method: "POST",
       headers: {
@@ -27,33 +24,44 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       const data = (await res.json()) as { code: string };
       redirect(
         303,
-        `http://localhost:${port}/callback?code=${encodeURIComponent(data.code)}&state=${encodeURIComponent(state)}`,
+        `http://localhost:${port}/callback?code=${encodeURIComponent(data.code)}&state=${encodeURIComponent(state ?? "")}`,
       );
     }
-
-    return { error: "Failed to create CLI session. Please try again.", challenge, state, port };
   }
 
-  // Not authenticated — render login form
-  return { challenge, state, port, error: null };
+  return {
+    challenge,
+    state,
+    port,
+    hasCli,
+    authenticated: Boolean(locals.user),
+    error: null,
+  };
 };
 
-function cliParams(url: URL): URLSearchParams {
+function getCliParams(formData: FormData): { challenge: string | null; state: string | null; port: string | null } {
+  return {
+    challenge: (formData.get("cli_challenge") as string) || null,
+    state: (formData.get("cli_state") as string) || null,
+    port: (formData.get("cli_port") as string) || null,
+  };
+}
+
+function buildRedirect(cli: { challenge: string | null; state: string | null; port: string | null }): string {
   const params = new URLSearchParams();
-  const challenge = url.searchParams.get("challenge");
-  const state = url.searchParams.get("state");
-  const port = url.searchParams.get("port");
-  if (challenge) params.set("challenge", challenge);
-  if (state) params.set("state", state);
-  if (port) params.set("port", port);
-  return params;
+  if (cli.challenge) params.set("challenge", cli.challenge);
+  if (cli.state) params.set("state", cli.state);
+  if (cli.port) params.set("port", cli.port);
+  const qs = params.toString();
+  return qs ? `/cli-auth?${qs}` : "/cli-auth";
 }
 
 export const actions: Actions = {
-  login: async ({ request, cookies, url }) => {
-    const data = await request.formData();
-    const email = data.get("email") as string;
-    const password = data.get("password") as string;
+  login: async ({ request, cookies }) => {
+    const formData = await request.formData();
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+    const cli = getCliParams(formData);
 
     const supabase = getSupabase(cookies);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -68,15 +76,14 @@ export const actions: Actions = {
       return fail(400, { error: error.message, email });
     }
 
-    // Redirect back to this page — load function will handle CLI session creation
-    redirect(303, `/cli-auth?${cliParams(url)}`);
+    redirect(303, buildRedirect(cli));
   },
 
   magicLink: async ({ request, cookies, url }) => {
-    const data = await request.formData();
-    const email = data.get("email") as string;
-    const params = cliParams(url);
-    const cliRedirect = `/cli-auth?${params}`;
+    const formData = await request.formData();
+    const email = formData.get("email") as string;
+    const cli = getCliParams(formData);
+    const cliRedirect = buildRedirect(cli);
 
     const supabase = getSupabase(cookies);
     const { error } = await supabase.auth.signInWithOtp({
@@ -91,10 +98,10 @@ export const actions: Actions = {
   },
 
   oauth: async ({ request, cookies, url }) => {
-    const data = await request.formData();
-    const provider = data.get("provider") as "google" | "github";
-    const params = cliParams(url);
-    const cliRedirect = `/cli-auth?${params}`;
+    const formData = await request.formData();
+    const provider = formData.get("provider") as "google" | "github";
+    const cli = getCliParams(formData);
+    const cliRedirect = buildRedirect(cli);
 
     const supabase = getSupabase(cookies);
     const { data: oauthData, error } = await supabase.auth.signInWithOAuth({
@@ -109,13 +116,12 @@ export const actions: Actions = {
   },
 
   signup: async ({ request, cookies }) => {
-    const data = await request.formData();
-    const email = data.get("email") as string;
-    const password = data.get("password") as string;
+    const formData = await request.formData();
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
 
     const supabase = getSupabase(cookies);
 
-    // Check for existing user
     const { data: existingUsers } = await supabase.from("users").select("id").eq("email", email).limit(1);
     if (existingUsers && existingUsers.length > 0) {
       return fail(400, {
