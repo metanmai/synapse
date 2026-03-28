@@ -182,6 +182,18 @@ server.tool(
   }
 );
 
+// --- rm: delete a file ---
+server.tool(
+  "rm",
+  "Delete a file. Like `rm` on a local filesystem. Permanently removes the file (history is preserved).",
+  { path: z.string().describe("File path to delete") },
+  async ({ path }) => {
+    const project = await getProject();
+    await api("DELETE", `/api/context/${encodeURIComponent(project)}/${encodeURIComponent(path)}`);
+    return { content: [{ type: "text", text: `Deleted ${path}` }] };
+  }
+);
+
 // --- search: search file contents ---
 server.tool(
   "search",
