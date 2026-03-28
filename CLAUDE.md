@@ -48,19 +48,24 @@ Synapse REPLACES local filesystem for all context operations. Do NOT write conte
   - **If they differ** — first check Synapse for `settings/sync-preferences.json` which stores the user's past decisions about conflicts (e.g., `{ "ignore": ["hook Y", "permission X"], "policy": "keep-local" }`). If the user has already decided to ignore certain differences or set a policy, respect that silently. Otherwise, show what's different and ask how to resolve: keep local, keep Synapse, or merge. Save their decision to `settings/sync-preferences.json` so they're never asked about the same conflict again.
 - If the user is working on a known project, `ls("project-name/")` to load its context.
 
-### During Work
-- **Decisions made** — Immediately write to Synapse: `write({ path: "decisions/chose-redis-over-memcached.md", content: "...", tags: ["decision", "infrastructure"] })`
-- **Bugs encountered** — Save the diagnosis: `write({ path: "bugs/auth-token-expiry-race.md", content: "..." })`
-- **Architecture discussed** — Capture it: `write({ path: "architecture/api-gateway-design.md", content: "..." })`
-- **Meeting notes** — `write({ path: "notes/standup-2026-03-22.md", content: "..." })`
-- **User says "remember this"** — Always Synapse, never local files.
+### MANDATORY: Read-Through Pattern (Check Synapse → Fallback → Write Back)
+Synapse uses a **read-through caching pattern**. Follow this flow for EVERY task:
 
-### MANDATORY: Before Asking the User or Scanning Code
-- You MUST search Synapse BEFORE reading local files or asking the user for context.
-- If you need context about a past decision, search Synapse first: `search({ query: "why did we choose X" })`
-- If you're unsure about project conventions, check: `search({ query: "conventions" })` or `ls("standards/")`
-- Don't ask the user something that might already be in Synapse.
-- Only after Synapse returns no results should you fall back to codebase exploration.
+1. **READ from Synapse first** — `search({ query: "<topic>" })` or `ls("projects/<project-name>/")`. This is not optional. Do this in parallel with starting other work if possible — don't block the workflow.
+2. **Cache HIT** — Synapse has the context → use it, done.
+3. **Cache MISS** — Synapse has no results → fall back to codebase, git history, or other sources. Continue working — don't pause.
+4. **WRITE BACK (non-blocking)** — After finding the answer, write it to Synapse in the background alongside your next response or tool call. Never make the user wait for a write-back.
+
+Write-back examples (what to save after a cache miss):
+- **Explored a codebase** → `write({ path: "projects/<name>/overview.md", content: "..." })`
+- **Found a decision in git/code** → `write({ path: "decisions/<topic>.md", content: "...", tags: ["decision"] })`
+- **Diagnosed a bug** → `write({ path: "bugs/<bug-name>.md", content: "..." })`
+- **Discovered architecture** → `write({ path: "architecture/<topic>.md", content: "..." })`
+- **Meeting notes** → `write({ path: "notes/standup-2026-03-22.md", content: "..." })`
+- **Subagent returned results** → Write back immediately (subagents can't access Synapse).
+- **User says "remember this"** → Always Synapse, never local files.
+
+If context already exists in Synapse but is outdated, **update it** rather than creating a duplicate.
 
 ### What NOT to Write to Synapse
 - Source code (that belongs in git)
