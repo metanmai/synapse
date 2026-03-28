@@ -59,3 +59,5 @@ jobs:
         env:
           TEST_E2E: "1"
           TEST_API_URL: ${{ secrets.TEST_API_URL }}
+          TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+          TEST_SUPABASE_SERVICE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_KEY }}
