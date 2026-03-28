@@ -12,6 +12,7 @@ import {
   searchEntries,
 } from "../../db/queries";
 
+import { embeddingConfigFromEnv, embedTexts } from "../../lib/embeddings";
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
 
@@ -55,7 +56,12 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
 
-      const results = await searchEntries(db, proj.id, query, { tags, folder });
+      // Embed the query for semantic search
+      const config = embeddingConfigFromEnv(env);
+      const vectors = await embedTexts([query], "search_query", config);
+      const queryEmbedding = vectors?.[0] ?? null;
+
+      const results = await searchEntries(db, proj.id, query, { tags, folder }, queryEmbedding);
 
       if (!results.length) {
         return { content: [{ type: "text", text: `No results found for "${query}".` }] };

@@ -288,3 +288,11 @@ export async function restoreEntry(
   if (error) throw error;
   return data as Entry;
 }
+
+export async function updateEmbedding(db: SupabaseClient, entryId: string, embedding: number[]): Promise<void> {
+  const { error } = await db
+    .from("entries")
+    .update({ embedding: JSON.stringify(embedding) })
+    .eq("id", entryId);
+  if (error) console.error(`[embeddings] Failed to save embedding for ${entryId}:`, error.message);
+}
