@@ -19,11 +19,12 @@ import {
   upsertEntry,
 } from "../db/queries";
 import { authMiddleware } from "../lib/auth";
-import { embeddingConfigFromEnv, embedTexts } from "../lib/embeddings";
+import { embedTexts, embeddingConfigFromEnv } from "../lib/embeddings";
 import { envList } from "../lib/env";
 import { AppError, NotFoundError } from "../lib/errors";
 import { idempotency } from "../lib/idempotency";
 import { enforceConnectionLimit, enforceFileLimit, getHistoryLimit } from "../lib/tier";
+import { parseBody, schemas } from "../lib/validate";
 
 import type { Env } from "../lib/env";
 
@@ -50,13 +51,10 @@ context.use("*", idempotency);
 // POST /api/context/save
 context.post("/save", async (c) => {
   const user = c.get("user");
-  const { project, path, content, tags, source } = await c.req.json();
-  if (!project || !path || !content) {
-    throw new AppError("project, path, and content are required", 400, "VALIDATION_ERROR");
-  }
+  const { project, path, content, tags, source } = await parseBody(c, schemas.saveEntry);
 
   const validSources = envList(c.env, "VALID_SOURCES", "human,claude,chatgpt,cursor,copilot,windsurf,google_docs");
-  const entrySource = validSources.includes(source) ? source : "human";
+  const entrySource = source && validSources.includes(source) ? source : "human";
 
   const db = createSupabaseClient(c.env);
   const proj = await getProjectByName(db, project, user.id);
@@ -99,10 +97,7 @@ context.post("/save", async (c) => {
 // POST /api/context/session-summary
 context.post("/session-summary", async (c) => {
   const user = c.get("user");
-  const { project, summary, decisions: _decisions, pending } = await c.req.json();
-  if (!project || !summary) {
-    throw new AppError("project and summary are required", 400, "VALIDATION_ERROR");
-  }
+  const { project, summary, decisions: _decisions, pending } = await parseBody(c, schemas.sessionSummary);
 
   const db = createSupabaseClient(c.env);
   const proj = await getProjectByName(db, project, user.id);
@@ -144,10 +139,7 @@ context.post("/session-summary", async (c) => {
 // POST /api/context/file
 context.post("/file", async (c) => {
   const user = c.get("user");
-  const { project, path, content, content_type } = await c.req.json();
-  if (!project || !path || !content) {
-    throw new AppError("project, path, and content are required", 400, "VALIDATION_ERROR");
-  }
+  const { project, path, content, content_type } = await parseBody(c, schemas.saveFile);
 
   const db = createSupabaseClient(c.env);
   const proj = await getProjectByName(db, project, user.id);
@@ -274,10 +266,7 @@ context.post("/:project/restore", async (c) => {
   }
   const user = c.get("user");
   const projectName = c.req.param("project");
-  const { path, historyId } = await c.req.json();
-  if (!path || !historyId) {
-    throw new AppError("path and historyId are required", 400, "VALIDATION_ERROR");
-  }
+  const { path, historyId } = await parseBody(c, schemas.restoreEntry);
 
   const db = createSupabaseClient(c.env);
   const proj = await getProjectByName(db, projectName, user.id);
