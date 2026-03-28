@@ -8,7 +8,7 @@ import { useProjects } from "../hooks/useProjects";
 export function ProjectSettings() {
   const { name } = useParams<{ name: string }>();
   const { data: projects = [] } = useProjects();
-  const project = projects.find((p: any) => p.name === name);
+  const project = projects.find((p) => p.name === name);
 
   if (!project) return <div className="p-8 text-gray-500">Project not found</div>;
 
