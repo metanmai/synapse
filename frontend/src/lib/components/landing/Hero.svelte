@@ -1,6 +1,7 @@
 <script lang="ts">
 import { onMount } from "svelte";
 
+let { loggedIn = false } = $props<{ loggedIn?: boolean }>();
 let scrollY = $state(0);
 
 onMount(() => {
@@ -34,7 +35,11 @@ onMount(() => {
         and every AI tool persistent memory across sessions.
       </p>
       <div class="hero-actions">
-        <a href="/signup" class="hero-cta">Get Started Free</a>
+        {#if loggedIn}
+          <a href="/dashboard" class="hero-cta">Go to Dashboard</a>
+        {:else}
+          <a href="/signup" class="hero-cta">Get Started Free</a>
+        {/if}
         <a href="#how-it-works" class="hero-secondary">See how it works</a>
       </div>
     </div>
