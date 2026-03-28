@@ -10,7 +10,7 @@ export async function logActivity(
     target_email?: string;
     source?: string;
     metadata?: Record<string, unknown>;
-  }
+  },
 ): Promise<void> {
   const { error } = await db.from("activity_log").insert({
     project_id: params.project_id,

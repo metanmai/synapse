@@ -1,33 +1,33 @@
 <script>
-  import ScrollReveal from "./ScrollReveal.svelte";
+import ScrollReveal from "./ScrollReveal.svelte";
 
-  const features = [
-    {
-      title: "Context that persists",
-      description: "Decisions, architecture notes, and session summaries \u2014 saved automatically, loaded on demand.",
-      illustrationType: "timeline",
-    },
-    {
-      title: "Every tool, one brain",
-      description: "Switch between AI tools without losing a beat. They all share the same context.",
-      illustrationType: "hub",
-    },
-    {
-      title: "Version history",
-      description: "Track every change. Restore any version. Know what changed and why.",
-      illustrationType: "versions",
-    },
-    {
-      title: "Team sharing",
-      description: "Share projects with your team. Everyone\u2019s AI tools stay in sync.",
-      illustrationType: "sharing",
-    },
-    {
-      title: "Export & import",
-      description: "Your data is yours. Export as markdown, import anytime.",
-      illustrationType: "export",
-    },
-  ];
+const features = [
+  {
+    title: "Context that persists",
+    description: "Decisions, architecture notes, and session summaries \u2014 saved automatically, loaded on demand.",
+    illustrationType: "timeline",
+  },
+  {
+    title: "Every tool, one brain",
+    description: "Switch between AI tools without losing a beat. They all share the same context.",
+    illustrationType: "hub",
+  },
+  {
+    title: "Version history",
+    description: "Track every change. Restore any version. Know what changed and why.",
+    illustrationType: "versions",
+  },
+  {
+    title: "Team sharing",
+    description: "Share projects with your team. Everyone\u2019s AI tools stay in sync.",
+    illustrationType: "sharing",
+  },
+  {
+    title: "Export & import",
+    description: "Your data is yours. Export as markdown, import anytime.",
+    illustrationType: "export",
+  },
+];
 </script>
 
 <section id="features" class="features-section">
