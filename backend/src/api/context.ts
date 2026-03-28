@@ -6,7 +6,7 @@ import { getProjectByName, upsertEntry, getEntry, listEntries, searchEntries, ge
 import { logActivity } from "../db/activity-logger";
 import { NotFoundError, AppError } from "../lib/errors";
 import { envList } from "../lib/env";
-import { enforceFileLimit, enforceConnectionLimit, requirePro } from "../lib/tier";
+import { enforceFileLimit, enforceConnectionLimit, getHistoryLimit } from "../lib/tier";
 
 import type { Env } from "../lib/env";
 
@@ -181,7 +181,11 @@ context.get("/:project/load", async (c) => {
 
 // GET /api/context/:project/history/:path{.+}
 context.get("/:project/history/:path{.+}", async (c) => {
-  requirePro(c, "Version history");
+  const historyLimit = getHistoryLimit(c);
+  if (historyLimit === 0) {
+    throw new AppError("Version history is not available on your plan.", 403, "TIER_LIMIT");
+  }
+
   const user = c.get("user");
   const projectName = c.req.param("project");
   const path = c.req.param("path") ?? "";
@@ -190,13 +194,20 @@ context.get("/:project/history/:path{.+}", async (c) => {
   const proj = await getProjectByName(db, projectName, user.id);
   if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
 
-  const history = await getEntryHistory(db, proj.id, path);
+  let history = await getEntryHistory(db, proj.id, path);
+  // Free tier: limit to most recent N versions
+  if (historyLimit > 0) {
+    history = history.slice(0, historyLimit);
+  }
   return c.json(history);
 });
 
 // POST /api/context/:project/restore — body: { path, historyId }
 context.post("/:project/restore", async (c) => {
-  requirePro(c, "Version restore");
+  const historyLimit = getHistoryLimit(c);
+  if (historyLimit === 0) {
+    throw new AppError("Version restore is not available on your plan.", 403, "TIER_LIMIT");
+  }
   const user = c.get("user");
   const projectName = c.req.param("project");
   const { path, historyId } = await c.req.json();

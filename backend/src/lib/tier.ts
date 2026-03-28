@@ -23,6 +23,32 @@ export function requirePro(c: Context<{ Bindings: Env }>, feature: string) {
   }
 }
 
+/**
+ * Returns the max number of history versions to show.
+ * -1 = unlimited, 0 = none, positive = that many.
+ */
+export function getHistoryLimit(c: Context<{ Bindings: Env }>): number {
+  const limits = getTierLimits(c);
+  return limits.maxHistoryVersions;
+}
+
+export function enforceMemberLimit(
+  currentMemberCount: number,
+  c: Context<{ Bindings: Env }>
+) {
+  const limits = getTierLimits(c);
+  if (limits.maxMembers === 0) return; // 0 = unlimited
+  if (currentMemberCount >= limits.maxMembers) {
+    const tier = c.get("tier") ?? "free";
+    const price = envOr(c.env, "TIER_PRO_PRICE", "5.99");
+    throw new AppError(
+      `Member limit reached (${limits.maxMembers} members on ${tier} tier). Upgrade to Pro ($${price}/mo) for unlimited team members.`,
+      403,
+      "TIER_LIMIT"
+    );
+  }
+}
+
 export function enforceFileLimit(
   currentCount: number,
   c: Context<{ Bindings: Env }>
