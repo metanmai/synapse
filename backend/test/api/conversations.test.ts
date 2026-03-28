@@ -109,3 +109,31 @@ describe("Conversations API — auth enforcement", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("Conversations API — all endpoints require auth", () => {
+  const endpoints: [string, string][] = [
+    ["GET", "/api/conversations?project_id=test"],
+    ["POST", "/api/conversations"],
+    ["GET", "/api/conversations/some-id"],
+    ["PATCH", "/api/conversations/some-id"],
+    ["POST", "/api/conversations/some-id/messages"],
+    ["POST", "/api/conversations/some-id/media"],
+    ["GET", "/api/conversations/some-id/media/some-media"],
+    ["POST", "/api/conversations/import"],
+    ["GET", "/api/conversations/some-id/export/raw"],
+  ];
+
+  for (const [method, path] of endpoints) {
+    it(`${method} ${path} → 401 without auth`, async () => {
+      const req = new Request(`http://localhost${path}`, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: method !== "GET" ? JSON.stringify({}) : undefined,
+      });
+      const ctx = createExecutionContext();
+      const res = await worker.fetch(req, env, ctx);
+      await waitOnExecutionContext(ctx);
+      expect(res.status).toBe(401);
+    });
+  }
+});
