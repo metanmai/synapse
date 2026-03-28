@@ -1,14 +1,13 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { logActivity } from "../../db/activity-logger";
-import { createSupabaseClient } from "../../db/client";
 import {
   addMember,
   createProject,
   findUserByEmail,
   getMemberRole,
-  getProjectByName,
   listProjectsForUser,
   removeMember,
   setPreference,
@@ -16,31 +15,30 @@ import {
 
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
-import { requireMcpUserId } from "../mcp-context";
+import { mcpError, mcpResolveProject, mcpSuccess, requireMcpUserId } from "../mcp-context";
 
-export function registerProjectManagementTools(server: McpServer, env: Env, getContext: GetMcpContext) {
+export function registerProjectManagementTools(
+  server: McpServer,
+  _env: Env,
+  getContext: GetMcpContext,
+  db: SupabaseClient,
+) {
   server.tool(
     "create_project",
     "Create a new project workspace for organizing context. You become the owner.",
     { name: z.string().describe("Project name") },
     async ({ name }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
       const project = await createProject(db, name, userId);
-      return {
-        content: [{ type: "text", text: `Project "${project.name}" created (id: ${project.id})` }],
-      };
+      return mcpSuccess(`Project "${project.name}" created (id: ${project.id})`);
     },
   );
 
   server.tool("list_projects", "List all projects you have access to.", {}, async (_args) => {
-    const db = createSupabaseClient(env);
     const userId = requireMcpUserId(getContext);
     const projects = await listProjectsForUser(db, userId);
     const list = projects.map((p) => `- ${p.name} (id: ${p.id})`).join("\n");
-    return {
-      content: [{ type: "text", text: list || "No projects found." }],
-    };
+    return mcpSuccess(list || "No projects found.");
   });
 
   server.tool(
@@ -52,20 +50,19 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
       role: z.enum(["editor", "viewer"]).describe("Role: 'editor' can read/write, 'viewer' can only read"),
     },
     async ({ project, email, role }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       const callerRole = await getMemberRole(db, proj.id, userId);
       if (callerRole !== "owner") {
-        return { content: [{ type: "text", text: "Only project owners can invite members." }] };
+        return mcpError("Only project owners can invite members.");
       }
 
       const invitee = await findUserByEmail(db, email);
       if (!invitee) {
-        return { content: [{ type: "text", text: `No user found with email ${email}. They need to sign up first.` }] };
+        return mcpError(`No user found with email ${email}. They need to sign up first.`);
       }
 
       await addMember(db, proj.id, invitee.id, role);
@@ -76,9 +73,7 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
         target_email: email,
         source: "claude",
       });
-      return {
-        content: [{ type: "text", text: `Invited ${email} as ${role} to "${project}".` }],
-      };
+      return mcpSuccess(`Invited ${email} as ${role} to "${project}".`);
     },
   );
 
@@ -90,20 +85,19 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
       email: z.string().email().describe("Email of the person to remove"),
     },
     async ({ project, email }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       const callerRole = await getMemberRole(db, proj.id, userId);
       if (callerRole !== "owner") {
-        return { content: [{ type: "text", text: "Only project owners can remove members." }] };
+        return mcpError("Only project owners can remove members.");
       }
 
       const target = await findUserByEmail(db, email);
       if (!target) {
-        return { content: [{ type: "text", text: `No user found with email ${email}.` }] };
+        return mcpError(`No user found with email ${email}.`);
       }
 
       await removeMember(db, proj.id, target.id);
@@ -114,9 +108,7 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
         target_email: email,
         source: "claude",
       });
-      return {
-        content: [{ type: "text", text: `Removed ${email} from "${project}".` }],
-      };
+      return mcpSuccess(`Removed ${email} from "${project}".`);
     },
   );
 
@@ -129,11 +121,10 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
       value: z.string().describe("Preference value"),
     },
     async ({ project, key, value }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       await setPreference(db, userId, proj.id, key, value);
       await logActivity(db, {
@@ -143,9 +134,7 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
         source: "claude",
         metadata: { key, value },
       });
-      return {
-        content: [{ type: "text", text: `Set ${key} = ${value} for project "${project}".` }],
-      };
+      return mcpSuccess(`Set ${key} = ${value} for project "${project}".`);
     },
   );
 }
