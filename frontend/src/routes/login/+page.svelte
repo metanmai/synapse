@@ -12,7 +12,7 @@ let loading = $state(false);
   </div>
 
   <div class="glass w-full max-w-md rounded-xl" style="padding: 2rem;">
-    <a href="/" style="display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.8125rem; color: var(--color-text-muted); text-decoration: none; margin-bottom: 1.5rem; transition: color 0.2s;" onmouseenter="this.style.color='var(--color-text)'" onmouseleave="this.style.color='var(--color-text-muted)'">
+    <a href="/" style="display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.8125rem; color: var(--color-text-muted); text-decoration: none; margin-bottom: 1.5rem; transition: color 0.2s;" onmouseenter={(e) => (e.currentTarget.style.color = 'var(--color-text)')} onmouseleave={(e) => (e.currentTarget.style.color = 'var(--color-text-muted)')}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
       Back to home
     </a>
