@@ -4,7 +4,7 @@ import { page } from "$app/stores";
 
 let { billing } = $props<{
   billing: {
-    tier: "free" | "pro";
+    tier: "free" | "plus";
     subscription: {
       status: string;
       current_period_end: string | null;
@@ -32,12 +32,12 @@ const renewalDate = $derived(
 >
   <div class="flex items-center gap-2 mb-2">
     <h3 class="font-medium" style="color: var(--color-accent);">Subscription</h3>
-    {#if billing.tier === "pro"}
+    {#if billing.tier === "plus"}
       <span
         class="text-xs font-semibold px-2 py-0.5 rounded-full"
         style="background-color: var(--color-pink); color: white;"
       >
-        PRO
+        PLUS
       </span>
     {/if}
   </div>
@@ -47,13 +47,13 @@ const renewalDate = $derived(
       class="rounded-lg p-3 text-sm mb-3"
       style="background-color: var(--color-success-bg); color: var(--color-success);"
     >
-      Welcome to Pro! Your upgrade is active.
+      Welcome to Plus! Your upgrade is active.
     </div>
   {/if}
 
   {#if billing.tier === "free"}
     <p class="text-sm mb-3" style="color: var(--color-text-muted);">
-      You're on the <strong>Free</strong> plan. Upgrade to Pro for 500 files, unlimited
+      You're on the <strong>Free</strong> plan. Upgrade to Plus for 500 files, unlimited
       connections, and version history.
     </p>
     <form method="POST" action="?/checkout" use:enhance>
@@ -62,12 +62,12 @@ const renewalDate = $derived(
         class="rounded-lg px-4 py-2 text-sm font-medium cursor-pointer"
         style="background-color: var(--color-pink); color: white; border: none;"
       >
-        Upgrade to Pro — $5.99/mo
+        Upgrade to Plus — $5.99/mo
       </button>
     </form>
   {:else if billing.subscription?.cancel_at_period_end}
     <p class="text-sm mb-3" style="color: var(--color-text-muted);">
-      Your Pro subscription is active until <strong>{renewalDate}</strong>. It will not renew.
+      Your Plus subscription is active until <strong>{renewalDate}</strong>. It will not renew.
     </p>
     <form method="POST" action="?/portal" use:enhance>
       <button
@@ -80,7 +80,7 @@ const renewalDate = $derived(
     </form>
   {:else}
     <p class="text-sm mb-3" style="color: var(--color-text-muted);">
-      Pro plan — renews <strong>{renewalDate}</strong>.
+      Plus plan — renews <strong>{renewalDate}</strong>.
     </p>
     <form method="POST" action="?/portal" use:enhance>
       <button
