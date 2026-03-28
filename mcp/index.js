@@ -5,56 +5,34 @@ const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio
 const { z } = require("zod");
 
 const crypto = require("crypto");
-const { spawn, execSync } = require("child_process");
-const path = require("path");
-
-const API_URL = process.env.SYNAPSE_API_URL || "http://localhost:8787";
+const API_URL = "https://synapse.tanmai.workers.dev";
 const API_KEY = process.env.SYNAPSE_API_KEY;
-const PROJECT = process.env.SYNAPSE_PROJECT || "My Workspace";
 const PASSPHRASE = process.env.SYNAPSE_PASSPHRASE;
 const USER_EMAIL = process.env.SYNAPSE_USER_EMAIL;
-const BACKEND_DIR = path.resolve(__dirname, "..", "backend");
+const DEFAULT_PROJECT_NAME = "My Workspace";
 
 if (!API_KEY) {
   console.error("SYNAPSE_API_KEY is required");
   process.exit(1);
 }
 
-// --- Auto-start backend if not running ---
-let backendProcess = null;
+// Auto-detect or create the user's project
+let PROJECT = null;
 
-async function ensureBackend() {
-  try {
-    const res = await fetch(`${API_URL}/health`, { signal: AbortSignal.timeout(2000) });
-    if (res.ok) return; // already running
-  } catch {
-    // not running — start it
+async function getProject() {
+  if (PROJECT) return PROJECT;
+
+  // List existing projects
+  const projects = await api("GET", "/api/projects");
+  if (projects.length > 0) {
+    PROJECT = projects[0].name;
+    return PROJECT;
   }
 
-  console.error("[synapse-mcp] Backend not running, starting wrangler dev...");
-  backendProcess = spawn("npx", ["wrangler", "dev", "--test-scheduled"], {
-    cwd: BACKEND_DIR,
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: true,
-  });
-
-  // Don't let the backend process keep the MCP server alive if it exits
-  backendProcess.unref();
-
-  // Wait for backend to be ready (poll health endpoint)
-  for (let i = 0; i < 30; i++) {
-    await new Promise((r) => setTimeout(r, 1000));
-    try {
-      const res = await fetch(`${API_URL}/health`, { signal: AbortSignal.timeout(2000) });
-      if (res.ok) {
-        console.error("[synapse-mcp] Backend started successfully");
-        return;
-      }
-    } catch {
-      // still starting up
-    }
-  }
-  console.error("[synapse-mcp] Warning: Backend may not have started properly");
+  // No projects — create one
+  const created = await api("POST", "/api/projects", { name: DEFAULT_PROJECT_NAME });
+  PROJECT = created.name;
+  return PROJECT;
 }
 
 // --- E2E Encryption (matches frontend crypto.ts) ---
@@ -138,7 +116,8 @@ server.tool(
   async ({ path }) => {
     const folder = path || "";
     const qs = folder ? `?folder=${encodeURIComponent(folder)}` : "";
-    const entries = await api("GET", `/api/context/${encodeURIComponent(PROJECT)}/list${qs}`);
+    const project = await getProject();
+    const entries = await api("GET", `/api/context/${encodeURIComponent(project)}/list${qs}`);
 
     if (entries.length === 0) {
       return { content: [{ type: "text", text: folder ? `${folder}/ is empty` : "(empty)" }] };
@@ -162,7 +141,8 @@ server.tool(
   "Read a file's content. Like `cat` on a local filesystem. Returns the full markdown/text content of the file at the given path.",
   { path: z.string().describe("File path to read (e.g. 'decisions/chose-svelte.md')") },
   async ({ path }) => {
-    const entry = await api("GET", `/api/context/${encodeURIComponent(PROJECT)}/${encodeURIComponent(path)}`);
+    const project = await getProject();
+    const entry = await api("GET", `/api/context/${encodeURIComponent(project)}/${encodeURIComponent(path)}`);
     const meta = [
       `path: ${entry.path}`,
       `updated: ${new Date(entry.updated_at).toLocaleString()}`,
@@ -187,9 +167,10 @@ server.tool(
     tags: z.array(z.string()).optional().describe("Optional tags for the file"),
   },
   async ({ path, content, tags }) => {
+    const project = await getProject();
     const encrypted = await encryptContent(content);
     await api("POST", "/api/context/save", {
-      project: PROJECT,
+      project,
       path,
       content: encrypted,
       tags: tags || [],
@@ -214,7 +195,7 @@ server.tool(
 
     const results = await api(
       "GET",
-      `/api/context/${encodeURIComponent(PROJECT)}/search?${params}`
+      `/api/context/${encodeURIComponent(await getProject())}/search?${params}`
     );
 
     if (results.length === 0) {
@@ -243,7 +224,7 @@ server.tool(
   async ({ path }) => {
     const versions = await api(
       "GET",
-      `/api/context/${encodeURIComponent(PROJECT)}/history/${encodeURIComponent(path)}`
+      `/api/context/${encodeURIComponent(await getProject())}/history/${encodeURIComponent(path)}`
     );
 
     if (versions.length === 0) {
@@ -271,7 +252,8 @@ server.tool(
   "Show the full directory tree. Like the `tree` command on a local filesystem.",
   {},
   async () => {
-    const entries = await api("GET", `/api/context/${encodeURIComponent(PROJECT)}/list`);
+    const project = await getProject();
+    const entries = await api("GET", `/api/context/${encodeURIComponent(project)}/list`);
 
     if (entries.length === 0) {
       return { content: [{ type: "text", text: "(empty workspace)" }] };
@@ -293,7 +275,6 @@ server.tool(
 );
 
 async function main() {
-  await ensureBackend();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
