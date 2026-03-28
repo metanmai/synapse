@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
-import { Sidebar } from "../components/layout/Sidebar";
-import { VersionTimeline } from "../components/activity/VersionTimeline";
+
+import { Sidebar } from "../components/layout";
+import { VersionTimeline } from "../components/activity";
 import { useEntryHistory, useRestoreEntry } from "../hooks/useEntries";
 
 export function HistoryPage() {
