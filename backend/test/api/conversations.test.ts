@@ -53,9 +53,7 @@ describe("Conversations API — auth enforcement", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        messages: [
-          { role: "user", content: "Hello", source_agent: "test" },
-        ],
+        messages: [{ role: "user", content: "Hello", source_agent: "test" }],
       }),
     });
     const ctx = createExecutionContext();
