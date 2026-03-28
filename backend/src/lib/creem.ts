@@ -23,9 +23,16 @@ export async function creemRequest<T>(
   });
 
   if (!res.ok) {
-    const error = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string };
-    console.error(`[creem] ${method} ${path} failed: ${res.status} — ${error.message}`);
-    throw new Error(error.message || `Creem API error: ${res.status}`);
+    const raw = await res.text().catch(() => res.statusText);
+    console.error(`[creem] ${method} ${path} failed: ${res.status} — ${raw}`);
+    let msg = `Creem API error: ${res.status}`;
+    try {
+      const parsed = JSON.parse(raw) as { message?: string; error?: string };
+      msg = parsed.message || parsed.error || msg;
+    } catch {
+      // raw wasn't JSON
+    }
+    throw new Error(msg);
   }
 
   return res.json() as Promise<T>;
