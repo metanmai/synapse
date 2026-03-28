@@ -7,7 +7,9 @@ export const load: PageServerLoad = async ({ locals }) => {
   const projects = await api.listProjects();
 
   if (projects.length > 0) {
-    redirect(303, `/projects/${encodeURIComponent(projects[0].name)}`);
+    const first = projects[0];
+    const slug = first.role === "owner" ? first.name : `${first.owner_email}~${first.name}`;
+    redirect(303, `/projects/${encodeURIComponent(slug)}`);
   }
 
   // Auto-create a default project for the user
