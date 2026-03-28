@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { marked } from "marked";
-  import type { Entry } from "$lib/types";
+import type { Entry } from "$lib/types";
+import { marked } from "marked";
 
-  let { entry, projectName, onEdit } = $props<{
-    entry: Entry;
-    projectName: string;
-    onEdit: () => void;
-  }>();
+let { entry, projectName, onEdit } = $props<{
+  entry: Entry;
+  projectName: string;
+  onEdit: () => void;
+}>();
 
-  let html = $derived(marked.parse(entry.content, { async: false }) as string);
+let html = $derived(marked.parse(entry.content, { async: false }) as string);
 </script>
 
 <div>
