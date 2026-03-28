@@ -42,6 +42,36 @@ You have access to a Synapse MCP server — a remote workspace for storing and r
 - Never write context to local files unless explicitly asked
 `;
 
+// --- Slash command / prompt definitions (shared across editors) ---
+
+interface CommandDef {
+  description: string;
+  body: string;
+}
+
+const SYNAPSE_COMMAND_DEFS: Record<string, CommandDef> = {
+  "synapse-search": {
+    description: "Search the Synapse workspace using semantic search",
+    body: "Search the Synapse workspace using semantic search. Find files by meaning, not just keywords.\n\nUse the Synapse MCP `search` tool with the user's query. Display matching files with paths and relevant snippets.",
+  },
+  "synapse-tree": {
+    description: "Show the full Synapse workspace file tree",
+    body: "Show the full Synapse workspace file tree.\n\nUse the Synapse MCP `tree` tool and display the result in a readable format.",
+  },
+  "synapse-sync": {
+    description: "Sync project context to Synapse",
+    body: "Sync project context to Synapse.\n\n1. Use the Synapse MCP `tree` tool to verify connection\n2. Summarize recent git changes\n3. Write project overview and recent changes using the Synapse MCP `write` tool",
+  },
+  "synapse-whoami": {
+    description: "Show Synapse workspace info",
+    body: 'Show current Synapse workspace info.\n\n1. Use the Synapse MCP `ls` tool to verify connection\n2. Use the Synapse MCP `tree` tool to count files\n3. Report: "Connected to Synapse. [count] files in workspace."',
+  },
+  "synapse-clean": {
+    description: "Clean up the Synapse workspace",
+    body: "Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Use the Synapse MCP `tree` tool to list all files\n2. Identify duplicates, test files, empty entries\n3. Confirm with the user before deleting anything\n4. Delete confirmed entries using the Synapse MCP `rm` tool",
+  },
+};
+
 // --- Shared helpers ---
 
 function synapseMcpServer(apiKey: string): Record<string, unknown> {
@@ -111,6 +141,54 @@ function globalConfigDir(): string {
   return process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
 }
 
+// --- Command / prompt / workflow writers ---
+
+/** Write Cursor-style commands to a commands/ directory. */
+function writeCursorCommandFiles(baseDir: string, pathPrefix: string): string[] {
+  const written: string[] = [];
+  const cmdDir = path.join(baseDir, "commands");
+  fs.mkdirSync(cmdDir, { recursive: true });
+  for (const [name, def] of Object.entries(SYNAPSE_COMMAND_DEFS)) {
+    const filepath = path.join(cmdDir, `${name}.md`);
+    if (!fs.existsSync(filepath)) {
+      fs.writeFileSync(filepath, `${def.body}\n`);
+      written.push(`${pathPrefix}commands/${name}.md`);
+    }
+  }
+  return written;
+}
+
+/** Write VS Code Copilot prompt files to .github/prompts/. */
+function writeVSCodePromptFiles(cwd: string): string[] {
+  const written: string[] = [];
+  const promptDir = path.join(cwd, ".github", "prompts");
+  fs.mkdirSync(promptDir, { recursive: true });
+  for (const [name, def] of Object.entries(SYNAPSE_COMMAND_DEFS)) {
+    const filepath = path.join(promptDir, `${name}.prompt.md`);
+    if (!fs.existsSync(filepath)) {
+      const content = `---\ndescription: "${def.description}"\nmode: "agent"\n---\n\n${def.body}\n`;
+      fs.writeFileSync(filepath, content);
+      written.push(`.github/prompts/${name}.prompt.md`);
+    }
+  }
+  return written;
+}
+
+/** Write Windsurf workflow files to .windsurf/workflows/. */
+function writeWindsurfWorkflowFiles(cwd: string): string[] {
+  const written: string[] = [];
+  const workflowDir = path.join(cwd, ".windsurf", "workflows");
+  fs.mkdirSync(workflowDir, { recursive: true });
+  for (const [name, def] of Object.entries(SYNAPSE_COMMAND_DEFS)) {
+    const filepath = path.join(workflowDir, `${name}.md`);
+    if (!fs.existsSync(filepath)) {
+      fs.writeFileSync(filepath, `${def.body}\n`);
+      written.push(`.windsurf/workflows/${name}.md`);
+    }
+  }
+  return written;
+}
+
 // --- Per-editor writers ---
 
 function writeGenericMcp(apiKey: string, cwd: string): string[] {
@@ -130,6 +208,7 @@ function writeCursorLocal(apiKey: string, cwd: string): string[] {
   if (appendInstructions(path.join(cwd, ".cursorrules"))) {
     written.push(".cursorrules");
   }
+  written.push(...writeCursorCommandFiles(path.join(cwd, ".cursor"), ".cursor/"));
   return written;
 }
 
@@ -138,6 +217,7 @@ function writeCursorGlobal(apiKey: string): string[] {
   const globalMcp = path.join(os.homedir(), ".cursor", "mcp.json");
   writeMcpJson(globalMcp, apiKey);
   written.push("~/.cursor/mcp.json");
+  written.push(...writeCursorCommandFiles(path.join(os.homedir(), ".cursor"), "~/.cursor/"));
   return written;
 }
 
@@ -150,6 +230,7 @@ function writeWindsurfLocal(apiKey: string, home: string, cwd: string): string[]
   if (appendInstructions(path.join(cwd, ".windsurfrules"))) {
     written.push(".windsurfrules");
   }
+  written.push(...writeWindsurfWorkflowFiles(cwd));
   return written;
 }
 
@@ -176,6 +257,7 @@ function writeVSCodeLocal(apiKey: string, cwd: string): string[] {
   if (appendInstructions(path.join(ghDir, "copilot-instructions.md"))) {
     written.push(".github/copilot-instructions.md");
   }
+  written.push(...writeVSCodePromptFiles(cwd));
   return written;
 }
 
@@ -276,7 +358,7 @@ export function detectEditors(scope: SetupScope): EditorInfo[] {
         id: "cursor",
         name: "Cursor",
         detected: fs.existsSync(path.join(home, ".cursor")),
-        hint: "~/.cursor/mcp.json (global)",
+        hint: "~/.cursor/mcp.json + commands",
         write: (apiKey) => writeCursorGlobal(apiKey),
       },
       {
@@ -308,21 +390,21 @@ export function detectEditors(scope: SetupScope): EditorInfo[] {
       id: "cursor",
       name: "Cursor",
       detected: fs.existsSync(path.join(cwd, ".cursor")) || fs.existsSync(path.join(cwd, ".cursorrules")),
-      hint: ".cursor/mcp.json + .cursorrules",
+      hint: ".cursor/mcp.json + commands + .cursorrules",
       write: (apiKey) => writeCursorLocal(apiKey, cwd),
     },
     {
       id: "windsurf",
       name: "Windsurf",
       detected: fs.existsSync(path.join(home, ".codeium")),
-      hint: "~/.codeium/windsurf/mcp_config.json + .windsurfrules",
+      hint: "mcp_config + workflows + .windsurfrules",
       write: (apiKey) => writeWindsurfLocal(apiKey, home, cwd),
     },
     {
       id: "vscode",
       name: "VS Code",
       detected: fs.existsSync(path.join(cwd, ".vscode")),
-      hint: ".vscode/settings.json + copilot-instructions",
+      hint: ".vscode/settings.json + prompts + copilot-instructions",
       write: (apiKey) => writeVSCodeLocal(apiKey, cwd),
     },
     {
