@@ -335,44 +335,54 @@ export function detectEditors(scope: SetupScope): EditorInfo[] {
   ];
 }
 
+export interface ExistingSetup {
+  configured: boolean;
+  locations: string[];
+  apiKey: string | null;
+}
+
+/** Extract SYNAPSE_API_KEY from a JSON MCP config file. */
+function extractApiKey(filePath: string): string | null {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    const synapse = parsed?.mcpServers?.synapse;
+    return synapse?.env?.SYNAPSE_API_KEY ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Check if Synapse is already configured in any local or global config. */
-export function detectExistingSetup(): { configured: boolean; locations: string[] } {
+export function detectExistingSetup(): ExistingSetup {
   const home = os.homedir();
   const cwd = process.cwd();
   const locations: string[] = [];
+  let apiKey: string | null = null;
 
-  // Local
-  const localMcp = path.join(cwd, ".mcp.json");
-  if (fs.existsSync(localMcp)) {
-    try {
-      const content = fs.readFileSync(localMcp, "utf-8");
-      if (content.includes("synapsesync-mcp")) locations.push(".mcp.json");
-    } catch {
-      /* ignore */
+  // Check MCP JSON files — extract API key from the first one found
+  const mcpFiles: [string, string][] = [
+    [path.join(cwd, ".mcp.json"), ".mcp.json"],
+    [path.join(cwd, ".cursor", "mcp.json"), ".cursor/mcp.json"],
+    [path.join(home, ".cursor", "mcp.json"), "~/.cursor/mcp.json"],
+    [path.join(home, ".claude", ".mcp.json"), "~/.claude/.mcp.json"],
+    [path.join(home, ".codeium", "windsurf", "mcp_config.json"), "~/.codeium/windsurf/mcp_config.json"],
+  ];
+
+  for (const [filePath, label] of mcpFiles) {
+    if (fs.existsSync(filePath)) {
+      try {
+        const content = fs.readFileSync(filePath, "utf-8");
+        if (content.includes("synapsesync-mcp")) {
+          locations.push(label);
+          if (!apiKey) apiKey = extractApiKey(filePath);
+        }
+      } catch {
+        /* ignore */
+      }
     }
   }
 
-  const cursorLocal = path.join(cwd, ".cursor", "mcp.json");
-  if (fs.existsSync(cursorLocal)) {
-    try {
-      const content = fs.readFileSync(cursorLocal, "utf-8");
-      if (content.includes("synapsesync-mcp")) locations.push(".cursor/mcp.json");
-    } catch {
-      /* ignore */
-    }
-  }
-
-  // Global
-  const cursorGlobal = path.join(home, ".cursor", "mcp.json");
-  if (fs.existsSync(cursorGlobal)) {
-    try {
-      const content = fs.readFileSync(cursorGlobal, "utf-8");
-      if (content.includes("synapsesync-mcp")) locations.push("~/.cursor/mcp.json");
-    } catch {
-      /* ignore */
-    }
-  }
-
+  // Check non-MCP files (CLAUDE.md — has instructions but no API key)
   const claudeMd = path.join(home, ".claude", "CLAUDE.md");
   if (fs.existsSync(claudeMd)) {
     try {
@@ -383,17 +393,7 @@ export function detectExistingSetup(): { configured: boolean; locations: string[
     }
   }
 
-  const windsurfMcp = path.join(home, ".codeium", "windsurf", "mcp_config.json");
-  if (fs.existsSync(windsurfMcp)) {
-    try {
-      const content = fs.readFileSync(windsurfMcp, "utf-8");
-      if (content.includes("synapsesync-mcp")) locations.push("~/.codeium/windsurf/mcp_config.json");
-    } catch {
-      /* ignore */
-    }
-  }
-
-  return { configured: locations.length > 0, locations };
+  return { configured: locations.length > 0, locations, apiKey };
 }
 
 /** Write configs for selected editors. Continues on per-editor failure. */
