@@ -12,7 +12,8 @@ Authorization: Bearer <api_key>
 
 Get an API key:
 - Via web: Sign up at synapsesync.app, go to Account -> API Keys
-- Via CLI: `npx synapsesync-mcp login --email <email> --password <password>`
+- Via CLI (interactive): `npx synapsesync-mcp` or `npx synapsesync-mcp wizard` in a terminal from your project directory
+- Via CLI (non-interactive): `npx synapsesync-mcp login --email <email> --password <password>`
 
 ## Auth
 
