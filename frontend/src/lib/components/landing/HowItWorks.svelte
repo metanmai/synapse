@@ -224,8 +224,9 @@
 
   .step-desc {
     font-size: 1rem;
-    font-weight: 300;
-    color: var(--color-tan);
+    font-weight: 400;
+    color: var(--color-burgundy);
+    opacity: 0.65;
     margin: 0;
     line-height: 1.5;
   }
