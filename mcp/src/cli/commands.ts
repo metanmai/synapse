@@ -80,7 +80,8 @@ export async function runTree(): Promise<void> {
       if (!current.children.has(parts[i])) {
         current.children.set(parts[i], { children: new Map(), file: i === parts.length - 1 });
       }
-      current = current.children.get(parts[i])!;
+      const next = current.children.get(parts[i]);
+      if (next) current = next;
     }
   }
 
@@ -89,8 +90,8 @@ export async function runTree(): Promise<void> {
 
   function render(node: Node, prefix: string): void {
     const sorted = [...node.children.entries()].sort(([a], [b]) => {
-      const aIsDir = !node.children.get(a)!.file;
-      const bIsDir = !node.children.get(b)!.file;
+      const aIsDir = !(node.children.get(a)?.file ?? false);
+      const bIsDir = !(node.children.get(b)?.file ?? false);
       if (aIsDir !== bIsDir) return aIsDir ? -1 : 1;
       return a.localeCompare(b);
     });
@@ -325,7 +326,7 @@ export async function runUpgrade(): Promise<void> {
     } catch {
       clack.log.message(`Open this URL to complete checkout:\n  ${accent(url)}`);
     }
-  } catch (err) {
+  } catch (_err) {
     spin.stop(themeError("Could not create checkout"));
     clack.log.message(`Upgrade at ${accent("synapsesync.app/account")}`);
   }
