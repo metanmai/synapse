@@ -3,7 +3,6 @@ export type Tier = "free" | "pro";
 export interface User {
   id: string;
   email: string;
-  stripe_customer_id: string | null;
   google_oauth_tokens: GoogleOAuthTokens | null;
   created_at: string;
 }
@@ -101,7 +100,9 @@ export interface ActivityLogEntry {
 export interface Subscription {
   id: string;
   user_id: string;
-  stripe_subscription_id: string;
+  provider: string;
+  provider_subscription_id: string;
+  provider_customer_id: string | null;
   status: "active" | "canceled" | "past_due" | "inactive";
   current_period_end: string | null;
   cancel_at_period_end: boolean;
