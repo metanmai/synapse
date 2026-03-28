@@ -17,7 +17,7 @@ const loggedIn = $derived(!!data.user);
 </script>
 
 <LandingNav {loggedIn} />
-<Hero {loggedIn} />
+<Hero />
 <ToolBar />
 <ProblemSection />
 <Stats />
