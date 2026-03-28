@@ -1,12 +1,12 @@
-import { Context, Next } from "hono";
+import type { Context, Next } from "hono";
 
 import { createSupabaseClient } from "../db/client";
-import { findUserByApiKeyHash, updateApiKeyLastUsed, ApiKeyExpiredError } from "../db/queries";
+import { ApiKeyExpiredError, findUserByApiKeyHash, updateApiKeyLastUsed } from "../db/queries";
 import { findUserBySupabaseAuthId, getActiveSubscription } from "../db/queries";
 import { UnauthorizedError } from "./errors";
 
-import type { Env } from "./env";
 import type { UserRow } from "../db/types";
+import type { Env } from "./env";
 
 declare module "hono" {
   interface ContextVariableMap {
@@ -29,10 +29,7 @@ function isJwt(token: string): boolean {
   return parts.length === 3 && parts.every((p) => p.length > 0);
 }
 
-export async function authMiddleware(
-  c: Context<{ Bindings: Env }>,
-  next: Next
-): Promise<Response | void> {
+export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next): Promise<Response | undefined> {
   const authHeader = c.req.header("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     throw new UnauthorizedError();
@@ -54,7 +51,9 @@ export async function authMiddleware(
     } else if (data?.user) {
       user = await findUserBySupabaseAuthId(db, data.user.id);
       if (!user) {
-        console.error(`[auth] Auth user found (${data.user.id}, ${data.user.email}) but no matching row in public.users. Run the migration or insert manually.`);
+        console.error(
+          `[auth] Auth user found (${data.user.id}, ${data.user.email}) but no matching row in public.users. Run the migration or insert manually.`,
+        );
       }
     } else {
       console.warn("[auth] JWT provided but Supabase returned no user");
@@ -89,7 +88,7 @@ export async function authMiddleware(
 
   // Resolve tier from subscription status
   const sub = await getActiveSubscription(db, user.id);
-  const tier = (sub?.status === "active" || sub?.status === "past_due") ? "pro" : "free";
+  const tier = sub?.status === "active" || sub?.status === "past_due" ? "pro" : "free";
   c.set("tier", tier);
 
   await next();

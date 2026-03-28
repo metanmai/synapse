@@ -1,26 +1,26 @@
 <script>
-  import ScrollReveal from "./ScrollReveal.svelte";
+import ScrollReveal from "./ScrollReveal.svelte";
 
-  const steps = [
-    {
-      number: 1,
-      title: "Connect",
-      description: "Add Synapse to any AI tool in one line",
-      illustration: "config",
-    },
-    {
-      number: 2,
-      title: "Work",
-      description: "Your AI tools save and share context automatically",
-      illustration: "sync",
-    },
-    {
-      number: 3,
-      title: "Share",
-      description: "Invite your team, export your knowledge",
-      illustration: "team",
-    },
-  ];
+const steps = [
+  {
+    number: 1,
+    title: "Connect",
+    description: "Add Synapse to any AI tool in one line",
+    illustration: "config",
+  },
+  {
+    number: 2,
+    title: "Work",
+    description: "Your AI tools save and share context automatically",
+    illustration: "sync",
+  },
+  {
+    number: 3,
+    title: "Share",
+    description: "Invite your team, export your knowledge",
+    illustration: "team",
+  },
+];
 </script>
 
 <section id="how-it-works" class="how-it-works">
