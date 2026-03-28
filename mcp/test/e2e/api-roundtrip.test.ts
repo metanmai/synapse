@@ -778,6 +778,435 @@ suite("Full User Journey", () => {
   });
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  CONVERSATIONS — Cross-Agent Resume Flow
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  let CROSS_AGENT_CONV_ID: string;
+
+  describe("Conversations: Cross-Agent Resume", () => {
+    it("creates conversation with system_prompt and working_context", async () => {
+      const { status, data } = await api("POST", "/api/conversations", KEY, {
+        project_id: PROJECT_ID,
+        title: "Cross-Agent Resume Test",
+        fidelity_mode: "full",
+        system_prompt: "You are a coding assistant working on the synapse project.",
+        working_context: { repo: "synapse", branch: "main", cwd: "/Users/test/synapse" },
+      });
+      if (status === 403) {
+        console.log("  ⏭ Cross-agent tests skipped — free tier");
+        return;
+      }
+      expect(status).toBe(201);
+      expect(data.system_prompt).toBe("You are a coding assistant working on the synapse project.");
+      expect(data.working_context).toEqual({ repo: "synapse", branch: "main", cwd: "/Users/test/synapse" });
+      CROSS_AGENT_CONV_ID = data.id;
+    });
+
+    it("appends messages from claude-code agent with tool_interaction", async () => {
+      if (!CROSS_AGENT_CONV_ID) return;
+      const { status, data } = await api("POST", `/api/conversations/${CROSS_AGENT_CONV_ID}/messages`, KEY, {
+        messages: [
+          { role: "user", content: "Fix the auth middleware bug", source_agent: "claude-code" },
+          {
+            role: "assistant",
+            content: "I'll look at the auth middleware code.",
+            source_agent: "claude-code",
+            source_model: "claude-opus-4-6",
+          },
+          {
+            role: "assistant",
+            content: "",
+            source_agent: "claude-code",
+            source_model: "claude-opus-4-6",
+            tool_interaction: {
+              name: "Read",
+              input: { file_path: "/src/lib/auth.ts" },
+              output: "export function authMiddleware() { ... }",
+              summary: "Read auth.ts (120 lines)",
+            },
+          },
+          {
+            role: "assistant",
+            content: "Found the issue — the token validation is missing the expiry check.",
+            source_agent: "claude-code",
+            source_model: "claude-opus-4-6",
+          },
+        ],
+      });
+      expect(status).toBe(200);
+      expect(data.messages.length).toBe(4);
+    });
+
+    it("GET returns system_prompt, working_context, and all messages", async () => {
+      if (!CROSS_AGENT_CONV_ID) return;
+      const { status, data } = await api("GET", `/api/conversations/${CROSS_AGENT_CONV_ID}`, KEY);
+      expect(status).toBe(200);
+      expect(data.system_prompt).toBe("You are a coding assistant working on the synapse project.");
+      expect(data.working_context).toEqual({ repo: "synapse", branch: "main", cwd: "/Users/test/synapse" });
+      expect(data.messages.length).toBe(4);
+      expect(data.messages[0].content).toBe("Fix the auth middleware bug");
+      expect(data.messages[0].source_agent).toBe("claude-code");
+      expect(data.messages[2].tool_interaction).toBeTruthy();
+      expect(data.messages[2].tool_interaction.name).toBe("Read");
+    });
+
+    it("appends messages from cursor agent (simulating agent resume)", async () => {
+      if (!CROSS_AGENT_CONV_ID) return;
+      const { status, data } = await api("POST", `/api/conversations/${CROSS_AGENT_CONV_ID}/messages`, KEY, {
+        messages: [
+          {
+            role: "user",
+            content: "Continue fixing the auth bug — add the expiry check.",
+            source_agent: "cursor",
+          },
+          {
+            role: "assistant",
+            content: "I see the previous context. Adding the token expiry validation now.",
+            source_agent: "cursor",
+            source_model: "gpt-4o",
+          },
+        ],
+      });
+      expect(status).toBe(200);
+      expect(data.messages.length).toBe(2);
+    });
+
+    it("GET shows all messages from both agents in order", async () => {
+      if (!CROSS_AGENT_CONV_ID) return;
+      const { status, data } = await api("GET", `/api/conversations/${CROSS_AGENT_CONV_ID}`, KEY);
+      expect(status).toBe(200);
+      expect(data.messages.length).toBe(6);
+
+      // Verify ordering: first 4 from claude-code, then 2 from cursor
+      expect(data.messages[0].source_agent).toBe("claude-code");
+      expect(data.messages[3].source_agent).toBe("claude-code");
+      expect(data.messages[4].source_agent).toBe("cursor");
+      expect(data.messages[5].source_agent).toBe("cursor");
+      expect(data.messages[5].source_model).toBe("gpt-4o");
+
+      // Verify sequence numbers are monotonically increasing
+      for (let i = 1; i < data.messages.length; i++) {
+        expect(data.messages[i].sequence).toBeGreaterThan(data.messages[i - 1].sequence);
+      }
+    });
+
+    it("export to raw format preserves all fields", async () => {
+      if (!CROSS_AGENT_CONV_ID) return;
+      const { status, data } = await api("GET", `/api/conversations/${CROSS_AGENT_CONV_ID}/export/raw`, KEY);
+      expect(status).toBe(200);
+      expect(data.format).toBe("raw");
+      expect(data.fidelity).toBe("full");
+
+      // Raw adapter returns canonical messages as-is
+      const messages = data.data;
+      expect(messages.length).toBe(6);
+      // Verify tool interaction preserved in raw export
+      const toolMsg = messages.find((m: R) => m.toolInteraction?.name === "Read");
+      expect(toolMsg).toBeTruthy();
+      expect(toolMsg.toolInteraction.input).toEqual({ file_path: "/src/lib/auth.ts" });
+    });
+
+    it("cleanup: soft-delete cross-agent conversation", async () => {
+      if (!CROSS_AGENT_CONV_ID) return;
+      const { status } = await api("PATCH", `/api/conversations/${CROSS_AGENT_CONV_ID}`, KEY, { status: "deleted" });
+      expect(status).toBe(200);
+    });
+  });
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  CONVERSATIONS — Fidelity Mode Roundtrip
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  let FIDELITY_CONV_ID: string;
+
+  describe("Conversations: Fidelity Mode Roundtrip", () => {
+    it("creates conversation with fidelity_mode=full", async () => {
+      const { status, data } = await api("POST", "/api/conversations", KEY, {
+        project_id: PROJECT_ID,
+        title: "Fidelity Mode Test",
+        fidelity_mode: "full",
+      });
+      if (status === 403) {
+        console.log("  ⏭ Fidelity tests skipped — free tier");
+        return;
+      }
+      expect(status).toBe(201);
+      expect(data.fidelity_mode).toBe("full");
+      FIDELITY_CONV_ID = data.id;
+    });
+
+    it("appends messages with detailed tool_interaction", async () => {
+      if (!FIDELITY_CONV_ID) return;
+      const { status, data } = await api("POST", `/api/conversations/${FIDELITY_CONV_ID}/messages`, KEY, {
+        messages: [
+          { role: "user", content: "Search for auth bugs", source_agent: "test" },
+          {
+            role: "assistant",
+            content: "",
+            source_agent: "test",
+            tool_interaction: {
+              name: "Grep",
+              input: { pattern: "auth.*bug", path: "/src" },
+              output: "Found 3 matches in auth.ts, middleware.ts, login.ts",
+              summary: "Grep for auth bugs (3 matches)",
+            },
+          },
+          {
+            role: "assistant",
+            content: "I found 3 files with potential auth bugs.",
+            source_agent: "test",
+          },
+        ],
+      });
+      expect(status).toBe(200);
+      expect(data.messages.length).toBe(3);
+    });
+
+    it("GET returns full tool_interaction details", async () => {
+      if (!FIDELITY_CONV_ID) return;
+      const { status, data } = await api("GET", `/api/conversations/${FIDELITY_CONV_ID}`, KEY);
+      expect(status).toBe(200);
+      const toolMsg = data.messages.find((m: R) => m.tool_interaction?.name === "Grep");
+      expect(toolMsg).toBeTruthy();
+      expect(toolMsg.tool_interaction.input).toEqual({ pattern: "auth.*bug", path: "/src" });
+      expect(toolMsg.tool_interaction.output).toBe("Found 3 matches in auth.ts, middleware.ts, login.ts");
+      expect(toolMsg.tool_interaction.summary).toBe("Grep for auth bugs (3 matches)");
+    });
+
+    it("export to anthropic format with full fidelity includes tool_use blocks", async () => {
+      if (!FIDELITY_CONV_ID) return;
+      const { status, data } = await api("GET", `/api/conversations/${FIDELITY_CONV_ID}/export/anthropic`, KEY);
+      expect(status).toBe(200);
+      expect(data.format).toBe("anthropic");
+      expect(data.fidelity).toBe("full");
+
+      const messages = data.data;
+      // Should have tool_use blocks in full fidelity
+      const toolMsg = messages.find(
+        (m: R) => Array.isArray(m.content) && m.content.some((b: R) => b.type === "tool_use"),
+      );
+      expect(toolMsg).toBeTruthy();
+    });
+
+    it("export to openai format with full fidelity includes tool_calls", async () => {
+      if (!FIDELITY_CONV_ID) return;
+      const { status, data } = await api("GET", `/api/conversations/${FIDELITY_CONV_ID}/export/openai`, KEY);
+      expect(status).toBe(200);
+      expect(data.format).toBe("openai");
+      expect(data.fidelity).toBe("full");
+
+      const messages = data.data;
+      // Should have tool_calls in full fidelity
+      const toolMsg = messages.find((m: R) => m.tool_calls && m.tool_calls.length > 0);
+      expect(toolMsg).toBeTruthy();
+      expect(toolMsg.tool_calls[0].function.name).toBe("Grep");
+    });
+
+    it("switching fidelity to summary collapses tool details", async () => {
+      if (!FIDELITY_CONV_ID) return;
+      // Change conversation fidelity to summary
+      const { status: patchStatus } = await api("PATCH", `/api/conversations/${FIDELITY_CONV_ID}`, KEY, {
+        fidelity_mode: "summary",
+      });
+      expect(patchStatus).toBe(200);
+
+      // Export to openai — tool_calls should be absent in summary
+      const { status, data } = await api("GET", `/api/conversations/${FIDELITY_CONV_ID}/export/openai`, KEY);
+      expect(status).toBe(200);
+      expect(data.fidelity).toBe("summary");
+
+      const messages = data.data;
+      // No tool_calls in summary mode
+      const hasToolCalls = messages.some((m: R) => m.tool_calls && m.tool_calls.length > 0);
+      expect(hasToolCalls).toBe(false);
+
+      // Tool interactions should be collapsed to text annotations
+      const toolAnnotation = messages.find((m: R) => typeof m.content === "string" && m.content.includes("[Tool:"));
+      expect(toolAnnotation).toBeTruthy();
+    });
+
+    it("cleanup: soft-delete fidelity conversation", async () => {
+      if (!FIDELITY_CONV_ID) return;
+      const { status } = await api("PATCH", `/api/conversations/${FIDELITY_CONV_ID}`, KEY, { status: "deleted" });
+      expect(status).toBe(200);
+    });
+  });
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  CONVERSATIONS — Format Import/Export Roundtrip
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  let IMPORT_CONV_ID: string;
+
+  describe("Conversations: Format Import/Export Roundtrip", () => {
+    it("imports Anthropic-format messages with tool_use + tool_result", async () => {
+      const { status, data } = await api("POST", "/api/conversations/import", KEY, {
+        project_id: PROJECT_ID,
+        format: "anthropic",
+        title: "Imported Anthropic Conversation",
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "What files are in the src directory?" }],
+          },
+          {
+            role: "assistant",
+            content: [
+              { type: "text", text: "Let me check the directory listing." },
+              {
+                type: "tool_use",
+                id: "toolu_abc123",
+                name: "list_files",
+                input: { path: "/src" },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_abc123",
+                content: "index.ts\napp.ts\nutils.ts",
+              },
+            ],
+          },
+          {
+            role: "assistant",
+            content: [
+              { type: "text", text: "The src directory contains: index.ts, app.ts, and utils.ts." },
+            ],
+          },
+        ],
+      });
+      if (status === 403) {
+        console.log("  ⏭ Import/export tests skipped — free tier");
+        return;
+      }
+      expect(status).toBe(201);
+      IMPORT_CONV_ID = data.id;
+    });
+
+    it("GET shows canonicalized messages from import", async () => {
+      if (!IMPORT_CONV_ID) return;
+      const { status, data } = await api("GET", `/api/conversations/${IMPORT_CONV_ID}`, KEY);
+      expect(status).toBe(200);
+      // Anthropic adapter splits tool_use and tool_result into separate canonical messages
+      expect(data.messages.length).toBeGreaterThanOrEqual(4);
+
+      // First message should be the user question
+      expect(data.messages[0].role).toBe("user");
+      expect(data.messages[0].content).toBe("What files are in the src directory?");
+
+      // Should have a tool_interaction message
+      const toolCall = data.messages.find((m: R) => m.tool_interaction?.name === "list_files");
+      expect(toolCall).toBeTruthy();
+
+      // Should have a tool result message
+      const toolResult = data.messages.find((m: R) => m.role === "tool");
+      expect(toolResult).toBeTruthy();
+      expect(toolResult.content).toContain("index.ts");
+    });
+
+    it("exports to openai format", async () => {
+      if (!IMPORT_CONV_ID) return;
+      const { status, data } = await api("GET", `/api/conversations/${IMPORT_CONV_ID}/export/openai`, KEY);
+      expect(status).toBe(200);
+      expect(data.format).toBe("openai");
+
+      const messages = data.data;
+      expect(messages.length).toBeGreaterThanOrEqual(1);
+
+      // OpenAI format: user messages have string content
+      const userMsg = messages.find((m: R) => m.role === "user" && typeof m.content === "string");
+      expect(userMsg).toBeTruthy();
+    });
+
+    it("exports to anthropic format", async () => {
+      if (!IMPORT_CONV_ID) return;
+      const { status, data } = await api("GET", `/api/conversations/${IMPORT_CONV_ID}/export/anthropic`, KEY);
+      expect(status).toBe(200);
+      expect(data.format).toBe("anthropic");
+
+      const messages = data.data;
+      expect(messages.length).toBeGreaterThanOrEqual(1);
+
+      // Anthropic format: messages have content as array of blocks
+      const blockMsg = messages.find((m: R) => Array.isArray(m.content));
+      expect(blockMsg).toBeTruthy();
+    });
+
+    it("cleanup: soft-delete imported conversation", async () => {
+      if (!IMPORT_CONV_ID) return;
+      const { status } = await api("PATCH", `/api/conversations/${IMPORT_CONV_ID}`, KEY, { status: "deleted" });
+      expect(status).toBe(200);
+    });
+  });
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  CONVERSATIONS — Working Context Update
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  let CTX_UPDATE_CONV_ID: string;
+
+  describe("Conversations: Working Context Update", () => {
+    it("creates conversation with initial working_context", async () => {
+      const { status, data } = await api("POST", "/api/conversations", KEY, {
+        project_id: PROJECT_ID,
+        title: "Working Context Update Test",
+        working_context: { repo: "synapse", branch: "main" },
+      });
+      if (status === 403) {
+        console.log("  ⏭ Working context tests skipped — free tier");
+        return;
+      }
+      expect(status).toBe(201);
+      expect(data.working_context).toEqual({ repo: "synapse", branch: "main" });
+      CTX_UPDATE_CONV_ID = data.id;
+    });
+
+    it("GET confirms initial working_context", async () => {
+      if (!CTX_UPDATE_CONV_ID) return;
+      const { status, data } = await api("GET", `/api/conversations/${CTX_UPDATE_CONV_ID}`, KEY);
+      expect(status).toBe(200);
+      expect(data.working_context).toEqual({ repo: "synapse", branch: "main" });
+    });
+
+    it("appends messages with context updates", async () => {
+      if (!CTX_UPDATE_CONV_ID) return;
+      const { status } = await api("POST", `/api/conversations/${CTX_UPDATE_CONV_ID}/messages`, KEY, {
+        messages: [
+          { role: "user", content: "Switching to feature branch", source_agent: "claude-code" },
+        ],
+        context: [
+          { type: "repo", key: "branch", value: "feature/auth-fix" },
+          { type: "env", key: "NODE_ENV", value: "development" },
+        ],
+      });
+      expect(status).toBe(200);
+    });
+
+    it("GET shows conversation context entries", async () => {
+      if (!CTX_UPDATE_CONV_ID) return;
+      const { status, data } = await api("GET", `/api/conversations/${CTX_UPDATE_CONV_ID}`, KEY);
+      expect(status).toBe(200);
+
+      // Context entries should be present
+      expect(data.context).toBeDefined();
+      expect(data.context.length).toBeGreaterThanOrEqual(2);
+      const branchCtx = data.context.find((c: R) => c.key === "branch");
+      expect(branchCtx).toBeTruthy();
+      expect(branchCtx.value).toBe("feature/auth-fix");
+    });
+
+    it("cleanup: soft-delete context update conversation", async () => {
+      if (!CTX_UPDATE_CONV_ID) return;
+      const { status } = await api("PATCH", `/api/conversations/${CTX_UPDATE_CONV_ID}`, KEY, { status: "deleted" });
+      expect(status).toBe(200);
+    });
+  });
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  AUTH ENFORCEMENT — all protected endpoints
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
