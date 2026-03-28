@@ -6,11 +6,11 @@ import { findUserBySupabaseAuthId, getActiveSubscription } from "../db/queries";
 import { UnauthorizedError } from "./errors";
 
 import type { Env } from "./env";
-import type { User } from "../db/types";
+import type { UserRow } from "../db/types";
 
 declare module "hono" {
   interface ContextVariableMap {
-    user: User;
+    user: UserRow;
     tier: import("../db/types").Tier;
   }
 }
@@ -40,7 +40,7 @@ export async function authMiddleware(
 
   const token = authHeader.slice(7);
   const db = createSupabaseClient(c.env);
-  let user: User | null = null;
+  let user: UserRow | null = null;
 
   // Try JWT by verifying with Supabase auth
   if (isJwt(token)) {
