@@ -14,24 +14,27 @@ context.use("*", authMiddleware);
 // POST /api/context/save
 context.post("/save", async (c) => {
   const user = c.get("user");
-  const { project, path, content, tags } = await c.req.json();
+  const { project, path, content, tags, source } = await c.req.json();
   if (!project || !path || !content) {
     throw new AppError("project, path, and content are required", 400, "VALIDATION_ERROR");
   }
+
+  const validSources = ["human", "claude", "chatgpt", "cursor", "copilot", "windsurf", "google_docs"];
+  const entrySource = validSources.includes(source) ? source : "human";
 
   const db = createSupabaseClient(c.env);
   const proj = await getProjectByName(db, project, user.id);
   if (!proj) throw new NotFoundError(`Project "${project}" not found`);
 
   const entry = await upsertEntry(db, {
-    project_id: proj.id, path, content, tags, author_id: user.id, source: "human",
+    project_id: proj.id, path, content, tags, author_id: user.id, source: entrySource,
   });
   await logActivity(db, {
     project_id: proj.id,
     user_id: user.id,
     action: entry.created_at === entry.updated_at ? "entry_created" : "entry_updated",
     target_path: path,
-    source: "human",
+    source: entrySource,
   });
   return c.json(entry, 201);
 });
