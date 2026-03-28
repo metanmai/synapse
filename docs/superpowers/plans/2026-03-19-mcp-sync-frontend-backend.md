@@ -507,27 +507,9 @@ export async function authMiddleware(
 }
 ```
 
-- [ ] **Step 3: Write test for JWT detection**
+- [ ] **Step 3: Verify existing tests still pass (hashApiKey tests already exist)**
 
-Update `test/api/auth.test.ts` — add:
-```typescript
-import { hashApiKey } from "../../src/lib/auth";
-
-describe("hashApiKey", () => {
-  it("produces consistent SHA-256 hex hash", async () => {
-    const hash1 = await hashApiKey("test-key-123");
-    const hash2 = await hashApiKey("test-key-123");
-    expect(hash1).toBe(hash2);
-    expect(hash1).toHaveLength(64);
-  });
-
-  it("produces different hashes for different keys", async () => {
-    const hash1 = await hashApiKey("key-a");
-    const hash2 = await hashApiKey("key-b");
-    expect(hash1).not.toBe(hash2);
-  });
-});
-```
+Note: `test/api/auth.test.ts` already contains hashApiKey tests — no changes needed.
 
 - [ ] **Step 4: Run tests**
 
@@ -684,7 +666,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Env } from "./lib/env";
 import { AppError } from "./lib/errors";
-import { auth } from "./api/auth";
+import { auth, account } from "./api/auth";
 import { context } from "./api/context";
 import { projects } from "./api/projects";
 import { sync } from "./api/sync";
@@ -696,7 +678,7 @@ const app = new Hono<{ Bindings: Env }>();
 
 // CORS for frontend
 app.use("*", cors({
-  origin: ["http://localhost:5173"],
+  origin: ["http://localhost:5173", "https://app.mcp-sync.dev"],
   allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization"],
   credentials: true,
@@ -720,6 +702,7 @@ app.route("/api/context", context);
 app.route("/api/projects", projects);
 app.route("/api/sync", sync);
 app.route("/api/share", share);
+app.route("/api/account", account);
 
 // Mount MCP server (Streamable HTTP transport)
 app.mount("/mcp", McpSyncAgent.serve("/mcp").fetch);
@@ -776,12 +759,14 @@ context.get("/:project/history/:path{.+}", async (c) => {
   return c.json(history);
 });
 
-// POST /api/context/:project/history/:path{.+}/restore/:historyId
-context.post("/:project/history/:path{.+}/restore/:historyId", async (c) => {
+// POST /api/context/:project/restore — body: { path, historyId }
+context.post("/:project/restore", async (c) => {
   const user = c.get("user");
   const projectName = c.req.param("project");
-  const path = c.req.param("path");
-  const historyId = c.req.param("historyId");
+  const { path, historyId } = await c.req.json();
+  if (!path || !historyId) {
+    throw new AppError("path and historyId are required", 400, "VALIDATION_ERROR");
+  }
 
   const db = createSupabaseClient(c.env);
   const proj = await getProjectByName(db, projectName, user.id);
@@ -919,8 +904,12 @@ git commit -m "feat: add activity logging to MCP tools"
 
 Add to `src/api/auth.ts`:
 ```typescript
-// POST /auth/account/regenerate-key
-auth.post("/account/regenerate-key", authMiddleware, async (c) => {
+// POST /api/account/regenerate-key — mounted separately in index.ts, not under /auth
+// Add this as a standalone Hono app exported from auth.ts
+export const account = new Hono<{ Bindings: Env }>();
+account.use("*", authMiddleware);
+
+account.post("/regenerate-key", async (c) => {
   const user = c.get("user");
 
   const apiKey = crypto.randomUUID() + "-" + crypto.randomUUID();
