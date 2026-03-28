@@ -9,11 +9,11 @@ export interface Env {
   GOOGLE_CLIENT_SECRET: string;
 
   // CORS — comma-separated allowed origins
-  // Default: "http://localhost:5173,https://app.synapse.dev"
+  // Default: "http://localhost:5173,https://synapsesync.app"
   CORS_ORIGINS?: string;
 
   // App URLs
-  APP_URL?: string; // Default: "https://app.synapse.dev"
+  APP_URL?: string; // Default: "https://synapsesync.app"
 
   // Tier limits
   TIER_FREE_MAX_FILES?: string;       // Default: "50"
