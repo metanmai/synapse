@@ -62,8 +62,8 @@
           <p class="text-sm" style="color: var(--color-danger);">{form.error}</p>
         {/if}
         <button type="submit"
-          class="w-full rounded-lg px-4 py-2.5 text-sm font-medium text-white cursor-pointer"
-          style="background-color: var(--color-accent);"
+          class="w-full rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
+          style="background-color: var(--color-accent); color: var(--color-text);"
         >
           Create account
         </button>
@@ -71,7 +71,7 @@
 
       <p class="mt-4 text-center text-sm" style="color: var(--color-text-muted);">
         Already have an account?
-        <a href="/login" style="color: var(--color-accent);">Sign in</a>
+        <a href="/login" style="color: var(--color-link);">Sign in</a>
       </p>
     {/if}
   </div>

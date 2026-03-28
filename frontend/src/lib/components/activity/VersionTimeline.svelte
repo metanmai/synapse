@@ -20,7 +20,7 @@
         <form method="POST" action="?/restore" use:enhance>
           <input type="hidden" name="historyId" value={version.id} />
           <button type="submit" class="text-xs cursor-pointer"
-            style="color: var(--color-accent);">
+            style="color: var(--color-link);">
             Restore this version
           </button>
         </form>
