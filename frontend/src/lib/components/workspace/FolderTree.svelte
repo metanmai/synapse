@@ -9,6 +9,42 @@
     onAction: (action: "activity" | "share" | "delete", path: string, isFolder: boolean) => void;
   }>();
 
+  let searchQuery = $state("");
+
+  // Fuzzy match: all query chars must appear in order in the target
+  function fuzzyMatch(query: string, target: string): { match: boolean; score: number } {
+    const q = query.toLowerCase();
+    const t = target.toLowerCase();
+    let qi = 0;
+    let score = 0;
+    let prevMatchIdx = -2;
+
+    for (let ti = 0; ti < t.length && qi < q.length; ti++) {
+      if (t[ti] === q[qi]) {
+        score += 1;
+        // Bonus for consecutive matches
+        if (ti === prevMatchIdx + 1) score += 2;
+        // Bonus for matching after separator
+        if (ti === 0 || t[ti - 1] === "/" || t[ti - 1] === "-" || t[ti - 1] === "_" || t[ti - 1] === ".") score += 3;
+        prevMatchIdx = ti;
+        qi++;
+      }
+    }
+    return { match: qi === q.length, score };
+  }
+
+  let searchResults = $derived.by(() => {
+    if (searchQuery.length < 1) return null;
+    const results: { path: string; name: string; score: number }[] = [];
+    for (const entry of entries) {
+      const { match, score } = fuzzyMatch(searchQuery, entry.path);
+      if (match) {
+        results.push({ path: entry.path, name: entry.path.split("/").pop() || entry.path, score });
+      }
+    }
+    return results.sort((a, b) => b.score - a.score);
+  });
+
   interface TreeNode {
     name: string;
     path: string;
@@ -153,11 +189,34 @@
 {/snippet}
 
 <div>
-  {#each tree.files.sort((a, b) => a.name.localeCompare(b.name)) as file}
-    {@render fileRow(file.path, file.name, 0)}
-  {/each}
-  {@render folder(tree, 0)}
-  {#if entries.length === 0}
-    <p class="px-1" style="color: var(--color-text-muted); font-size: 11px;">No entries yet</p>
+  <!-- Search bar -->
+  <div class="mb-2 px-1">
+    <input type="text" placeholder="Search files..." bind:value={searchQuery}
+      class="w-full rounded-md px-2 py-1.5"
+      style="font-size: 11px; border: 1px solid var(--color-border); background: var(--color-bg);
+        outline: none;"
+      onfocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-pink)')}
+      onblur={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
+    />
+  </div>
+
+  {#if searchResults !== null}
+    <!-- Fuzzy search results -->
+    {#if searchResults.length === 0}
+      <p class="px-2 py-1" style="color: var(--color-text-muted); font-size: 11px;">No matches</p>
+    {:else}
+      {#each searchResults as result}
+        {@render fileRow(result.path, result.path, 0)}
+      {/each}
+    {/if}
+  {:else}
+    <!-- Normal tree view -->
+    {#each tree.files.sort((a, b) => a.name.localeCompare(b.name)) as file}
+      {@render fileRow(file.path, file.name, 0)}
+    {/each}
+    {@render folder(tree, 0)}
+    {#if entries.length === 0}
+      <p class="px-1" style="color: var(--color-text-muted); font-size: 11px;">No entries yet</p>
+    {/if}
   {/if}
 </div>
