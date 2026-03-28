@@ -9,11 +9,13 @@ import { enforceMemberLimit } from "../lib/tier";
 import { buildProjectZip } from "../lib/export";
 import { parseZipEntries, importEntries } from "../lib/import";
 import { getTierLimits } from "../lib/tier";
+import { idempotency } from "../lib/idempotency";
 
 import type { Env } from "../lib/env";
 
 const projects = new Hono<{ Bindings: Env }>();
 projects.use("*", authMiddleware);
+projects.use("*", idempotency);
 
 // POST /api/projects
 projects.post("/", async (c) => {
