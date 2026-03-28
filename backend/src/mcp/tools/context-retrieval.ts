@@ -10,6 +10,7 @@ import {
   getRecentEntries,
   listEntries,
   searchEntries,
+  searchInsights,
 } from "../../db/queries";
 
 import { embedTexts, embeddingConfigFromEnv } from "../../lib/embeddings";
@@ -62,21 +63,42 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
       const vectors = await embedTexts([query], "search_query", config);
       const queryEmbedding = vectors?.[0] ?? null;
 
-      const results = await searchEntries(db, proj.id, query, { tags, folder }, queryEmbedding);
+      const [results, insights] = await Promise.all([
+        searchEntries(db, proj.id, query, { tags, folder }, queryEmbedding),
+        searchInsights(db, proj.id, query),
+      ]);
 
-      if (!results.length) {
+      if (!results.length && !insights.length) {
         return { content: [{ type: "text", text: `No results found for "${query}".` }] };
       }
 
-      const formatted = results
-        .map(
-          (e) =>
-            `### ${e.path}\n*Tags: ${e.tags.join(", ") || "none"}*\n\n${e.content.slice(0, 500)}${e.content.length > 500 ? "..." : ""}`,
-        )
-        .join("\n\n---\n\n");
+      let output = "";
+
+      if (results.length) {
+        const formatted = results
+          .map(
+            (e) =>
+              `### ${e.path}\n*Tags: ${e.tags.join(", ") || "none"}*\n\n${e.content.slice(0, 500)}${e.content.length > 500 ? "..." : ""}`,
+          )
+          .join("\n\n---\n\n");
+
+        output += `Found ${results.length} result(s):\n\n${formatted}`;
+      }
+
+      if (insights.length) {
+        const formattedInsights = insights
+          .map((i) => {
+            const detail = i.detail ? `\n    ${i.detail}` : "";
+            return `  [${i.type}] ${i.summary}${detail}`;
+          })
+          .join("\n");
+
+        if (output) output += "\n\n---\n\n";
+        output += `**Key Insights:**\n${formattedInsights}`;
+      }
 
       return {
-        content: [{ type: "text", text: `Found ${results.length} result(s):\n\n${formatted}` }],
+        content: [{ type: "text", text: output }],
       };
     },
   );
