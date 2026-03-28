@@ -11,10 +11,13 @@ import ProblemSection from "$lib/components/landing/ProblemSection.svelte";
 import SetupGuide from "$lib/components/landing/SetupGuide.svelte";
 import Stats from "$lib/components/landing/Stats.svelte";
 import ToolBar from "$lib/components/landing/ToolBar.svelte";
+
+let { data } = $props();
+const loggedIn = $derived(!!data.user);
 </script>
 
-<LandingNav />
-<Hero />
+<LandingNav {loggedIn} />
+<Hero {loggedIn} />
 <ToolBar />
 <ProblemSection />
 <Stats />
@@ -23,5 +26,5 @@ import ToolBar from "$lib/components/landing/ToolBar.svelte";
 <FeatureCards />
 <Comparison />
 <Faq />
-<CtaSection />
+<CtaSection {loggedIn} />
 <LandingFooter />
