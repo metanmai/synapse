@@ -155,7 +155,7 @@ export function createApi(token: string | null) {
     // Billing
     getBillingStatus: () =>
       request<{
-        tier: "free" | "pro";
+        tier: "free" | "plus";
         subscription: {
           status: string;
           current_period_end: string | null;
