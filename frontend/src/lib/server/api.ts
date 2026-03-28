@@ -138,5 +138,24 @@ export function createApi(token: string | null) {
         token,
         { method: "PUT", body: JSON.stringify({ key, value }) },
       ),
+
+    // Billing
+    getBillingStatus: () =>
+      request<{
+        tier: "free" | "pro";
+        subscription: {
+          status: string;
+          current_period_end: string | null;
+          cancel_at_period_end: boolean;
+        } | null;
+      }>("/api/billing/status", token),
+    createCheckout: () =>
+      request<{ url: string }>("/api/billing/checkout", token, {
+        method: "POST",
+      }),
+    createPortalSession: () =>
+      request<{ url: string }>("/api/billing/portal", token, {
+        method: "POST",
+      }),
   };
 }
