@@ -8,8 +8,8 @@ import {
   getConversation,
   getConversationContext,
   getMediaForConversation,
-  getMessages,
   getMemberRole,
+  getMessages,
   insertMedia,
   listConversations,
   saveConversationContext,
@@ -17,13 +17,12 @@ import {
 } from "../db/queries";
 import { detectAdapter, getAdapter } from "../lib/adapters";
 import { authMiddleware } from "../lib/auth";
+import type { Env } from "../lib/env";
 import { AppError, ForbiddenError, NotFoundError } from "../lib/errors";
 import { idempotency } from "../lib/idempotency";
 import { getSignedUrl, uploadMedia } from "../lib/storage";
 import { requireConversationSync } from "../lib/tier";
 import { parseBody, schemas } from "../lib/validate";
-
-import type { Env } from "../lib/env";
 
 const conversations = new Hono<{ Bindings: Env }>();
 conversations.use("*", authMiddleware);
@@ -72,8 +71,10 @@ conversations.get("/", async (c) => {
   }
 
   const status = c.req.query("status") as "active" | "archived" | undefined;
-  const limit = c.req.query("limit") ? Number.parseInt(c.req.query("limit")!) : undefined;
-  const offset = c.req.query("offset") ? Number.parseInt(c.req.query("offset")!) : undefined;
+  const limitStr = c.req.query("limit");
+  const offsetStr = c.req.query("offset");
+  const limit = limitStr ? Number.parseInt(limitStr) : undefined;
+  const offset = offsetStr ? Number.parseInt(offsetStr) : undefined;
 
   const db = createSupabaseClient(c.env);
 
@@ -152,12 +153,10 @@ conversations.get("/:id", async (c) => {
   const user = c.get("user");
   const conversationId = c.req.param("id");
 
-  const fromSequence = c.req.query("from_sequence")
-    ? Number.parseInt(c.req.query("from_sequence")!)
-    : undefined;
-  const msgLimit = c.req.query("msg_limit")
-    ? Number.parseInt(c.req.query("msg_limit")!)
-    : undefined;
+  const fromSequenceStr = c.req.query("from_sequence");
+  const msgLimitStr = c.req.query("msg_limit");
+  const fromSequence = fromSequenceStr ? Number.parseInt(fromSequenceStr) : undefined;
+  const msgLimit = msgLimitStr ? Number.parseInt(msgLimitStr) : undefined;
 
   const db = createSupabaseClient(c.env);
 
