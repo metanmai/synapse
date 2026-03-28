@@ -1,32 +1,17 @@
 import type { Env } from "../lib/env";
 import { createSupabaseClient } from "../db/client";
 import type { Entry, GoogleOAuthTokens } from "../db/types";
+import { getAccessToken } from "./google-auth";
 
-async function getAccessToken(env: Env, tokens: GoogleOAuthTokens): Promise<string> {
-  if (Date.now() < tokens.expires_at) {
-    return tokens.access_token;
-  }
+interface GoogleDriveFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  modifiedTime?: string;
+}
 
-  // Refresh the token
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
-      refresh_token: tokens.refresh_token,
-      grant_type: "refresh_token",
-    }),
-  });
-
-  const data = await res.json() as any;
-  if (!data.access_token) throw new Error("Failed to refresh Google token");
-
-  // Update stored tokens
-  tokens.access_token = data.access_token;
-  tokens.expires_at = Date.now() + data.expires_in * 1000;
-
-  return data.access_token;
+interface GoogleDriveListResponse {
+  files: GoogleDriveFile[];
 }
 
 async function ensureDriveFolder(
@@ -41,7 +26,7 @@ async function ensureDriveFolder(
     )}&fields=files(id,name)`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
-  const searchData = await searchRes.json() as any;
+  const searchData = await searchRes.json() as GoogleDriveListResponse;
 
   if (searchData.files?.length > 0) {
     return searchData.files[0].id;
@@ -60,7 +45,7 @@ async function ensureDriveFolder(
       parents: [parentId],
     }),
   });
-  const created = await createRes.json() as any;
+  const created = await createRes.json() as GoogleDriveFile;
   return created.id;
 }
 
@@ -108,7 +93,7 @@ async function upsertGoogleDoc(
       body,
     }
   );
-  const created = await res.json() as any;
+  const created = await res.json() as GoogleDriveFile;
   return created.id;
 }
 
@@ -125,7 +110,7 @@ export async function syncProjectToGoogle(env: Env, projectId: string): Promise<
     throw new Error("Project has no linked Google Drive folder");
   }
 
-  const tokens = (project as any).users?.google_oauth_tokens as GoogleOAuthTokens | null;
+  const tokens = (project as unknown as { users?: { google_oauth_tokens?: GoogleOAuthTokens } }).users?.google_oauth_tokens ?? null;
   if (!tokens) throw new Error("Project owner has not connected Google");
 
   const accessToken = await getAccessToken(env, tokens);
