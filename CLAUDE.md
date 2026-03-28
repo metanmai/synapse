@@ -2,6 +2,8 @@
 
 Synapse is a context management tool that stores knowledge as files in a remote workspace. It has a web frontend (SvelteKit), a backend API (Cloudflare Workers), and an MCP server that exposes the workspace as a filesystem.
 
+CRITICAL REQUIREMENT: You MUST call `mcp__synapse__search()` or `mcp__synapse__tree()` BEFORE scanning the codebase, reading files, or doing any other work when the user asks about context, decisions, past work, architecture, or how something works. Synapse is the user's cross-session knowledge base. Skipping it means you will miss important context and waste time rediscovering things already documented. This is a BLOCKING step — do not proceed to codebase exploration until Synapse has been checked.
+
 ## MCP Server — Synapse Workspace
 
 You have access to a **Synapse MCP server** that connects to the user's remote workspace. Use it like a filesystem:
@@ -53,10 +55,12 @@ Synapse REPLACES local filesystem for all context operations. Do NOT write conte
 - **Meeting notes** — `write({ path: "notes/standup-2026-03-22.md", content: "..." })`
 - **User says "remember this"** — Always Synapse, never local files.
 
-### Before Asking the User
+### MANDATORY: Before Asking the User or Scanning Code
+- You MUST search Synapse BEFORE reading local files or asking the user for context.
 - If you need context about a past decision, search Synapse first: `search({ query: "why did we choose X" })`
 - If you're unsure about project conventions, check: `search({ query: "conventions" })` or `ls("standards/")`
 - Don't ask the user something that might already be in Synapse.
+- Only after Synapse returns no results should you fall back to codebase exploration.
 
 ### What NOT to Write to Synapse
 - Source code (that belongs in git)
