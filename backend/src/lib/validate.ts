@@ -30,6 +30,15 @@ export const schemas = {
     label: z.string().optional().default("cli"),
   }),
 
+  cliSession: z.object({
+    code_challenge: z.string().min(1, "Code challenge is required"),
+  }),
+
+  cliExchange: z.object({
+    code: z.string().min(1, "Code is required"),
+    code_verifier: z.string().min(1, "Code verifier is required"),
+  }),
+
   createApiKey: z.object({
     label: z.string().min(1, "Label is required").trim(),
     expires_at: z.string().nullable().optional(),
