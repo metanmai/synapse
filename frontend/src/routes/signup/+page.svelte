@@ -1,7 +1,25 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
+  import { onMount } from "svelte";
 
   let { form } = $props();
+
+  // Poll for email confirmation when showing "check your email" screen
+  onMount(() => {
+    if (!form?.success) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/dashboard", { redirect: "manual" });
+        if (res.status === 200 || res.status === 303 || res.type === "opaqueredirect") {
+          clearInterval(interval);
+          window.location.href = "/dashboard";
+        }
+      } catch {}
+    }, 3000);
+
+    return () => clearInterval(interval);
+  });
 </script>
 
 <div class="min-h-screen flex items-center justify-center" style="background-color: var(--color-bg);">
@@ -10,9 +28,13 @@
     {#if form?.success}
       <div class="text-center">
         <h2 class="text-lg font-semibold mb-2">Check your email</h2>
-        <p class="text-sm" style="color: var(--color-text-muted);">
+        <p class="text-sm mb-4" style="color: var(--color-text-muted);">
           We sent a confirmation link to {form.email}
         </p>
+        <div class="flex items-center justify-center gap-2 text-xs" style="color: var(--color-text-muted);">
+          <span class="polling-dot"></span>
+          Waiting for confirmation...
+        </div>
       </div>
     {:else}
       <h1 class="text-xl font-semibold mb-6" style="color: var(--color-accent);">Create your account</h1>
@@ -76,3 +98,18 @@
     {/if}
   </div>
 </div>
+
+<style>
+  .polling-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--color-accent);
+    animation: pulse-dot 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+  }
+</style>
