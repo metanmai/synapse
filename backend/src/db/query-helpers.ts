@@ -6,6 +6,9 @@ import type { PostgrestSingleResponse } from "@supabase/supabase-js";
  */
 export function singleOrNull<T>(result: PostgrestSingleResponse<T>): T | null {
   if (result.error && result.error.code === "PGRST116") return null;
-  if (result.error) throw result.error;
+  if (result.error) {
+    console.error(`[db] Query error: ${result.error.message} (code: ${result.error.code})`);
+    throw result.error;
+  }
   return result.data as T;
 }
