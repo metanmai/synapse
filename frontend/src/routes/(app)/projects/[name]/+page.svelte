@@ -121,9 +121,9 @@ function closePanel() {
   }} />
 {/if}
 
-<div class="flex h-full" style={dragging ? "user-select: none; cursor: col-resize;" : ""}>
+<div class="workspace-layout" style={dragging ? "user-select: none; cursor: col-resize;" : ""}>
   <!-- File tree sidebar -->
-  <div class="glass p-3 overflow-y-auto shrink-0"
+  <div class="glass p-3 overflow-y-auto file-tree-sidebar"
     style="width: {sidebarWidth}px; border-radius: 0;">
     <div class="flex items-center justify-between mb-2 px-1">
       <span class="font-medium uppercase tracking-wide"
@@ -202,3 +202,28 @@ function closePanel() {
   <input type="file" name="file" accept=".zip" bind:this={importInput}
     onchange={() => importForm?.requestSubmit()} />
 </form>
+
+<style>
+  .workspace-layout {
+    display: flex;
+    height: 100%;
+  }
+
+  .file-tree-sidebar {
+    flex-shrink: 0;
+    min-width: 0;
+  }
+
+  @media (max-width: 768px) {
+    .workspace-layout {
+      flex-direction: column;
+    }
+
+    .file-tree-sidebar {
+      width: 100% !important;
+      max-height: 40vh;
+      border-right: none !important;
+      border-bottom: 1px solid var(--color-border);
+    }
+  }
+</style>
