@@ -168,11 +168,16 @@ billing.post("/verify", async (c) => {
   }
 
   // Ask Creem directly for the checkout status
-  const checkout = await creemRequest<{
+  let checkout: {
     status: string;
     subscription?: { id: string; current_period_end_date?: string } | string;
     customer?: { id: string } | string;
-  }>(c.env, "GET", `/checkouts?checkout_id=${encodeURIComponent(body.checkout_id)}`);
+  };
+  try {
+    checkout = await creemRequest(c.env, "GET", `/checkouts?checkout_id=${encodeURIComponent(body.checkout_id)}`);
+  } catch {
+    throw new AppError("Could not verify checkout — invalid or unknown checkout ID", 400, "VALIDATION_ERROR");
+  }
 
   if (checkout.status !== "completed") {
     return c.json({ status: "pending" });
