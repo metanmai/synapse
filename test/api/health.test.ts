@@ -48,4 +48,14 @@ describe("Route smoke tests", () => {
     await waitOnExecutionContext(ctx);
     expect(res.status).toBe(404);
   });
+
+  it("POST /api/share/invalid-token/join without auth returns 401", async () => {
+    const req = new Request("http://localhost/api/share/invalid-token/join", {
+      method: "POST",
+    });
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(req, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(res.status).toBe(401);
+  });
 });
