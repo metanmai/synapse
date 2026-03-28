@@ -23,8 +23,15 @@ let loading = $state(false);
 let contextPath = $state<string | null>(null);
 let contextIsFolder = $state(false);
 
-// Client-side entry cache
+// Client-side entry cache — invalidate when entries list changes (project switch, save, etc.)
 const entryCache = new Map<string, Entry>();
+let prevEntriesRef: typeof data.entries | undefined = $state(undefined);
+$effect(() => {
+  if (prevEntriesRef !== undefined && data.entries !== prevEntriesRef) {
+    entryCache.clear();
+  }
+  prevEntriesRef = data.entries;
+});
 
 // Resizable sidebar
 let sidebarWidth = $state(220);
@@ -103,13 +110,15 @@ function startEdit() {
   mode = "edit";
 }
 
-function handleAction(action: "activity" | "share" | "delete", path: string, isFolder: boolean) {
+function handleAction(action: "activity" | "share" | "delete" | "export", path: string, isFolder: boolean) {
   contextPath = path;
   contextIsFolder = isFolder;
   if (action === "activity") {
     mode = "activity";
   } else if (action === "share") {
     mode = "share";
+  } else if (action === "export") {
+    // Export is triggered from FolderTree via `<a download>`; no-op if routed here.
   } else if (action === "delete") {
     if (confirm(`Delete ${path}?`)) {
       // TODO: wire up delete API
