@@ -70,9 +70,9 @@ export function getTierLimitsFromEnv(env?: Record<string, string>) {
       maxHistoryVersions: Number.parseInt(env?.TIER_FREE_MAX_HISTORY ?? "3"),
       maxMembers: Number.parseInt(env?.TIER_FREE_MAX_MEMBERS ?? "2"),
     },
-    pro: {
-      maxFiles: Number.parseInt(env?.TIER_PRO_MAX_FILES ?? "500"),
-      maxConnections: Number.parseInt(env?.TIER_PRO_MAX_CONNECTIONS ?? "0"),
+    plus: {
+      maxFiles: Number.parseInt(env?.TIER_PLUS_MAX_FILES ?? "500"),
+      maxConnections: Number.parseInt(env?.TIER_PLUS_MAX_CONNECTIONS ?? "0"),
       maxHistoryVersions: -1,
       maxMembers: 0,
     },

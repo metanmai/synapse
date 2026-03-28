@@ -670,7 +670,7 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "tier": { "type": "string", "enum": ["free", "pro"] },
+                    "tier": { "type": "string", "enum": ["free", "plus"] },
                     "subscription": {
                       "type": "object",
                       "nullable": true,
