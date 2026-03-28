@@ -1,8 +1,10 @@
 import { Context, Next } from "hono";
-import type { Env } from "./env";
+
 import { createSupabaseClient } from "../db/client";
-import { findUserByApiKeyHash, findUserBySupabaseAuthId } from "../db/queries/users";
+import { findUserByApiKeyHash, findUserBySupabaseAuthId } from "../db/queries";
 import { UnauthorizedError } from "./errors";
+
+import type { Env } from "./env";
 import type { User } from "../db/types";
 
 declare module "hono" {
