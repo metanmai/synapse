@@ -12,6 +12,12 @@ const navSections = $derived([
     ],
   },
   {
+    heading: "Knowledge",
+    items: [
+      { href: `/projects/${encodeURIComponent(projectName)}/insights`, label: "Insights", icon: "💡" },
+    ],
+  },
+  {
     heading: "Activity",
     items: [{ href: `/projects/${encodeURIComponent(projectName)}/activity`, label: "Recent", icon: "📋" }],
   },
