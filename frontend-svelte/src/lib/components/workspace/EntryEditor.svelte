@@ -12,7 +12,7 @@
 <form method="POST" action="?/saveEntry" use:enhance={() => {
   return async ({ result, update }) => {
     if (result.type === "success" && result.data?.savedPath) {
-      window.location.href = `/projects/${encodeURIComponent(projectName)}?path=${encodeURIComponent(result.data.savedPath)}`;
+      window.location.href = `/projects/${encodeURIComponent(projectName)}?path=${encodeURIComponent(result.data.savedPath as string)}`;
     } else {
       await update();
     }
