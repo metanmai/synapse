@@ -8,6 +8,11 @@ export async function creemRequest<T>(
   path: string,
   body?: Record<string, unknown>,
 ): Promise<T> {
+  if (!env.CREEM_API_KEY) {
+    console.error("[creem] CREEM_API_KEY secret is not set");
+    throw new Error("Billing is not configured");
+  }
+
   const res = await fetch(`${CREEM_API_URL}${path}`, {
     method,
     headers: {
@@ -19,6 +24,7 @@ export async function creemRequest<T>(
 
   if (!res.ok) {
     const error = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string };
+    console.error(`[creem] ${method} ${path} failed: ${res.status} — ${error.message}`);
     throw new Error(error.message || `Creem API error: ${res.status}`);
   }
 
