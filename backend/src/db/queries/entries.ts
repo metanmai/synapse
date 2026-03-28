@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { FULLTEXT_SCORE, ILIKE_SCORE, SEMANTIC_MATCH_COUNT, SEMANTIC_MATCH_THRESHOLD } from "../../lib/constants";
+import { SEMANTIC_MATCH_COUNT, SEMANTIC_MATCH_THRESHOLD } from "../../lib/constants";
 import { singleOrNull } from "../query-helpers";
-import { type ScoredEntry, buildIlikeWords, mergeSearchResults } from "../search-helpers";
+import { type ScoredEntry, mergeSearchResults, runFulltextSearch, runIlikeSearch } from "../search-helpers";
 import type { Entry, EntryHistory } from "../types";
 
 const ENTRY_COLUMNS =
@@ -127,55 +127,26 @@ export async function searchEntries(
     : Promise.resolve([]);
 
   // --- Tier 2: Full-text search ---
-  let ftQuery = db
-    .from("entries")
-    .select(ENTRY_COLUMNS)
-    .eq("project_id", projectId)
-    .textSearch("search_vector", query, { type: "websearch" });
-
-  if (options?.folder) ftQuery = ftQuery.like("path", `${options.folder}/%`);
-  if (options?.tags?.length) ftQuery = ftQuery.overlaps("tags", options.tags);
-
-  const fulltextPromise: Promise<ScoredEntry[]> = Promise.resolve(
-    ftQuery.then(({ data, error }) => {
-      if (error) {
-        console.error("[search] fulltext error:", error.message);
-        return [];
-      }
-      // TODO: Use ts_rank for proper intra-tier ordering (requires RPC function).
-      // For v1, all full-text results get a fixed score of 0.5 (below semantic, above ILIKE).
-      return (data ?? []).map((e: Entry) => ({ entry: e, score: FULLTEXT_SCORE }));
-    }),
+  const filters = { folder: options?.folder, tags: options?.tags };
+  const fulltextPromise: Promise<ScoredEntry[]> = runFulltextSearch<Entry>(
+    db,
+    "entries",
+    ENTRY_COLUMNS,
+    projectId,
+    query,
+    filters,
   );
 
   // --- Tier 3: ILIKE word search ---
-  const words = buildIlikeWords(query);
-  const ilikePromise: Promise<ScoredEntry[]> =
-    words.length > 0
-      ? (() => {
-          const orClauses = words
-            .map((w) => {
-              const p = `%${w}%`;
-              return `path.ilike.${p},content.ilike.${p}`;
-            })
-            .join(",");
-
-          let iq = db.from("entries").select(ENTRY_COLUMNS).eq("project_id", projectId).or(orClauses);
-
-          if (options?.folder) iq = iq.like("path", `${options.folder}/%`);
-          if (options?.tags?.length) iq = iq.overlaps("tags", options.tags);
-
-          return Promise.resolve(
-            iq.then(({ data, error }) => {
-              if (error) {
-                console.error("[search] ilike error:", error.message);
-                return [];
-              }
-              return (data ?? []).map((e: Entry) => ({ entry: e, score: ILIKE_SCORE }));
-            }),
-          );
-        })()
-      : Promise.resolve([]);
+  const ilikePromise: Promise<ScoredEntry[]> = runIlikeSearch<Entry>(
+    db,
+    "entries",
+    ENTRY_COLUMNS,
+    projectId,
+    query,
+    ["path", "content"],
+    filters,
+  );
 
   // Run all three tiers in parallel
   const [semantic, fulltext, ilike] = await Promise.all([semanticPromise, fulltextPromise, ilikePromise]);
