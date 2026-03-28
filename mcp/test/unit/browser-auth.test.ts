@@ -15,8 +15,8 @@ function parseAuthUrl(url: string): { port: number; state: string; challenge: st
   const parsed = new URL(url);
   return {
     port: Number(parsed.searchParams.get("port")),
-    state: parsed.searchParams.get("state")!,
-    challenge: parsed.searchParams.get("challenge")!,
+    state: parsed.searchParams.get("state") ?? "",
+    challenge: parsed.searchParams.get("challenge") ?? "",
   };
 }
 
