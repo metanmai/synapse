@@ -16,6 +16,7 @@ import {
 
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
+import { requireMcpUserId } from "../mcp-context";
 
 export function registerProjectManagementTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   server.tool(
@@ -24,7 +25,7 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
     { name: z.string().describe("Project name") },
     async ({ name }) => {
       const db = createSupabaseClient(env);
-      const userId = getContext().userId!;
+      const userId = requireMcpUserId(getContext);
       const project = await createProject(db, name, userId);
       return {
         content: [{ type: "text", text: `Project "${project.name}" created (id: ${project.id})` }],
@@ -34,7 +35,7 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
 
   server.tool("list_projects", "List all projects you have access to.", {}, async (_args) => {
     const db = createSupabaseClient(env);
-    const userId = getContext().userId!;
+    const userId = requireMcpUserId(getContext);
     const projects = await listProjectsForUser(db, userId);
     const list = projects.map((p) => `- ${p.name} (id: ${p.id})`).join("\n");
     return {
@@ -52,7 +53,7 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
     },
     async ({ project, email, role }) => {
       const db = createSupabaseClient(env);
-      const userId = getContext().userId!;
+      const userId = requireMcpUserId(getContext);
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -90,7 +91,7 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
     },
     async ({ project, email }) => {
       const db = createSupabaseClient(env);
-      const userId = getContext().userId!;
+      const userId = requireMcpUserId(getContext);
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -129,7 +130,7 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
     },
     async ({ project, key, value }) => {
       const db = createSupabaseClient(env);
-      const userId = getContext().userId!;
+      const userId = requireMcpUserId(getContext);
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
