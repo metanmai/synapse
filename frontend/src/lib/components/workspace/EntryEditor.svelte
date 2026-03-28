@@ -44,12 +44,15 @@ let {
       await update();
     }
   };
-}} class="space-y-4">
+}} class="glass space-y-4" style="padding: 2rem;">
   {#if isNew}
     <input type="text" name="path" placeholder="Path (e.g., decisions/chose-svelte.md)"
       required autofocus
-      class="w-full rounded-lg px-3 py-2.5 text-sm"
-      style="border: 1px solid var(--color-border);"
+      class="w-full text-sm"
+      style="border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 16px;
+        transition: var(--transition-base); outline: none;"
+      onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-pink)'; e.currentTarget.style.boxShadow = 'inset 0 2px 4px rgba(86, 28, 36, 0.06)'; }}
+      onblur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = ''; }}
     />
   {:else}
     <input type="hidden" name="path" value={entry?.path ?? ""} />
@@ -58,23 +61,26 @@ let {
     </div>
   {/if}
   <textarea name="content" placeholder="Content (markdown)"
-    class="w-full rounded-lg px-3 py-2.5 text-sm font-mono"
-    style="border: 1px solid var(--color-border); min-height: 400px; line-height: 1.6;"
+    class="w-full text-sm font-mono"
+    style="border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 16px;
+      min-height: 400px; line-height: 1.6; transition: var(--transition-base); outline: none;"
+    onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-pink)'; e.currentTarget.style.boxShadow = 'inset 0 2px 4px rgba(86, 28, 36, 0.06)'; }}
+    onblur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = ''; }}
   >{entry?.content ?? ""}</textarea>
   <input type="text" name="tags" placeholder="Tags (comma-separated)"
     value={entry?.tags?.join(", ") ?? ""}
-    class="w-full rounded-lg px-3 py-2.5 text-sm"
-    style="border: 1px solid var(--color-border);"
+    class="w-full text-sm"
+    style="border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 16px;
+      transition: var(--transition-base); outline: none;"
+    onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-pink)'; e.currentTarget.style.boxShadow = 'inset 0 2px 4px rgba(86, 28, 36, 0.06)'; }}
+    onblur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = ''; }}
   />
-  <div class="flex gap-2">
-    <button type="submit"
-      class="rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
-      style="background-color: var(--color-accent); color: white;">
+  <div class="flex gap-2 items-center">
+    <button type="submit" class="btn-primary cursor-pointer">
       Save
     </button>
     <a href="/projects/{encodeURIComponent(projectName)}{entry ? `?path=${encodeURIComponent(entry.path)}` : ''}"
-      class="rounded-lg px-4 py-2.5 text-sm cursor-pointer"
-      style="color: var(--color-text-muted);">
+      class="btn-secondary cursor-pointer">
       Cancel
     </a>
   </div>
