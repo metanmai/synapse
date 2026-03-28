@@ -1,10 +1,11 @@
 <script lang="ts">
   import type { EntryListItem } from "$lib/types";
 
-  let { entries, selectedPath, projectName } = $props<{
+  let { entries, selectedPath, projectName, onSelect } = $props<{
     entries: EntryListItem[];
     selectedPath: string | null;
     projectName: string;
+    onSelect: (path: string) => void;
   }>();
 
   function buildTree(items: EntryListItem[]) {
@@ -31,14 +32,14 @@
       </div>
       {#each tree[folder] as path}
         {@const filename = path.split("/").pop()}
-        <a href="/projects/{encodeURIComponent(projectName)}?path={encodeURIComponent(path)}"
-          class="block w-full text-left px-2 py-1.5 rounded-lg text-sm truncate"
+        <button onclick={() => onSelect(path)}
+          class="block w-full text-left px-2 py-1.5 rounded-lg text-sm truncate cursor-pointer"
           style={selectedPath === path
             ? `background-color: var(--color-bg-muted); color: var(--color-accent); font-weight: 500;`
             : `color: var(--color-text);`}
         >
           {filename}
-        </a>
+        </button>
       {/each}
     </div>
   {/each}
