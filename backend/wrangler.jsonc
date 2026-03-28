@@ -23,7 +23,9 @@
     "crons": ["*/5 * * * *"]
   },
   "vars": {
-    "CREEM_PRO_PRODUCT_ID": "prod_PLACEHOLDER"
+    "CREEM_PRO_PRODUCT_ID": "prod_PLACEHOLDER",
+    "EMBEDDING_SERVICE_URL": "",
+    "EMBEDDING_SERVICE_KEY": ""
   },
   "observability": {
     "enabled": true,
