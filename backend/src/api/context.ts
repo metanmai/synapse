@@ -1,7 +1,7 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Hono } from "hono";
 
 import { logActivity } from "../db/activity-logger";
-import { createSupabaseClient } from "../db/client";
 import {
   countEntries,
   countUniqueConnections,
@@ -10,7 +10,6 @@ import {
   getEntry,
   getEntryHistory,
   getPreferences,
-  getProjectByName,
   getRecentEntries,
   listEntries,
   restoreEntry,
@@ -19,19 +18,21 @@ import {
   upsertEntry,
 } from "../db/queries";
 import { authMiddleware } from "../lib/auth";
+import { DEFAULT_VALID_SOURCES, RECENT_ENTRIES_LIMIT, SUMMARY_PREVIEW_LENGTH } from "../lib/constants";
 import { embedTexts, embeddingConfigFromEnv } from "../lib/embeddings";
 import { envList } from "../lib/env";
 import { AppError, NotFoundError } from "../lib/errors";
 import { idempotency } from "../lib/idempotency";
 import { enforceConnectionLimit, enforceFileLimit, getHistoryLimit } from "../lib/tier";
 import { parseBody, schemas } from "../lib/validate";
+import { resolveProject, resolveProjectEditor } from "../middleware/project-auth";
 
 import type { Env } from "../lib/env";
 
 /** Fire-and-forget: embed entry content and save the vector. */
 async function embedAndUpdate(
   env: Env,
-  db: ReturnType<typeof createSupabaseClient>,
+  db: SupabaseClient,
   entryId: string,
   path: string,
   content: string,
@@ -53,12 +54,11 @@ context.post("/save", async (c) => {
   const user = c.get("user");
   const { project, path, content, tags, source } = await parseBody(c, schemas.saveEntry);
 
-  const validSources = envList(c.env, "VALID_SOURCES", "human,claude,chatgpt,cursor,copilot,windsurf,google_docs");
+  const validSources = envList(c.env, "VALID_SOURCES", DEFAULT_VALID_SOURCES);
   const entrySource = source && validSources.includes(source) ? source : "human";
 
-  const db = createSupabaseClient(c.env);
-  const proj = await getProjectByName(db, project, user.id);
-  if (!proj) throw new NotFoundError(`Project "${project}" not found`);
+  const db = c.get("db");
+  const { project: proj } = await resolveProjectEditor(db, project, user.id);
 
   // Check if this is a new entry (not an update)
   const existing = await getEntry(db, proj.id, path);
@@ -99,9 +99,8 @@ context.post("/session-summary", async (c) => {
   const user = c.get("user");
   const { project, summary, decisions: _decisions, pending } = await parseBody(c, schemas.sessionSummary);
 
-  const db = createSupabaseClient(c.env);
-  const proj = await getProjectByName(db, project, user.id);
-  if (!proj) throw new NotFoundError(`Project "${project}" not found`);
+  const db = c.get("db");
+  const { project: proj } = await resolveProjectEditor(db, project, user.id);
 
   const date = new Date().toISOString().split("T")[0];
   const slug = summary
@@ -141,9 +140,8 @@ context.post("/file", async (c) => {
   const user = c.get("user");
   const { project, path, content, content_type } = await parseBody(c, schemas.saveFile);
 
-  const db = createSupabaseClient(c.env);
-  const proj = await getProjectByName(db, project, user.id);
-  if (!proj) throw new NotFoundError(`Project "${project}" not found`);
+  const db = c.get("db");
+  const { project: proj } = await resolveProjectEditor(db, project, user.id);
 
   const entry = await upsertEntry(db, {
     project_id: proj.id,
@@ -176,9 +174,8 @@ context.get("/:project/search", async (c) => {
 
   if (!query) throw new AppError("q query parameter is required", 400, "VALIDATION_ERROR");
 
-  const db = createSupabaseClient(c.env);
-  const proj = await getProjectByName(db, projectName, user.id);
-  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
+  const db = c.get("db");
+  const { project: proj } = await resolveProject(db, projectName, user.id);
 
   // Embed the query for semantic search (returns null if service unavailable)
   const config = embeddingConfigFromEnv(c.env);
@@ -195,9 +192,8 @@ context.get("/:project/list", async (c) => {
   const projectName = c.req.param("project");
   const folder = c.req.query("folder");
 
-  const db = createSupabaseClient(c.env);
-  const proj = await getProjectByName(db, projectName, user.id);
-  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
+  const db = c.get("db");
+  const { project: proj } = await resolveProject(db, projectName, user.id);
 
   const entries = await listEntries(db, proj.id, folder);
   return c.json(entries);
@@ -208,9 +204,8 @@ context.get("/:project/load", async (c) => {
   const user = c.get("user");
   const projectName = c.req.param("project");
 
-  const db = createSupabaseClient(c.env);
-  const proj = await getProjectByName(db, projectName, user.id);
-  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
+  const db = c.get("db");
+  const { project: proj } = await resolveProject(db, projectName, user.id);
 
   const prefs = await getPreferences(db, user.id, proj.id);
 
@@ -220,7 +215,7 @@ context.get("/:project/load", async (c) => {
       return c.json({ mode: "full", entries });
     }
     case "smart": {
-      const entries = await getRecentEntries(db, proj.id, 20);
+      const entries = await getRecentEntries(db, proj.id, RECENT_ENTRIES_LIMIT);
       return c.json({ mode: "smart", entries });
     }
     case "on_demand": {
@@ -229,7 +224,7 @@ context.get("/:project/load", async (c) => {
     }
     case "summary_only": {
       const entries = await getAllEntries(db, proj.id);
-      const summary = entries.map((e) => `- **${e.path}**: ${e.content.slice(0, 100)}...`).join("\n");
+      const summary = entries.map((e) => `- **${e.path}**: ${e.content.slice(0, SUMMARY_PREVIEW_LENGTH)}...`).join("\n");
       return c.json({ mode: "summary_only", summary });
     }
   }
@@ -246,9 +241,8 @@ context.get("/:project/history/:path{.+}", async (c) => {
   const projectName = c.req.param("project");
   const path = c.req.param("path") ?? "";
 
-  const db = createSupabaseClient(c.env);
-  const proj = await getProjectByName(db, projectName, user.id);
-  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
+  const db = c.get("db");
+  const { project: proj } = await resolveProject(db, projectName, user.id);
 
   let history = await getEntryHistory(db, proj.id, path);
   // Free tier: limit to most recent N versions
@@ -268,9 +262,8 @@ context.post("/:project/restore", async (c) => {
   const projectName = c.req.param("project");
   const { path, historyId } = await parseBody(c, schemas.restoreEntry);
 
-  const db = createSupabaseClient(c.env);
-  const proj = await getProjectByName(db, projectName, user.id);
-  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
+  const db = c.get("db");
+  const { project: proj } = await resolveProjectEditor(db, projectName, user.id);
 
   const entry = await restoreEntry(db, proj.id, path, historyId);
   if (!entry) throw new NotFoundError("Entry or history record not found");
@@ -295,9 +288,8 @@ context.delete("/:project/:path{.+}", async (c) => {
   const projectName = c.req.param("project");
   const path = c.req.param("path") ?? "";
 
-  const db = createSupabaseClient(c.env);
-  const proj = await getProjectByName(db, projectName, user.id);
-  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
+  const db = c.get("db");
+  const { project: proj } = await resolveProjectEditor(db, projectName, user.id);
 
   const entry = await getEntry(db, proj.id, path);
   if (!entry) throw new NotFoundError(`Entry "${path}" not found in project "${projectName}"`);
@@ -320,9 +312,8 @@ context.get("/:project/:path{.+}", async (c) => {
   const projectName = c.req.param("project");
   const path = c.req.param("path");
 
-  const db = createSupabaseClient(c.env);
-  const proj = await getProjectByName(db, projectName, user.id);
-  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
+  const db = c.get("db");
+  const { project: proj } = await resolveProject(db, projectName, user.id);
 
   const entry = await getEntry(db, proj.id, path);
   if (!entry) throw new NotFoundError(`Entry "${path}" not found in project "${projectName}"`);
