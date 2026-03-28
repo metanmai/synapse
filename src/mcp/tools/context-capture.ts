@@ -5,6 +5,7 @@ import type { GetMcpContext } from "../agent";
 import { createSupabaseClient } from "../../db/client";
 import { getProjectByName } from "../../db/queries/projects";
 import { upsertEntry } from "../../db/queries/entries";
+import { logActivity } from "../../db/activity-logger";
 
 export function registerContextCaptureTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   server.tool(
@@ -29,6 +30,13 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
         content,
         tags: tags ?? [],
         author_id: userId,
+        source: "claude",
+      });
+      await logActivity(db, {
+        project_id: proj.id,
+        user_id: userId,
+        action: "entry_created",
+        target_path: path,
         source: "claude",
       });
 
@@ -71,6 +79,13 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
         content: fullContent,
         tags: ["session-summary"],
         author_id: userId,
+        source: "claude",
+      });
+      await logActivity(db, {
+        project_id: proj.id,
+        user_id: userId,
+        action: "entry_created",
+        target_path: path,
         source: "claude",
       });
 
@@ -118,6 +133,13 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
         content_type,
         author_id: userId,
         source: "human",
+      });
+      await logActivity(db, {
+        project_id: proj.id,
+        user_id: userId,
+        action: "entry_created",
+        target_path: path,
+        source: "claude",
       });
 
       return {
