@@ -7,6 +7,7 @@ import { getProjectByName, upsertEntry } from "../../db/queries";
 
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
+import { requireMcpUserId } from "../mcp-context";
 
 export function registerContextCaptureTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   server.tool(
@@ -20,7 +21,7 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
     },
     async ({ project, path, content, tags }) => {
       const db = createSupabaseClient(env);
-      const userId = getContext().userId!;
+      const userId = requireMcpUserId(getContext);
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -59,7 +60,7 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
     },
     async ({ project, summary, decisions, pending }) => {
       const db = createSupabaseClient(env);
-      const userId = getContext().userId!;
+      const userId = requireMcpUserId(getContext);
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -133,7 +134,7 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
     },
     async ({ project, path, content, content_type }) => {
       const db = createSupabaseClient(env);
-      const userId = getContext().userId!;
+      const userId = requireMcpUserId(getContext);
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
