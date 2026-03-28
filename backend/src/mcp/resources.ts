@@ -1,9 +1,9 @@
 import { type McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createSupabaseClient } from "../db/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getEntry, listEntries } from "../db/queries/entries";
 import type { Env } from "../lib/env";
 
-export function registerResources(server: McpServer, env: Env) {
+export function registerResources(server: McpServer, _env: Env, db: SupabaseClient) {
   // Resource templates for project tree and individual entries
   server.resource(
     "project-tree",
@@ -11,7 +11,6 @@ export function registerResources(server: McpServer, env: Env) {
     { description: "Browse the full folder tree of a project" },
     async (uri: URL) => {
       const project = uri.pathname.split("/")[1];
-      const db = createSupabaseClient(env);
 
       // Note: resource access doesn't have auth context in MCP protocol.
       // For now, list all entries. Auth is handled at the transport level.
@@ -39,7 +38,6 @@ export function registerResources(server: McpServer, env: Env) {
       const parts = uri.pathname.split("/");
       const project = parts[1];
       const path = parts.slice(2).join("/");
-      const db = createSupabaseClient(env);
 
       const { data: proj } = await db.from("projects").select("id").eq("name", project).single();
 

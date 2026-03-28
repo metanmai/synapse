@@ -1,15 +1,15 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { logActivity } from "../../db/activity-logger";
-import { createSupabaseClient } from "../../db/client";
-import { createInsight, getProjectByName, listInsights } from "../../db/queries";
+import { createInsight, listInsights } from "../../db/queries";
 
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
-import { requireMcpUserId } from "../mcp-context";
+import { mcpError, mcpResolveProject, mcpSuccess, requireMcpUserId } from "../mcp-context";
 
-export function registerInsightTools(server: McpServer, env: Env, getContext: GetMcpContext) {
+export function registerInsightTools(server: McpServer, _env: Env, getContext: GetMcpContext, db: SupabaseClient) {
   server.tool(
     "save_insight",
     "Save a key insight about a project — a decision, learning, preference, architecture note, or action item. Call this whenever something worth remembering comes up.",
@@ -20,11 +20,10 @@ export function registerInsightTools(server: McpServer, env: Env, getContext: Ge
       detail: z.string().optional().describe("Optional longer explanation or context"),
     },
     async ({ project, type, summary, detail }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text" as const, text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       const insight = await createInsight(db, {
         project_id: proj.id,
@@ -43,9 +42,7 @@ export function registerInsightTools(server: McpServer, env: Env, getContext: Ge
         metadata: { insight_id: insight.id, type },
       });
 
-      return {
-        content: [{ type: "text" as const, text: `Saved ${type} insight: "${summary}"` }],
-      };
+      return mcpSuccess(`Saved ${type} insight: "${summary}"`);
     },
   );
 
@@ -61,11 +58,10 @@ export function registerInsightTools(server: McpServer, env: Env, getContext: Ge
       limit: z.number().optional().describe("Maximum number of insights to return (default 20)"),
     },
     async ({ project, type, limit }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text" as const, text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       const { insights, total } = await listInsights(db, proj.id, {
         type,
@@ -74,9 +70,7 @@ export function registerInsightTools(server: McpServer, env: Env, getContext: Ge
 
       if (insights.length === 0) {
         const filterNote = type ? ` of type "${type}"` : "";
-        return {
-          content: [{ type: "text" as const, text: `No insights${filterNote} found in project "${project}".` }],
-        };
+        return mcpError(`No insights${filterNote} found in project "${project}".`);
       }
 
       const lines = insights.map((i) => `- [${i.type}] ${i.summary} (${new Date(i.updated_at).toLocaleDateString()})`);

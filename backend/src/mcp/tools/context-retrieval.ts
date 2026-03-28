@@ -1,12 +1,11 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
-import { createSupabaseClient } from "../../db/client";
 import {
   getAllEntries,
   getEntry,
   getPreferences,
-  getProjectByName,
   getRecentEntries,
   listEntries,
   searchEntries,
@@ -16,9 +15,14 @@ import {
 import { embedTexts, embeddingConfigFromEnv } from "../../lib/embeddings";
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
-import { requireMcpUserId } from "../mcp-context";
+import { mcpError, mcpResolveProject, requireMcpUserId } from "../mcp-context";
 
-export function registerContextRetrievalTools(server: McpServer, env: Env, getContext: GetMcpContext) {
+export function registerContextRetrievalTools(
+  server: McpServer,
+  env: Env,
+  getContext: GetMcpContext,
+  db: SupabaseClient,
+) {
   server.tool(
     "get_context",
     "Retrieve a specific context entry by its path within a project.",
@@ -27,14 +31,13 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
       path: z.string().describe("Path to the entry, e.g., 'decisions/chose-postgres.md'"),
     },
     async ({ project, path }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       const entry = await getEntry(db, proj.id, path);
-      if (!entry) return { content: [{ type: "text", text: `No entry found at "${path}".` }] };
+      if (!entry) return mcpError(`No entry found at "${path}".`);
 
       return {
         content: [{ type: "text", text: entry.content }],
@@ -52,11 +55,10 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
       folder: z.string().optional().describe("Limit search to a folder path prefix"),
     },
     async ({ project, query, tags, folder }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       // Embed the query for semantic search
       const config = embeddingConfigFromEnv(env);
@@ -69,7 +71,7 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
       ]);
 
       if (!results.length && !insights.length) {
-        return { content: [{ type: "text", text: `No results found for "${query}".` }] };
+        return mcpError(`No results found for "${query}".`);
       }
 
       let output = "";
@@ -111,16 +113,15 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
       folder: z.string().optional().describe("Folder path to list (omit for full project tree)"),
     },
     async ({ project, folder }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       const entries = await listEntries(db, proj.id, folder);
 
       if (!entries.length) {
-        return { content: [{ type: "text", text: folder ? `No entries in "${folder}".` : "Project is empty." }] };
+        return mcpError(folder ? `No entries in "${folder}".` : "Project is empty.");
       }
 
       const tree = entries
@@ -140,11 +141,10 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
       project: z.string().describe("Project name"),
     },
     async ({ project }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       const prefs = await getPreferences(db, userId, proj.id);
 
