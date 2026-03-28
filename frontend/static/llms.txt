@@ -14,7 +14,7 @@ Synapse stores knowledge as files in a remote workspace. AI tools (Claude, ChatG
 - POST /auth/signup - Create account
 - GET /api/projects - List projects
 - POST /api/context/save - Save context entry
-- GET /api/context/:project/search?q= - Search entries
+- GET /api/context/:project/search?q= - Search entries (semantic + full-text + keyword, merged by relevance)
 - GET /api/context/:project/list - List entries
 - GET /api/context/:project/history/:path - Version history
 
