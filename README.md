@@ -1,44 +1,65 @@
-# Synapse
+# SYNAPSE
 
-**Universal AI context layer — shared memory across Claude, ChatGPT, and your team**
+**Shared AI context that survives sessions — one workspace for Claude, Cursor, ChatGPT, and your team.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Build](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/tanmain/synapse/actions)
-[![Cloudflare Workers](https://img.shields.io/badge/runtime-Cloudflare%20Workers-orange)](https://workers.cloudflare.com/)
-[![MCP](https://img.shields.io/badge/protocol-MCP-purple)](https://modelcontextprotocol.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+[![Cloudflare Workers](https://img.shields.io/badge/runtime-Cloudflare%20Workers-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
+[![MCP](https://img.shields.io/badge/protocol-MCP-5C2D91?style=for-the-badge)](https://modelcontextprotocol.io/)
+[![npm](https://img.shields.io/npm/v/synapsesync-mcp?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/synapsesync-mcp)
+
+[Why Synapse](#why-synapse) · [How it works](#how-it-works) · [Getting started](#getting-started) · [Connect your tools](#connect-your-tools) · [Repository layout](#repository-layout) · [Self-hosting](docs/SELF_HOSTING.md) · [Architecture](docs/ARCHITECTURE.md)
 
 ---
 
-AI tools don't remember anything between sessions, and they certainly don't share memory with each other. Synapse fixes that. It gives every AI tool you use — Claude, ChatGPT, Cursor — a single, persistent context layer that follows you across sessions and syncs across your team.
+AI assistants start every conversation cold. Your stack, decisions, and notes live in chat transcripts — not in a place the *next* session can rely on. Synapse is a **persistent context workspace**: files in the cloud, semantic search, version history, optional encryption, and access from the web app or from AI tools via **REST** and **MCP**.
 
-## What it does
+---
 
-- **Captures decisions, conventions, and session summaries** from any AI tool, automatically or on demand
-- **Shares context across all your Claude, ChatGPT, and Cursor sessions** — no more re-explaining your stack, preferences, or prior decisions
-- **Semantic search** — find context by meaning, not just keywords. "auth flow" finds documents about "login and session tokens"
-- **Team collaboration** — invite members to projects, share context via links, keep everyone's AI on the same page
-- **Browse and edit context in a web UI**, or enable Google Docs bidirectional sync to manage it in your existing workflow
+## Why Synapse
+
+| Problem | What Synapse does |
+|--------|-------------------|
+| Context disappears between sessions | Store decisions, notes, and specs as **paths** (e.g. `decisions/auth.md`) — always retrievable |
+| Tools don't share memory | **Same project** for every tool that can call the API or run the MCP server |
+| Keyword search misses intent | **Semantic search** (vector + text) so “auth flow” finds login and session docs |
+| Teams drift apart | **Projects, members, share links** — one source of truth for humans and AIs |
+
+The complexity stays in the product. Your workflow: write context where it belongs, search when you need it, let tools read/write through MCP or HTTP.
+
+---
+
+## Who this is for
+
+- Builders who want **durable memory** for AI-assisted work without copying prompts between tools.
+- Teams who want **one context layer** instead of scattered Notion docs and chat logs.
+- Anyone comfortable running a **Supabase** project and a **Cloudflare Worker** (or using a hosted deployment).
+
+---
 
 ## How it works
 
-Synapse is a lightweight backend that any AI tool can talk to over HTTP or MCP. Your AI tools read from and write to it, so context captured in one session is immediately available in the next — and to everyone on your team.
+1. **Workspace** — Knowledge is stored as **entries** (markdown by default) organized by path inside a **project**.
+2. **Backend** — A **Cloudflare Worker** exposes a **Hono** API (auth, projects, context CRUD, search, sharing, billing hooks, optional Google sync).
+3. **Frontend** — **SvelteKit** Web UI to browse, edit, search, and manage API keys.
+4. **MCP** — The **`synapsesync-mcp`** package exposes filesystem-like tools (`ls`, `read`, `write`, `search`, `tree`, …) so Claude Code, Cursor, and other MCP clients can use the same workspace.
+5. **Data** — **Supabase** (Postgres + **pgvector**) for storage and auth; embeddings power semantic retrieval.
 
-| Layer | Technology |
-|---|---|
-| Backend | Cloudflare Worker — MCP server + Hono REST API |
-| Frontend | SvelteKit 5 + Tailwind CSS 4 |
-| Database | Supabase (Postgres + pgvector) |
-| Search | 3-tier: semantic (nomic-embed-text-v1.5) + full-text + keyword |
-| Auth | Supabase Auth — email, magic link, Google, GitHub + API keys for AI tools |
-| Sync | Google Docs bidirectional sync |
+```text
+┌─────────────┐     ┌──────────────────┐     ┌─────────────┐
+│  Web / MCP  │────▶│  Worker (Hono)   │────▶│  Supabase   │
+│  clients    │     │  + MCP bridge    │     │  + vectors  │
+└─────────────┘     └──────────────────┘     └─────────────┘
+```
 
-## Quick Start
+---
+
+## Getting started
 
 ### Prerequisites
 
-- Node.js 18+
-- A [Supabase](https://supabase.com) account (free tier works)
-- A [Cloudflare](https://cloudflare.com) account (free tier works)
+- **Node.js 18+**
+- **Supabase** account (free tier is fine)
+- **Cloudflare** account (for deploying the Worker; local dev uses Wrangler)
 
 ### 1. Clone and install
 
@@ -46,177 +67,148 @@ Synapse is a lightweight backend that any AI tool can talk to over HTTP or MCP. 
 git clone https://github.com/tanmain/synapse.git
 cd synapse
 npm install
-cd frontend && npm install && cd ..
 ```
 
-### 2. Set up Supabase
+The repo is an **npm workspace** (`backend`, `frontend`, `mcp`, `packages/shared`).
 
-Create a new Supabase project, then run the migrations:
+### 2. Database
+
+Create a Supabase project and apply migrations from `supabase/` (see Supabase CLI docs for `link` / `db push`). Example:
 
 ```bash
+cd backend
 npx supabase link --project-ref <your-project-ref>
 npm run db:migrate
 ```
 
-Copy your project URL and anon key from the Supabase dashboard — you'll need them in the next step.
+### 3. Secrets and local env
 
-### 3. Configure secrets
+Configure Worker secrets (see `backend/wrangler.jsonc` and your deployment docs), e.g.:
 
 ```bash
-# Supabase connection
-wrangler secret put SUPABASE_URL
-wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-
-# Google OAuth (optional — required for Google Docs sync)
-wrangler secret put GOOGLE_CLIENT_ID
-wrangler secret put GOOGLE_CLIENT_SECRET
+cd backend
+npx wrangler secret put SUPABASE_URL
+npx wrangler secret put SUPABASE_SERVICE_KEY
+# Optional Google OAuth for Docs sync
+npx wrangler secret put GOOGLE_CLIENT_ID
+npx wrangler secret put GOOGLE_CLIENT_SECRET
 ```
 
-Create a `.env` file in `frontend/` for local development:
+For **local frontend**, copy `frontend/.env.example` to `frontend/.env` and fill in values:
 
 ```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_API_BASE_URL=http://localhost:8787
+API_URL=http://localhost:8787
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
 ```
 
 ### 4. Run locally
 
 ```bash
-# In one terminal — backend (Cloudflare Worker via Wrangler)
-npm run dev
+# Terminal A — API + Worker
+npm run dev:backend
 
-# In another terminal — frontend (Vite dev server)
-cd frontend && npm run dev
+# Terminal B — SvelteKit
+npm run dev:frontend
 ```
 
-The backend runs at `http://localhost:8787` and the frontend at `http://localhost:5173`.
+Default ports are typically **8787** (Worker) and **5173** (frontend); confirm in terminal output.
 
-### 5. Connect Claude
+### 5. Quality checks (optional)
 
 ```bash
-claude mcp add synapse http://localhost:8787/mcp --header "Authorization: Bearer <your-api-key>"
+npm run typecheck
+npm test
+npm run lint
 ```
 
-Generate an API key from the web UI under Account > API Keys.
+---
 
-### 6. Deploy
+## Connect your tools
 
-```bash
-npm run deploy
+### Cursor / Claude Code — MCP (`npx`)
+
+Install the published MCP server and add it to your MCP config with your **API key** from the web app (Account → API keys):
+
+```json
+{
+  "mcpServers": {
+    "synapse": {
+      "command": "npx",
+      "args": ["synapsesync-mcp"],
+      "env": {
+        "SYNAPSE_API_KEY": "<your-api-key>"
+      }
+    }
+  }
+}
 ```
 
-## Connect AI Tools
+Optional:
 
-### Claude (via MCP)
+- `SYNAPSE_API_URL` — API base URL (defaults to production if unset; use `http://localhost:8787` for local).
+- `SYNAPSE_PASSPHRASE` + `SYNAPSE_USER_EMAIL` — transparent **E2E-style** encryption for content (see MCP package help).
 
-```bash
-claude mcp add synapse https://your-domain.workers.dev/mcp \
-  --header "Authorization: Bearer <your-api-key>"
-```
+The CLI also supports `login` / `signup` flows — run `npx synapsesync-mcp` for usage.
 
-Once connected, Claude can read context from your projects and save new entries automatically during your sessions.
+### HTTP / custom integrations
 
-### ChatGPT (Custom GPT)
+Use **`Authorization: Bearer <api-key>`** against your Worker’s REST routes (same API the web app uses). Explore `backend/src` route modules for available endpoints.
 
-Create a Custom GPT and add a REST API action pointing at:
+---
 
-```
-https://your-domain.workers.dev/api
-```
+## Repository layout
 
-Set the authentication type to Bearer token and paste your API key. Use the OpenAPI spec at `/api/openapi.json` to configure the action schema.
-
-### Any HTTP client
-
-Synapse exposes a standard REST API. All endpoints accept a Bearer token:
-
-```bash
-curl https://your-domain.workers.dev/api/entries \
-  -H "Authorization: Bearer <your-api-key>"
-```
-
-See [API reference](docs/) for full endpoint documentation.
-
-## Project Structure
-
-```
+```text
 synapse/
-├── src/                        # Cloudflare Worker backend
-│   ├── index.ts                # Worker entry point
-│   ├── api/                    # Hono REST API routes
-│   │   ├── auth.ts
-│   │   ├── context.ts
-│   │   ├── projects.ts
-│   │   ├── share.ts
-│   │   └── sync.ts
-│   ├── mcp/                    # MCP server
-│   │   ├── agent.ts
-│   │   ├── prompts.ts
-│   │   ├── resources.ts
-│   │   └── tools/
-│   │       ├── context-capture.ts
-│   │       ├── context-retrieval.ts
-│   │       ├── google-sync.ts
-│   │       └── project-management.ts
-│   ├── sync/                   # Google Docs sync
-│   │   ├── from-google.ts
-│   │   ├── google-auth.ts
-│   │   └── to-google.ts
-│   ├── db/                     # Database helpers
-│   └── lib/                    # Shared utilities
-│       ├── auth.ts
-│       ├── env.ts
-│       └── errors.ts
-├── frontend/src/               # React SPA
-│   ├── pages/                  # Route-level components
-│   │   ├── DashboardPage.tsx
-│   │   ├── ProjectWorkspace.tsx
-│   │   ├── ActivityPage.tsx
-│   │   └── AccountPage.tsx
-│   ├── components/             # UI components
-│   │   └── workspace/
-│   │       ├── EntryEditor.tsx
-│   │       ├── FolderTree.tsx
-│   │       └── SearchPanel.tsx
-│   ├── hooks/                  # React Query hooks
-│   └── lib/                    # Auth, API client
-├── supabase/                   # Supabase migrations
-├── wrangler.jsonc              # Cloudflare Worker config
-└── package.json
+├── backend/                 # Cloudflare Worker — Hono API, MCP, sync
+│   ├── src/
+│   ├── wrangler.jsonc
+│   └── package.json         # @synapse/backend
+├── frontend/                # SvelteKit 5 + Tailwind 4
+│   └── src/
+├── mcp/                     # synapsesync-mcp (TypeScript, publishable)
+├── packages/shared/         # @synapse/shared — shared types
+├── supabase/                # SQL migrations
+├── docs/                    # Design notes & internal plans
+├── package.json             # Workspace root scripts
+└── biome.json               # Lint / format
 ```
 
-## Tech Stack
+---
 
-- [Cloudflare Workers](https://workers.cloudflare.com/) — serverless edge runtime, zero cold starts
-- [Hono](https://hono.dev/) — fast, TypeScript-first web framework for the edge
-- [Model Context Protocol SDK](https://modelcontextprotocol.io/) — standard protocol for AI tool integrations
-- [Supabase](https://supabase.com/) — Postgres database + auth
-- [React 19](https://react.dev/) + [Vite](https://vitejs.dev/) + [Tailwind CSS](https://tailwindcss.com/) — frontend stack
-- [TanStack Query](https://tanstack.com/query) — server state management
-- [Zod](https://zod.dev/) — runtime schema validation
-- [TypeScript](https://www.typescriptlang.org/) — throughout
+## Tech stack
+
+| Layer | Choice |
+|------|--------|
+| API & edge | [Cloudflare Workers](https://workers.cloudflare.com/), [Hono](https://hono.dev/), [Wrangler](https://developers.cloudflare.com/workers/wrangler/) |
+| Web UI | [SvelteKit](https://kit.svelte.dev/) 5, [Vite](https://vitejs.dev/), [Tailwind CSS](https://tailwindcss.com/) 4 |
+| Data & auth | [Supabase](https://supabase.com/) (Postgres, Auth, pgvector) |
+| AI integration | [Model Context Protocol](https://modelcontextprotocol.io/) (`@modelcontextprotocol/sdk`) |
+| Tooling | TypeScript, [Biome](https://biomejs.dev/), Vitest (backend tests) |
+
+---
 
 ## Contributing
 
-Contributions are welcome. If you find a bug, have a feature request, or want to improve the docs, please [open an issue](https://github.com/tanmain/synapse/issues) or submit a pull request.
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup, commands, and PR expectations.
 
-To contribute:
+- **[SECURITY.md](SECURITY.md)** — report vulnerabilities privately.
+- **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** — community guidelines.
+- **[CHANGELOG.md](CHANGELOG.md)** — release notes.
 
-1. Fork the repo and create a feature branch
-2. Make your changes with tests where applicable (`npm test`)
-3. Ensure TypeScript compiles cleanly (`npm run typecheck`)
-4. Open a pull request with a clear description of what changed and why
+Short version:
 
-## Support the Project
+1. Fork and branch from `main`.
+2. Run `npm run lint`, `npm run typecheck`, and `npm test`.
+3. Open a PR with a clear description.
 
-Synapse is free and open source. If it saves you time, consider supporting its development.
-
-- [GitHub Sponsors](https://github.com/sponsors/tanmain)
-- [Buy Me a Coffee](https://buymeacoffee.com/tanmain)
-
-Every bit of support helps keep the project maintained and moving forward.
+---
 
 ## License
 
-[MIT](LICENSE) — Copyright 2026 Tanmai N
+[MIT](LICENSE)
+
+---
+
+**Synapse** — stop re-explaining your codebase every session.
