@@ -1,3 +1,3 @@
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 
 export { env, createExecutionContext, waitOnExecutionContext };

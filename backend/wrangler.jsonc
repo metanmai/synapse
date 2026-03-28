@@ -18,9 +18,7 @@
       "tag": "v1"
     }
   ],
-  "routes": [
-    { "pattern": "api.synapsesync.app", "custom_domain": true }
-  ],
+  "routes": [{ "pattern": "api.synapsesync.app", "custom_domain": true }],
   "triggers": {
     "crons": ["*/5 * * * *"]
   },

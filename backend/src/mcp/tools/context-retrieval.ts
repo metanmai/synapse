@@ -1,8 +1,16 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { createSupabaseClient } from "../../db/client";
-import { getProjectByName, getEntry, listEntries, searchEntries, getRecentEntries, getAllEntries, getPreferences } from "../../db/queries";
+import {
+  getAllEntries,
+  getEntry,
+  getPreferences,
+  getProjectByName,
+  getRecentEntries,
+  listEntries,
+  searchEntries,
+} from "../../db/queries";
 
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
@@ -28,7 +36,7 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
       return {
         content: [{ type: "text", text: entry.content }],
       };
-    }
+    },
   );
 
   server.tool(
@@ -53,14 +61,17 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
         return { content: [{ type: "text", text: `No results found for "${query}".` }] };
       }
 
-      const formatted = results.map((e) =>
-        `### ${e.path}\n*Tags: ${e.tags.join(", ") || "none"}*\n\n${e.content.slice(0, 500)}${e.content.length > 500 ? "..." : ""}`
-      ).join("\n\n---\n\n");
+      const formatted = results
+        .map(
+          (e) =>
+            `### ${e.path}\n*Tags: ${e.tags.join(", ") || "none"}*\n\n${e.content.slice(0, 500)}${e.content.length > 500 ? "..." : ""}`,
+        )
+        .join("\n\n---\n\n");
 
       return {
         content: [{ type: "text", text: `Found ${results.length} result(s):\n\n${formatted}` }],
       };
-    }
+    },
   );
 
   server.tool(
@@ -83,14 +94,14 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
         return { content: [{ type: "text", text: folder ? `No entries in "${folder}".` : "Project is empty." }] };
       }
 
-      const tree = entries.map((e) =>
-        `- ${e.path} (${e.content_type}${e.tags.length ? `, tags: ${e.tags.join(", ")}` : ""})`
-      ).join("\n");
+      const tree = entries
+        .map((e) => `- ${e.path} (${e.content_type}${e.tags.length ? `, tags: ${e.tags.join(", ")}` : ""})`)
+        .join("\n");
 
       return {
         content: [{ type: "text", text: tree }],
       };
-    }
+    },
   );
 
   server.tool(
@@ -122,7 +133,11 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
         case "on_demand": {
           const tree = await listEntries(db, proj.id);
           const treeText = tree.map((e) => `- ${e.path}`).join("\n");
-          return { content: [{ type: "text", text: `Project tree (use get_context to fetch individual entries):\n\n${treeText}` }] };
+          return {
+            content: [
+              { type: "text", text: `Project tree (use get_context to fetch individual entries):\n\n${treeText}` },
+            ],
+          };
         }
         case "summary_only": {
           const entries = await getAllEntries(db, proj.id);
@@ -130,6 +145,6 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
           return { content: [{ type: "text", text: `Project summary:\n\n${summary}` }] };
         }
       }
-    }
+    },
   );
 }

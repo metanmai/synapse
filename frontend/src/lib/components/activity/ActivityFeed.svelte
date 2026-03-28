@@ -1,18 +1,18 @@
 <script lang="ts">
-  import type { ActivityLogEntry } from "$lib/types";
+import type { ActivityLogEntry } from "$lib/types";
 
-  let { entries } = $props<{ entries: ActivityLogEntry[] }>();
+let { entries } = $props<{ entries: ActivityLogEntry[] }>();
 
-  const actionLabels: Record<string, string> = {
-    entry_created: "created",
-    entry_updated: "updated",
-    entry_deleted: "deleted",
-    member_added: "added member",
-    member_removed: "removed member",
-    settings_changed: "changed settings",
-    share_link_created: "created share link",
-    share_link_revoked: "revoked share link",
-  };
+const actionLabels: Record<string, string> = {
+  entry_created: "created",
+  entry_updated: "updated",
+  entry_deleted: "deleted",
+  member_added: "added member",
+  member_removed: "removed member",
+  settings_changed: "changed settings",
+  share_link_created: "created share link",
+  share_link_revoked: "revoked share link",
+};
 </script>
 
 <div class="space-y-3">
