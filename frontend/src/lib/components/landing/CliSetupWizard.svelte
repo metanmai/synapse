@@ -1,7 +1,7 @@
 <script>
 import ScrollReveal from "./ScrollReveal.svelte";
 
-const COMMAND = "npx synapsesync-mcp";
+const COMMAND = "npx synapsesync-mcp login";
 
 let copied = $state(false);
 
@@ -17,8 +17,9 @@ async function copyCommand() {
     <ScrollReveal>
       <h2 id="wizard-heading" class="wizard-headline">Guided setup (terminal)</h2>
       <p class="wizard-sub">
-        One command walks you through sign up, log in, or pasting an API key — then writes MCP config for editors
-        this machine already uses.
+        Run <code class="inline-code">login</code>, <code class="inline-code">signup</code>,
+        <code class="inline-code">init</code>, or <code class="inline-code">wizard</code> — keyboard-friendly prompts
+        then write MCP config for editors you already use.
       </p>
     </ScrollReveal>
 
@@ -35,13 +36,15 @@ async function copyCommand() {
           your code. Your IDE starts the same package without this wizard when it connects MCP (non-interactive).
         </p>
         <ol class="wizard-steps">
-          <li>Copy the command and run it in Terminal, iTerm, etc.</li>
-          <li>Choose create account, log in, or paste an existing API key.</li>
+          <li>Copy the command and run it in Terminal, iTerm, etc. (from your project folder).</li>
+          <li>Use <code class="inline-code">npx synapsesync-mcp --help</code> to see all commands.</li>
+          <li>Or run <code class="inline-code">npx synapsesync-mcp wizard</code> for a menu (sign up, log in, API key).</li>
           <li>When it finishes, restart Cursor, Claude Code, or your other MCP host.</li>
         </ol>
         <p class="wizard-alt">
-          Explicit subcommand:
-          <code class="inline-code">npx synapsesync-mcp wizard</code>
+          Other setup commands:
+          <code class="inline-code">signup</code>,
+          <code class="inline-code">init</code>
         </p>
       </div>
     </ScrollReveal>
