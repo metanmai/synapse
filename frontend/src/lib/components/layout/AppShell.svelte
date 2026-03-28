@@ -19,15 +19,12 @@ let { user, children } = $props<{
       <img src="/logo.svg" alt="" class="w-7 h-7" />
       synapse
     </a>
-    <div class="flex items-center gap-3 sm:gap-4">
-      <a href="/dashboard" style="font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.85); text-decoration: none; transition: var(--transition-base);">Workspace</a>
-      <span class="hidden sm:inline" style="font-size: 14px; color: rgba(255,255,255,0.75);">{user.email}</span>
-      <a href="/account" style="font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.75); text-decoration: none; transition: var(--transition-base);">Account</a>
+    <div class="flex items-center gap-2 sm:gap-3">
+      <a href="/dashboard" class="nav-btn">Workspace</a>
+      <a href="/account" class="nav-btn">Account</a>
+      <span class="hidden sm:inline" style="font-size: 13px; color: rgba(255,255,255,0.4);">{user.email}</span>
       <form method="POST" action="/logout" use:enhance>
-        <button type="submit" class="cursor-pointer"
-          style="font-size: 13px; color: rgba(255,255,255,0.75); transition: var(--transition-base);">
-          Sign out
-        </button>
+        <button type="submit" class="nav-btn nav-btn-ghost cursor-pointer">Sign out</button>
       </form>
     </div>
   </header>
@@ -35,3 +32,35 @@ let { user, children } = $props<{
     {@render children()}
   </main>
 </div>
+
+<style>
+  .nav-btn {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8);
+    text-decoration: none;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+    transition: all 150ms ease;
+  }
+
+  .nav-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: white;
+  }
+
+  .nav-btn-ghost {
+    border-color: transparent;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .nav-btn-ghost:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.8);
+  }
+</style>
