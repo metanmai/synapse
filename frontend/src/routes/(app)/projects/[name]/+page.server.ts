@@ -2,15 +2,16 @@ import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { createApi } from "$lib/server/api";
 
-export const load: PageServerLoad = async ({ params, url, locals }) => {
-  const api = createApi(locals.token);
+export const load: PageServerLoad = async ({ parent, params, url, locals }) => {
+  const { entries } = await parent();
   const path = url.searchParams.get("path");
   const query = url.searchParams.get("q");
   const edit = url.searchParams.has("edit");
   const isNew = url.searchParams.has("new");
 
-  const entries = await api.listEntries(params.name);
+  const api = createApi(locals.token);
 
+  // Only fetch entry/search on demand — entries list comes from layout
   let entry = null;
   if (path) {
     try {
@@ -25,7 +26,7 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
     searchResults = await api.searchEntries(params.name, query);
   }
 
-  return { entries, entry, searchResults, selectedPath: path, query, edit, isNew };
+  return { entry, searchResults, selectedPath: path, query, edit, isNew };
 };
 
 export const actions: Actions = {
