@@ -1,26 +1,26 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
-  import { onMount } from "svelte";
+import { enhance } from "$app/forms";
+import { onMount } from "svelte";
 
-  let { form } = $props();
-  let loading = $state(false);
+let { form } = $props();
+let loading = $state(false);
 
-  // Poll for email confirmation when showing "check your email" screen
-  onMount(() => {
-    if (!form?.success) return;
+// Poll for email confirmation when showing "check your email" screen
+onMount(() => {
+  if (!form?.success) return;
 
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch("/dashboard", { redirect: "manual" });
-        if (res.status === 200 || res.status === 303 || res.type === "opaqueredirect") {
-          clearInterval(interval);
-          window.location.href = "/dashboard";
-        }
-      } catch {}
-    }, 3000);
+  const interval = setInterval(async () => {
+    try {
+      const res = await fetch("/dashboard", { redirect: "manual" });
+      if (res.status === 200 || res.status === 303 || res.type === "opaqueredirect") {
+        clearInterval(interval);
+        window.location.href = "/dashboard";
+      }
+    } catch {}
+  }, 3000);
 
-    return () => clearInterval(interval);
-  });
+  return () => clearInterval(interval);
+});
 </script>
 
 <div class="min-h-screen flex items-center justify-center" style="background-color: var(--color-bg);">

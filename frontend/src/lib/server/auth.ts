@@ -1,5 +1,5 @@
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "$env/static/private";
 import { createServerClient } from "@supabase/ssr";
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "$env/static/private";
 import type { Cookies } from "@sveltejs/kit";
 
 export function getSupabase(cookies: Cookies) {
@@ -7,9 +7,9 @@ export function getSupabase(cookies: Cookies) {
     cookies: {
       getAll: () => cookies.getAll(),
       setAll: (cookiesToSet) => {
-        cookiesToSet.forEach(({ name, value, options }) => {
+        for (const { name, value, options } of cookiesToSet) {
           cookies.set(name, value, { ...options, path: options?.path ?? "/" });
-        });
+        }
       },
     },
   });
