@@ -1,12 +1,21 @@
 import { error } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
-import { createApi } from "$lib/server/api";
+import { createApi, ApiError } from "$lib/server/api";
 
 export const load: LayoutServerLoad = async ({ params, locals, depends }) => {
   depends("app:project");
 
   const api = createApi(locals.token);
-  const projects = await api.listProjects();
+
+  let projects;
+  try {
+    projects = await api.listProjects();
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error(err.status, err.message);
+    }
+    error(500, `Failed to list projects: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   // Match by name — handle both plain name and owner~name format
   const decodedName = decodeURIComponent(params.name);
@@ -25,10 +34,19 @@ export const load: LayoutServerLoad = async ({ params, locals, depends }) => {
     project = projects.find((p) => p.name === decodedName && p.role !== "owner");
   }
 
-  if (!project) error(404, "Project not found");
+  if (!project) error(404, `Project "${decodedName}" not found. You have ${projects.length} project(s).`);
 
-  const [entries, shareLinks, activity] = await Promise.all([
-    api.listEntries(params.name),
+  let entries;
+  try {
+    entries = await api.listEntries(params.name);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error(err.status, `Failed to list entries: ${err.message}`);
+    }
+    error(500, `Failed to list entries: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  const [shareLinks, activity] = await Promise.all([
     api.listShareLinks(project.id).catch(() => []),
     api.getActivity(project.id, 50, 0).catch(() => []),
   ]);
