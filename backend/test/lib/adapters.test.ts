@@ -1063,3 +1063,277 @@ describe("Edge cases", () => {
     expect(result[0].toolInteraction?.name).toBe("test");
   });
 });
+
+// ============================================================
+// 9. Additional Edge Cases (Task 23)
+// ============================================================
+
+describe("Additional edge cases", () => {
+  describe("Anthropic — mixed text and tool_use", () => {
+    it("concatenates multiple text blocks before tool_use in a single message", () => {
+      const raw = [
+        {
+          role: "assistant",
+          content: [
+            { type: "text", text: "First thought." },
+            { type: "text", text: "Second thought." },
+            { type: "tool_use", id: "toolu_abc", name: "search", input: { q: "test" } },
+          ],
+        },
+      ];
+
+      const result = anthropicAdapter.toCanonical(raw);
+      // Text blocks concatenated into one message, then tool_use as separate message
+      expect(result.length).toBeGreaterThanOrEqual(2);
+      expect(result[0].content).toBe("First thought.\nSecond thought.");
+      expect(result[0].role).toBe("assistant");
+      expect(result[1].toolInteraction).toBeDefined();
+      expect(result[1].toolInteraction!.name).toBe("search");
+    });
+
+    it("handles multiple tool_use blocks in one message", () => {
+      const raw = [
+        {
+          role: "assistant",
+          content: [
+            { type: "text", text: "Running both tools" },
+            { type: "tool_use", id: "t1", name: "search", input: { q: "a" } },
+            { type: "tool_use", id: "t2", name: "read_file", input: { path: "/tmp" } },
+          ],
+        },
+      ];
+
+      const result = anthropicAdapter.toCanonical(raw);
+      // 1 text message + 2 tool messages
+      expect(result).toHaveLength(3);
+      expect(result[0].content).toBe("Running both tools");
+      expect(result[1].toolInteraction!.name).toBe("search");
+      expect(result[2].toolInteraction!.name).toBe("read_file");
+    });
+
+    it("handles tool_use with no preceding text blocks", () => {
+      const raw = [
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "t1", name: "calc", input: { x: 42 } },
+          ],
+        },
+      ];
+
+      const result = anthropicAdapter.toCanonical(raw);
+      // Only the tool message, no empty text message
+      expect(result).toHaveLength(1);
+      expect(result[0].toolInteraction!.name).toBe("calc");
+      expect(result[0].content).toBe("");
+    });
+  });
+
+  describe("Anthropic — tool_result edge cases", () => {
+    it("handles tool_result with no content field", () => {
+      const raw = [
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_no_content",
+            },
+          ],
+        },
+      ];
+
+      const result = anthropicAdapter.toCanonical(raw);
+      expect(result).toHaveLength(1);
+      expect(result[0].role).toBe("tool");
+      expect(result[0].content).toBe("");
+    });
+  });
+
+  describe("detectAdapter — non-array inputs", () => {
+    it("returns raw for a number", () => {
+      expect(detectAdapter(42)).toBe("raw");
+    });
+
+    it("returns raw for undefined", () => {
+      expect(detectAdapter(undefined)).toBe("raw");
+    });
+
+    it("returns raw for boolean", () => {
+      expect(detectAdapter(true)).toBe("raw");
+    });
+  });
+
+  describe("OpenAI — tool_calls edge cases", () => {
+    it("handles tool_calls with empty JSON arguments", () => {
+      const raw = [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_empty",
+              type: "function",
+              function: { name: "no_args_tool", arguments: "{}" },
+            },
+          ],
+        },
+      ];
+
+      const result = openaiAdapter.toCanonical(raw);
+      expect(result).toHaveLength(1);
+      expect(result[0].toolInteraction!.name).toBe("no_args_tool");
+      expect(result[0].toolInteraction!.input).toEqual({});
+    });
+
+    it("handles assistant message with content AND multiple tool_calls", () => {
+      const raw = [
+        {
+          role: "assistant",
+          content: "I'll run two tools at once.",
+          tool_calls: [
+            {
+              id: "call_a",
+              type: "function",
+              function: { name: "tool_a", arguments: '{"x":1}' },
+            },
+            {
+              id: "call_b",
+              type: "function",
+              function: { name: "tool_b", arguments: '{"y":2}' },
+            },
+          ],
+        },
+      ];
+
+      const result = openaiAdapter.toCanonical(raw);
+      // 1 text message + 2 tool call messages
+      expect(result).toHaveLength(3);
+      expect(result[0].content).toBe("I'll run two tools at once.");
+      expect(result[0].role).toBe("assistant");
+      expect(result[1].toolInteraction!.name).toBe("tool_a");
+      expect(result[2].toolInteraction!.name).toBe("tool_b");
+    });
+  });
+
+  describe("Fidelity — summary vs full comprehensive", () => {
+    it("Anthropic summary: no tool_use blocks present in output", () => {
+      const messages = [
+        makeCanonical({
+          role: "assistant",
+          content: "Checking...",
+          toolInteraction: {
+            name: "web_search",
+            input: { q: "weather" },
+            summary: "Searched for weather",
+          },
+        }),
+        makeCanonical({
+          id: "msg-2",
+          role: "assistant",
+          content: "Also looking up...",
+          toolInteraction: {
+            name: "read_file",
+            input: { path: "/data.txt" },
+            summary: "Read data.txt",
+          },
+        }),
+      ];
+
+      const result = anthropicAdapter.fromCanonical(messages, "summary") as Array<{
+        content: Array<{ type: string; text: string }>;
+      }>;
+
+      // Every block in every message should be type "text" — no tool_use
+      for (const msg of result) {
+        for (const block of msg.content) {
+          expect(block.type).toBe("text");
+        }
+      }
+      // Summaries should be embedded in the text
+      expect(result[0].content[0].text).toContain("[Tool: Searched for weather]");
+      expect(result[1].content[0].text).toContain("[Tool: Read data.txt]");
+    });
+
+    it("Anthropic full: tool_use blocks are present in output", () => {
+      const messages = [
+        makeCanonical({
+          role: "assistant",
+          content: "Let me check",
+          toolInteraction: {
+            name: "search",
+            input: { q: "test" },
+            summary: "Called search",
+          },
+        }),
+        makeCanonical({
+          id: "msg-2",
+          role: "assistant",
+          content: "Also reading",
+          toolInteraction: {
+            name: "read_file",
+            input: { path: "/tmp" },
+            summary: "Read /tmp",
+          },
+        }),
+      ];
+
+      const result = anthropicAdapter.fromCanonical(messages, "full") as Array<{
+        content: Array<Record<string, unknown>>;
+      }>;
+
+      // Each message should have a tool_use block
+      for (const msg of result) {
+        const toolUseBlocks = msg.content.filter((b) => b.type === "tool_use");
+        expect(toolUseBlocks.length).toBeGreaterThanOrEqual(1);
+      }
+    });
+
+    it("OpenAI summary: no tool_calls in output for multiple tool messages", () => {
+      const messages = [
+        makeCanonical({
+          role: "assistant",
+          content: "Running search",
+          toolInteraction: {
+            name: "search",
+            input: { q: "test" },
+            summary: "Called search",
+          },
+        }),
+      ];
+
+      const result = openaiAdapter.fromCanonical(messages, "summary") as Array<{
+        content: string;
+        tool_calls?: unknown;
+      }>;
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tool_calls).toBeUndefined();
+      expect(result[0].content).toContain("[Tool: Called search]");
+    });
+
+    it("OpenAI full: tool_calls array present in output", () => {
+      const messages = [
+        makeCanonical({
+          role: "assistant",
+          content: "Running search",
+          toolInteraction: {
+            name: "search",
+            input: { q: "test" },
+            summary: "Called search",
+          },
+        }),
+      ];
+
+      const result = openaiAdapter.fromCanonical(messages, "full") as Array<{
+        content: string | null;
+        tool_calls?: Array<{ function: { name: string } }>;
+      }>;
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tool_calls).toBeDefined();
+      expect(result[0].tool_calls).toHaveLength(1);
+      expect(result[0].tool_calls![0].function.name).toBe("search");
+    });
+  });
+});
