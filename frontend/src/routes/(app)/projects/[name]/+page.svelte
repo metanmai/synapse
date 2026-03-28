@@ -4,9 +4,12 @@
   import EntryEditor from "$lib/components/workspace/EntryEditor.svelte";
   import PathActivityPanel from "$lib/components/workspace/PathActivityPanel.svelte";
   import PathSharePanel from "$lib/components/workspace/PathSharePanel.svelte";
+  import PassphrasePrompt from "$lib/components/PassphrasePrompt.svelte";
+  import { hasPassphrase, isEncrypted, decrypt, encrypt } from "$lib/crypto";
   import type { Entry } from "$lib/types";
 
   let { data, form } = $props();
+  let needsPassphrase = $state(false);
 
   let mode = $state<"view" | "edit" | "new" | "search" | "activity" | "share" | "empty">("empty");
   let selectedPath = $state<string | null>(null);
@@ -56,7 +59,16 @@
     try {
       const res = await fetch(`/projects/${encodeURIComponent(data.project.name)}/api/entry?path=${encodeURIComponent(path)}`);
       if (res.ok) {
-        const fetched = await res.json();
+        const fetched: Entry = await res.json();
+        // Decrypt content if encrypted
+        if (isEncrypted(fetched.content)) {
+          if (!hasPassphrase()) {
+            needsPassphrase = true;
+            loading = false;
+            return;
+          }
+          fetched.content = await decrypt(fetched.content, data.user.email);
+        }
         entryCache.set(path, fetched);
         entry = fetched;
       } else {
@@ -117,6 +129,14 @@
     if (selectedPath && mode === "view") selectEntry(selectedPath);
   }
 </script>
+
+{#if needsPassphrase}
+  <PassphrasePrompt onUnlock={() => {
+    needsPassphrase = false;
+    entryCache.clear();
+    if (selectedPath) selectEntry(selectedPath);
+  }} />
+{/if}
 
 <div class="flex h-full" style={dragging ? "user-select: none; cursor: col-resize;" : ""}>
   <!-- File tree sidebar -->
