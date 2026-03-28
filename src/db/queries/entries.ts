@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Entry, EntryHistory } from "../types";
+import { singleOrNull } from "../query-helpers";
 
 export async function upsertEntry(
   db: SupabaseClient,
@@ -69,15 +70,14 @@ export async function getEntry(
   projectId: string,
   path: string
 ): Promise<Entry | null> {
-  const { data, error } = await db
-    .from("entries")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("path", path)
-    .single();
-  if (error && error.code === "PGRST116") return null;
-  if (error) throw error;
-  return data as Entry;
+  return singleOrNull<Entry>(
+    await db
+      .from("entries")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("path", path)
+      .single()
+  );
 }
 
 export async function listEntries(
