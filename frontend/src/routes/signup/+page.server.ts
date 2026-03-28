@@ -7,12 +7,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 export const actions: Actions = {
-  signup: async ({ request }) => {
+  signup: async ({ request, cookies }) => {
     const data = await request.formData();
     const email = data.get("email") as string;
     const password = data.get("password") as string;
 
-    const supabase = getSupabase();
+    const supabase = getSupabase(cookies);
     const { error } = await supabase.auth.signUp({ email, password });
 
     if (error) return fail(400, { error: error.message, email });
@@ -20,11 +20,11 @@ export const actions: Actions = {
     return { success: true, email };
   },
 
-  oauth: async ({ request, url }) => {
+  oauth: async ({ request, cookies, url }) => {
     const data = await request.formData();
     const provider = data.get("provider") as "google" | "github";
 
-    const supabase = getSupabase();
+    const supabase = getSupabase(cookies);
     const { data: oauthData, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: `${url.origin}/auth/callback` },
