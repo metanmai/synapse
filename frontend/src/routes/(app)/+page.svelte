@@ -46,7 +46,11 @@
     {/if}
   {/if}
 
-  {#if data.projects.length === 0}
+  {#if data.error}
+    <div class="p-4 rounded-xl mb-4" style="background-color: var(--color-bg-muted); border: 1px solid var(--color-border);">
+      <p class="text-sm" style="color: var(--color-danger);">{data.error}</p>
+    </div>
+  {:else if data.projects.length === 0}
     <p style="color: var(--color-text-muted);">No projects yet. Create one to get started.</p>
   {:else}
     <div class="space-y-2">
