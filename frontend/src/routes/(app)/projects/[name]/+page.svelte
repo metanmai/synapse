@@ -1,114 +1,116 @@
 <script lang="ts">
-  import FolderTree from "$lib/components/workspace/FolderTree.svelte";
-  import EntryViewer from "$lib/components/workspace/EntryViewer.svelte";
-  import EntryEditor from "$lib/components/workspace/EntryEditor.svelte";
-  import PathActivityPanel from "$lib/components/workspace/PathActivityPanel.svelte";
-  import PathSharePanel from "$lib/components/workspace/PathSharePanel.svelte";
-  import PassphrasePrompt from "$lib/components/PassphrasePrompt.svelte";
-  import { enhance } from "$app/forms";
-  import { hasPassphrase, isEncrypted, decrypt, encrypt } from "$lib/crypto";
-  import type { Entry } from "$lib/types";
+import { enhance } from "$app/forms";
+import PassphrasePrompt from "$lib/components/PassphrasePrompt.svelte";
+import EntryEditor from "$lib/components/workspace/EntryEditor.svelte";
+import EntryViewer from "$lib/components/workspace/EntryViewer.svelte";
+import FolderTree from "$lib/components/workspace/FolderTree.svelte";
+import PathActivityPanel from "$lib/components/workspace/PathActivityPanel.svelte";
+import PathSharePanel from "$lib/components/workspace/PathSharePanel.svelte";
+import { decrypt, encrypt, hasPassphrase, isEncrypted } from "$lib/crypto";
+import type { Entry } from "$lib/types";
 
-  let { data, form } = $props();
-  let needsPassphrase = $state(false);
-  let importInput: HTMLInputElement;
-  let importForm: HTMLFormElement;
+let { data, form } = $props();
+let needsPassphrase = $state(false);
+let importInput: HTMLInputElement;
+let importForm: HTMLFormElement;
 
-  let mode = $state<"view" | "edit" | "new" | "activity" | "share" | "empty">("empty");
-  let selectedPath = $state<string | null>(null);
-  let entry = $state<Entry | null>(null);
-  let loading = $state(false);
+let mode = $state<"view" | "edit" | "new" | "activity" | "share" | "empty">("empty");
+let selectedPath = $state<string | null>(null);
+let entry = $state<Entry | null>(null);
+let loading = $state(false);
 
-  // Context menu state
-  let contextPath = $state<string | null>(null);
-  let contextIsFolder = $state(false);
+// Context menu state
+let contextPath = $state<string | null>(null);
+let contextIsFolder = $state(false);
 
-  // Client-side entry cache
-  const entryCache = new Map<string, Entry>();
+// Client-side entry cache
+const entryCache = new Map<string, Entry>();
 
-  // Resizable sidebar
-  let sidebarWidth = $state(220);
-  let dragging = $state(false);
+// Resizable sidebar
+let sidebarWidth = $state(220);
+let dragging = $state(false);
 
-  function onDragStart(e: MouseEvent) {
-    e.preventDefault();
-    dragging = true;
-    const onMove = (e: MouseEvent) => {
-      sidebarWidth = Math.min(Math.max(e.clientX, 140), 500);
-    };
-    const onUp = () => {
-      dragging = false;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+function onDragStart(e: MouseEvent) {
+  e.preventDefault();
+  dragging = true;
+  const onMove = (e: MouseEvent) => {
+    sidebarWidth = Math.min(Math.max(e.clientX, 140), 500);
+  };
+  const onUp = () => {
+    dragging = false;
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+}
+
+async function selectEntry(path: string) {
+  selectedPath = path;
+  mode = "view";
+
+  // Return cached entry instantly if available
+  const cached = entryCache.get(path);
+  if (cached) {
+    entry = cached;
+    return;
   }
 
-  async function selectEntry(path: string) {
-    selectedPath = path;
-    mode = "view";
-
-    // Return cached entry instantly if available
-    const cached = entryCache.get(path);
-    if (cached) {
-      entry = cached;
-      return;
-    }
-
-    loading = true;
-    try {
-      const res = await fetch(`/projects/${encodeURIComponent(data.project.name)}/api/entry?path=${encodeURIComponent(path)}`);
-      if (res.ok) {
-        const fetched: Entry = await res.json();
-        // Decrypt content if encrypted
-        if (isEncrypted(fetched.content)) {
-          if (!hasPassphrase()) {
-            needsPassphrase = true;
-            loading = false;
-            return;
-          }
-          fetched.content = await decrypt(fetched.content, data.user.email);
+  loading = true;
+  try {
+    const res = await fetch(
+      `/projects/${encodeURIComponent(data.project.name)}/api/entry?path=${encodeURIComponent(path)}`,
+    );
+    if (res.ok) {
+      const fetched: Entry = await res.json();
+      // Decrypt content if encrypted
+      if (isEncrypted(fetched.content)) {
+        if (!hasPassphrase()) {
+          needsPassphrase = true;
+          loading = false;
+          return;
         }
-        entryCache.set(path, fetched);
-        entry = fetched;
-      } else {
-        entry = null;
+        fetched.content = await decrypt(fetched.content, data.user.email);
       }
-    } catch {
+      entryCache.set(path, fetched);
+      entry = fetched;
+    } else {
       entry = null;
     }
-    loading = false;
-  }
-
-  function startNew() {
-    mode = "new";
+  } catch {
     entry = null;
-    selectedPath = null;
   }
+  loading = false;
+}
 
-  function startEdit() {
-    mode = "edit";
-  }
+function startNew() {
+  mode = "new";
+  entry = null;
+  selectedPath = null;
+}
 
-  function handleAction(action: "activity" | "share" | "delete", path: string, isFolder: boolean) {
-    contextPath = path;
-    contextIsFolder = isFolder;
-    if (action === "activity") {
-      mode = "activity";
-    } else if (action === "share") {
-      mode = "share";
-    } else if (action === "delete") {
-      if (confirm(`Delete ${path}?`)) {
-        // TODO: wire up delete API
-      }
+function startEdit() {
+  mode = "edit";
+}
+
+function handleAction(action: "activity" | "share" | "delete", path: string, isFolder: boolean) {
+  contextPath = path;
+  contextIsFolder = isFolder;
+  if (action === "activity") {
+    mode = "activity";
+  } else if (action === "share") {
+    mode = "share";
+  } else if (action === "delete") {
+    if (confirm(`Delete ${path}?`)) {
+      // TODO: wire up delete API
     }
   }
+}
 
-  function closePanel() {
-    mode = selectedPath ? "view" : "empty";
-    if (selectedPath && mode === "view") selectEntry(selectedPath);
-  }
+function closePanel() {
+  mode = selectedPath ? "view" : "empty";
+  if (selectedPath && mode === "view") selectEntry(selectedPath);
+}
 </script>
 
 {#if needsPassphrase}
