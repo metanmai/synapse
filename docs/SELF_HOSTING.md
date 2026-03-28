@@ -98,7 +98,7 @@ Without embeddings: full-text / keyword paths still work depending on your schem
 
 ## 5. MCP package
 
-- **Published**: install `synapsesync-mcp` and set `SYNAPSE_API_KEY`, optionally `SYNAPSE_API_URL`.
+- **Published**: install `synapsesync-mcp` and set `SYNAPSE_API_KEY` (API host is fixed in the package; fork and change `API_URL` in `mcp/src/index.ts` if you use your own Worker).
 - **Local**: from repo root run `npm install`, then `cd mcp && npm run build`, and point MCP `command` at `node` with `args` at `path/to/mcp/dist/index.js`, or use `npx` after `npm link`.
 
 ## 6. Verification checklist
