@@ -194,7 +194,7 @@ function closePanel() {
   <!-- Main content -->
   <div class="flex-1 p-8 overflow-y-auto min-w-0 relative">
     {#if loading}
-      <div class="loading-bar"></div>
+      <div class="loading-text" style="color: var(--color-text-muted); font-size: 13px;">Loading...</div>
     {/if}
     {#if mode === "activity" && contextPath}
       <PathActivityPanel
@@ -255,23 +255,6 @@ function closePanel() {
     min-width: 0;
   }
 
-  .loading-bar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 5px;
-    background: linear-gradient(90deg, #e8a04e, #d4782f, #e8a04e);
-    background-size: 200% 100%;
-    animation: loading-slide 1.2s ease-in-out infinite;
-    border-radius: 0 0 2px 2px;
-    z-index: 10;
-  }
-
-  @keyframes loading-slide {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
 
   @media (max-width: 768px) {
     .workspace-layout {
