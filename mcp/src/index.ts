@@ -38,6 +38,49 @@ interface HistoryResponse {
   content: string;
 }
 
+interface ConversationSummary {
+  id: string;
+  title: string | null;
+  status: string;
+  message_count: number;
+  fidelity_mode: string;
+  updated_at: string;
+  created_at: string;
+}
+
+interface ListConversationsResponse {
+  conversations: ConversationSummary[];
+  total: number;
+}
+
+interface ConversationMessage {
+  id: string;
+  sequence: number;
+  role: string;
+  content: string | null;
+  tool_interaction: { name?: string; summary?: string; input?: unknown; output?: string } | null;
+  source_agent: string;
+  source_model: string | null;
+  created_at: string;
+}
+
+interface ConversationDetail {
+  id: string;
+  title: string | null;
+  status: string;
+  message_count: number;
+  fidelity_mode: string;
+  system_prompt: string | null;
+  working_context: Record<string, unknown> | null;
+  messages: ConversationMessage[];
+  updated_at: string;
+}
+
+interface ProjectListItem {
+  id: string;
+  name: string;
+}
+
 // --- CLI utilities ---
 
 function isInteractiveTerminal(): boolean {
@@ -493,6 +536,268 @@ if (!isMcpServerMode(args)) {
 
     return { content: [{ type: "text" as const, text: lines.join("\n") }] };
   });
+
+  // --- Conversation tools (Plus tier) ---
+
+  /** Resolve a project name to its ID by listing all projects and finding a match. */
+  async function resolveProjectId(projectName: string): Promise<string | null> {
+    const projects = (await api("GET", "/api/projects")) as ProjectListItem[];
+    const match = projects.find((p) => p.name.toLowerCase() === projectName.toLowerCase());
+    return match ? match.id : null;
+  }
+
+  // --- list_conversations: list conversations for a project ---
+  server.tool(
+    "list_conversations",
+    "List conversations synced to a project. Returns titles, message counts, status, and IDs. Plus only.",
+    {
+      project: z.string().describe("Project name"),
+      status: z.enum(["active", "archived"]).optional().describe("Filter by status (default: all non-deleted)"),
+      limit: z.number().optional().describe("Maximum number of conversations to return (default 20)"),
+    },
+    async ({ project, status, limit }) => {
+      const projectId = await resolveProjectId(project);
+      if (!projectId) {
+        return { content: [{ type: "text" as const, text: `Project "${project}" not found.` }], isError: true };
+      }
+
+      const params = new URLSearchParams({ project_id: projectId });
+      if (status) params.set("status", status);
+      if (limit) params.set("limit", String(limit));
+
+      let result: ListConversationsResponse;
+      try {
+        result = (await api("GET", `/api/conversations?${params}`)) as ListConversationsResponse;
+      } catch (_e) {
+        return {
+          content: [
+            { type: "text" as const, text: "Failed to list conversations. This feature requires a Plus subscription." },
+          ],
+          isError: true,
+        };
+      }
+
+      const { conversations, total } = result;
+      if (conversations.length === 0) {
+        const filterNote = status ? ` with status "${status}"` : "";
+        return {
+          content: [{ type: "text" as const, text: `No conversations${filterNote} found in project "${project}".` }],
+        };
+      }
+
+      const lines = conversations.map((c) => {
+        const title = c.title ?? "(untitled)";
+        const date = new Date(c.updated_at).toLocaleDateString();
+        return `- **${title}** — ${c.message_count} messages, ${c.status}, updated ${date}\n  ID: \`${c.id}\``;
+      });
+
+      const filterNote = status ? ` (status: ${status})` : "";
+      const header = `${total} conversation(s) in "${project}"${filterNote} (showing ${conversations.length}):`;
+
+      return { content: [{ type: "text" as const, text: `${header}\n\n${lines.join("\n")}` }] };
+    },
+  );
+
+  // --- load_conversation: load a conversation to resume it ---
+  server.tool(
+    "load_conversation",
+    "Load a conversation to resume it in another agent. Returns the system prompt, working context, and full message transcript. Plus only.",
+    {
+      project: z.string().describe("Project name"),
+      conversationId: z.string().describe("Conversation ID to load"),
+      fromSequence: z.number().optional().describe("Start from this message sequence number (for partial loads)"),
+    },
+    async ({ project, conversationId, fromSequence }) => {
+      const projectId = await resolveProjectId(project);
+      if (!projectId) {
+        return { content: [{ type: "text" as const, text: `Project "${project}" not found.` }], isError: true };
+      }
+
+      const params = new URLSearchParams();
+      if (fromSequence) params.set("from_sequence", String(fromSequence));
+      const qs = params.toString() ? `?${params}` : "";
+
+      let conv: ConversationDetail;
+      try {
+        conv = (await api(
+          "GET",
+          `/api/conversations/${encodeURIComponent(conversationId)}${qs}`,
+        )) as ConversationDetail;
+      } catch (_e) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Conversation "${conversationId}" not found or access denied. This feature requires a Plus subscription.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Build formatted transcript
+      const parts: string[] = [];
+
+      parts.push(`# Conversation: ${conv.title ?? "(untitled)"}`);
+      parts.push(`**ID:** ${conv.id}`);
+      parts.push(
+        `**Status:** ${conv.status} | **Fidelity:** ${conv.fidelity_mode} | **Messages:** ${conv.message_count}`,
+      );
+      parts.push("");
+
+      if (conv.system_prompt) {
+        parts.push("## System Prompt");
+        parts.push(conv.system_prompt);
+        parts.push("");
+      }
+
+      if (conv.working_context && Object.keys(conv.working_context).length > 0) {
+        parts.push("## Working Context");
+        for (const [key, value] of Object.entries(conv.working_context)) {
+          parts.push(`- **${key}:** ${typeof value === "string" ? value : JSON.stringify(value)}`);
+        }
+        parts.push("");
+      }
+
+      const messages = conv.messages ?? [];
+      if (messages.length > 0) {
+        parts.push("## Messages");
+        parts.push("");
+        for (const msg of messages) {
+          const agent = msg.source_agent
+            ? ` (${msg.source_agent}${msg.source_model ? ` / ${msg.source_model}` : ""})`
+            : "";
+          parts.push(`### [${msg.sequence}] ${msg.role}${agent}`);
+          if (msg.content) {
+            parts.push(msg.content);
+          }
+          if (msg.tool_interaction) {
+            if (conv.fidelity_mode === "summary" && msg.tool_interaction.summary) {
+              parts.push(`> Tool: ${msg.tool_interaction.summary}`);
+            } else {
+              parts.push(`> Tool: ${msg.tool_interaction.name ?? "unknown"}`);
+              if (msg.tool_interaction.input) {
+                parts.push(`> Input: ${JSON.stringify(msg.tool_interaction.input)}`);
+              }
+              if (msg.tool_interaction.output) {
+                parts.push(`> Output: ${msg.tool_interaction.output}`);
+              }
+            }
+          }
+          parts.push("");
+        }
+      } else {
+        parts.push("*No messages found.*");
+      }
+
+      return { content: [{ type: "text" as const, text: parts.join("\n") }] };
+    },
+  );
+
+  // --- sync_conversation: push messages to a conversation ---
+  server.tool(
+    "sync_conversation",
+    "Push messages to a conversation. Creates a new conversation if no conversationId is provided, otherwise appends. Plus only.",
+    {
+      project: z.string().describe("Project name"),
+      conversationId: z
+        .string()
+        .optional()
+        .describe("Existing conversation ID to append to. Omit to create a new conversation."),
+      title: z.string().optional().describe("Conversation title (used when creating a new conversation)"),
+      systemPrompt: z.string().optional().describe("System prompt for the conversation"),
+      workingContext: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe("Working context (key-value metadata about the environment, repo, etc.)"),
+      fidelity: z
+        .enum(["summary", "full"])
+        .optional()
+        .describe("Fidelity mode: 'summary' collapses tool calls, 'full' preserves everything. Default: summary"),
+      messages: z
+        .array(
+          z.object({
+            role: z.enum(["user", "assistant", "system", "tool"]).describe("Message role"),
+            content: z.string().describe("Message content"),
+            toolSummary: z.string().optional().describe("One-line summary of a tool call (for fidelity=summary)"),
+            sourceAgent: z.string().optional().describe("Agent that produced this message"),
+            sourceModel: z.string().optional().describe("Model used"),
+          }),
+        )
+        .describe("Messages to sync"),
+    },
+    async ({ project, conversationId, title, systemPrompt, workingContext, fidelity, messages }) => {
+      const projectId = await resolveProjectId(project);
+      if (!projectId) {
+        return { content: [{ type: "text" as const, text: `Project "${project}" not found.` }], isError: true };
+      }
+
+      let convId = conversationId;
+      let action: string;
+
+      if (!convId) {
+        // Create new conversation
+        let created: ConversationSummary;
+        try {
+          created = (await api("POST", "/api/conversations", {
+            project_id: projectId,
+            title: title ?? null,
+            fidelity_mode: fidelity ?? "summary",
+            system_prompt: systemPrompt ?? null,
+            working_context: workingContext ?? null,
+          })) as ConversationSummary;
+        } catch (_e) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "Failed to create conversation. This feature requires a Plus subscription.",
+              },
+            ],
+            isError: true,
+          };
+        }
+        convId = created.id;
+        action = "Created";
+      } else {
+        action = "Updated";
+      }
+
+      // Append messages
+      let appended = 0;
+      if (messages.length > 0) {
+        try {
+          const msgRows = messages.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+            tool_interaction: msg.toolSummary ? { name: "tool", summary: msg.toolSummary } : null,
+            source_agent: msg.sourceAgent ?? SOURCE,
+            source_model: msg.sourceModel ?? null,
+          }));
+          await api("POST", `/api/conversations/${encodeURIComponent(convId)}/messages`, {
+            messages: msgRows,
+          });
+          appended = messages.length;
+        } catch (_e) {
+          return {
+            content: [
+              { type: "text" as const, text: `${action} conversation "${convId}" but failed to append messages.` },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `${action} conversation "${convId}" in project "${project}". ${appended} message(s) appended.`,
+          },
+        ],
+      };
+    },
+  );
 
   async function main(): Promise<void> {
     const transport = new StdioServerTransport();
