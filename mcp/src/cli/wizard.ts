@@ -18,23 +18,32 @@ export async function runWizard(version: string): Promise<void> {
   if (existing.configured) {
     const locations = existing.locations.map((l) => `  ${muted(l)}`).join("\n");
 
-    // Validate existing API key
+    // Validate existing API keys — try each until one works
+    let validKey: string | null = null;
     let keyExpired = false;
-    if (existing.apiKey) {
+    if (existing.apiKeys.length > 0) {
       const spin = createGlyphSpinner();
       spin.start("Checking existing connection\u2026");
-      const keyStatus = await validateApiKey(existing.apiKey);
-      if (keyStatus.status === "expired") {
-        spin.stop(themeError("API key expired or revoked"));
-        keyExpired = true;
-      } else if (keyStatus.status === "valid") {
+      for (const key of existing.apiKeys) {
+        const keyStatus = await validateApiKey(key);
+        if (keyStatus.status === "valid") {
+          validKey = key;
+          break;
+        }
+        if (keyStatus.status === "expired") {
+          keyExpired = true;
+        }
+      }
+      if (validKey) {
         spin.stop(`${success("\u2713")} Connected`);
+      } else if (keyExpired) {
+        spin.stop(themeError("API key expired or revoked"));
       } else {
         spin.stop(muted("Could not verify connection"));
       }
     }
 
-    if (keyExpired) {
+    if (keyExpired && !validKey) {
       clack.log.warn(`Synapse is configured but your API key has expired:\n${locations}`);
       clack.log.info("Sign in again to get a new API key.");
       // Fall through to full auth flow
@@ -48,7 +57,7 @@ export async function runWizard(version: string): Promise<void> {
           {
             value: "add" as const,
             label: "Add more editors",
-            hint: existing.apiKey ? "keep current API key" : "paste your API key",
+            hint: validKey ? "keep current API key" : "paste your API key",
           },
           { value: "cancel" as const, label: "Cancel" },
         ],
@@ -60,8 +69,8 @@ export async function runWizard(version: string): Promise<void> {
       }
 
       if (action === "add") {
-        if (existing.apiKey) {
-          await runEditorSetup(existing.apiKey);
+        if (validKey) {
+          await runEditorSetup(validKey);
         } else {
           clack.log.info("Paste your existing API key to configure additional editors.");
           const key = await clack.password({
