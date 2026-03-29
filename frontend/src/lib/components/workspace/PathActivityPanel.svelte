@@ -19,8 +19,8 @@ const actionLabels: Record<string, string> = {
 };
 
 let filtered = $derived(
-  activity.filter((e) =>
-    isFolder ? e.target_path?.startsWith(path + "/") || e.target_path === path : e.target_path === path,
+  activity.filter((entry: ActivityLogEntry) =>
+    isFolder ? entry.target_path?.startsWith(path + "/") || entry.target_path === path : entry.target_path === path,
   ),
 );
 </script>
