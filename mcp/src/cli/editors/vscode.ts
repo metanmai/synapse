@@ -1,12 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import {
-  SYNAPSE_COMMAND_DEFS,
-  appendInstructions,
-  globalConfigDir,
-  synapseMcpServer,
-  writeJsonSafe,
-} from "./io.js";
+import { SYNAPSE_COMMAND_DEFS, appendInstructions, globalConfigDir, synapseMcpServer, writeJsonSafe } from "./io.js";
 
 /** Write VS Code Copilot prompt files to .github/prompts/. */
 function writeVSCodePromptFiles(cwd: string): string[] {
