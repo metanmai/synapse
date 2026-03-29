@@ -144,13 +144,17 @@ async function runInteractiveLogin(): Promise<void> {
   clack.intro(`${accent("\u25C6")} ${bold("Sign in to Synapse")}`);
 
   const spin = createGlyphSpinner();
-  spin.start("Waiting for browser login\u2026");
 
   try {
     const result = await browserAuth({
-      onUrl: (url) => {
-        spin.update("Waiting for browser login\u2026");
-        clack.log.info(`If the browser didn't open, visit:\n  ${muted(url)}`);
+      onUrl: (url, autoOpened) => {
+        if (autoOpened) {
+          spin.start("Waiting for browser login\u2026");
+          clack.log.info(`If the browser didn't open, visit:\n  ${muted(url)}`);
+        } else {
+          spin.start("Waiting for login\u2026");
+          clack.log.info(`Open this URL to sign in:\n  ${muted(url)}`);
+        }
       },
     });
     spin.stop(`Signed in as ${result.email}`);
@@ -168,13 +172,17 @@ async function runInteractiveSignup(): Promise<void> {
   clack.intro(`${accent("\u25C6")} ${bold("Create a Synapse account")}`);
 
   const spin = createGlyphSpinner();
-  spin.start("Waiting for browser\u2026");
 
   try {
     const result = await browserAuth({
-      onUrl: (url) => {
-        spin.update("Waiting for browser\u2026");
-        clack.log.info(`If the browser didn't open, visit:\n  ${muted(url)}`);
+      onUrl: (url, autoOpened) => {
+        if (autoOpened) {
+          spin.start("Waiting for browser\u2026");
+          clack.log.info(`If the browser didn't open, visit:\n  ${muted(url)}`);
+        } else {
+          spin.start("Waiting for login\u2026");
+          clack.log.info(`Open this URL to sign in:\n  ${muted(url)}`);
+        }
       },
     });
     spin.stop(`Signed in as ${result.email}`);
