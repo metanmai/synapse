@@ -2,11 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { singleOrNull } from "../query-helpers";
 import type {
   Conversation,
-  ConversationListItem,
-  ConversationMessage,
-  ConversationMediaRecord,
   ConversationContext,
   ConversationLimits,
+  ConversationListItem,
+  ConversationMediaRecord,
+  ConversationMessage,
   ConversationStatus,
   FidelityMode,
   MessageRole,
@@ -67,16 +67,9 @@ export async function createConversation(
   return data as Conversation;
 }
 
-export async function getConversation(
-  db: SupabaseClient,
-  conversationId: string,
-): Promise<Conversation | null> {
+export async function getConversation(db: SupabaseClient, conversationId: string): Promise<Conversation | null> {
   return singleOrNull<Conversation>(
-    await db
-      .from("conversations")
-      .select(CONVERSATION_COLUMNS)
-      .eq("id", conversationId)
-      .single(),
+    await db.from("conversations").select(CONVERSATION_COLUMNS).eq("id", conversationId).single(),
   );
 }
 
@@ -206,10 +199,7 @@ export async function appendMessages(
     encrypted: msg.encrypted ?? false,
   }));
 
-  const { data, error } = await db
-    .from("conversation_messages")
-    .insert(rows)
-    .select(MESSAGE_COLUMNS);
+  const { data, error } = await db.from("conversation_messages").insert(rows).select(MESSAGE_COLUMNS);
   if (error) throw error;
 
   // Update message_count on the conversation
@@ -218,10 +208,7 @@ export async function appendMessages(
     .update({ message_count: (maxRow?.sequence ?? 0) + messages.length })
     .eq("id", conversationId);
   if (updateError) {
-    console.error(
-      `[conversations] Failed to update message_count for ${conversationId}:`,
-      updateError.message,
-    );
+    console.error(`[conversations] Failed to update message_count for ${conversationId}:`, updateError.message);
   }
 
   return (data ?? []) as ConversationMessage[];
@@ -305,10 +292,7 @@ export async function insertMedia(
     .eq("id", params.conversation_id)
     .single();
   if (convError) {
-    console.error(
-      `[conversations] Failed to read media_size for ${params.conversation_id}:`,
-      convError.message,
-    );
+    console.error(`[conversations] Failed to read media_size for ${params.conversation_id}:`, convError.message);
   } else {
     const newSize = (conv.media_size ?? 0) + params.size;
     const { error: updateError } = await db
@@ -316,10 +300,7 @@ export async function insertMedia(
       .update({ media_size: newSize })
       .eq("id", params.conversation_id);
     if (updateError) {
-      console.error(
-        `[conversations] Failed to update media_size for ${params.conversation_id}:`,
-        updateError.message,
-      );
+      console.error(`[conversations] Failed to update media_size for ${params.conversation_id}:`, updateError.message);
     }
   }
 
@@ -369,15 +350,8 @@ export async function getConversationContext(
 
 // --- Limits ---
 
-export async function getConversationLimits(
-  db: SupabaseClient,
-  tier: string,
-): Promise<ConversationLimits | null> {
+export async function getConversationLimits(db: SupabaseClient, tier: string): Promise<ConversationLimits | null> {
   return singleOrNull<ConversationLimits>(
-    await db
-      .from("conversation_limits")
-      .select(LIMITS_COLUMNS)
-      .eq("tier", tier)
-      .single(),
+    await db.from("conversation_limits").select(LIMITS_COLUMNS).eq("tier", tier).single(),
   );
 }
