@@ -23,7 +23,7 @@ function submit() {
   <div class="w-full max-w-sm p-6 rounded-xl"
     style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border);">
     <div class="flex items-center gap-3 mb-4">
-      <img src="/logo.svg" alt="" class="w-8 h-8" />
+      <img src="/logo.svg" alt="Synapse logo" class="w-8 h-8" />
       <h2 class="text-lg font-semibold" style="color: var(--color-accent);">
         {isNew ? "Set Encryption Passphrase" : "Unlock Workspace"}
       </h2>
@@ -34,7 +34,7 @@ function submit() {
         : "Enter your passphrase to decrypt your files."}
     </p>
     <form onsubmit={(e) => { e.preventDefault(); submit(); }} class="space-y-3">
-      <input type="password" bind:value placeholder="Passphrase" required autofocus
+      <input type="password" bind:value placeholder="Passphrase" aria-label="Passphrase" required autofocus
         class="w-full rounded-lg px-3 py-2.5 text-sm"
         style="border: 1px solid var(--color-border);"
       />

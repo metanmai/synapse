@@ -39,11 +39,11 @@ function copyLink(token: string) {
     <form method="POST" action="?/addMember" use:enhance class="flex gap-2">
       <input type="hidden" name="projectId" value={projectId} />
       <input type="hidden" name="path" value={path} />
-      <input type="email" name="email" placeholder="Email address" required
+      <input type="email" name="email" placeholder="Email address" aria-label="Email address" required
         class="flex-1 rounded-lg px-2.5 py-2 text-xs"
         style="border: 1px solid var(--color-border);"
       />
-      <select name="role"
+      <select name="role" aria-label="Member role"
         class="rounded-lg px-2 py-2 text-xs"
         style="border: 1px solid var(--color-border);">
         <option value="editor">Editor</option>
