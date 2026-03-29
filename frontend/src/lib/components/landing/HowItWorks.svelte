@@ -11,13 +11,13 @@ const steps = [
   {
     number: 2,
     title: "Work",
-    description: "Your AI tools save and share context automatically",
+    description: "Context lands in one cloud workspace — pick it up from any tool or device",
     illustration: "sync",
   },
   {
     number: 3,
     title: "Share",
-    description: "Invite your team, export your knowledge",
+    description: "Invite teammates so every user’s AI stays aligned; export when you need a copy",
     illustration: "team",
   },
 ];
