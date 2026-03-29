@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { account, auth } from "./api/auth";
 import { billing } from "./api/billing";
 import { context } from "./api/context";
+import { insights } from "./api/insights";
 import { projects } from "./api/projects";
 import { share } from "./api/share";
 import { sync } from "./api/sync";
@@ -61,6 +62,7 @@ app.route("/api/sync", sync);
 app.route("/api/share", share);
 app.route("/api/account", account);
 app.route("/api/billing", billing);
+app.route("/api/insights", insights);
 
 // Mount MCP server (Streamable HTTP transport)
 app.mount("/mcp", SynapseAgent.serve("/mcp").fetch);
