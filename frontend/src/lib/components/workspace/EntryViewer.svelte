@@ -41,8 +41,8 @@ let html = $derived(DOMPurify.sanitize(marked.parse(entry.content, { async: fals
       </button>
     </div>
   </div>
-  <div class="prose rounded-xl p-5 text-sm"
+  <article class="prose rounded-xl p-5 text-sm"
     style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border); line-height: 1.7;">
     {@html html}
-  </div>
+  </article>
 </div>

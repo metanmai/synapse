@@ -36,7 +36,7 @@ let loading = $state(false);
         <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
         <input type="hidden" name="cli_state" value={data.state ?? ""} />
         <input type="hidden" name="cli_port" value={data.port ?? ""} />
-        <button type="submit" disabled={loading} class="btn-primary w-full cursor-pointer">
+        <button type="submit" disabled={loading} aria-label="Continue as {data.email}" class="btn-primary w-full cursor-pointer">
           {#if loading}
             <span class="flex items-center justify-center gap-2">
               <span class="spinner spinner-sm spinner-white"></span> Connecting...
@@ -103,7 +103,7 @@ let loading = $state(false);
           <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
           <input type="hidden" name="cli_state" value={data.state ?? ""} />
           <input type="hidden" name="cli_port" value={data.port ?? ""} />
-          <button type="submit" class="btn-secondary w-full cursor-pointer">
+          <button type="submit" aria-label="Continue with Google" class="btn-secondary w-full cursor-pointer">
             Continue with Google
           </button>
         </form>
@@ -112,7 +112,7 @@ let loading = $state(false);
           <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
           <input type="hidden" name="cli_state" value={data.state ?? ""} />
           <input type="hidden" name="cli_port" value={data.port ?? ""} />
-          <button type="submit" class="btn-secondary w-full cursor-pointer">
+          <button type="submit" aria-label="Continue with GitHub" class="btn-secondary w-full cursor-pointer">
             Continue with GitHub
           </button>
         </form>
@@ -139,17 +139,19 @@ let loading = $state(false);
             <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
             <input type="hidden" name="cli_state" value={data.state ?? ""} />
             <input type="hidden" name="cli_port" value={data.port ?? ""} />
-            <input type="email" name="email" placeholder="Email" required
+            <label for="cli-login-email" class="sr-only">Email</label>
+            <input id="cli-login-email" type="email" name="email" placeholder="Email" required
               value={form?.email ?? ""}
               class="w-full text-sm"
               style="border-radius: 12px; padding: 12px 16px; transition: all 150ms ease; border: 1px solid var(--color-border); background-color: var(--color-bg); color: var(--color-text);"
             />
-            <input type="password" name="password" placeholder="Password" required
+            <label for="cli-login-password" class="sr-only">Password</label>
+            <input id="cli-login-password" type="password" name="password" placeholder="Password" required
               class="w-full text-sm"
               style="border-radius: 12px; padding: 12px 16px; transition: all 150ms ease; border: 1px solid var(--color-border); background-color: var(--color-bg); color: var(--color-text);"
             />
             {#if form?.error}
-              <p class="text-sm" style="color: var(--color-danger);">{form.error}</p>
+              <p class="text-sm" role="alert" style="color: var(--color-danger);">{form.error}</p>
             {/if}
             <button type="submit" disabled={loading} class="btn-primary w-full cursor-pointer">
               {#if loading}
@@ -172,13 +174,14 @@ let loading = $state(false);
             <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
             <input type="hidden" name="cli_state" value={data.state ?? ""} />
             <input type="hidden" name="cli_port" value={data.port ?? ""} />
-            <input type="email" name="email" placeholder="Email" required
+            <label for="cli-magic-email" class="sr-only">Email</label>
+            <input id="cli-magic-email" type="email" name="email" placeholder="Email" required
               value={form?.email ?? ""}
               class="w-full text-sm"
               style="border-radius: 12px; padding: 12px 16px; transition: all 150ms ease; border: 1px solid var(--color-border); background-color: var(--color-bg); color: var(--color-text);"
             />
             {#if form?.error}
-              <p class="text-sm" style="color: var(--color-danger);">{form.error}</p>
+              <p class="text-sm" role="alert" style="color: var(--color-danger);">{form.error}</p>
             {/if}
             <button type="submit" disabled={loading} class="btn-primary w-full cursor-pointer">
               {#if loading}
@@ -216,18 +219,20 @@ let loading = $state(false);
           <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
           <input type="hidden" name="cli_state" value={data.state ?? ""} />
           <input type="hidden" name="cli_port" value={data.port ?? ""} />
-          <input type="email" name="email" placeholder="Email" required
+          <label for="cli-signup-email" class="sr-only">Email</label>
+          <input id="cli-signup-email" type="email" name="email" placeholder="Email" required
             value={form?.email ?? ""}
             class="w-full text-sm"
             style="border-radius: 12px; padding: 12px 16px; transition: all 150ms ease; border: 1px solid var(--color-border); background-color: var(--color-bg); color: var(--color-text);"
           />
-          <input type="password" name="password" placeholder="Password (min 6 characters)"
+          <label for="cli-signup-password" class="sr-only">Password</label>
+          <input id="cli-signup-password" type="password" name="password" placeholder="Password (min 6 characters)"
             required minlength={6}
             class="w-full text-sm"
             style="border-radius: 12px; padding: 12px 16px; transition: all 150ms ease; border: 1px solid var(--color-border); background-color: var(--color-bg); color: var(--color-text);"
           />
           {#if form?.error}
-            <p class="text-sm" style="color: var(--color-danger);">{form.error}</p>
+            <p class="text-sm" role="alert" style="color: var(--color-danger);">{form.error}</p>
           {/if}
           <button type="submit" disabled={loading} class="btn-primary w-full cursor-pointer">
             {#if loading}

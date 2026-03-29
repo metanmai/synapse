@@ -25,9 +25,9 @@ const actionLabels: Record<string, string> = {
           style="background-color: var(--color-pink); color: white;">
           {entry.source}
         </span>
-        <span class="text-xs ml-auto" style="color: var(--color-text-muted);">
+        <time class="text-xs ml-auto" datetime={entry.created_at} style="color: var(--color-text-muted);">
           {new Date(entry.created_at).toLocaleString()}
-        </span>
+        </time>
       </div>
       {#if entry.target_path}
         <div class="text-xs mt-1 font-mono" style="color: var(--color-text-muted);">
