@@ -1,36 +1,11 @@
 <script lang="ts">
 import type { ConversationListItem } from "$lib/types";
+import { statusColors, formatRelativeDate } from "./conversation-helpers";
 
 let { conversations, projectName } = $props<{
   conversations: ConversationListItem[];
   projectName: string;
 }>();
-
-const statusColors: Record<string, { bg: string; text: string }> = {
-  active: { bg: "rgba(22, 163, 74, 0.12)", text: "#16a34a" },
-  archived: { bg: "rgba(107, 114, 128, 0.12)", text: "#6b7280" },
-  deleted: { bg: "rgba(220, 38, 38, 0.12)", text: "#dc2626" },
-};
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
-  });
-}
 
 const encodedProject = $derived(encodeURIComponent(projectName));
 </script>
@@ -68,7 +43,7 @@ const encodedProject = $derived(encodeURIComponent(projectName));
           </span>
           <span class="meta-separator"></span>
           <span class="meta-item">
-            {formatDate(convo.updated_at)}
+            {formatRelativeDate(convo.updated_at)}
           </span>
         </div>
       </a>
