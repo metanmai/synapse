@@ -893,13 +893,21 @@ if (!isMcpServerMode(args)) {
       let appended = 0;
       if (messages.length > 0) {
         try {
-          const msgRows = messages.map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-            tool_interaction: msg.toolSummary ? { name: "tool", summary: msg.toolSummary } : null,
-            source_agent: msg.sourceAgent ?? SOURCE,
-            source_model: msg.sourceModel ?? null,
-          }));
+          const msgRows = messages.map(
+            (msg: {
+              role: string;
+              content: string;
+              toolSummary?: string;
+              sourceAgent?: string;
+              sourceModel?: string;
+            }) => ({
+              role: msg.role,
+              content: msg.content,
+              tool_interaction: msg.toolSummary ? { name: "tool", summary: msg.toolSummary } : null,
+              source_agent: msg.sourceAgent ?? SOURCE,
+              source_model: msg.sourceModel ?? null,
+            }),
+          );
           await api("POST", `/api/conversations/${encodeURIComponent(convId)}/messages`, {
             messages: msgRows,
           });
