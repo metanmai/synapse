@@ -1,6 +1,7 @@
 import { redirect, error } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
-import { createApi } from "$lib/server/api";
+import { createApi, ApiError } from "$lib/server/api";
+import { API_URL } from "$env/static/private";
 
 export const load: PageServerLoad = async ({ locals }) => {
   try {
@@ -17,12 +18,14 @@ export const load: PageServerLoad = async ({ locals }) => {
     await api.createProject("My Workspace");
     redirect(303, `/projects/${encodeURIComponent("My Workspace")}`);
   } catch (err: any) {
-    // Re-throw SvelteKit redirects
+    // Re-throw SvelteKit redirects and errors
     if (err?.status === 303 || err?.location) throw err;
-    // Show full error detail in dev
-    error(500, {
-      message: `Dashboard load failed: ${err?.message || String(err)}`,
-      detail: JSON.stringify({ status: err?.status, body: err?.body, stack: err?.stack }, null, 2),
+    if (err?.status && err?.body) throw err; // SvelteKit error objects
+    // Show full error detail — preserve original status code
+    const status = err instanceof ApiError ? err.status : 500;
+    error(status, {
+      message: `Dashboard failed: ${err?.message || String(err)}`,
+      detail: `API_URL: ${API_URL}\nStatus: ${err?.status}\nStack: ${err?.stack ?? "none"}`,
     } as any);
   }
 };
