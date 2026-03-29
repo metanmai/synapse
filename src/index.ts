@@ -22,7 +22,7 @@ app.use("*", cors({
 
 app.onError((err, c) => {
   if (err instanceof AppError) {
-    return c.json({ error: err.message, code: err.code }, err.status as any);
+    return c.json({ error: err.message, code: err.code }, err.status as 400 | 401 | 403 | 404 | 409 | 410 | 500);
   }
   console.error("Unhandled error:", err);
   return c.json({ error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
