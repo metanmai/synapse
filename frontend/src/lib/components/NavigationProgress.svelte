@@ -1,5 +1,13 @@
 <script lang="ts">
 import { navigating } from "$app/stores";
+
+$effect(() => {
+  if ($navigating) {
+    document.body.classList.add("navigating");
+  } else {
+    document.body.classList.remove("navigating");
+  }
+});
 </script>
 
 {#if $navigating}
@@ -9,6 +17,14 @@ import { navigating } from "$app/stores";
 {/if}
 
 <style>
+  :global(body.navigating) {
+    cursor: progress !important;
+  }
+
+  :global(body.navigating *) {
+    cursor: progress !important;
+  }
+
   .nav-progress {
     position: fixed;
     top: 0;
