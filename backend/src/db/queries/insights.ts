@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { singleOrNull } from "../query-helpers";
-import { mergeSearchTiers, runFulltextSearch, runIlikeSearch } from "../search-helpers";
 import type { Insight, InsightListItem, InsightSource, InsightType } from "../types";
 
 const INSIGHT_COLUMNS = "id, project_id, user_id, type, summary, detail, source, encrypted, created_at, updated_at";
@@ -115,12 +114,57 @@ export async function deleteInsight(db: SupabaseClient, insightId: string): Prom
 }
 
 export async function searchInsights(db: SupabaseClient, projectId: string, query: string): Promise<Insight[]> {
-  // Run full-text and ILIKE tiers in parallel
-  const [fulltext, ilike] = await Promise.all([
-    runFulltextSearch<Insight>(db, "insights", INSIGHT_COLUMNS, projectId, query),
-    runIlikeSearch<Insight>(db, "insights", INSIGHT_COLUMNS, projectId, query, ["summary", "detail"]),
-  ]);
+  // Full-text search using the search_vector column
+  const { data: ftResults, error: ftError } = await db
+    .from("insights")
+    .select(INSIGHT_COLUMNS)
+    .eq("project_id", projectId)
+    .textSearch("search_vector", query, { type: "websearch" });
 
-  // Deduplicate, keeping highest-scored results first (fulltext > ilike)
-  return mergeSearchTiers<Insight>(fulltext, ilike);
+  if (ftError) {
+    console.error("[search] insights fulltext error:", ftError.message);
+  }
+
+  // ILIKE fallback for partial matches
+  const words = query
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length >= 2);
+
+  let ilikeResults: Insight[] = [];
+  if (words.length > 0) {
+    const orClauses = words
+      .map((w) => {
+        const p = `%${w}%`;
+        return `summary.ilike.${p},detail.ilike.${p}`;
+      })
+      .join(",");
+
+    const { data, error } = await db.from("insights").select(INSIGHT_COLUMNS).eq("project_id", projectId).or(orClauses);
+
+    if (error) {
+      console.error("[search] insights ilike error:", error.message);
+    } else {
+      ilikeResults = (data ?? []) as Insight[];
+    }
+  }
+
+  // Deduplicate: full-text results take priority
+  const seen = new Set<string>();
+  const results: Insight[] = [];
+
+  for (const item of (ftResults ?? []) as Insight[]) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      results.push(item);
+    }
+  }
+  for (const item of ilikeResults) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      results.push(item);
+    }
+  }
+
+  return results;
 }
