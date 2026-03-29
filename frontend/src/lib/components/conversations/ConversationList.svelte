@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { ConversationListItem } from "$lib/types";
-import { statusColors, formatRelativeDate } from "./conversation-helpers";
+import { formatRelativeDate, statusColors } from "./conversation-helpers";
 
 let { conversations, projectName } = $props<{
   conversations: ConversationListItem[];
