@@ -260,8 +260,8 @@ function closePanel() {
     top: 0;
     left: 0;
     right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, var(--color-pink), var(--color-pink-dark), var(--color-pink));
+    height: 5px;
+    background: linear-gradient(90deg, #e8a04e, #d4782f, #e8a04e);
     background-size: 200% 100%;
     animation: loading-slide 1.2s ease-in-out infinite;
     border-radius: 0 0 2px 2px;
