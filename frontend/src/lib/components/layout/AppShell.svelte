@@ -7,7 +7,7 @@ let { user, children } = $props<{
 }>();
 </script>
 
-<div class="min-h-screen" style="background-color: var(--color-bg);">
+<div class="min-h-screen" style="background-color: var(--color-bg); overflow-x: hidden;">
   <!-- Floating background orbs -->
   <div style="position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden;">
     <div style="position: absolute; top: 10%; left: 15%; width: 400px; height: 400px; border-radius: 50%; background: rgba(86, 28, 36, 0.04); filter: blur(80px); animation: float-orb 20s ease-in-out infinite;"></div>
@@ -19,12 +19,12 @@ let { user, children } = $props<{
       <img src="/logo.svg" alt="" class="w-7 h-7" />
       synapse
     </a>
-    <div class="flex items-center gap-4">
-      <span style="font-size: 14px; color: rgba(255,255,255,0.75);">{user.email}</span>
-      <a href="/account" style="font-size: 14px; font-weight: 500; color: white; transition: var(--transition-base); opacity: 1;">Account</a>
+    <div class="flex items-center gap-3 sm:gap-4">
+      <span class="hidden sm:inline" style="font-size: 14px; color: rgba(255,255,255,0.75);">{user.email}</span>
+      <a href="/account" style="font-size: 13px; font-weight: 500; color: white; transition: var(--transition-base);">Account</a>
       <form method="POST" action="/logout" use:enhance>
         <button type="submit" class="cursor-pointer"
-          style="font-size: 14px; color: rgba(255,255,255,0.75); transition: var(--transition-base);">
+          style="font-size: 13px; color: rgba(255,255,255,0.75); transition: var(--transition-base);">
           Sign out
         </button>
       </form>
