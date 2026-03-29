@@ -341,6 +341,59 @@ if (!isMcpServerMode(args)) {
   });
 
   // --- ls: list files and folders ---
+  /**
+   * Resolve a file path using glob-like fuzzy matching.
+   * Tries exact hit first, then progressively looser matches against all workspace entries.
+   * Returns { match, suggestions } — match is the single resolved path (or null), suggestions
+   * is a list of candidates when the match is ambiguous.
+   */
+  async function resolvePath(
+    target: string,
+  ): Promise<{ match: string | null; suggestions: string[] }> {
+    const project = await getProject();
+
+    // 1. Try exact fetch — fast path, no listing needed
+    try {
+      await api("GET", `/api/context/${encodeURIComponent(project)}/${encodeURIComponent(target)}`);
+      return { match: target, suggestions: [] };
+    } catch {
+      // Not found — fall through to fuzzy matching
+    }
+
+    // 2. List all entries and match
+    const entries = (await api("GET", `/api/context/${encodeURIComponent(project)}/list`)) as EntryListResponse[];
+    const paths = entries.map((e) => e.path);
+    const q = target.toLowerCase().replace(/\.md$/, "");
+
+    // Helper: filename without extension
+    const stem = (p: string) =>
+      (p.split("/").pop() ?? p).toLowerCase().replace(/\.md$/, "");
+
+    // Exact filename match (ignore directory)
+    const byName = paths.filter((p) => stem(p) === q);
+    if (byName.length === 1) return { match: byName[0], suggestions: [] };
+
+    // Path ends with target (e.g. "auth.md" matches "retrospectives/auth.md")
+    const bySuffix = paths.filter((p) => p.toLowerCase().endsWith(target.toLowerCase()));
+    if (bySuffix.length === 1) return { match: bySuffix[0], suggestions: [] };
+
+    // Path starts with target (prefix, like "decisions/conv" → "decisions/conversation-sync-design.md")
+    const byPrefix = paths.filter((p) => p.toLowerCase().startsWith(q));
+    if (byPrefix.length === 1) return { match: byPrefix[0], suggestions: [] };
+
+    // Filename starts with query stem (e.g. "auth" → "auth-middleware-rewrite.md")
+    const byFilenamePrefix = paths.filter((p) => stem(p).startsWith(q));
+    if (byFilenamePrefix.length === 1) return { match: byFilenamePrefix[0], suggestions: [] };
+
+    // Substring in path (e.g. "url-migration" matches "retrospectives/url-migration.md")
+    const bySubstring = paths.filter((p) => p.toLowerCase().includes(q));
+    if (bySubstring.length === 1) return { match: bySubstring[0], suggestions: [] };
+
+    // Multiple matches — return as suggestions, preferring narrower match sets
+    const candidates = byName.length > 0 ? byName : bySuffix.length > 0 ? bySuffix : byPrefix.length > 0 ? byPrefix : byFilenamePrefix.length > 0 ? byFilenamePrefix : bySubstring;
+    return { match: null, suggestions: candidates.slice(0, 8) };
+  }
+
   server.tool(
     "ls",
     "List files and folders. Like `ls` on a local filesystem. Returns directory contents with types and modification dates.",
@@ -349,10 +402,15 @@ if (!isMcpServerMode(args)) {
       const folder = path || "";
       const qs = folder ? `?folder=${encodeURIComponent(folder)}` : "";
       const project = await getProject();
-      const entries = (await api(
-        "GET",
-        `/api/context/${encodeURIComponent(project)}/list${qs}`,
-      )) as EntryListResponse[];
+      let entries: EntryListResponse[];
+      try {
+        entries = (await api(
+          "GET",
+          `/api/context/${encodeURIComponent(project)}/list${qs}`,
+        )) as EntryListResponse[];
+      } catch (_e) {
+        return { content: [{ type: "text" as const, text: folder ? `Folder not found: ${folder}/` : "Workspace is empty." }], isError: true };
+      }
 
       if (entries.length === 0) {
         return { content: [{ type: "text" as const, text: folder ? `${folder}/ is empty` : "(empty)" }] };
@@ -376,10 +434,17 @@ if (!isMcpServerMode(args)) {
     "Read a file's content. Like `cat` on a local filesystem. Returns the full markdown/text content of the file at the given path.",
     { path: z.string().describe("File path to read (e.g. 'notes/meeting.md')") },
     async ({ path }) => {
+      const { match, suggestions } = await resolvePath(path);
+      if (!match) {
+        if (suggestions.length > 0) {
+          return { content: [{ type: "text" as const, text: `File not found: ${path}\n\nDid you mean:\n${suggestions.map((s) => `  - ${s}`).join("\n")}` }], isError: true };
+        }
+        return { content: [{ type: "text" as const, text: `File not found: ${path}` }], isError: true };
+      }
       const project = await getProject();
       const entry = (await api(
         "GET",
-        `/api/context/${encodeURIComponent(project)}/${encodeURIComponent(path)}`,
+        `/api/context/${encodeURIComponent(project)}/${encodeURIComponent(match)}`,
       )) as EntryResponse;
       const meta = [
         `path: ${entry.path}`,
@@ -428,9 +493,16 @@ if (!isMcpServerMode(args)) {
     "Delete a file. Like `rm` on a local filesystem. Permanently removes the file (history is preserved).",
     { path: z.string().describe("File path to delete") },
     async ({ path }) => {
+      const { match, suggestions } = await resolvePath(path);
+      if (!match) {
+        if (suggestions.length > 0) {
+          return { content: [{ type: "text" as const, text: `File not found: ${path}\n\nDid you mean:\n${suggestions.map((s) => `  - ${s}`).join("\n")}` }], isError: true };
+        }
+        return { content: [{ type: "text" as const, text: `File not found: ${path}` }], isError: true };
+      }
       const project = await getProject();
-      await api("DELETE", `/api/context/${encodeURIComponent(project)}/${encodeURIComponent(path)}`);
-      return { content: [{ type: "text" as const, text: `Deleted ${path}` }] };
+      await api("DELETE", `/api/context/${encodeURIComponent(project)}/${encodeURIComponent(match)}`);
+      return { content: [{ type: "text" as const, text: `Deleted ${match}` }] };
     },
   );
 
@@ -490,9 +562,16 @@ if (!isMcpServerMode(args)) {
     "View version history for a file. Shows past versions with timestamps and who made each change.",
     { path: z.string().describe("File path to get history for") },
     async ({ path }) => {
+      const { match, suggestions } = await resolvePath(path);
+      if (!match) {
+        if (suggestions.length > 0) {
+          return { content: [{ type: "text" as const, text: `File not found: ${path}\n\nDid you mean:\n${suggestions.map((s) => `  - ${s}`).join("\n")}` }], isError: true };
+        }
+        return { content: [{ type: "text" as const, text: `File not found: ${path}` }], isError: true };
+      }
       const versions = (await api(
         "GET",
-        `/api/context/${encodeURIComponent(await getProject())}/history/${encodeURIComponent(path)}`,
+        `/api/context/${encodeURIComponent(await getProject())}/history/${encodeURIComponent(match)}`,
       )) as HistoryResponse[];
 
       if (versions.length === 0) {
@@ -539,11 +618,28 @@ if (!isMcpServerMode(args)) {
 
   // --- Conversation tools (Plus tier) ---
 
-  /** Resolve a project name to its ID by listing all projects and finding a match. */
+  /** Resolve a project name to its ID using fuzzy matching: exact → starts-with → includes. */
   async function resolveProjectId(projectName: string): Promise<string | null> {
     const projects = (await api("GET", "/api/projects")) as ProjectListItem[];
-    const match = projects.find((p) => p.name.toLowerCase() === projectName.toLowerCase());
-    return match ? match.id : null;
+    const q = projectName.toLowerCase();
+
+    // 1. Exact match
+    const exact = projects.find((p) => p.name.toLowerCase() === q);
+    if (exact) return exact.id;
+
+    // 2. Starts-with
+    const prefix = projects.filter((p) => p.name.toLowerCase().startsWith(q));
+    if (prefix.length === 1) return prefix[0].id;
+
+    // 3. Substring / includes
+    const substring = projects.filter((p) => p.name.toLowerCase().includes(q));
+    if (substring.length === 1) return substring[0].id;
+
+    // 4. Reverse: query contains project name (e.g. "my synapse project" matches "synapse")
+    const reverse = projects.filter((p) => q.includes(p.name.toLowerCase()));
+    if (reverse.length === 1) return reverse[0].id;
+
+    return null;
   }
 
   // --- list_conversations: list conversations for a project ---
