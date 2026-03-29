@@ -5,12 +5,8 @@
     "version": "1.0.0",
     "description": "Shared context layer for AI tools — persistent memory across sessions."
   },
-  "servers": [
-    { "url": "https://api.synapsesync.app" }
-  ],
-  "security": [
-    { "BearerAuth": [] }
-  ],
+  "servers": [{ "url": "https://api.synapsesync.app" }],
+  "security": [{ "BearerAuth": [] }],
   "components": {
     "securitySchemes": {
       "BearerAuth": {
@@ -231,7 +227,10 @@
         },
         "responses": {
           "201": { "description": "Member added" },
-          "403": { "description": "Only owners can invite", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+          "403": {
+            "description": "Only owners can invite",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
         }
       }
     },
@@ -388,7 +387,10 @@
                   "path": { "type": "string" },
                   "content": { "type": "string" },
                   "tags": { "type": "array", "items": { "type": "string" } },
-                  "source": { "type": "string", "enum": ["human", "claude", "chatgpt", "cursor", "copilot", "windsurf", "google_docs"] }
+                  "source": {
+                    "type": "string",
+                    "enum": ["human", "claude", "chatgpt", "cursor", "copilot", "windsurf", "google_docs"]
+                  }
                 }
               }
             }
@@ -462,9 +464,7 @@
       "get": {
         "summary": "Load project context",
         "tags": ["Context"],
-        "parameters": [
-          { "name": "project", "in": "path", "required": true, "schema": { "type": "string" } }
-        ],
+        "parameters": [{ "name": "project", "in": "path", "required": true, "schema": { "type": "string" } }],
         "responses": {
           "200": {
             "description": "Context entries based on user preference mode",
@@ -514,9 +514,7 @@
       "post": {
         "summary": "Restore version",
         "tags": ["Context"],
-        "parameters": [
-          { "name": "project", "in": "path", "required": true, "schema": { "type": "string" } }
-        ],
+        "parameters": [{ "name": "project", "in": "path", "required": true, "schema": { "type": "string" } }],
         "requestBody": {
           "required": true,
           "content": {

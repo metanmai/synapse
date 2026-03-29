@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
+import { enhance } from "$app/forms";
 
-  let { form } = $props();
-  let loading = $state(false);
+let { form } = $props();
+let loading = $state(false);
 </script>
 
 <div class="min-h-screen flex items-center justify-center" style="background-color: var(--color-bg);">
