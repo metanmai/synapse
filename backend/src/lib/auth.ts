@@ -46,9 +46,16 @@ export async function authMiddleware(
     const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
-    const { data } = await supabase.auth.getUser(token);
-    if (data?.user) {
+    const { data, error: authError } = await supabase.auth.getUser(token);
+    if (authError) {
+      console.error("[auth] Supabase getUser failed:", authError.message);
+    } else if (data?.user) {
       user = await findUserBySupabaseAuthId(db, data.user.id);
+      if (!user) {
+        console.error(`[auth] Auth user found (${data.user.id}, ${data.user.email}) but no matching row in public.users. Run the migration or insert manually.`);
+      }
+    } else {
+      console.warn("[auth] JWT provided but Supabase returned no user");
     }
   }
 
@@ -56,6 +63,9 @@ export async function authMiddleware(
   if (!user) {
     const apiKeyHash = await hashApiKey(token);
     user = await findUserByApiKeyHash(db, apiKeyHash);
+    if (!user && !isJwt(token)) {
+      console.warn("[auth] API key provided but no matching user found");
+    }
   }
 
   if (!user) {
