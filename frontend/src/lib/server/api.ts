@@ -65,6 +65,11 @@ export function createApi(token: string | null) {
         method: "POST",
         body: JSON.stringify({ email, role }),
       }),
+    updateMemberRole: (projectId: string, email: string, role: string) =>
+      request<void>(`/api/projects/${projectId}/members/${encodeURIComponent(email)}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({ role }),
+      }),
     removeMember: (projectId: string, email: string) =>
       request<void>(`/api/projects/${projectId}/members/${encodeURIComponent(email)}`, token, { method: "DELETE" }),
 
