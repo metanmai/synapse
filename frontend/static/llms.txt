@@ -1,0 +1,27 @@
+# Synapse
+
+> A shared context layer that gives AI tools persistent memory across sessions.
+
+Synapse stores knowledge as files in a remote workspace. AI tools (Claude, ChatGPT, Cursor) connect via MCP to share context.
+
+## API
+- Base URL: https://api.synapsesync.app
+- Auth: Bearer token (API key or JWT)
+- MCP endpoint: https://api.synapsesync.app/mcp
+
+## Key endpoints
+- POST /auth/login - Authenticate, get API key
+- POST /auth/signup - Create account
+- GET /api/projects - List projects
+- POST /api/context/save - Save context entry
+- GET /api/context/:project/search?q= - Search entries
+- GET /api/context/:project/list - List entries
+- GET /api/context/:project/history/:path - Version history
+
+## MCP Server
+npm package: synapsesync-mcp
+Install: npx synapsesync-mcp login --email <email> --password <password>
+
+## Tiers
+- Free: 50 files, 3 connections, 3 version history, 2 team members
+- Pro ($5.99/mo): 500 files, unlimited connections, full history, unlimited members
