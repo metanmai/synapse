@@ -2,9 +2,10 @@ import { Hono } from "hono";
 
 import { authMiddleware } from "../lib/auth";
 import { createSupabaseClient } from "../db/client";
-import { createProject, listProjectsForUser, getProjectByName, getMemberRole, addMember, removeMember, findUserByEmail, setPreference, getPreferences, createShareLink, listShareLinks, deleteShareLink, getActivityLog } from "../db/queries";
+import { createProject, listProjectsForUser, getProjectByName, getMemberRole, addMember, removeMember, findUserByEmail, setPreference, getPreferences, createShareLink, listShareLinks, deleteShareLink, getActivityLog, getAllEntries } from "../db/queries";
 import { logActivity } from "../db/activity-logger";
 import { AppError, NotFoundError, ForbiddenError } from "../lib/errors";
+import { buildProjectZip } from "../lib/export";
 
 import type { Env } from "../lib/env";
 
@@ -185,6 +186,35 @@ projects.get("/:id/activity", async (c) => {
 
   const activity = await getActivityLog(db, projectId, limit, offset);
   return c.json(activity);
+});
+
+// GET /api/projects/:id/export
+projects.get("/:id/export", async (c) => {
+  const user = c.get("user");
+  const projectId = c.req.param("id");
+
+  const db = createSupabaseClient(c.env);
+  const callerRole = await getMemberRole(db, projectId, user.id);
+  if (!callerRole) throw new NotFoundError("Project not found");
+
+  // Get project name for the zip filename
+  const { data: project } = await db
+    .from("projects")
+    .select("name")
+    .eq("id", projectId)
+    .single();
+
+  const entries = await getAllEntries(db, projectId);
+  const zip = buildProjectZip(project?.name ?? "export", entries);
+
+  const filename = `${(project?.name ?? "export").replace(/[^a-zA-Z0-9-_]/g, "_")}.zip`;
+
+  return new Response(zip, {
+    headers: {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+    },
+  });
 });
 
 export { projects };
