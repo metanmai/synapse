@@ -18,7 +18,7 @@
   </select>
   <button type="submit"
     class="rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
-    style="background-color: var(--color-accent); color: var(--color-text);">
+    style="background-color: var(--color-accent); color: white;">
     Invite
   </button>
 </form>
