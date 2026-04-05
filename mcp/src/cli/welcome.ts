@@ -17,7 +17,7 @@ export async function showWelcome(version: string): Promise<void> {
       stream.write(`  ${line}\n`);
     }
     stream.write(`\n  ${bold("Synapse")} ${muted(`v${version}`)}\n`);
-    stream.write(`  ${muted("Shared context for your AI tools")}\n\n`);
+    stream.write(`  ${muted("Capture sessions. Distill knowledge. Remember everything.")}\n\n`);
     return;
   }
 
@@ -43,6 +43,6 @@ export async function showWelcome(version: string): Promise<void> {
   await sleep(frameDelay);
 
   // Tagline
-  stream.write(`  ${muted("Shared context for your AI tools")}\n\n`);
+  stream.write(`  ${muted("Capture sessions. Distill knowledge. Remember everything.")}\n\n`);
   await sleep(frameDelay);
 }

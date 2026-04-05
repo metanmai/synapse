@@ -1,4 +1,7 @@
+import { spawn } from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import * as clack from "@clack/prompts";
 import { validateApiKey } from "./api.js";
 import { browserAuth } from "./browser-auth.js";
@@ -228,7 +231,9 @@ async function runFixIssues(locations: ConfigLocation[], validKey: string): Prom
     clack.log.warn(`${themeError("\u2717")} ${e}`);
   }
 
-  clack.outro(`Restart your editor to connect. ${muted("synapsesync.app/docs")}`);
+  clack.outro(
+    `Restart your editor to connect. ${muted("Run 'npx synapsesync-mcp capture start' to begin capturing sessions.")}`,
+  );
 }
 
 /** Inject SYNAPSE_API_KEY into an existing config file that has a synapse server entry but no key. */
@@ -317,5 +322,40 @@ async function runEditorSetup(apiKey: string): Promise<void> {
     }
   }
 
-  clack.outro(`Restart your editor to connect. ${muted("synapsesync.app/docs")}`);
+  // Offer to start session capture
+  const startCapture = await clack.confirm({
+    message: "Start capturing AI sessions automatically?",
+    initialValue: true,
+  });
+
+  if (!clack.isCancel(startCapture) && startCapture) {
+    const captureSpin = createGlyphSpinner();
+    captureSpin.start("Starting capture daemon\u2026");
+
+    try {
+      const workerPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "capture", "capture-worker.js");
+      const child = spawn(process.execPath, [workerPath], {
+        detached: true,
+        stdio: ["ignore", "ignore", "ignore"],
+      });
+      child.unref();
+
+      if (child.pid) {
+        // Write PID file
+        const pidDir = path.join(process.env.HOME ?? "~", ".synapse");
+        fs.mkdirSync(pidDir, { recursive: true });
+        fs.writeFileSync(path.join(pidDir, "capture.pid"), String(child.pid));
+        captureSpin.stop(`Capture daemon started (PID ${child.pid})`);
+      } else {
+        captureSpin.stop("Capture daemon started");
+      }
+    } catch {
+      captureSpin.stop("Could not start capture daemon");
+      clack.log.info(`Start it manually: ${muted("npx synapsesync-mcp capture start")}`);
+    }
+  }
+
+  clack.outro(
+    `Restart your editor to connect. ${muted("Your sessions will be captured and distilled automatically.")}`,
+  );
 }
