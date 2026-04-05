@@ -10,6 +10,8 @@ import { decrypt, encrypt, hasPassphrase, isEncrypted } from "$lib/crypto";
 import type { Entry } from "$lib/types";
 
 let { data, form } = $props();
+const projectSlug: string =
+  data.project.role === "owner" ? data.project.name : `${data.project.owner_email}~${data.project.name}`;
 let needsPassphrase = $state(false);
 let importInput: HTMLInputElement;
 let importForm: HTMLFormElement;
@@ -66,9 +68,7 @@ async function selectEntry(path: string) {
 
   loading = true;
   try {
-    const res = await fetch(
-      `/projects/${encodeURIComponent(data.project.name)}/api/entry?path=${encodeURIComponent(path)}`,
-    );
+    const res = await fetch(`/projects/${encodeURIComponent(projectSlug)}/api/entry?path=${encodeURIComponent(path)}`);
     if (res.ok) {
       const fetched: Entry = await res.json();
       // Decrypt content if encrypted
@@ -167,7 +167,7 @@ function closePanel() {
       </div>
     </div>
     <FolderTree entries={data.entries} {selectedPath}
-      projectName={data.project.name} onSelect={selectEntry} onAction={handleAction}
+      projectName={projectSlug} onSelect={selectEntry} onAction={handleAction}
       onNewInFolder={startNewInFolder} />
   </div>
 
@@ -209,11 +209,11 @@ function closePanel() {
         onClose={closePanel}
       />
     {:else if mode === "new"}
-      <EntryEditor projectName={data.project.name} isNew onCancel={closePanel} pathPrefix={newFolderPrefix} />
+      <EntryEditor projectName={projectSlug} isNew onCancel={closePanel} pathPrefix={newFolderPrefix} />
     {:else if mode === "edit" && entry}
-      <EntryEditor {entry} projectName={data.project.name} onCancel={closePanel} />
+      <EntryEditor {entry} projectName={projectSlug} onCancel={closePanel} />
     {:else if mode === "view" && entry}
-      <EntryViewer {entry} projectName={data.project.name} onEdit={startEdit} />
+      <EntryViewer {entry} projectName={projectSlug} onEdit={startEdit} />
     {:else}
       <div class="text-center mt-20" style="color: var(--color-text-muted); font-size: 14px;">
         Select a file or create a new one
