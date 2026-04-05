@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   agentColors,
+  defaultToolBadge,
   formatMessageTime,
   formatRelativeDate,
   getAgentColor,
+  getToolBadge,
+  getToolLabel,
   pluralizeMessages,
   roleLabels,
   statusColors,
+  toolBadgeColors,
   toolSummary,
 } from "./conversation-helpers";
 
@@ -255,5 +259,61 @@ describe("pluralizeMessages", () => {
   it("uses plural for count > 1", () => {
     expect(pluralizeMessages(5)).toBe("5 messages");
     expect(pluralizeMessages(100)).toBe("100 messages");
+  });
+});
+
+// ---------- toolBadgeColors ----------
+
+describe("toolBadgeColors", () => {
+  it("defines colors for all supported tools", () => {
+    expect(toolBadgeColors["claude-code"]).toBeDefined();
+    expect(toolBadgeColors.cursor).toBeDefined();
+    expect(toolBadgeColors.codex).toBeDefined();
+    expect(toolBadgeColors.gemini).toBeDefined();
+  });
+
+  it("each entry has bg and text properties", () => {
+    for (const [, value] of Object.entries(toolBadgeColors)) {
+      expect(value).toHaveProperty("bg");
+      expect(value).toHaveProperty("text");
+    }
+  });
+});
+
+// ---------- getToolBadge ----------
+
+describe("getToolBadge", () => {
+  it("returns correct colors for known tools", () => {
+    expect(getToolBadge("claude-code")).toBe(toolBadgeColors["claude-code"]);
+    expect(getToolBadge("cursor")).toBe(toolBadgeColors.cursor);
+  });
+
+  it("returns default badge for unknown tools", () => {
+    expect(getToolBadge("unknown-tool")).toBe(defaultToolBadge);
+  });
+
+  it("returns default badge for null/undefined", () => {
+    expect(getToolBadge(null)).toBe(defaultToolBadge);
+    expect(getToolBadge(undefined)).toBe(defaultToolBadge);
+  });
+});
+
+// ---------- getToolLabel ----------
+
+describe("getToolLabel", () => {
+  it("returns human-readable label for known tools", () => {
+    expect(getToolLabel("claude-code")).toBe("Claude Code");
+    expect(getToolLabel("cursor")).toBe("Cursor");
+    expect(getToolLabel("codex")).toBe("Codex");
+    expect(getToolLabel("gemini")).toBe("Gemini");
+  });
+
+  it("returns the raw string for unknown tools", () => {
+    expect(getToolLabel("some-tool")).toBe("some-tool");
+  });
+
+  it("returns Unknown for null/undefined", () => {
+    expect(getToolLabel(null)).toBe("Unknown");
+    expect(getToolLabel(undefined)).toBe("Unknown");
   });
 });
