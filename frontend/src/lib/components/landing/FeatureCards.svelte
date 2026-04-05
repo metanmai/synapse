@@ -3,31 +3,33 @@ import ScrollReveal from "./ScrollReveal.svelte";
 
 const features = [
   {
-    title: "Context that persists",
+    title: "Zero-effort capture",
     description:
-      "Decisions, architecture notes, and session summaries \u2014 in the cloud, on every device, every session.",
+      "A background daemon watches Claude Code, Cursor, Codex, and Gemini. No plugins, no prompts, no manual saving.",
     illustrationType: "timeline",
   },
   {
-    title: "Every tool, one brain",
+    title: "LLM distillation",
     description:
-      "Claude, ChatGPT, Cursor, and more \u2014 they all read and write the same workspace, not separate silos.",
+      "An LLM reads your sessions and extracts decisions, architecture notes, and learnings. Signal from noise, automatically.",
     illustrationType: "hub",
   },
   {
-    title: "Version history",
-    description: "Track every change. Restore any version. Know what changed and why.",
+    title: "Cross-tool memory",
+    description:
+      "Knowledge captured from Claude is available in Cursor. From your laptop to your desktop. Across your whole team.",
     illustrationType: "versions",
   },
   {
-    title: "Team sharing",
+    title: "Semantic search",
     description:
-      "Invite users to a project so everyone\u2019s assistants share the same context \u2014 no re-briefing in every chat.",
+      "Search by meaning, not keywords. \u201CAuth flow\u201D finds documents about login, session tokens, and OAuth.",
     illustrationType: "sharing",
   },
   {
-    title: "Export & import",
-    description: "Your data is yours. Export as markdown, import anytime.",
+    title: "End-to-end encryption",
+    description:
+      "Set a passphrase and content is encrypted before it leaves your machine. The server never sees plaintext.",
     illustrationType: "export",
   },
 ];

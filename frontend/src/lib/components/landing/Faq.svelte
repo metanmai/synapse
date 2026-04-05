@@ -8,29 +8,29 @@ interface FaqItem {
 
 const faqs: FaqItem[] = [
   {
-    question: "What AI tools does Synapse work with?",
+    question: "How does session capture work?",
     answer:
-      "Synapse works with any AI tool that supports the Model Context Protocol (MCP), including Claude, ChatGPT, Cursor, Windsurf, and GitHub Copilot. If your tool supports MCP servers, it works with Synapse.",
+      "A lightweight background daemon watches where your AI tools store session data on disk (JSONL for Claude Code, JSON for Cursor, etc.). When files change, it parses them into a standard format. No plugins needed \u2014 it works by watching the filesystem.",
   },
   {
-    question: "Is my data encrypted?",
+    question: "What does distillation do exactly?",
     answer:
-      "Yes. All data is encrypted in transit with TLS. You can also enable end-to-end encryption with a passphrase, which means even we cannot read your files. Your passphrase never leaves your device.",
+      "When a session goes idle, Synapse sends the transcript to an LLM (your choice of Anthropic, OpenAI, or Google) that extracts decisions, architecture notes, and learnings. Trivial exchanges are skipped. Only the valuable stuff makes it into your workspace.",
   },
   {
-    question: "Can I use Synapse with my team?",
+    question: "Which AI tools are supported?",
     answer:
-      "Absolutely. The Plus plan supports team workspaces where multiple people can share context, decisions, and architecture notes. Every team member's AI tools stay in sync automatically.",
+      "Capture works with Claude Code, Cursor, Codex CLI, and Gemini CLI. The knowledge workspace is accessible from any MCP-capable tool, including ChatGPT, Windsurf, VS Code, and GitHub Copilot.",
   },
   {
-    question: "What happens when I hit the free tier limit?",
+    question: "Is my data private and encrypted?",
     answer:
-      "The free tier includes 50 files and 3 connected devices. When you hit the limit, your existing files remain accessible. You just cannot create new ones until you upgrade to Plus or delete some files.",
+      "Yes. You can enable end-to-end encryption with a passphrase \u2014 content is encrypted on your machine before it ever hits the server. We cannot read your files. Captured sessions are stored locally by default and only sync to the cloud if you have an API key configured.",
   },
   {
-    question: "How does the MCP server work?",
+    question: "What does it cost?",
     answer:
-      "The MCP server runs locally on your machine via npx. It exposes your Synapse workspace as a filesystem that AI tools can read from and write to. Setup takes one line in your tool's config file.",
+      "Free tier: 50 files, 3 connected devices. Capture and local storage are free with no limits. Plus at $5.99/mo for cloud sync, team sharing, and more projects. You provide your own LLM API key for distillation.",
   },
 ];
 

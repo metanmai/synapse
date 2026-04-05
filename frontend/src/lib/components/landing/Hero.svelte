@@ -42,68 +42,55 @@ onMount(() => {
     </div>
 
     <div class="hero-visual" style="transform: translateY({scrollY * -0.04}px);">
-      <!-- Stylized workspace mockup -->
-      <div class="workspace-mockup">
+      <!-- Pipeline visualization: Capture → Distill → Knowledge -->
+      <div class="pipeline-mockup">
         <div class="mockup-glow" aria-hidden="true"></div>
-        <!-- Title bar -->
-        <div class="mockup-titlebar">
-          <div class="titlebar-dots">
-            <span class="dot dot-red"></span>
-            <span class="dot dot-yellow"></span>
-            <span class="dot dot-green"></span>
+
+        <!-- Stage 1: Raw session -->
+        <div class="pipeline-stage stage-capture">
+          <div class="stage-label">Captured session</div>
+          <div class="stage-card">
+            <div class="session-line"><span class="role-user">you</span> Should we use Redis or Memcached?</div>
+            <div class="session-line"><span class="role-assistant">claude</span> Redis — pub/sub support for cache invalidation</div>
+            <div class="session-line"><span class="role-user">you</span> What about the auth middleware?</div>
+            <div class="session-line"><span class="role-assistant">claude</span> Switch to session cookies. JWT refresh was unreliable...</div>
+            <div class="session-fade">+146 more messages</div>
           </div>
-          <span class="titlebar-text">Synapse Workspace</span>
         </div>
-        <!-- Sidebar + content -->
-        <div class="mockup-body">
-          <div class="mockup-sidebar">
-            <div class="sidebar-section">
-              <div class="sidebar-heading">Projects</div>
-              <div class="sidebar-item active">
-                <span class="item-icon">&#128193;</span>
-                <span class="item-text">my-app</span>
-              </div>
-              <div class="sidebar-item">
-                <span class="item-icon">&#128193;</span>
-                <span class="item-text">design-system</span>
-              </div>
+
+        <!-- Arrow -->
+        <div class="pipeline-arrow">
+          <div class="arrow-line"></div>
+          <div class="arrow-label">distill</div>
+        </div>
+
+        <!-- Stage 2: Extracted knowledge -->
+        <div class="pipeline-stage stage-output">
+          <div class="stage-label">Extracted knowledge</div>
+          <div class="output-files">
+            <div class="output-file">
+              <span class="file-icon">&#9670;</span>
+              <span class="file-path">decisions/chose-redis.md</span>
+              <span class="file-tag">decision</span>
             </div>
-            <div class="sidebar-section">
-              <div class="sidebar-heading">Recent</div>
-              <div class="sidebar-item">
-                <span class="item-icon">&#128196;</span>
-                <span class="item-text">api-design.md</span>
-              </div>
-              <div class="sidebar-item">
-                <span class="item-icon">&#128196;</span>
-                <span class="item-text">chose-redis.md</span>
-              </div>
-              <div class="sidebar-item">
-                <span class="item-icon">&#128196;</span>
-                <span class="item-text">auth-flow.md</span>
-              </div>
+            <div class="output-file">
+              <span class="file-icon">&#9670;</span>
+              <span class="file-path">decisions/session-cookies.md</span>
+              <span class="file-tag">decision</span>
+            </div>
+            <div class="output-file">
+              <span class="file-icon">&#9670;</span>
+              <span class="file-path">learnings/jwt-refresh-gotcha.md</span>
+              <span class="file-tag">learning</span>
             </div>
           </div>
-          <div class="mockup-content">
-            <div class="content-header">decisions/chose-session-cookies.md</div>
-            <div class="content-lines">
-              <div class="content-line line-heading"># Chose Session Cookies</div>
-              <div class="content-line line-text">Switched from JWT to session cookies...</div>
-              <div class="content-line line-text short">Refresh token rotation was unreliable</div>
-              <div class="content-line line-heading small">## Extracted from</div>
-              <div class="content-line line-text">Claude Code session, Apr 2 2026</div>
-              <div class="content-line line-tag-row">
-                <span class="content-tag">decision</span>
-                <span class="content-tag">auto-distilled</span>
-              </div>
-            </div>
-            <!-- Tool badges floating -->
-            <div class="connected-tools">
-              <div class="tool-badge tool-badge-1">Claude</div>
-              <div class="tool-badge tool-badge-2">Cursor</div>
-              <div class="tool-badge tool-badge-3">ChatGPT</div>
-            </div>
-          </div>
+        </div>
+
+        <!-- Floating tool badges -->
+        <div class="connected-tools">
+          <div class="tool-badge tool-badge-1">Claude Code</div>
+          <div class="tool-badge tool-badge-2">Cursor</div>
+          <div class="tool-badge tool-badge-3">Codex</div>
         </div>
       </div>
     </div>
@@ -305,24 +292,18 @@ onMount(() => {
     border-bottom-color: var(--color-burgundy);
   }
 
-  /* ── Workspace mockup ── */
+  /* ── Pipeline mockup ── */
   .hero-visual {
     flex: 1;
     max-width: 520px;
     position: relative;
   }
 
-  .workspace-mockup {
+  .pipeline-mockup {
     position: relative;
-    background: rgba(255, 253, 248, 0.7);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(199, 183, 163, 0.4);
-    border-radius: 16px;
-    overflow: hidden;
-    box-shadow:
-      0 20px 60px rgba(86, 28, 36, 0.12),
-      0 4px 16px rgba(86, 28, 36, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 0;
   }
 
   .mockup-glow {
@@ -335,156 +316,155 @@ onMount(() => {
     pointer-events: none;
   }
 
-  .mockup-titlebar {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    background: rgba(86, 28, 36, 0.06);
-    border-bottom: 1px solid rgba(199, 183, 163, 0.25);
-  }
-
-  .titlebar-dots {
-    display: flex;
-    gap: 6px;
-  }
-
-  .dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-  }
-
-  .dot-red { background: #ff6059; }
-  .dot-yellow { background: #ffbd2e; }
-  .dot-green { background: #28c840; }
-
-  .titlebar-text {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    color: var(--color-burgundy);
-    opacity: 0.5;
-  }
-
-  .mockup-body {
-    display: flex;
-    min-height: 260px;
-  }
-
-  .mockup-sidebar {
-    width: 140px;
-    padding: 0.75rem;
-    border-right: 1px solid rgba(199, 183, 163, 0.2);
-    background: rgba(232, 216, 196, 0.15);
-    flex-shrink: 0;
-  }
-
-  .sidebar-section {
-    margin-bottom: 1rem;
-  }
-
-  .sidebar-heading {
-    font-size: 0.5625rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-tan);
-    margin-bottom: 0.375rem;
-  }
-
-  .sidebar-item {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.25rem 0.375rem;
-    border-radius: 6px;
-    font-size: 0.625rem;
-    color: var(--color-burgundy);
-    opacity: 0.6;
-    transition: background 0.15s, opacity 0.15s;
-  }
-
-  .sidebar-item.active {
-    background: rgba(86, 28, 36, 0.08);
-    opacity: 1;
-    font-weight: 600;
-  }
-
-  .item-icon {
-    font-size: 0.6875rem;
-    line-height: 1;
-  }
-
-  .item-text {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .mockup-content {
-    flex: 1;
-    padding: 1rem;
+  .pipeline-stage {
     position: relative;
   }
 
-  .content-header {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    color: var(--color-burgundy);
-    opacity: 0.4;
-    margin-bottom: 0.75rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid rgba(199, 183, 163, 0.2);
+  .stage-label {
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-tan);
+    margin-bottom: 0.5rem;
   }
 
-  .content-lines {
+  .stage-card {
+    background: rgba(255, 253, 248, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(199, 183, 163, 0.4);
+    border-radius: 12px;
+    padding: 1rem;
     display: flex;
     flex-direction: column;
-    gap: 0.375rem;
+    gap: 0.5rem;
+    box-shadow:
+      0 12px 40px rgba(86, 28, 36, 0.08),
+      0 2px 8px rgba(86, 28, 36, 0.04);
   }
 
-  .content-line {
+  .session-line {
     font-size: 0.6875rem;
     line-height: 1.5;
     color: var(--color-burgundy);
+    opacity: 0.7;
   }
 
-  .line-heading {
+  .role-user {
+    display: inline-block;
     font-weight: 700;
-    font-size: 0.75rem;
-    color: var(--color-burgundy);
+    font-size: 0.5625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-brown);
+    background: rgba(200, 160, 106, 0.15);
+    padding: 0.0625rem 0.375rem;
+    border-radius: 4px;
+    margin-right: 0.375rem;
   }
 
-  .line-heading.small {
-    font-size: 0.6875rem;
+  .role-assistant {
+    display: inline-block;
+    font-weight: 700;
+    font-size: 0.5625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-burgundy);
+    background: rgba(86, 28, 36, 0.08);
+    padding: 0.0625rem 0.375rem;
+    border-radius: 4px;
+    margin-right: 0.375rem;
+  }
+
+  .session-fade {
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: var(--color-tan);
+    text-align: center;
+    padding-top: 0.25rem;
+  }
+
+  /* Arrow between stages */
+  .pipeline-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.75rem 0;
+    position: relative;
+  }
+
+  .arrow-line {
+    width: 2px;
+    height: 24px;
+    background: linear-gradient(to bottom, var(--color-tan), var(--color-brown));
+    border-radius: 1px;
+  }
+
+  .arrow-label {
+    font-size: 0.5625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--color-brown);
+    background: var(--color-cream);
+    padding: 0.125rem 0.625rem;
+    border: 1px solid rgba(199, 183, 163, 0.4);
+    border-radius: 9999px;
     margin-top: 0.25rem;
   }
 
-  .line-text {
-    opacity: 0.55;
-  }
-
-  .line-text.short {
-    width: 60%;
-  }
-
-  .line-tag-row {
+  /* Output files */
+  .output-files {
     display: flex;
-    gap: 0.375rem;
-    margin-top: 0.375rem;
+    flex-direction: column;
+    gap: 0.5rem;
   }
 
-  .content-tag {
-    display: inline-block;
-    padding: 0.125rem 0.5rem;
-    background: rgba(86, 28, 36, 0.08);
-    border-radius: 9999px;
-    font-size: 0.5625rem;
-    font-weight: 600;
+  .output-file {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(255, 253, 248, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(199, 183, 163, 0.4);
+    border-radius: 10px;
+    padding: 0.625rem 0.875rem;
+    box-shadow: 0 4px 16px rgba(86, 28, 36, 0.06);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+
+  .output-file:hover {
+    transform: translateX(4px);
+    box-shadow: 0 6px 24px rgba(86, 28, 36, 0.1);
+  }
+
+  .file-icon {
     color: var(--color-brown);
+    font-size: 0.5rem;
   }
 
-  /* Tool badges floating around the mockup */
+  .file-path {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--color-burgundy);
+    font-family: monospace;
+    flex: 1;
+  }
+
+  .file-tag {
+    font-size: 0.5rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-brown);
+    background: rgba(86, 28, 36, 0.08);
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+  }
+
+  /* Tool badges floating */
   .connected-tools {
     position: absolute;
     inset: 0;
@@ -512,8 +492,8 @@ onMount(() => {
   }
 
   .tool-badge-2 {
-    bottom: 30px;
-    right: -20px;
+    top: 50%;
+    right: -24px;
     animation: float-orb-reverse 5s ease-in-out infinite 1s;
   }
 

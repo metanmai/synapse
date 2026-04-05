@@ -2,7 +2,7 @@
 import ScrollReveal from "./ScrollReveal.svelte";
 
 let copied = $state(false);
-const command = "npx synapsesync-mcp";
+const command = "npx synapsesync-mcp && npx synapsesync-mcp capture start";
 
 async function copyCommand() {
   await navigator.clipboard.writeText(command);
@@ -18,8 +18,8 @@ async function copyCommand() {
   </div>
   <div class="setup-inner">
     <ScrollReveal>
-      <h2 class="setup-headline">Set up in 30 seconds</h2>
-      <p class="setup-sub">One command. The wizard handles everything — login, editor detection, and config.</p>
+      <h2 class="setup-headline">Two commands. That's it.</h2>
+      <p class="setup-sub">Sign up, start capturing. Your sessions become knowledge automatically.</p>
     </ScrollReveal>
 
     <ScrollReveal delay={100} direction="up">
@@ -43,12 +43,12 @@ async function copyCommand() {
         <div class="mini-arrow">&rarr;</div>
         <div class="mini-step">
           <span class="mini-num">2</span>
-          <span class="mini-text">Sign in via the browser</span>
+          <span class="mini-text">Sign in and start capturing</span>
         </div>
         <div class="mini-arrow">&rarr;</div>
         <div class="mini-step">
           <span class="mini-num">3</span>
-          <span class="mini-text">Your AI tools now share context</span>
+          <span class="mini-text">Sessions become knowledge</span>
         </div>
       </div>
     </ScrollReveal>

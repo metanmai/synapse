@@ -12,8 +12,8 @@ let { loggedIn = false } = $props();
   </div>
   <div class="cta-inner">
     <ScrollReveal>
-      <h2 class="cta-headline">Start building with context</h2>
-      <p class="cta-sub">Free to start. Plus at $5.99/mo for teams and power users.</p>
+      <h2 class="cta-headline">Stop losing your best AI conversations</h2>
+      <p class="cta-sub">Capture sessions, distill knowledge, remember everything. Free to start.</p>
       <div class="cta-button-wrap">
         <div class="cta-glow" aria-hidden="true"></div>
         {#if loggedIn}
