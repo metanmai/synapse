@@ -10,7 +10,7 @@ let { results, query, projectName } = $props<{
 
 <div class="space-y-3">
   <form method="GET" class="flex gap-2">
-    <input type="text" name="q" placeholder="Search context..." autofocus
+    <input type="text" name="q" placeholder="Search context..." aria-label="Search context" autofocus
       value={query ?? ""}
       class="flex-1 text-sm"
       style="border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 16px;
