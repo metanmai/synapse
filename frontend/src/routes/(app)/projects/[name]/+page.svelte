@@ -12,6 +12,7 @@ import type { Entry } from "$lib/types";
 let { data, form } = $props();
 const projectSlug: string =
   data.project.role === "owner" ? data.project.name : `${data.project.owner_email}~${data.project.name}`;
+const canEdit = data.project.role !== "viewer";
 let needsPassphrase = $state(false);
 let importInput: HTMLInputElement;
 let importForm: HTMLFormElement;
@@ -149,26 +150,28 @@ function closePanel() {
     <div class="flex items-center justify-between mb-2 px-1">
       <span class="font-medium uppercase tracking-wide"
         style="color: var(--color-text-muted); font-size: 10px;">Files</span>
-      <div class="flex items-center gap-2">
-        <button onclick={() => startNew()}
-          aria-label="New file"
-          class="cursor-pointer"
-          style="font-size: 14px; width: 24px; height: 24px; border-radius: 6px; border: none; background: transparent; color: var(--color-text-muted); cursor: pointer; transition: all 150ms ease; display: flex; align-items: center; justify-content: center; line-height: 1;"
-          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
-          onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
-          title="New file">+</button>
-        <button onclick={() => importInput?.click()}
-          aria-label="Import zip"
-          class="cursor-pointer"
-          style="font-size: 12px; width: 24px; height: 24px; border-radius: 6px; border: none; background: transparent; color: var(--color-text-muted); cursor: pointer; transition: all 150ms ease; display: flex; align-items: center; justify-content: center; line-height: 1;"
-          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
-          onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
-          title="Import zip">↑</button>
-      </div>
+      {#if canEdit}
+        <div class="flex items-center gap-2">
+          <button onclick={() => startNew()}
+            aria-label="New file"
+            class="cursor-pointer"
+            style="font-size: 14px; width: 24px; height: 24px; border-radius: 6px; border: none; background: transparent; color: var(--color-text-muted); cursor: pointer; transition: all 150ms ease; display: flex; align-items: center; justify-content: center; line-height: 1;"
+            onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
+            onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
+            title="New file">+</button>
+          <button onclick={() => importInput?.click()}
+            aria-label="Import zip"
+            class="cursor-pointer"
+            style="font-size: 12px; width: 24px; height: 24px; border-radius: 6px; border: none; background: transparent; color: var(--color-text-muted); cursor: pointer; transition: all 150ms ease; display: flex; align-items: center; justify-content: center; line-height: 1;"
+            onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
+            onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
+            title="Import zip">↑</button>
+        </div>
+      {/if}
     </div>
     <FolderTree entries={data.entries} {selectedPath}
       projectName={projectSlug} onSelect={selectEntry} onAction={handleAction}
-      onNewInFolder={startNewInFolder} />
+      onNewInFolder={canEdit ? startNewInFolder : undefined} {canEdit} />
   </div>
 
   <!-- Resize handle -->
@@ -213,7 +216,7 @@ function closePanel() {
     {:else if mode === "edit" && entry}
       <EntryEditor {entry} projectName={projectSlug} onCancel={closePanel} />
     {:else if mode === "view" && entry}
-      <EntryViewer {entry} projectName={projectSlug} onEdit={startEdit} />
+      <EntryViewer {entry} projectName={projectSlug} onEdit={canEdit ? startEdit : undefined} />
     {:else}
       <div class="text-center mt-20" style="color: var(--color-text-muted); font-size: 14px;">
         Select a file or create a new one

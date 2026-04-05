@@ -6,7 +6,7 @@ import { marked } from "marked";
 let { entry, projectName, onEdit } = $props<{
   entry: Entry;
   projectName: string;
-  onEdit: () => void;
+  onEdit?: () => void;
 }>();
 
 let html = $derived(DOMPurify.sanitize(marked.parse(entry.content, { async: false }) as string));
@@ -35,10 +35,12 @@ let html = $derived(DOMPurify.sanitize(marked.parse(entry.content, { async: fals
         class="btn-secondary cursor-pointer" style="text-decoration: none;">
         History
       </a>
-      <button onclick={() => onEdit()}
-        class="btn-secondary cursor-pointer">
-        Edit
-      </button>
+      {#if onEdit}
+        <button onclick={() => onEdit()}
+          class="btn-secondary cursor-pointer">
+          Edit
+        </button>
+      {/if}
     </div>
   </div>
   <article class="prose rounded-xl p-5 text-sm"
