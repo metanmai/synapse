@@ -84,7 +84,8 @@ async function selectEntry(path: string) {
     } else {
       entry = null;
     }
-  } catch {
+  } catch (err) {
+    console.error("[selectEntry] failed for", path, err);
     entry = null;
   }
   loading = false;
