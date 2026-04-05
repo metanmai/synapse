@@ -12,6 +12,7 @@ import { API_URL } from "./cli/config.js";
 import { runStats } from "./cli/stats.js";
 import { accent, bold, muted } from "./cli/theme.js";
 import { runWizard } from "./cli/wizard.js";
+import { runDistill } from "./distill/cli.js";
 
 // --- Interfaces for MCP server response shapes ---
 
@@ -118,6 +119,7 @@ const CLI_SUBCOMMANDS = new Set([
   "upgrade",
   "whoami",
   "capture",
+  "distill",
 ]);
 
 // --- CLI help ---
@@ -147,6 +149,10 @@ function printHelp(): void {
     s("npx synapsesync-mcp capture stop", "Stop capture daemon"),
     s("npx synapsesync-mcp capture status", "Check daemon status"),
     s("npx synapsesync-mcp capture list", "List captured sessions"),
+    "",
+    bold("Distill"),
+    s("npx synapsesync-mcp distill <id>", "Extract knowledge from a captured session"),
+    s("npx synapsesync-mcp distill --latest", "Distill the most recent captured session"),
     "",
     s("-h, --help", "Show this help"),
     s("-v, --version", "Show version"),
@@ -242,6 +248,11 @@ async function handleCli(raw: string[]): Promise<void> {
 
   if (cmd === "capture") {
     await runCapture(raw.slice(1));
+    process.exit(0);
+  }
+
+  if (cmd === "distill") {
+    await runDistill(raw.slice(1));
     process.exit(0);
   }
 
