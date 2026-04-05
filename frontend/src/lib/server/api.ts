@@ -28,12 +28,16 @@ async function request<T>(path: string, token: string | null, options: RequestIn
 
   let res: Response;
   try {
-    res = await fetch(url, { ...options, headers });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    res = await fetch(url, { ...options, headers, signal: controller.signal });
+    clearTimeout(timeout);
   } catch (err) {
-    throw new ApiError(
-      503,
-      `Cannot reach API at ${API_URL}${path}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    const isTimeout = err instanceof DOMException && err.name === "AbortError";
+    const message = isTimeout
+      ? `API request timed out after 10s: ${method} ${path}`
+      : `Cannot reach API at ${API_URL}${path}: ${err instanceof Error ? err.message : String(err)}`;
+    throw new ApiError(503, message);
   }
 
   if (!res.ok) {
