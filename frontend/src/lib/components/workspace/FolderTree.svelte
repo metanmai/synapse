@@ -141,6 +141,10 @@ function menuPathIsFile(menuPath: string): boolean {
       class="menu-item block w-full text-left px-3 py-1.5 cursor-pointer">
       Activity
     </button>
+    <button role="menuitem" onclick={() => handleAction("share", menuOpen!, menuPathIsFolder(menuOpen!))}
+      class="menu-item block w-full text-left px-3 py-1.5 cursor-pointer">
+      Share
+    </button>
     <a role="menuitem" href={`/projects/${encodeURIComponent(projectName)}/api/export`}
       download
       class="menu-item menu-link block w-full text-left px-3 py-1.5 cursor-pointer"
