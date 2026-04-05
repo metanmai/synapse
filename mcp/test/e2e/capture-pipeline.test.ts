@@ -17,9 +17,9 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 import { AdapterRegistry } from "../../src/capture/adapter-registry.js";
 import { ClaudeCodeAdapter } from "../../src/capture/adapters/claude-code.js";
+import { ClineAdapter } from "../../src/capture/adapters/cline.js";
 import { CodexAdapter } from "../../src/capture/adapters/codex.js";
 import { CursorAdapter } from "../../src/capture/adapters/cursor.js";
-import { ClineAdapter } from "../../src/capture/adapters/cline.js";
 import { GeminiAdapter } from "../../src/capture/adapters/gemini.js";
 import { CloudSyncer } from "../../src/capture/cloud-sync.js";
 import { DaemonManager } from "../../src/capture/daemon.js";
@@ -183,7 +183,12 @@ const CLINE_JSON = JSON.stringify([
     role: "assistant",
     content: [
       { type: "text", text: "Added rate limiter with 100 req/15min window." },
-      { type: "tool_use", id: "toolu_02", name: "write_to_file", input: { path: "src/middleware/rate-limit.ts", content: "..." } },
+      {
+        type: "tool_use",
+        id: "toolu_02",
+        name: "write_to_file",
+        input: { path: "src/middleware/rate-limit.ts", content: "..." },
+      },
     ],
   },
   {

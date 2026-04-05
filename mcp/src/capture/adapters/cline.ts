@@ -46,7 +46,16 @@ export class ClineAdapter implements ToolAdapter {
   watchPaths(): string[] {
     const base =
       process.platform === "darwin"
-        ? path.join(os.homedir(), "Library", "Application Support", "Code", "User", "globalStorage", "saoudrizwan.claude-dev", "tasks")
+        ? path.join(
+            os.homedir(),
+            "Library",
+            "Application Support",
+            "Code",
+            "User",
+            "globalStorage",
+            "saoudrizwan.claude-dev",
+            "tasks",
+          )
         : path.join(os.homedir(), ".config", "Code", "User", "globalStorage", "saoudrizwan.claude-dev", "tasks");
     return [base];
   }
