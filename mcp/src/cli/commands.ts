@@ -2,7 +2,7 @@ import child_process from "node:child_process";
 import * as clack from "@clack/prompts";
 import { validateApiKey } from "./api.js";
 import { API_URL, pad } from "./config.js";
-import { type ExistingSetup, detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors.js";
+import { type ExistingSetup, detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors/index.js";
 import { createGlyphSpinner } from "./spinner.js";
 import { accent, bold, muted, success, error as themeError } from "./theme.js";
 
