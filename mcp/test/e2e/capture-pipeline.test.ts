@@ -19,6 +19,7 @@ import { AdapterRegistry } from "../../src/capture/adapter-registry.js";
 import { ClaudeCodeAdapter } from "../../src/capture/adapters/claude-code.js";
 import { CodexAdapter } from "../../src/capture/adapters/codex.js";
 import { CursorAdapter } from "../../src/capture/adapters/cursor.js";
+import { ClineAdapter } from "../../src/capture/adapters/cline.js";
 import { GeminiAdapter } from "../../src/capture/adapters/gemini.js";
 import { CloudSyncer } from "../../src/capture/cloud-sync.js";
 import { DaemonManager } from "../../src/capture/daemon.js";
@@ -161,6 +162,39 @@ const GEMINI_JSON = JSON.stringify({
   createdAt: "2026-04-02T10:00:00Z",
   updatedAt: "2026-04-02T10:01:10Z",
 });
+
+const CLINE_JSON = JSON.stringify([
+  {
+    role: "user",
+    content: [{ type: "text", text: "add rate limiting to the API" }],
+  },
+  {
+    role: "assistant",
+    content: [
+      { type: "text", text: "I'll add rate limiting middleware." },
+      { type: "tool_use", id: "toolu_01", name: "read_file", input: { path: "src/server.ts" } },
+    ],
+  },
+  {
+    role: "user",
+    content: [{ type: "tool_result", tool_use_id: "toolu_01", content: "const app = express();" }],
+  },
+  {
+    role: "assistant",
+    content: [
+      { type: "text", text: "Added rate limiter with 100 req/15min window." },
+      { type: "tool_use", id: "toolu_02", name: "write_to_file", input: { path: "src/middleware/rate-limit.ts", content: "..." } },
+    ],
+  },
+  {
+    role: "user",
+    content: [{ type: "tool_result", tool_use_id: "toolu_02", content: "File written." }],
+  },
+  {
+    role: "assistant",
+    content: [{ type: "text", text: "Rate limiting is now active." }],
+  },
+]);
 
 /* ------------------------------------------------------------------ */
 /*  1. CLI Lifecycle                                                  */
@@ -404,6 +438,46 @@ suite("Capture Pipeline E2E", () => {
       expect(s.id).toMatch(/^ses_[0-9a-f]{16}$/);
       expect(s.tool).toBe("gemini");
     });
+
+    it("Cline: file -> watcher -> adapter -> store", async () => {
+      const watchDir = path.join(pipelineTmp, "cline-tasks");
+      fs.mkdirSync(watchDir, { recursive: true });
+      const storeDir = path.join(pipelineTmp, "sessions");
+
+      const adapter = new ClineAdapter();
+      adapter.watchPaths = () => [watchDir];
+
+      const registry = new AdapterRegistry();
+      registry.register(adapter);
+      const store = new SessionStore(storeDir);
+
+      const watcher = new CaptureWatcher(registry, 300);
+      const sessions: CapturedSession[] = [];
+      watcher.on("session", (s: CapturedSession) => {
+        sessions.push(s);
+        store.save(s);
+      });
+
+      await watcher.start();
+
+      const taskDir = path.join(watchDir, "a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+      fs.mkdirSync(taskDir, { recursive: true });
+      const sessionFile = path.join(taskDir, "api_conversation_history.json");
+      fs.writeFileSync(sessionFile, CLINE_JSON);
+
+      await waitFor(() => sessions.length > 0);
+      await watcher.stop();
+
+      expect(sessions.length).toBe(1);
+      const s = sessions[0];
+      expect(s.id).toMatch(/^ses_[0-9a-f]{16}$/);
+      expect(s.tool).toBe("cline");
+      expect(s.messages.length).toBeGreaterThan(0);
+
+      const stored = store.load(s.id);
+      expect(stored).not.toBeNull();
+      expect(stored?.id).toBe(s.id);
+    });
   });
 
   /* ------------------------------------------------------------------ */
@@ -618,7 +692,82 @@ suite("Capture Pipeline E2E", () => {
   });
 
   /* ------------------------------------------------------------------ */
-  /*  7. Safe Read                                                      */
+  /*  7. Cline Adapter E2E                                              */
+  /* ------------------------------------------------------------------ */
+
+  describe("Cline Adapter E2E", () => {
+    let adapterTmp: string;
+
+    beforeEach(() => {
+      adapterTmp = fs.mkdtempSync(path.join(os.tmpdir(), "syn-cap-cline-"));
+    });
+
+    afterEach(() => {
+      fs.rmSync(adapterTmp, { recursive: true, force: true });
+    });
+
+    it("parses Anthropic Messages API format with tool calls and tool_result filtering", () => {
+      const taskDir = path.join(adapterTmp, "a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+      fs.mkdirSync(taskDir, { recursive: true });
+      const filePath = path.join(taskDir, "api_conversation_history.json");
+      fs.writeFileSync(filePath, CLINE_JSON);
+
+      const adapter = new ClineAdapter();
+      const session = adapter.parse(filePath);
+
+      expect(session).not.toBeNull();
+      expect(session?.id).toMatch(/^ses_[0-9a-f]{16}$/);
+      expect(session?.tool).toBe("cline");
+
+      // 6 raw messages: user, assistant(text+tool_use), user(tool_result FILTERED),
+      // assistant(text+tool_use), user(tool_result FILTERED), assistant(text)
+      // = 4 messages: 1 user + 3 assistant
+      expect(session?.messages.length).toBe(4);
+
+      // First message is user
+      expect(session?.messages[0].role).toBe("user");
+      expect(session?.messages[0].content).toBe("add rate limiting to the API");
+
+      // Second message is assistant with tool call
+      expect(session?.messages[1].role).toBe("assistant");
+      expect(session?.messages[1].toolCalls).toBeDefined();
+      expect(session?.messages[1].toolCalls?.length).toBe(1);
+      expect(session?.messages[1].toolCalls?.[0].name).toBe("read_file");
+    });
+
+    it("returns null for non-JSON files", () => {
+      const taskDir = path.join(adapterTmp, "some-task-id");
+      fs.mkdirSync(taskDir, { recursive: true });
+      const filePath = path.join(taskDir, "api_conversation_history.jsonl");
+      fs.writeFileSync(filePath, "some content");
+
+      const adapter = new ClineAdapter();
+      expect(adapter.parse(filePath)).toBeNull();
+    });
+
+    it("returns null for malformed JSON", () => {
+      const taskDir = path.join(adapterTmp, "some-task-id");
+      fs.mkdirSync(taskDir, { recursive: true });
+      const filePath = path.join(taskDir, "api_conversation_history.json");
+      fs.writeFileSync(filePath, "{not an array}");
+
+      const adapter = new ClineAdapter();
+      expect(adapter.parse(filePath)).toBeNull();
+    });
+
+    it("returns null for empty message array", () => {
+      const taskDir = path.join(adapterTmp, "some-task-id");
+      fs.mkdirSync(taskDir, { recursive: true });
+      const filePath = path.join(taskDir, "api_conversation_history.json");
+      fs.writeFileSync(filePath, "[]");
+
+      const adapter = new ClineAdapter();
+      expect(adapter.parse(filePath)).toBeNull();
+    });
+  });
+
+  /* ------------------------------------------------------------------ */
+  /*  8. Safe Read                                                      */
   /* ------------------------------------------------------------------ */
 
   describe("Safe Read", () => {
