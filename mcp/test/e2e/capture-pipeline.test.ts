@@ -21,6 +21,7 @@ import { ClineAdapter } from "../../src/capture/adapters/cline.js";
 import { CodexAdapter } from "../../src/capture/adapters/codex.js";
 import { CursorAdapter } from "../../src/capture/adapters/cursor.js";
 import { GeminiAdapter } from "../../src/capture/adapters/gemini.js";
+import { CopilotCliAdapter } from "../../src/capture/adapters/copilot-cli.js";
 import { RooCodeAdapter } from "../../src/capture/adapters/roo-code.js";
 import { CloudSyncer } from "../../src/capture/cloud-sync.js";
 import { DaemonManager } from "../../src/capture/daemon.js";
@@ -223,6 +224,19 @@ const ROO_CODE_JSON = JSON.stringify([
     content: [{ type: "text", text: "Search endpoint is live at GET /api/search." }],
   },
 ]);
+
+const COPILOT_CLI_JSONL = [
+  '{"type":"session.start","data":{"cwd":"/tmp/copilot-proj","model":"gpt-4o"},"id":"ev1","timestamp":"2026-04-02T10:00:00Z","parentId":null}',
+  '{"type":"user.message","data":{"content":"set up CI pipeline"},"id":"ev2","timestamp":"2026-04-02T10:00:01Z","parentId":"ev1"}',
+  '{"type":"assistant.turn_start","data":{},"id":"ev3","timestamp":"2026-04-02T10:00:02Z","parentId":"ev2"}',
+  '{"type":"tool.execution_start","data":{"toolCallId":"tc1","name":"read_file","input":{"path":".github/workflows"}},"id":"ev4","timestamp":"2026-04-02T10:00:03Z","parentId":"ev3"}',
+  '{"type":"tool.execution_complete","data":{"toolCallId":"tc1","name":"read_file","output":"directory listing"},"id":"ev5","timestamp":"2026-04-02T10:00:04Z","parentId":"ev4"}',
+  '{"type":"assistant.message","data":{"content":"I\'ll create a GitHub Actions workflow for CI."},"id":"ev6","timestamp":"2026-04-02T10:00:05Z","parentId":"ev5"}',
+  '{"type":"user.message","data":{"content":"add test step too"},"id":"ev7","timestamp":"2026-04-02T10:00:10Z","parentId":"ev6"}',
+  '{"type":"assistant.message","data":{"content":"Added test step with npm test."},"id":"ev8","timestamp":"2026-04-02T10:00:11Z","parentId":"ev7"}',
+  '{"type":"assistant.turn_end","data":{},"id":"ev9","timestamp":"2026-04-02T10:00:12Z","parentId":"ev8"}',
+  "CORRUPT LINE \u2028 WITH UNICODE",
+].join("\n");
 
 /* ------------------------------------------------------------------ */
 /*  1. CLI Lifecycle                                                  */
@@ -540,6 +554,47 @@ suite("Capture Pipeline E2E", () => {
       const s = sessions[0];
       expect(s.id).toMatch(/^ses_[0-9a-f]{16}$/);
       expect(s.tool).toBe("roo-code");
+      expect(s.messages.length).toBeGreaterThan(0);
+
+      const stored = store.load(s.id);
+      expect(stored).not.toBeNull();
+      expect(stored?.id).toBe(s.id);
+    });
+
+    it("Copilot CLI: file -> watcher -> adapter -> store", async () => {
+      const watchDir = path.join(pipelineTmp, "copilot-sessions");
+      fs.mkdirSync(watchDir, { recursive: true });
+      const storeDir = path.join(pipelineTmp, "sessions");
+
+      const adapter = new CopilotCliAdapter();
+      adapter.watchPaths = () => [watchDir];
+
+      const registry = new AdapterRegistry();
+      registry.register(adapter);
+      const store = new SessionStore(storeDir);
+
+      const watcher = new CaptureWatcher(registry, 300);
+      const sessions: CapturedSession[] = [];
+      watcher.on("session", (s: CapturedSession) => {
+        sessions.push(s);
+        store.save(s);
+      });
+
+      await watcher.start();
+
+      const sessionDir = path.join(watchDir, "abc12300-deed-face-1234");
+      fs.mkdirSync(sessionDir, { recursive: true });
+      const sessionFile = path.join(sessionDir, "events.jsonl");
+      fs.writeFileSync(sessionFile, COPILOT_CLI_JSONL);
+
+      await waitFor(() => sessions.length > 0);
+      await watcher.stop();
+
+      expect(sessions.length).toBe(1);
+      const s = sessions[0];
+      expect(s.id).toMatch(/^ses_[0-9a-f]{16}$/);
+      expect(s.tool).toBe("copilot-cli");
+      expect(s.projectPath).toBe("/tmp/copilot-proj");
       expect(s.messages.length).toBeGreaterThan(0);
 
       const stored = store.load(s.id);
@@ -942,7 +997,122 @@ suite("Capture Pipeline E2E", () => {
   });
 
   /* ------------------------------------------------------------------ */
-  /*  9. Safe Read                                                      */
+  /*  9. Copilot CLI Adapter E2E                                        */
+  /* ------------------------------------------------------------------ */
+
+  describe("Copilot CLI Adapter E2E", () => {
+    let adapterTmp: string;
+
+    beforeEach(() => {
+      adapterTmp = fs.mkdtempSync(path.join(os.tmpdir(), "syn-cap-copilot-"));
+    });
+
+    afterEach(() => {
+      fs.rmSync(adapterTmp, { recursive: true, force: true });
+    });
+
+    it("parses JSONL events into user/assistant messages with tool calls", () => {
+      const sessionDir = path.join(adapterTmp, "abc12300-deed-face-1234");
+      fs.mkdirSync(sessionDir, { recursive: true });
+      const filePath = path.join(sessionDir, "events.jsonl");
+      fs.writeFileSync(filePath, COPILOT_CLI_JSONL);
+
+      const adapter = new CopilotCliAdapter();
+      const session = adapter.parse(filePath);
+
+      expect(session).not.toBeNull();
+      expect(session?.id).toMatch(/^ses_[0-9a-f]{16}$/);
+      expect(session?.tool).toBe("copilot-cli");
+      expect(session?.projectPath).toBe("/tmp/copilot-proj");
+
+      // 4 messages: user.message("set up CI pipeline"), assistant.message(with tool calls),
+      // user.message("add test step too"), assistant.message("Added test step...")
+      expect(session?.messages.length).toBe(4);
+
+      // First message is user
+      expect(session?.messages[0].role).toBe("user");
+      expect(session?.messages[0].content).toBe("set up CI pipeline");
+
+      // Second message is assistant with tool calls
+      expect(session?.messages[1].role).toBe("assistant");
+      expect(session?.messages[1].toolCalls).toBeDefined();
+      expect(session?.messages[1].toolCalls?.some((tc) => tc.name === "read_file")).toBe(true);
+
+      // Third message is user
+      expect(session?.messages[2].role).toBe("user");
+
+      // Fourth message is assistant
+      expect(session?.messages[3].role).toBe("assistant");
+
+      expect(session?.startedAt).toBe("2026-04-02T10:00:00Z");
+      expect(session?.updatedAt).toBe("2026-04-02T10:00:12Z");
+    });
+
+    it("handles U+2028/U+2029 Unicode sanitization", () => {
+      const sessionDir = path.join(adapterTmp, "unicode-session");
+      fs.mkdirSync(sessionDir, { recursive: true });
+      const filePath = path.join(sessionDir, "events.jsonl");
+
+      const unicodeLines = [
+        '{"type":"session.start","data":{"cwd":"/tmp/proj"},"id":"ev1","timestamp":"2026-04-02T10:00:00Z","parentId":null}',
+        '{"type":"user.message","data":{"content":"hello \u2028 world \u2029 test"},"id":"ev2","timestamp":"2026-04-02T10:00:01Z","parentId":"ev1"}',
+        '{"type":"assistant.message","data":{"content":"response \u2028 here"},"id":"ev3","timestamp":"2026-04-02T10:00:02Z","parentId":"ev2"}',
+      ].join("\n");
+
+      fs.writeFileSync(filePath, unicodeLines);
+
+      const adapter = new CopilotCliAdapter();
+      const session = adapter.parse(filePath);
+
+      expect(session).not.toBeNull();
+      expect(session?.messages.length).toBe(2);
+      expect(session?.parseErrors).toBeUndefined();
+    });
+
+    it("tracks parse errors for corrupt JSONL lines", () => {
+      const sessionDir = path.join(adapterTmp, "corrupt-session");
+      fs.mkdirSync(sessionDir, { recursive: true });
+      const filePath = path.join(sessionDir, "events.jsonl");
+      fs.writeFileSync(filePath, COPILOT_CLI_JSONL);
+
+      const adapter = new CopilotCliAdapter();
+      const session = adapter.parse(filePath);
+
+      expect(session).not.toBeNull();
+      expect(session?.parseErrors).toBeDefined();
+      expect(session?.parseErrors?.length).toBe(1);
+      expect(session?.parseErrors?.[0]).toMatch(/Line 10/);
+    });
+
+    it("returns null for non-JSONL files", () => {
+      const sessionDir = path.join(adapterTmp, "json-session");
+      fs.mkdirSync(sessionDir, { recursive: true });
+      const filePath = path.join(sessionDir, "events.json");
+      fs.writeFileSync(filePath, '{"type":"session.start"}');
+
+      const adapter = new CopilotCliAdapter();
+      expect(adapter.parse(filePath)).toBeNull();
+    });
+
+    it("returns null when no user or assistant messages exist", () => {
+      const sessionDir = path.join(adapterTmp, "empty-session");
+      fs.mkdirSync(sessionDir, { recursive: true });
+      const filePath = path.join(sessionDir, "events.jsonl");
+
+      const noMessagesLines = [
+        '{"type":"session.start","data":{"cwd":"/tmp/proj","model":"gpt-4o"},"id":"ev1","timestamp":"2026-04-02T10:00:00Z","parentId":null}',
+        '{"type":"session.info","data":{"version":"1.0"},"id":"ev2","timestamp":"2026-04-02T10:00:01Z","parentId":"ev1"}',
+      ].join("\n");
+
+      fs.writeFileSync(filePath, noMessagesLines);
+
+      const adapter = new CopilotCliAdapter();
+      expect(adapter.parse(filePath)).toBeNull();
+    });
+  });
+
+  /* ------------------------------------------------------------------ */
+  /*  10. Safe Read                                                     */
   /* ------------------------------------------------------------------ */
 
   describe("Safe Read", () => {
