@@ -25,12 +25,13 @@ let contextIsFolder = $state(false);
 
 // Client-side entry cache — invalidate when entries list changes (project switch, save, etc.)
 const entryCache = new Map<string, Entry>();
-let prevEntriesRef: typeof data.entries | undefined = $state(undefined);
+let prevEntriesRef: typeof data.entries | undefined;
 $effect(() => {
-  if (prevEntriesRef !== undefined && data.entries !== prevEntriesRef) {
+  const current = data.entries;
+  if (prevEntriesRef !== undefined && current !== prevEntriesRef) {
     entryCache.clear();
   }
-  prevEntriesRef = data.entries;
+  prevEntriesRef = current;
 });
 
 // Resizable sidebar
