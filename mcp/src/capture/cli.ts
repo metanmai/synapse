@@ -1,8 +1,8 @@
-// mcp/src/capture/cli.ts
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { accent, bold, muted } from "../cli/theme.js";
+import * as clack from "@clack/prompts";
+import { accent, bold, muted, success } from "../cli/theme.js";
 import { DaemonManager } from "./daemon.js";
 import { SessionStore } from "./store.js";
 
@@ -22,17 +22,29 @@ export async function runCapture(args: string[]): Promise<void> {
     case "list":
       return listCaptures();
     default:
-      console.log(`${bold("Usage:")}`);
-      console.log("  npx synapsesync-mcp capture start    Start capture daemon");
-      console.log("  npx synapsesync-mcp capture stop     Stop capture daemon");
-      console.log("  npx synapsesync-mcp capture status   Check daemon status");
-      console.log("  npx synapsesync-mcp capture list     List captured sessions");
+      captureHelp();
   }
 }
 
+function captureHelp(): void {
+  clack.intro(`${accent("\u25C6")} ${bold("Synapse Capture")}`);
+  clack.log.message(
+    [
+      `  ${accent("start")}    Start the session capture daemon`,
+      `  ${accent("stop")}     Stop the capture daemon`,
+      `  ${accent("status")}   Check daemon status and session count`,
+      `  ${accent("list")}     List recently captured sessions`,
+    ].join("\n"),
+  );
+  clack.outro(muted("npx synapsesync-mcp capture <command>"));
+}
+
 function startCapture(): void {
+  clack.intro(`${accent("\u25C6")} ${bold("Synapse Capture")}`);
+
   if (daemon.isRunning()) {
-    console.log(`${accent("Capture daemon is already running")} (PID ${daemon.readPid()})`);
+    clack.log.info(`Daemon is already running ${muted(`(PID ${daemon.readPid()})`)}`);
+    clack.outro(muted("Use 'capture stop' to restart"));
     return;
   }
 
@@ -45,54 +57,90 @@ function startCapture(): void {
   child.unref();
   if (child.pid) {
     daemon.writePid(child.pid);
-    console.log(`${accent("Capture daemon started")} (PID ${child.pid})`);
-    console.log(muted(`Log: ${daemon.getLogFile()}`));
+    clack.log.success(`Daemon started ${muted(`(PID ${child.pid})`)}`);
+    clack.log.message(muted(`  Log: ${daemon.getLogFile()}`));
   }
+  clack.outro(muted("Sessions will be captured automatically"));
 }
 
 function stopCapture(): void {
+  clack.intro(`${accent("\u25C6")} ${bold("Synapse Capture")}`);
+
   const pid = daemon.readPid();
   if (!pid || !daemon.isRunning()) {
-    console.log("Capture daemon is not running.");
+    clack.log.info("Daemon is not running.");
+    clack.outro(muted("Use 'capture start' to begin"));
     return;
   }
 
   try {
     process.kill(pid, "SIGTERM");
     daemon.cleanup();
-    console.log(`${accent("Capture daemon stopped")} (PID ${pid})`);
+    clack.log.success(`Daemon stopped ${muted(`(PID ${pid})`)}`);
   } catch {
-    console.log("Failed to stop daemon. It may have already exited.");
+    clack.log.warn("Could not stop daemon — it may have already exited.");
     daemon.cleanup();
   }
+  clack.outro(muted("synapsesync.app"));
 }
 
 function captureStatus(): void {
+  clack.intro(`${accent("\u25C6")} ${bold("Synapse Capture")}`);
+
   const status = daemon.status();
+  const sessions = store.list();
+
+  const lines: string[] = [];
+
+  // Daemon status
   if (status.running) {
-    console.log(`${accent("Running")} (PID ${status.pid})`);
+    lines.push(`  ${success("\u25CF")} ${bold("Daemon")}  ${success("running")} ${muted(`PID ${status.pid}`)}`);
   } else {
-    console.log(muted("Not running"));
+    lines.push(`  ${muted("\u25CB")} ${bold("Daemon")}  ${muted("stopped")}`);
   }
 
-  const sessions = store.list();
-  console.log(`${sessions.length} captured session(s)`);
+  // Session count
+  lines.push(`  ${muted("\u25CF")} ${bold("Sessions")}  ${accent(String(sessions.length))} captured`);
+
+  // Tool breakdown if sessions exist
+  if (sessions.length > 0) {
+    const toolCounts = new Map<string, number>();
+    for (const s of sessions) {
+      toolCounts.set(s.tool, (toolCounts.get(s.tool) ?? 0) + 1);
+    }
+    const breakdown = Array.from(toolCounts.entries())
+      .map(([tool, count]) => `${tool} ${muted(`(${count})`)}`)
+      .join(muted("  \u00B7  "));
+    lines.push(`           ${breakdown}`);
+  }
+
+  clack.log.message(lines.join("\n"));
+  clack.outro(muted("synapsesync.app"));
 }
 
 function listCaptures(): void {
+  clack.intro(`${accent("\u25C6")} ${bold("Synapse Sessions")}`);
+
   const sessions = store.list();
   if (sessions.length === 0) {
-    console.log(muted("No captured sessions yet."));
+    clack.log.info("No captured sessions yet.");
+    clack.log.message(muted(`  Run ${accent("npx synapsesync-mcp capture start")} to begin.`));
+    clack.outro(muted("synapsesync.app"));
     return;
   }
 
-  for (const s of sessions.slice(0, 20)) {
+  const lines = sessions.slice(0, 20).map((s) => {
     const date = new Date(s.updatedAt).toLocaleString();
-    const msgCount = s.messages.length;
-    console.log(`  ${accent(s.id)}  ${s.tool}  ${msgCount} msgs  ${date}`);
-  }
+    const msgs = `${s.messages.length} msgs`;
+    const toolLabel = s.tool.padEnd(12);
+    return `  ${accent(s.id)}  ${bold(toolLabel)}  ${muted(msgs.padEnd(10))}  ${muted(date)}`;
+  });
+
+  clack.log.message(lines.join("\n"));
 
   if (sessions.length > 20) {
-    console.log(muted(`  ... and ${sessions.length - 20} more`));
+    clack.log.message(muted(`  … and ${sessions.length - 20} more`));
   }
+
+  clack.outro(muted(`${sessions.length} session(s) total`));
 }

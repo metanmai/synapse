@@ -1,6 +1,8 @@
+import * as clack from "@clack/prompts";
 import { SessionStore } from "../capture/store.js";
 import type { CapturedSession } from "../capture/types.js";
-import { accent, bold, muted } from "../cli/theme.js";
+import { createGlyphSpinner } from "../cli/spinner.js";
+import { accent, bold, muted, success } from "../cli/theme.js";
 import { distillSession } from "./index.js";
 
 const store = new SessionStore();
@@ -9,25 +11,36 @@ export async function runDistill(args: string[]): Promise<void> {
   const sessionId = args[0];
 
   if (!sessionId && !args.includes("--latest")) {
-    console.log(`${bold("Usage:")}`);
-    console.log("  npx synapsesync-mcp distill <session-id>   Distill a specific session");
-    console.log("  npx synapsesync-mcp distill --latest       Distill the most recent session");
+    clack.intro(`${accent("\u25C6")} ${bold("Synapse Distill")}`);
+    clack.log.message(
+      [
+        `  ${accent("<session-id>")}   Extract knowledge from a specific session`,
+        `  ${accent("--latest")}       Distill the most recent captured session`,
+      ].join("\n"),
+    );
+    clack.outro(muted("npx synapsesync-mcp distill <command>"));
     return;
   }
+
+  clack.intro(`${accent("\u25C6")} ${bold("Synapse Distill")}`);
 
   // Resolve session
   let session: CapturedSession | null = null;
   if (args.includes("--latest")) {
     const sessions = store.list();
     if (sessions.length === 0) {
-      console.log(muted("No captured sessions. Run 'capture start' first."));
+      clack.log.warn("No captured sessions found.");
+      clack.log.message(muted(`  Run ${accent("npx synapsesync-mcp capture start")} first.`));
+      clack.outro(muted("synapsesync.app"));
       return;
     }
     session = sessions[0];
   } else {
     session = store.load(sessionId);
     if (!session) {
-      console.log(`Session not found: ${sessionId}`);
+      clack.log.error(`Session not found: ${accent(sessionId)}`);
+      clack.log.message(muted(`  Run ${accent("npx synapsesync-mcp capture list")} to see available sessions.`));
+      clack.outro(muted("synapsesync.app"));
       return;
     }
   }
@@ -40,20 +53,32 @@ export async function runDistill(args: string[]): Promise<void> {
   const project = process.env.SYNAPSE_PROJECT ?? "My Workspace";
 
   if (!apiKey) {
-    console.log("Set SYNAPSE_DISTILL_API_KEY to your LLM provider API key.");
-    console.log("  export SYNAPSE_DISTILL_API_KEY=sk-ant-...");
-    console.log(`  export SYNAPSE_DISTILL_PROVIDER=${provider}`);
-    console.log(`  export SYNAPSE_DISTILL_MODEL=${model}`);
+    clack.log.warn("No LLM provider key configured.");
+    clack.log.message(
+      [
+        "",
+        `  ${muted("export")} ${accent("SYNAPSE_DISTILL_API_KEY")}${muted("=sk-ant-...")}`,
+        `  ${muted("export")} ${accent("SYNAPSE_DISTILL_PROVIDER")}${muted(`=${provider}`)}`,
+        `  ${muted("export")} ${accent("SYNAPSE_DISTILL_MODEL")}${muted(`=${model}`)}`,
+        "",
+      ].join("\n"),
+    );
+    clack.outro(muted("Set the env vars above and try again"));
     return;
   }
 
   if (!synapseApiKey) {
-    console.log("Set SYNAPSE_API_KEY to write results to your workspace.");
+    clack.log.warn(`Set ${accent("SYNAPSE_API_KEY")} to write results to your workspace.`);
+    clack.outro(muted("synapsesync.app/account"));
     return;
   }
 
-  console.log(`${accent("Distilling")} session ${session.id} (${session.messages.length} messages)...`);
-  console.log(muted(`Provider: ${provider} / ${model}`));
+  clack.log.info(
+    `Session ${accent(session.id)} ${muted("\u00B7")} ${session.tool} ${muted("\u00B7")} ${session.messages.length} messages`,
+  );
+
+  const spin = createGlyphSpinner();
+  spin.start(`Distilling with ${provider}/${model}\u2026`);
 
   try {
     const result = await distillSession(session, {
@@ -62,18 +87,20 @@ export async function runDistill(args: string[]): Promise<void> {
       model,
       synapseApiKey,
       project,
-      log: (msg) => console.log(muted(`  ${msg}`)),
     });
 
     if (result.filesWritten === 0) {
-      console.log(muted("No insights extracted from this session."));
+      spin.stop("No insights extracted from this session.");
+      clack.outro(muted("Session may be too short or routine"));
     } else {
-      console.log(`\n${accent(`${result.filesWritten} file(s) written to workspace:`)}`);
-      for (const f of result.files) {
-        console.log(`  ${f.path}`);
-      }
+      spin.stop(`${success("\u2713")} ${result.filesWritten} file(s) written`);
+      const fileLines = result.files.map((f) => `  ${success("\u2713")} ${accent(f.path)}`).join("\n");
+      clack.log.message(fileLines);
+      clack.outro(muted("Knowledge saved to your workspace"));
     }
   } catch (err) {
-    console.log(`Distill failed: ${err}`);
+    spin.stop("Distillation failed");
+    clack.log.error(String(err));
+    clack.outro(muted("Check your API key and try again"));
   }
 }
