@@ -27,8 +27,9 @@
     <h3>Usage Data</h3>
     <p>We use Plausible Analytics for anonymous, cookie-free page view tracking. No personal data is sent to Plausible.</p>
 
-    <h2>Encryption</h2>
+    <h2>Encryption & Data Access</h2>
     <p>Synapse supports optional end-to-end encryption using AES-256-GCM. When enabled with a passphrase, your content is encrypted client-side before reaching our servers. We cannot read encrypted content — this is zero-knowledge encryption. Your passphrase is never transmitted or stored.</p>
+    <p><strong>We do not read, access, or inspect your workspace content — encrypted or not.</strong> Your data is stored solely to provide the service back to you. We have no internal tools, dashboards, or processes that display user content. Our backend uses a service key for API operations, but no human at Synapse views your files, conversations, or insights.</p>
 
     <h2>How We Use Your Data</h2>
     <ul>
@@ -65,7 +66,7 @@
     <p>We may update this policy from time to time. Changes will be posted on this page with an updated "Last updated" date.</p>
 
     <h2>Contact</h2>
-    <p>Questions about this policy? Email <a href="mailto:tanmai.niranjan@gmail.com">tanmai.niranjan@gmail.com</a>.</p>
+    <p>Questions about this policy? Email <a href="mailto:metanmai@gmail.com">metanmai@gmail.com</a>.</p>
   </div>
 </div>
 
