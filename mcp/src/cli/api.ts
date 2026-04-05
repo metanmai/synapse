@@ -1,4 +1,4 @@
-const API_URL = "https://api.synapsesync.app";
+import { API_URL } from "./config.js";
 
 export interface LoginResponse {
   email: string;
