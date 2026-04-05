@@ -185,7 +185,12 @@ Remove:
 
 ### Signup flow
 
-The `POST /auth/signup` endpoint currently generates an API key and returns it. This needs to be updated to create a key in the `api_keys` table instead of setting `api_key_hash` on the `users` row. The key is returned in the signup response as before, with label "default".
+The `POST /auth/signup` endpoint currently generates an API key and stores the hash on the `users` row via `createUser(db, email, apiKeyHash)`. This becomes two operations:
+
+1. `createUser(db, email)` — no longer takes `apiKeyHash` param
+2. `createApiKey(db, userId, keyHash, "default")` — inserts into `api_keys` table
+
+The plaintext key is returned in the signup response as before.
 
 ## Files touched
 
