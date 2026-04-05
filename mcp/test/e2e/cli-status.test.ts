@@ -22,6 +22,7 @@ const BIN = path.resolve(__dirname, "../../dist/index.js");
 
 /** Strip ANSI escape codes from terminal output. */
 function stripAnsi(s: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping ANSI escapes requires matching control chars
   return s.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
@@ -40,8 +41,12 @@ function runStatus(home: string, cwd: string): Promise<{ stdout: string; stderr:
 
     let stdout = "";
     let stderr = "";
-    proc.stdout.on("data", (d) => { stdout += d.toString(); });
-    proc.stderr.on("data", (d) => { stderr += d.toString(); });
+    proc.stdout.on("data", (d) => {
+      stdout += d.toString();
+    });
+    proc.stderr.on("data", (d) => {
+      stderr += d.toString();
+    });
     proc.on("close", (code) => {
       resolve({ stdout: stripAnsi(stdout), stderr: stripAnsi(stderr), code });
     });
@@ -56,9 +61,13 @@ function writeMcpConfig(filePath: string, apiKey?: string): void {
   if (apiKey) env.SYNAPSE_API_KEY = apiKey;
   fs.writeFileSync(
     filePath,
-    JSON.stringify({
-      mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env } },
-    }, null, 2),
+    JSON.stringify(
+      {
+        mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env } },
+      },
+      null,
+      2,
+    ),
   );
 }
 
@@ -154,12 +163,12 @@ suite("CLI status — per-location display", () => {
   });
 
   // This test requires a real API key — skip if not available
-  const REAL_KEY = process.env.TEST_SYNAPSE_API_KEY;
+  const REAL_KEY = process.env.TEST_SYNAPSE_API_KEY ?? "";
   const keyTest = REAL_KEY ? it : it.skip;
 
   keyTest("shows 'connected' for location with a valid API key", async () => {
     freshDirs();
-    writeMcpConfig(path.join(tmpCwd, ".mcp.json"), REAL_KEY!);
+    writeMcpConfig(path.join(tmpCwd, ".mcp.json"), REAL_KEY);
 
     const { stdout } = await runStatus(tmpHome, tmpCwd);
     expect(stdout).toContain("connected");
@@ -171,7 +180,7 @@ suite("CLI status — per-location display", () => {
   keyTest("shows 'connected' and 'missing API key' side by side", async () => {
     freshDirs();
     // One config with valid key, one without
-    writeMcpConfig(path.join(tmpCwd, ".mcp.json"), REAL_KEY!);
+    writeMcpConfig(path.join(tmpCwd, ".mcp.json"), REAL_KEY);
     writeMcpConfig(path.join(tmpCwd, ".cursor", "mcp.json")); // no key
 
     const { stdout } = await runStatus(tmpHome, tmpCwd);

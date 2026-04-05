@@ -1,6 +1,6 @@
-import type { Actions, PageServerLoad } from "./$types";
-import { ApiError, createApi } from "$lib/server/api";
+import { createApi } from "$lib/server/api";
 import { fail, redirect } from "@sveltejs/kit";
+import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params }) => {
   return { conversationId: params.id };
