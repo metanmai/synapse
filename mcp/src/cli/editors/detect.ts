@@ -35,7 +35,7 @@ export function detectEditors(scope: SetupScope): EditorInfo[] {
         id: "claude-code",
         name: "Claude Code",
         detected: fs.existsSync(path.join(home, ".claude")),
-        hint: "~/.claude/CLAUDE.md + commands",
+        hint: "~/.claude.json + CLAUDE.md + commands",
         write: (apiKey) => writeClaudeCodeGlobal(apiKey, home),
       },
       {
@@ -112,7 +112,11 @@ export interface ExistingSetup {
 function extractApiKey(filePath: string): string | null {
   try {
     const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-    const synapse = parsed?.mcpServers?.synapse;
+    // Claude Code / Cursor / Windsurf use mcpServers, VS Code uses mcp.servers or servers
+    const synapse =
+      parsed?.mcpServers?.synapse ??
+      parsed?.mcp?.servers?.synapse ??
+      parsed?.servers?.synapse;
     return synapse?.env?.SYNAPSE_API_KEY ?? null;
   } catch {
     return null;
@@ -129,8 +133,10 @@ export function detectExistingSetup(): ExistingSetup {
   // Check MCP JSON files — collect ALL unique API keys (local first, global last)
   const mcpFiles: [string, string][] = [
     [path.join(cwd, ".mcp.json"), ".mcp.json"],
+    [path.join(cwd, ".vscode", "mcp.json"), ".vscode/mcp.json"],
     [path.join(cwd, ".cursor", "mcp.json"), ".cursor/mcp.json"],
     [path.join(home, ".cursor", "mcp.json"), "~/.cursor/mcp.json"],
+    [path.join(home, ".claude.json"), "~/.claude.json"],
     [path.join(home, ".claude", ".mcp.json"), "~/.claude/.mcp.json"],
     [path.join(home, ".codeium", "windsurf", "mcp_config.json"), "~/.codeium/windsurf/mcp_config.json"],
   ];
