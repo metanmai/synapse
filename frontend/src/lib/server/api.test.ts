@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // We need to control the API_URL import. The alias in vitest.config.ts maps
 // $env/static/private to our mock that exports API_URL = "http://localhost:8787".
-import { createApi, ApiError } from "./api";
+import { ApiError, createApi } from "./api";
 
 // ---------- fetch mock ----------
 function mockFetchOk(body: unknown = {}, status = 200) {
@@ -244,9 +244,7 @@ describe("API method URL construction", () => {
     await api.getEntry("my project", "notes/hello world.md");
 
     const [url] = fetchMock.mock.calls[0];
-    expect(url).toBe(
-      "http://localhost:8787/api/context/my%20project/notes%2Fhello%20world.md",
-    );
+    expect(url).toBe("http://localhost:8787/api/context/my%20project/notes%2Fhello%20world.md");
   });
 
   it("listEntries includes folder query param when provided", async () => {
@@ -328,9 +326,7 @@ describe("API_URL not configured", () => {
     } catch (err) {
       expect(err).toBeInstanceOf(mod.ApiError);
       expect((err as InstanceType<typeof mod.ApiError>).status).toBe(500);
-      expect((err as InstanceType<typeof mod.ApiError>).message).toContain(
-        "API_URL is not configured",
-      );
+      expect((err as InstanceType<typeof mod.ApiError>).message).toContain("API_URL is not configured");
     }
     vi.doUnmock("$env/static/private");
   });
