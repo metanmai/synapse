@@ -16,8 +16,9 @@ const PREFIX = "enc:v1:";
 
 let cachedKey: CryptoKey | null = null;
 
-function hexEncode(buf: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buf))
+function hexEncode(buf: ArrayBuffer | Uint8Array): string {
+  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
@@ -82,7 +83,7 @@ export async function encrypt(plaintext: string, userEmail: string): Promise<str
   const key = await getKey(userEmail);
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
   const encoded = new TextEncoder().encode(plaintext);
-  const ciphertext = await crypto.subtle.encrypt({ name: ALGORITHM, iv }, key, encoded);
+  const ciphertext = await crypto.subtle.encrypt({ name: ALGORITHM, iv }, key, encoded as BufferSource);
   const ivHex = hexEncode(iv);
   const ctBase64 = btoa(String.fromCharCode(...new Uint8Array(ciphertext)));
   return `${PREFIX}${ivHex}:${ctBase64}`;
@@ -100,6 +101,10 @@ export async function decrypt(encrypted: string, userEmail: string): Promise<str
   const iv = hexDecode(ivHex);
   const ciphertext = Uint8Array.from(atob(ctBase64), (c) => c.charCodeAt(0));
 
-  const decrypted = await crypto.subtle.decrypt({ name: ALGORITHM, iv }, key, ciphertext);
+  const decrypted = await crypto.subtle.decrypt(
+    { name: ALGORITHM, iv: iv as BufferSource },
+    key,
+    ciphertext as BufferSource,
+  );
   return new TextDecoder().decode(decrypted);
 }
