@@ -63,6 +63,10 @@ jobs:
           TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
           TEST_SUPABASE_SERVICE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_KEY }}
 
+      - name: Build MCP CLI
+        working-directory: mcp
+        run: npm run build
+
       - name: E2E tests
         working-directory: mcp
         run: npx vitest run test/e2e/
