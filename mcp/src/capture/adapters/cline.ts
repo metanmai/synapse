@@ -62,7 +62,7 @@ export class ClineAdapter implements ToolAdapter {
 
   parse(filePath: string): CapturedSession | null {
     if (!filePath.endsWith(".json")) return null;
-    if (!path.basename(filePath).startsWith("api_conversation_history")) return null;
+    if (path.basename(filePath) !== "api_conversation_history.json") return null;
 
     const raw = safeReadFile(filePath);
     if (!raw) return null;
@@ -106,7 +106,8 @@ export class ClineAdapter implements ToolAdapter {
     let startedAt = now;
     try {
       const historyPath = path.join(path.dirname(path.dirname(filePath)), "..", "state", "taskHistory.json");
-      const historyRaw = fs.readFileSync(historyPath, "utf-8");
+      const historyRaw = safeReadFile(historyPath);
+      if (!historyRaw) throw new Error("No history file");
       const history = JSON.parse(historyRaw) as { id: string; ts: number }[];
       const match = history.find((h) => h.id === taskId);
       if (match?.ts) startedAt = new Date(match.ts).toISOString();
