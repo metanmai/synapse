@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { FULLTEXT_SCORE, ILIKE_SCORE, SEMANTIC_MATCH_COUNT, SEMANTIC_MATCH_THRESHOLD } from "../../lib/constants";
 import { singleOrNull } from "../query-helpers";
 import { type ScoredEntry, buildIlikeWords, mergeSearchResults } from "../search-helpers";
 import type { Entry, EntryHistory } from "../types";
@@ -109,8 +110,8 @@ export async function searchEntries(
           .rpc("match_entries", {
             query_embedding: JSON.stringify(queryEmbedding),
             match_project_id: projectId,
-            match_threshold: 0.3,
-            match_count: 10,
+            match_threshold: SEMANTIC_MATCH_THRESHOLD,
+            match_count: SEMANTIC_MATCH_COUNT,
           })
           .then(({ data, error }) => {
             if (error) {
@@ -143,7 +144,7 @@ export async function searchEntries(
       }
       // TODO: Use ts_rank for proper intra-tier ordering (requires RPC function).
       // For v1, all full-text results get a fixed score of 0.5 (below semantic, above ILIKE).
-      return (data ?? []).map((e: Entry) => ({ entry: e, score: 0.5 }));
+      return (data ?? []).map((e: Entry) => ({ entry: e, score: FULLTEXT_SCORE }));
     }),
   );
 
@@ -170,7 +171,7 @@ export async function searchEntries(
                 console.error("[search] ilike error:", error.message);
                 return [];
               }
-              return (data ?? []).map((e: Entry) => ({ entry: e, score: 0.1 }));
+              return (data ?? []).map((e: Entry) => ({ entry: e, score: ILIKE_SCORE }));
             }),
           );
         })()
