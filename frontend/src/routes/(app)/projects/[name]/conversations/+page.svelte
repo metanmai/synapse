@@ -5,15 +5,18 @@ import ConversationList from "$lib/components/conversations/ConversationList.sve
 let { data } = $props();
 
 const encodedProject = $derived(encodeURIComponent(data.project.name));
+let filtering = $state(false);
 
-function handleStatusChange(e: Event) {
+async function handleStatusChange(e: Event) {
   const value = (e.target as HTMLSelectElement).value;
   const params = new URLSearchParams();
   if (value !== "all") params.set("status", value);
   const qs = params.toString();
-  goto(`/projects/${encodedProject}/conversations${qs ? `?${qs}` : ""}`, {
+  filtering = true;
+  await goto(`/projects/${encodedProject}/conversations${qs ? `?${qs}` : ""}`, {
     invalidateAll: true,
   });
+  filtering = false;
 }
 
 function pageUrl(page: number): string {
@@ -68,11 +71,18 @@ const emptyLabel = $derived(data.statusFilter === "all" ? null : data.statusFilt
       </div>
     </div>
 
-    <ConversationList
-      conversations={data.conversations}
-      projectName={data.project.name}
-      {emptyLabel}
-    />
+    {#if filtering}
+      <div class="flex items-center gap-2 py-4" style="color: var(--color-text-muted); font-size: 13px;">
+        <div class="spinner spinner-sm"></div>
+        Loading...
+      </div>
+    {:else}
+      <ConversationList
+        conversations={data.conversations}
+        projectName={data.project.name}
+        {emptyLabel}
+      />
+    {/if}
 
     {#if data.totalPages > 1}
       <nav class="pagination" aria-label="Conversations pagination">
