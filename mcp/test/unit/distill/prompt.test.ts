@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildPrompt } from "../../../src/distill/prompt.js";
 import type { CapturedSession } from "../../../src/capture/types.js";
+import { buildPrompt } from "../../../src/distill/prompt.js";
 
 function makeSession(messageCount: number): CapturedSession {
   const messages = [];
