@@ -1,9 +1,18 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-import { createSupabaseClient } from "../../db/client";
-import { createProject, listProjectsForUser, getProjectByName, getMemberRole, addMember, removeMember, findUserByEmail, setPreference } from "../../db/queries";
 import { logActivity } from "../../db/activity-logger";
+import { createSupabaseClient } from "../../db/client";
+import {
+  addMember,
+  createProject,
+  findUserByEmail,
+  getMemberRole,
+  getProjectByName,
+  listProjectsForUser,
+  removeMember,
+  setPreference,
+} from "../../db/queries";
 
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
@@ -20,23 +29,18 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
       return {
         content: [{ type: "text", text: `Project "${project.name}" created (id: ${project.id})` }],
       };
-    }
+    },
   );
 
-  server.tool(
-    "list_projects",
-    "List all projects you have access to.",
-    {},
-    async (_args) => {
-      const db = createSupabaseClient(env);
-      const userId = getContext().userId!;
-      const projects = await listProjectsForUser(db, userId);
-      const list = projects.map((p) => `- ${p.name} (id: ${p.id})`).join("\n");
-      return {
-        content: [{ type: "text", text: list || "No projects found." }],
-      };
-    }
-  );
+  server.tool("list_projects", "List all projects you have access to.", {}, async (_args) => {
+    const db = createSupabaseClient(env);
+    const userId = getContext().userId!;
+    const projects = await listProjectsForUser(db, userId);
+    const list = projects.map((p) => `- ${p.name} (id: ${p.id})`).join("\n");
+    return {
+      content: [{ type: "text", text: list || "No projects found." }],
+    };
+  });
 
   server.tool(
     "invite_member",
@@ -65,13 +69,16 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
 
       await addMember(db, proj.id, invitee.id, role);
       await logActivity(db, {
-        project_id: proj.id, user_id: userId, action: "member_added",
-        target_email: email, source: "claude",
+        project_id: proj.id,
+        user_id: userId,
+        action: "member_added",
+        target_email: email,
+        source: "claude",
       });
       return {
         content: [{ type: "text", text: `Invited ${email} as ${role} to "${project}".` }],
       };
-    }
+    },
   );
 
   server.tool(
@@ -100,13 +107,16 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
 
       await removeMember(db, proj.id, target.id);
       await logActivity(db, {
-        project_id: proj.id, user_id: userId, action: "member_removed",
-        target_email: email, source: "claude",
+        project_id: proj.id,
+        user_id: userId,
+        action: "member_removed",
+        target_email: email,
+        source: "claude",
       });
       return {
         content: [{ type: "text", text: `Removed ${email} from "${project}".` }],
       };
-    }
+    },
   );
 
   server.tool(
@@ -124,14 +134,17 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
 
-      const prefs = await setPreference(db, userId, proj.id, key, value);
+      await setPreference(db, userId, proj.id, key, value);
       await logActivity(db, {
-        project_id: proj.id, user_id: userId, action: "settings_changed",
-        source: "claude", metadata: { key, value },
+        project_id: proj.id,
+        user_id: userId,
+        action: "settings_changed",
+        source: "claude",
+        metadata: { key, value },
       });
       return {
         content: [{ type: "text", text: `Set ${key} = ${value} for project "${project}".` }],
       };
-    }
+    },
   );
 }
