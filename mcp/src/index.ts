@@ -545,7 +545,7 @@ if (!isMcpServerMode(args)) {
   // --- rm: delete a file ---
   server.tool(
     "rm",
-    "Delete a file. Like `rm` on a local filesystem. Permanently removes the file (history is preserved).",
+    "Delete a file. Like `rm` on a local filesystem. This is permanent and cannot be undone.",
     { path: z.string().describe("File path to delete") },
     { destructiveHint: true },
     async ({ path }) => {
