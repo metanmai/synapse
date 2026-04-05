@@ -15,7 +15,15 @@
     "start": "node dist/index.js",
     "prepublishOnly": "npm install && npm run build"
   },
-  "keywords": ["mcp", "synapse", "ai", "context", "claude", "chatgpt", "cursor"],
+  "keywords": [
+    "mcp",
+    "synapse",
+    "ai",
+    "context",
+    "claude",
+    "chatgpt",
+    "cursor"
+  ],
   "homepage": "https://synapsesync.app",
   "repository": {
     "type": "git",
@@ -28,10 +36,13 @@
   "author": "metanmai",
   "license": "MIT",
   "type": "module",
-  "files": ["dist/"],
+  "files": [
+    "dist/"
+  ],
   "dependencies": {
     "@clack/prompts": "^0.11.0",
     "@modelcontextprotocol/sdk": "1.27.1",
+    "chokidar": "^5.0.0",
     "zod": "4.3.6"
   },
   "devDependencies": {
