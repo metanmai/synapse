@@ -526,8 +526,8 @@ if (!isMcpServerMode(args)) {
       const accountAge = projects[0]?.created_at
         ? Math.floor((Date.now() - new Date(projects[0].created_at).getTime()) / 86_400_000)
         : 0;
-      lines.push(`Synapse Lifetime Stats`);
-      lines.push(`${"─".repeat(40)}`);
+      lines.push("Synapse Lifetime Stats");
+      lines.push("─".repeat(40));
       lines.push(`Account age: ${accountAge} days`);
       lines.push(`Projects: ${projects.length}`);
       lines.push(`Total files: ${totalFiles}`);
