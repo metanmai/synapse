@@ -399,10 +399,7 @@ describe("editors", () => {
       const settingsDir = path.join(tmpDir, ".vscode");
       fs.mkdirSync(settingsDir, { recursive: true });
       const mcpPath = path.join(settingsDir, "mcp.json");
-      fs.writeFileSync(
-        mcpPath,
-        JSON.stringify({ servers: { other: { command: "x" } } }, null, 2),
-      );
+      fs.writeFileSync(mcpPath, JSON.stringify({ servers: { other: { command: "x" } } }, null, 2));
 
       const editors = detectEditors("local");
       const vscode = findEditor(editors, "vscode");
