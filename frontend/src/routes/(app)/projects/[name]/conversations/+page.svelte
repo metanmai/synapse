@@ -1,9 +1,30 @@
 <script lang="ts">
+import { goto } from "$app/navigation";
 import ConversationList from "$lib/components/conversations/ConversationList.svelte";
 
 let { data } = $props();
 
 const encodedProject = $derived(encodeURIComponent(data.project.name));
+
+function handleStatusChange(e: Event) {
+  const value = (e.target as HTMLSelectElement).value;
+  const params = new URLSearchParams();
+  if (value !== "all") params.set("status", value);
+  const qs = params.toString();
+  goto(`/projects/${encodedProject}/conversations${qs ? `?${qs}` : ""}`, {
+    invalidateAll: true,
+  });
+}
+
+function pageUrl(page: number): string {
+  const params = new URLSearchParams();
+  if (data.statusFilter !== "all") params.set("status", data.statusFilter);
+  if (page > 1) params.set("page", String(page));
+  const qs = params.toString();
+  return `/projects/${encodedProject}/conversations${qs ? `?${qs}` : ""}`;
+}
+
+const emptyLabel = $derived(data.statusFilter === "all" ? null : data.statusFilter);
 </script>
 
 {#if data.tier === "free"}
@@ -24,15 +45,58 @@ const encodedProject = $derived(encodeURIComponent(data.project.name));
       <h1 class="text-xl font-semibold" style="color: var(--color-accent);">
         Conversations
       </h1>
-      <a
-        href="/projects/{encodedProject}/conversations/import"
-        class="import-btn"
-      >
-        Import
-      </a>
+      <div class="header-actions">
+        <div class="filter-group">
+          <label for="status-filter" class="filter-label">Status</label>
+          <select
+            id="status-filter"
+            class="filter-select"
+            value={data.statusFilter}
+            onchange={handleStatusChange}
+          >
+            <option value="all">All</option>
+            <option value="active">Active</option>
+            <option value="archived">Archived</option>
+          </select>
+        </div>
+        <a
+          href="/projects/{encodedProject}/conversations/import"
+          class="import-btn"
+        >
+          Import
+        </a>
+      </div>
     </div>
 
-    <ConversationList conversations={data.conversations} projectName={data.project.name} />
+    <ConversationList
+      conversations={data.conversations}
+      projectName={data.project.name}
+      {emptyLabel}
+    />
+
+    {#if data.totalPages > 1}
+      <nav class="pagination" aria-label="Conversations pagination">
+        {#if data.page > 1}
+          <a href={pageUrl(data.page - 1)} class="page-link">
+            &larr; Previous
+          </a>
+        {:else}
+          <span class="page-link page-disabled">&larr; Previous</span>
+        {/if}
+
+        <span class="page-info">
+          Page {data.page} of {data.totalPages}
+        </span>
+
+        {#if data.page < data.totalPages}
+          <a href={pageUrl(data.page + 1)} class="page-link">
+            Next &rarr;
+          </a>
+        {:else}
+          <span class="page-link page-disabled">Next &rarr;</span>
+        {/if}
+      </nav>
+    {/if}
   </div>
 {/if}
 
@@ -92,6 +156,43 @@ const encodedProject = $derived(encodeURIComponent(data.project.name));
     box-shadow: 0 4px 12px rgba(86, 28, 36, 0.25);
   }
 
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .filter-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .filter-select {
+    font-size: 0.8125rem;
+    padding: 5px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-muted);
+    color: var(--color-text);
+    outline: none;
+    cursor: pointer;
+    transition: var(--transition-base);
+  }
+
+  .filter-select:focus {
+    border-color: var(--color-pink);
+    box-shadow: 0 0 0 2px rgba(86, 28, 36, 0.08);
+  }
+
   .import-btn {
     font-size: 0.8125rem;
     font-weight: 500;
@@ -106,5 +207,40 @@ const encodedProject = $derived(encodeURIComponent(data.project.name));
 
   .import-btn:hover {
     background: rgba(86, 28, 36, 0.06);
+  }
+
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .page-link {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--color-link);
+    text-decoration: none;
+    padding: 6px 12px;
+    border-radius: 8px;
+    transition: var(--transition-base);
+  }
+
+  .page-link:hover:not(.page-disabled) {
+    background: rgba(86, 28, 36, 0.06);
+  }
+
+  .page-disabled {
+    color: var(--color-text-muted);
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .page-info {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
   }
 </style>
