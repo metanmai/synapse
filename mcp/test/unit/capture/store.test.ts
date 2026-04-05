@@ -1,8 +1,7 @@
-// mcp/test/unit/capture/store.test.ts
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SessionStore } from "../../../src/capture/store.js";
 import type { CapturedSession } from "../../../src/capture/types.js";
 
@@ -36,8 +35,8 @@ describe("SessionStore", () => {
     store.save(session);
     const loaded = store.load("ses_test1");
     expect(loaded).not.toBeNull();
-    expect(loaded!.id).toBe("ses_test1");
-    expect(loaded!.messages).toHaveLength(1);
+    expect(loaded?.id).toBe("ses_test1");
+    expect(loaded?.messages).toHaveLength(1);
   });
 
   it("returns null for nonexistent session", () => {
@@ -54,19 +53,23 @@ describe("SessionStore", () => {
   });
 
   it("overwrites an existing session on save", () => {
-    store.save(makeSession({
-      id: "ses_1",
-      messages: [{ role: "user", content: "v1", timestamp: "2026-04-02T10:00:00Z" }],
-    }));
-    store.save(makeSession({
-      id: "ses_1",
-      messages: [
-        { role: "user", content: "v1", timestamp: "2026-04-02T10:00:00Z" },
-        { role: "assistant", content: "v2", timestamp: "2026-04-02T10:00:01Z" },
-      ],
-    }));
+    store.save(
+      makeSession({
+        id: "ses_1",
+        messages: [{ role: "user", content: "v1", timestamp: "2026-04-02T10:00:00Z" }],
+      }),
+    );
+    store.save(
+      makeSession({
+        id: "ses_1",
+        messages: [
+          { role: "user", content: "v1", timestamp: "2026-04-02T10:00:00Z" },
+          { role: "assistant", content: "v2", timestamp: "2026-04-02T10:00:01Z" },
+        ],
+      }),
+    );
     const loaded = store.load("ses_1");
-    expect(loaded!.messages).toHaveLength(2);
+    expect(loaded?.messages).toHaveLength(2);
   });
 
   it("deletes a session", () => {
