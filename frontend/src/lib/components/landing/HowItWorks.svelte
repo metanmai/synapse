@@ -4,20 +4,21 @@ import ScrollReveal from "./ScrollReveal.svelte";
 const steps = [
   {
     number: 1,
-    title: "Connect",
-    description: "Add Synapse to any AI tool in one line",
+    title: "Capture",
+    description: "A background daemon silently records your sessions from Claude Code, Cursor, Codex, and Gemini",
     illustration: "config",
   },
   {
     number: 2,
-    title: "Work",
-    description: "Context lands in one cloud workspace — pick it up from any tool or device",
+    title: "Distill",
+    description: "An LLM extracts decisions, architecture, and learnings — the signal from the noise",
     illustration: "sync",
   },
   {
     number: 3,
-    title: "Share",
-    description: "Invite teammates so every user’s AI stays aligned; export when you need a copy",
+    title: "Remember",
+    description:
+      "Next session, your AI tools search the workspace and already have context from every past conversation",
     illustration: "team",
   },
 ];

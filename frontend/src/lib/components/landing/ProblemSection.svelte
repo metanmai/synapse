@@ -10,20 +10,20 @@ import ScrollReveal from "./ScrollReveal.svelte";
   </div>
   <div class="problem-inner">
     <ScrollReveal>
-      <h2 class="problem-headline">Your AI tools forget everything</h2>
+      <h2 class=”problem-headline”>Your best AI conversations disappear</h2>
     </ScrollReveal>
-    <div class="pain-points">
+    <div class=”pain-points”>
       <ScrollReveal delay={150}>
-        <p class="pain-point">Every session starts from scratch</p>
+        <p class=”pain-point”>Hundreds of sessions full of decisions, architecture, and debugging insights</p>
       </ScrollReveal>
       <ScrollReveal delay={300}>
-        <p class="pain-point">Decisions made yesterday are lost today</p>
+        <p class=”pain-point”>Trapped in chat logs you’ll never scroll back to</p>
       </ScrollReveal>
       <ScrollReveal delay={450}>
-        <p class="pain-point">Switching tools or devices means losing context</p>
+        <p class=”pain-point”>Every morning, you re-explain your own project to your own tools</p>
       </ScrollReveal>
       <ScrollReveal delay={600}>
-        <p class="pain-point">Teammates can’t see what your AI already “knows”</p>
+        <p class=”pain-point”>The knowledge is there — it just never gets extracted</p>
       </ScrollReveal>
     </div>
   </div>
