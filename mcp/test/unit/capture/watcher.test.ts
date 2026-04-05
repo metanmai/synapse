@@ -48,15 +48,21 @@ describe("CaptureWatcher", () => {
 
     await watcher.start();
 
+    // Small delay to ensure chokidar is fully watching after "ready"
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
     const testFile = path.join(tmpDir, "test-session.jsonl");
     fs.writeFileSync(testFile, '{"test": true}\n');
 
-    // Wait for chokidar awaitWriteFinish (500ms) + scan interval (500ms) + buffer
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    // Poll up to 8s (awaitWriteFinish 500ms + scan interval 500ms + OS/CI overhead)
+    const deadline = Date.now() + 8000;
+    while (sessions.length === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
 
     expect(sessions.length).toBe(1);
     expect(sessions[0].id).toBe("ses_claude-code_1");
-  });
+  }, 15000);
 
   it("ignores files that adapters return null for", async () => {
     const sessions: CapturedSession[] = [];
