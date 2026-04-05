@@ -1,6 +1,6 @@
 {
   "name": "synapsesync-mcp",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "MCP server for Synapse — shared AI context across tools and devices",
   "main": "dist/index.js",
   "bin": {
