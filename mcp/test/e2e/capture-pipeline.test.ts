@@ -1597,8 +1597,8 @@ suite("Capture Pipeline E2E", () => {
       expect(validateSession({ id: "test", tool: "cursor" })).toBe(false);
     });
 
-    it("all four tools are valid", () => {
-      for (const tool of ["claude-code", "cursor", "codex", "gemini"]) {
+    it("all seven tools are valid", () => {
+      for (const tool of ["claude-code", "cursor", "codex", "gemini", "copilot-cli", "cline", "roo-code"]) {
         const session = {
           id: "ses_aabbccdd11223344",
           tool,
