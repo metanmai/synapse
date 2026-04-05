@@ -30,7 +30,12 @@ app.onError((err, c) => {
     return c.json({ error: err.message, code: err.code }, err.status as 400 | 401 | 403 | 404 | 409 | 410 | 500);
   }
   console.error(`[error] ${c.req.method} ${c.req.path}:`, err.message, err.stack);
-  return c.json({ error: err.message || "Internal server error", code: "INTERNAL_ERROR" }, 500);
+  return c.json({
+    error: err.message || "Internal server error",
+    code: "INTERNAL_ERROR",
+    detail: String(err),
+    path: c.req.path,
+  }, 500);
 });
 
 app.get("/health", (c) => c.json({ status: "ok", service: "synapse" }));
