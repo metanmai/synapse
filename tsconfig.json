@@ -7,8 +7,6 @@
     "types": ["@cloudflare/vitest-pool-workers"],
     "strict": true,
     "skipLibCheck": true,
-    "outDir": "dist",
-    "rootDir": "src",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
