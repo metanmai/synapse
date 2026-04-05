@@ -1,12 +1,23 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
 import InsightList from "$lib/components/insights/InsightList.svelte";
+import { getBadgeColor, groupInsightsByType } from "$lib/components/insights/insight-helpers";
 import type { InsightType } from "$lib/types";
 
 let { data, form } = $props();
 
 let showForm = $state(false);
 let saving = $state(false);
+
+const groups = $derived(groupInsightsByType(data.insights));
+let collapsedSections = $state<Set<string>>(new Set());
+
+function toggleSection(type: string) {
+  const next = new Set(collapsedSections);
+  if (next.has(type)) next.delete(type);
+  else next.add(type);
+  collapsedSections = next;
+}
 
 const insightTypes: { value: InsightType; label: string }[] = [
   { value: "decision", label: "Decision" },
@@ -100,7 +111,42 @@ function handleSubmit() {
     <div class="success-msg mb-4" role="status">Insight deleted.</div>
   {/if}
 
-  <InsightList insights={data.insights} />
+  {#if data.insights.length === 0}
+    <div class="empty-state">
+      <p class="empty-title">No insights yet</p>
+      <p class="empty-desc">
+        Insights are decisions, learnings, and architecture notes extracted from your sessions.
+        Run <code>npx synapsesync-mcp distill --latest</code> or add one manually above.
+      </p>
+    </div>
+  {:else}
+    {#each groups as group}
+      <div class="insight-section">
+        <button
+          class="section-header cursor-pointer"
+          onclick={() => toggleSection(group.type)}
+        >
+          <div class="section-header-left">
+            <span
+              class="section-badge"
+              style="background: {getBadgeColor(group.type).bg}; color: {getBadgeColor(group.type).text};"
+            >
+              {group.label}
+            </span>
+            <span class="section-count">{group.items.length}</span>
+          </div>
+          <span class="section-chevron">
+            {collapsedSections.has(group.type) ? "▶" : "▼"}
+          </span>
+        </button>
+        {#if !collapsedSections.has(group.type)}
+          <div class="section-items">
+            <InsightList insights={group.items} />
+          </div>
+        {/if}
+      </div>
+    {/each}
+  {/if}
 </div>
 
 <style>
@@ -203,5 +249,77 @@ function handleSubmit() {
     padding: 8px 12px;
     border-radius: 8px;
     background: var(--color-success-bg);
+  }
+
+  .insight-section {
+    margin-bottom: 1.5rem;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.5rem 0;
+    border: none;
+    background: none;
+    margin-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .section-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .section-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+  }
+
+  .section-count {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+  }
+
+  .section-chevron {
+    font-size: 0.625rem;
+    color: var(--color-text-muted);
+  }
+
+  .section-items {
+    padding-left: 0;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+  }
+
+  .empty-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-desc {
+    font-size: 0.8125rem;
+    color: var(--color-text-muted);
+    max-width: 400px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  .empty-desc code {
+    font-size: 0.75rem;
+    background: rgba(86, 28, 36, 0.06);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
   }
 </style>

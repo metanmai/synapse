@@ -21,3 +21,27 @@ export function formatInsightDate(iso: string): string {
 export function formatInsightType(type: string): string {
   return type.replace("_", " ");
 }
+
+export interface InsightGroup<T extends { type: string } = { type: string }> {
+  type: string;
+  label: string;
+  items: T[];
+}
+
+export function groupInsightsByType<T extends { type: string }>(insights: T[]): InsightGroup<T>[] {
+  const typeConfig = [
+    { type: "decision", label: "Decisions" },
+    { type: "architecture", label: "Architecture" },
+    { type: "learning", label: "Learnings" },
+    { type: "preference", label: "Preferences" },
+    { type: "action_item", label: "Action Items" },
+  ];
+
+  return typeConfig
+    .map(({ type, label }) => ({
+      type,
+      label,
+      items: insights.filter((i) => i.type === type),
+    }))
+    .filter((group) => group.items.length > 0);
+}
