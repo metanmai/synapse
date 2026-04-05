@@ -105,7 +105,7 @@ export async function addMember(
 ): Promise<ProjectMember> {
   const { data, error } = await db
     .from("project_members")
-    .insert({ project_id: projectId, user_id: userId, role })
+    .upsert({ project_id: projectId, user_id: userId, role }, { onConflict: "project_id,user_id" })
     .select()
     .single();
   if (error) throw error;
