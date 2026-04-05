@@ -414,6 +414,7 @@ if (!isMcpServerMode(args)) {
     "ls",
     "List files and folders. Like `ls` on a local filesystem. Returns directory contents with types and modification dates.",
     { path: z.string().optional().describe("Directory path to list. Omit for root.") },
+    { readOnlyHint: true },
     async ({ path }) => {
       const folder = path || "";
       const qs = folder ? `?folder=${encodeURIComponent(folder)}` : "";
@@ -449,6 +450,7 @@ if (!isMcpServerMode(args)) {
     "read",
     "Read a file's content. Like `cat` on a local filesystem. Returns the full markdown/text content of the file at the given path.",
     { path: z.string().describe("File path to read (e.g. 'notes/meeting.md')") },
+    { readOnlyHint: true },
     async ({ path }) => {
       const { match, suggestions } = await resolvePath(path);
       if (!match) {
@@ -497,6 +499,7 @@ if (!isMcpServerMode(args)) {
       content: z.string().describe("The full file content to write"),
       tags: z.array(z.string()).optional().describe("Optional tags for the file"),
     },
+    { destructiveHint: true },
     async ({ path, content, tags }) => {
       const project = await getProject();
       const encrypted = await encryptContent(content);
@@ -516,6 +519,7 @@ if (!isMcpServerMode(args)) {
     "rm",
     "Delete a file. Like `rm` on a local filesystem. Permanently removes the file (history is preserved).",
     { path: z.string().describe("File path to delete") },
+    { destructiveHint: true },
     async ({ path }) => {
       const { match, suggestions } = await resolvePath(path);
       if (!match) {
@@ -547,6 +551,7 @@ if (!isMcpServerMode(args)) {
       folder: z.string().optional().describe("Limit search to a specific directory"),
       tags: z.string().optional().describe("Comma-separated tags to filter by"),
     },
+    { readOnlyHint: true },
     async ({ query, folder, tags }) => {
       const params = new URLSearchParams({ q: query });
       if (folder) params.set("folder", folder);
@@ -593,6 +598,7 @@ if (!isMcpServerMode(args)) {
     "history",
     "View version history for a file. Shows past versions with timestamps and who made each change.",
     { path: z.string().describe("File path to get history for") },
+    { readOnlyHint: true },
     async ({ path }) => {
       const { match, suggestions } = await resolvePath(path);
       if (!match) {
@@ -634,27 +640,33 @@ if (!isMcpServerMode(args)) {
   );
 
   // --- tree: show full directory tree ---
-  server.tool("tree", "Show the full directory tree. Like the `tree` command on a local filesystem.", {}, async () => {
-    const project = await getProject();
-    const entries = (await api("GET", `/api/context/${encodeURIComponent(project)}/list`)) as EntryListResponse[];
+  server.tool(
+    "tree",
+    "Show the full directory tree. Like the `tree` command on a local filesystem.",
+    {},
+    { readOnlyHint: true },
+    async () => {
+      const project = await getProject();
+      const entries = (await api("GET", `/api/context/${encodeURIComponent(project)}/list`)) as EntryListResponse[];
 
-    if (entries.length === 0) {
-      return { content: [{ type: "text" as const, text: "(empty workspace)" }] };
-    }
+      if (entries.length === 0) {
+        return { content: [{ type: "text" as const, text: "(empty workspace)" }] };
+      }
 
-    // Build tree structure
-    const paths = entries.map((e) => e.path).sort();
-    const lines = ["."];
+      // Build tree structure
+      const paths = entries.map((e) => e.path).sort();
+      const lines = ["."];
 
-    for (const p of paths) {
-      const depth = p.split("/").length - 1;
-      const indent = "  ".repeat(depth);
-      const name = p.split("/").pop();
-      lines.push(`${indent}${name}`);
-    }
+      for (const p of paths) {
+        const depth = p.split("/").length - 1;
+        const indent = "  ".repeat(depth);
+        const name = p.split("/").pop();
+        lines.push(`${indent}${name}`);
+      }
 
-    return { content: [{ type: "text" as const, text: lines.join("\n") }] };
-  });
+      return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+    },
+  );
 
   // --- Conversation tools (Plus tier) ---
 
@@ -697,6 +709,7 @@ if (!isMcpServerMode(args)) {
       status: z.enum(["active", "archived"]).optional().describe("Filter by status (default: all non-deleted)"),
       limit: z.number().optional().describe("Maximum number of conversations to return (default 20)"),
     },
+    { readOnlyHint: true },
     async ({ project, status, limit }) => {
       const projectId = await resolveProjectId(project);
       if (!projectId) {
@@ -749,6 +762,7 @@ if (!isMcpServerMode(args)) {
       conversationId: z.string().describe("Conversation ID to load"),
       fromSequence: z.number().optional().describe("Start from this message sequence number (for partial loads)"),
     },
+    { readOnlyHint: true },
     async ({ project, conversationId, fromSequence }) => {
       const projectId = await resolveProjectId(project);
       if (!projectId) {
@@ -846,6 +860,7 @@ if (!isMcpServerMode(args)) {
       summary: z.string().describe("Short summary of the insight"),
       detail: z.string().optional().describe("Optional longer explanation or context"),
     },
+    { destructiveHint: true },
     async ({ project, type, summary, detail }) => {
       const projectId = await resolveProjectId(project, true);
       if (!projectId) {
@@ -885,6 +900,7 @@ if (!isMcpServerMode(args)) {
         .describe("Filter by insight type"),
       limit: z.number().optional().describe("Maximum number of insights to return (default 20)"),
     },
+    { readOnlyHint: true },
     async ({ project, type, limit }) => {
       const projectId = await resolveProjectId(project);
       if (!projectId) {
@@ -956,6 +972,7 @@ if (!isMcpServerMode(args)) {
         )
         .describe("Messages to sync"),
     },
+    { destructiveHint: true },
     async ({ project, conversationId, title, systemPrompt, workingContext, fidelity, messages }) => {
       const projectId = await resolveProjectId(project, true);
       if (!projectId) {
