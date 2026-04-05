@@ -1,7 +1,8 @@
-import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { safeReadFile } from "../safe-read.js";
 import type { CapturedSession, SessionMessage, ToolAdapter } from "../types.js";
+import { sessionIdFromNative } from "../types.js";
 
 interface CursorRequest {
   requestId: string;
@@ -27,11 +28,13 @@ export class CursorAdapter implements ToolAdapter {
 
   parse(filePath: string): CapturedSession | null {
     if (!filePath.endsWith(".json")) return null;
-    if (!fs.existsSync(filePath)) return null;
+
+    const raw = safeReadFile(filePath);
+    if (!raw) return null;
 
     let chat: CursorChat;
     try {
-      chat = JSON.parse(fs.readFileSync(filePath, "utf-8")) as CursorChat;
+      chat = JSON.parse(raw) as CursorChat;
     } catch {
       return null;
     }
@@ -67,7 +70,7 @@ export class CursorAdapter implements ToolAdapter {
     const projectPath = wsIdx >= 0 ? parts.slice(0, wsIdx).join(path.sep) : "unknown";
 
     return {
-      id: chat.sessionId,
+      id: sessionIdFromNative(chat.sessionId),
       tool: "cursor",
       projectPath,
       startedAt: new Date(chat.creationDate).toISOString(),

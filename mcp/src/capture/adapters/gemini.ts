@@ -1,7 +1,8 @@
-import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { safeReadFile } from "../safe-read.js";
 import type { CapturedSession, SessionMessage, ToolAdapter } from "../types.js";
+import { sessionIdFromNative } from "../types.js";
 
 interface GeminiContent {
   type: string;
@@ -35,11 +36,13 @@ export class GeminiAdapter implements ToolAdapter {
 
   parse(filePath: string): CapturedSession | null {
     if (!filePath.endsWith(".json")) return null;
-    if (!fs.existsSync(filePath)) return null;
+
+    const raw = safeReadFile(filePath);
+    if (!raw) return null;
 
     let chat: GeminiChat;
     try {
-      chat = JSON.parse(fs.readFileSync(filePath, "utf-8")) as GeminiChat;
+      chat = JSON.parse(raw) as GeminiChat;
     } catch {
       return null;
     }
@@ -77,7 +80,7 @@ export class GeminiAdapter implements ToolAdapter {
     if (messages.length === 0) return null;
 
     return {
-      id: chat.id,
+      id: sessionIdFromNative(chat.id),
       tool: "gemini",
       projectPath: "unknown",
       startedAt: chat.createdAt,

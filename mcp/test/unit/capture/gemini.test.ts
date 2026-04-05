@@ -24,7 +24,7 @@ describe("GeminiAdapter", () => {
     const session = adapter.parse(FIXTURE);
     expect(session).not.toBeNull();
     expect(session?.tool).toBe("gemini");
-    expect(session?.id).toBe("ses_gemini_001");
+    expect(session?.id).toBe("ses_d4e5f6a7b8c90123");
   });
 
   it("maps 'model' role to 'assistant'", () => {

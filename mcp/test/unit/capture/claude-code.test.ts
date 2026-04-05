@@ -23,7 +23,7 @@ describe("ClaudeCodeAdapter", () => {
     const session = adapter.parse(FIXTURE);
     expect(session).not.toBeNull();
     expect(session?.tool).toBe("claude-code");
-    expect(session?.id).toBe("ses_cc_001");
+    expect(session?.id).toBe("ses_a1b2c3d4e5f67890");
     expect(session?.projectPath).toBe("/Users/test/myproject");
   });
 

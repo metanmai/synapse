@@ -24,7 +24,7 @@ describe("CursorAdapter", () => {
     const session = adapter.parse(FIXTURE);
     expect(session).not.toBeNull();
     expect(session?.tool).toBe("cursor");
-    expect(session?.id).toBe("ses_cursor_001");
+    expect(session?.id).toBe("ses_b2c3d4e5f6a78901");
   });
 
   it("extracts alternating user/assistant messages from requests", () => {

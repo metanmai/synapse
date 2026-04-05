@@ -23,7 +23,7 @@ describe("CodexAdapter", () => {
     const session = adapter.parse(FIXTURE);
     expect(session).not.toBeNull();
     expect(session?.tool).toBe("codex");
-    expect(session?.id).toBe("ses_codex_001");
+    expect(session?.id).toBe("ses_c3d4e5f6a7b89012");
     expect(session?.projectPath).toBe("/Users/test/myproject");
   });
 
