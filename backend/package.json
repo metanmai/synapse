@@ -1,5 +1,5 @@
 {
-  "name": "synapse",
+  "name": "@synapse/backend",
   "version": "1.0.0",
   "description": "Universal AI context layer — shared context across AI tools and teams",
   "scripts": {
