@@ -423,7 +423,7 @@ describe("editors", () => {
       expect(fs.existsSync(cmdDir)).toBe(true);
       const files = fs.readdirSync(cmdDir);
       const synapseFiles = files.filter((f) => f.startsWith("synapse-") && f.endsWith(".md"));
-      expect(synapseFiles.length).toBe(8);
+      expect(synapseFiles.length).toBe(9);
     });
 
     it("command files have content", () => {
@@ -464,7 +464,7 @@ describe("editors", () => {
       expect(fs.existsSync(promptDir)).toBe(true);
       const files = fs.readdirSync(promptDir);
       const synapseFiles = files.filter((f) => f.startsWith("synapse-") && f.endsWith(".prompt.md"));
-      expect(synapseFiles.length).toBe(8);
+      expect(synapseFiles.length).toBe(9);
 
       // Verify YAML frontmatter
       for (const file of synapseFiles) {
@@ -499,7 +499,7 @@ describe("editors", () => {
       expect(fs.existsSync(workflowDir)).toBe(true);
       const files = fs.readdirSync(workflowDir);
       const synapseFiles = files.filter((f) => f.startsWith("synapse-") && f.endsWith(".md"));
-      expect(synapseFiles.length).toBe(8);
+      expect(synapseFiles.length).toBe(9);
     });
 
     it("skips existing files (idempotent)", () => {
@@ -519,6 +519,9 @@ describe("editors", () => {
   // ─── detectExistingSetup ───────────────────────────────────────────
 
   describe("detectExistingSetup", () => {
+    /** Helper: get labels from locations */
+    const labels = (result: ReturnType<typeof detectExistingSetup>) => result.locations.map((l) => l.label);
+
     it("returns {configured: false, locations: [], apiKeys: []} when no configs exist", () => {
       const result = detectExistingSetup();
       expect(result.configured).toBe(false);
@@ -536,7 +539,7 @@ describe("editors", () => {
 
       const result = detectExistingSetup();
       expect(result.configured).toBe(true);
-      expect(result.locations).toContain(".mcp.json");
+      expect(labels(result)).toContain(".mcp.json");
     });
 
     it("detects .cursor/mcp.json with synapsesync-mcp entry", () => {
@@ -551,7 +554,7 @@ describe("editors", () => {
 
       const result = detectExistingSetup();
       expect(result.configured).toBe(true);
-      expect(result.locations).toContain(".cursor/mcp.json");
+      expect(labels(result)).toContain(".cursor/mcp.json");
     });
 
     it("extracts API key from found config", () => {
@@ -617,11 +620,7 @@ describe("editors", () => {
       fs.writeFileSync(path.join(tmpDir, ".mcp.json"), "not valid json{{{");
 
       const result = detectExistingSetup();
-      // Should not throw — the read-catch in detectExistingSetup skips corrupted files.
-      // But the file still exists so it may still be detected depending on implementation.
-      // The code does: try { content = readFileSync(...); if (content.includes("synapsesync-mcp")) }
-      // "not valid json{{{" does not include "synapsesync-mcp" so it won't be added.
-      expect(result.locations).not.toContain(".mcp.json");
+      expect(labels(result)).not.toContain(".mcp.json");
       expect(result.apiKeys).toEqual([]);
     });
 
@@ -632,7 +631,7 @@ describe("editors", () => {
 
       const result = detectExistingSetup();
       expect(result.configured).toBe(true);
-      expect(result.locations).toContain("~/.claude/CLAUDE.md");
+      expect(labels(result)).toContain("~/.claude/CLAUDE.md");
     });
 
     it("does not detect CLAUDE.md without Synapse mention", () => {
@@ -641,7 +640,116 @@ describe("editors", () => {
       fs.writeFileSync(path.join(claudeDir, "CLAUDE.md"), "# Just some rules\nBe helpful.");
 
       const result = detectExistingSetup();
-      expect(result.locations).not.toContain("~/.claude/CLAUDE.md");
+      expect(labels(result)).not.toContain("~/.claude/CLAUDE.md");
+    });
+
+    // ─── Per-location status ────────────────────────────────────────
+
+    it("marks location as 'has_key' when API key is present", () => {
+      fs.writeFileSync(
+        path.join(tmpDir, ".mcp.json"),
+        JSON.stringify({
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: "sk-test" } } },
+        }),
+      );
+
+      const result = detectExistingSetup();
+      const loc = result.locations.find((l) => l.label === ".mcp.json");
+      expect(loc).toBeDefined();
+      expect(loc?.status).toBe("has_key");
+      expect(loc?.apiKey).toBe("sk-test");
+    });
+
+    it("marks location as 'no_key' when synapse config exists but env is empty", () => {
+      fs.writeFileSync(
+        path.join(tmpDir, ".mcp.json"),
+        JSON.stringify({
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: {} } },
+        }),
+      );
+
+      const result = detectExistingSetup();
+      const loc = result.locations.find((l) => l.label === ".mcp.json");
+      expect(loc).toBeDefined();
+      expect(loc?.status).toBe("no_key");
+      expect(loc?.apiKey).toBeNull();
+    });
+
+    it("marks location as 'no_key' when synapse config has no env at all", () => {
+      fs.writeFileSync(
+        path.join(tmpDir, ".mcp.json"),
+        JSON.stringify({
+          mcpServers: { synapse: { command: "node", args: ["/some/path"] } },
+        }),
+      );
+
+      const result = detectExistingSetup();
+      const loc = result.locations.find((l) => l.label === ".mcp.json");
+      expect(loc).toBeDefined();
+      expect(loc?.status).toBe("no_key");
+      expect(loc?.apiKey).toBeNull();
+    });
+
+    it("marks CLAUDE.md as 'instructions_only'", () => {
+      const claudeDir = path.join(tmpHomeDir, ".claude");
+      fs.mkdirSync(claudeDir, { recursive: true });
+      fs.writeFileSync(path.join(claudeDir, "CLAUDE.md"), "# Synapse\nInstructions here.");
+
+      const result = detectExistingSetup();
+      const loc = result.locations.find((l) => l.label === "~/.claude/CLAUDE.md");
+      expect(loc).toBeDefined();
+      expect(loc?.status).toBe("instructions_only");
+      expect(loc?.apiKey).toBeNull();
+    });
+
+    it("shows mixed statuses across locations", () => {
+      // .mcp.json has a key
+      fs.writeFileSync(
+        path.join(tmpDir, ".mcp.json"),
+        JSON.stringify({
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: "sk-good" } } },
+        }),
+      );
+      // .cursor/mcp.json has synapse but no key
+      const cursorDir = path.join(tmpDir, ".cursor");
+      fs.mkdirSync(cursorDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(cursorDir, "mcp.json"),
+        JSON.stringify({
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: {} } },
+        }),
+      );
+      // CLAUDE.md has instructions
+      const claudeDir = path.join(tmpHomeDir, ".claude");
+      fs.mkdirSync(claudeDir, { recursive: true });
+      fs.writeFileSync(path.join(claudeDir, "CLAUDE.md"), "# Synapse instructions");
+
+      const result = detectExistingSetup();
+      expect(result.locations).toHaveLength(3);
+
+      const mcp = result.locations.find((l) => l.label === ".mcp.json");
+      const cursor = result.locations.find((l) => l.label === ".cursor/mcp.json");
+      const claude = result.locations.find((l) => l.label === "~/.claude/CLAUDE.md");
+
+      expect(mcp?.status).toBe("has_key");
+      expect(cursor?.status).toBe("no_key");
+      expect(claude?.status).toBe("instructions_only");
+
+      // Only one unique API key
+      expect(result.apiKeys).toEqual(["sk-good"]);
+    });
+
+    it("location objects include the absolute file path", () => {
+      fs.writeFileSync(
+        path.join(tmpDir, ".mcp.json"),
+        JSON.stringify({
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: "sk-x" } } },
+        }),
+      );
+
+      const result = detectExistingSetup();
+      const loc = result.locations.find((l) => l.label === ".mcp.json");
+      expect(loc?.filePath).toBe(path.join(tmpDir, ".mcp.json"));
     });
   });
 
@@ -686,7 +794,7 @@ describe("editors", () => {
       const cmdDir = path.join(tmpHomeDir, ".claude", "commands", "synapse");
       expect(fs.existsSync(cmdDir)).toBe(true);
       const files = fs.readdirSync(cmdDir);
-      expect(files.length).toBe(8);
+      expect(files.length).toBe(9);
       expect(files).toContain("search.md");
       expect(files).toContain("tree.md");
       expect(files).toContain("sync.md");
@@ -695,6 +803,7 @@ describe("editors", () => {
       expect(files).toContain("list-convos.md");
       expect(files).toContain("load-convo.md");
       expect(files).toContain("sync-convo.md");
+      expect(files).toContain("insights.md");
     });
 
     it("command files are idempotent (skip existing)", () => {

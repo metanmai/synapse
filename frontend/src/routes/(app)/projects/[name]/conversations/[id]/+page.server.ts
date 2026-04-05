@@ -1,27 +1,9 @@
-import { ApiError, createApi } from "$lib/server/api";
-import { error, fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
+import { ApiError, createApi } from "$lib/server/api";
+import { fail, redirect } from "@sveltejs/kit";
 
-export const load: PageServerLoad = async ({ params, locals }) => {
-  const api = createApi(locals.token);
-
-  try {
-    const data = await api.getConversation(params.id);
-    return {
-      conversation: data.conversation,
-      messages: data.messages,
-      context: data.context,
-      media: data.media,
-    };
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
-      error(404, "Conversation not found");
-    }
-    if (err instanceof ApiError) {
-      error(err.status, err.message);
-    }
-    error(500, `Failed to load conversation: ${err instanceof Error ? err.message : String(err)}`);
-  }
+export const load: PageServerLoad = async ({ params }) => {
+  return { conversationId: params.id };
 };
 
 export const actions: Actions = {
@@ -34,7 +16,6 @@ export const actions: Actions = {
         error: err instanceof Error ? err.message : "Failed to archive conversation",
       });
     }
-    // Stay on the page — the load function will re-fetch
   },
 
   restore: async ({ params, locals }) => {

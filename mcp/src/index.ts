@@ -39,6 +39,20 @@ interface HistoryResponse {
   content: string;
 }
 
+interface InsightResponse {
+  id: string;
+  type: string;
+  summary: string;
+  detail: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+interface ListInsightsResponse {
+  insights: InsightResponse[];
+  total: number;
+}
+
 interface ConversationSummary {
   id: string;
   title: string | null;
@@ -819,6 +833,95 @@ if (!isMcpServerMode(args)) {
       }
 
       return { content: [{ type: "text" as const, text: parts.join("\n") }] };
+    },
+  );
+
+  // --- save_insight: store a decision/learning/preference/architecture/action_item ---
+  server.tool(
+    "save_insight",
+    "Save a key insight about the project — a decision, learning, preference, architecture note, or action item. Call this whenever something worth remembering comes up during a session.",
+    {
+      project: z.string().describe("Project name"),
+      type: z
+        .enum(["decision", "learning", "preference", "architecture", "action_item"])
+        .describe("Type of insight"),
+      summary: z.string().describe("Short summary of the insight"),
+      detail: z.string().optional().describe("Optional longer explanation or context"),
+    },
+    async ({ project, type, summary, detail }) => {
+      const projectId = await resolveProjectId(project, true);
+      if (!projectId) {
+        return { content: [{ type: "text" as const, text: `Project "${project}" not found.` }], isError: true };
+      }
+
+      try {
+        const insight = (await api("POST", "/api/insights", {
+          project_id: projectId,
+          type,
+          summary,
+          detail: detail ?? null,
+          source: { type: "session", agent: SOURCE },
+        })) as InsightResponse;
+
+        return {
+          content: [{ type: "text" as const, text: `Saved ${type} insight: "${insight.summary}"` }],
+        };
+      } catch (_e) {
+        return {
+          content: [{ type: "text" as const, text: `Failed to save insight.` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // --- list_insights: browse insights for a project ---
+  server.tool(
+    "list_insights",
+    "List insights for a project, optionally filtered by type. Returns insights sorted by most recently updated.",
+    {
+      project: z.string().describe("Project name"),
+      type: z
+        .enum(["decision", "learning", "preference", "architecture", "action_item"])
+        .optional()
+        .describe("Filter by insight type"),
+      limit: z.number().optional().describe("Maximum number of insights to return (default 20)"),
+    },
+    async ({ project, type, limit }) => {
+      const projectId = await resolveProjectId(project);
+      if (!projectId) {
+        return { content: [{ type: "text" as const, text: `Project "${project}" not found.` }], isError: true };
+      }
+
+      const params = new URLSearchParams({ project_id: projectId });
+      if (type) params.set("type", type);
+      if (limit) params.set("limit", String(limit));
+
+      try {
+        const result = (await api("GET", `/api/insights?${params}`)) as ListInsightsResponse;
+        const { insights, total } = result;
+
+        if (insights.length === 0) {
+          const filterNote = type ? ` of type "${type}"` : "";
+          return {
+            content: [{ type: "text" as const, text: `No insights${filterNote} found in project "${project}".` }],
+          };
+        }
+
+        const lines = insights.map(
+          (i) => `- [${i.type}] ${i.summary}${i.detail ? ` — ${i.detail}` : ""} (${new Date(i.updated_at).toLocaleDateString()})`,
+        );
+        const header = type
+          ? `${total} ${type} insight(s) in "${project}" (showing ${insights.length}):`
+          : `${total} insight(s) in "${project}" (showing ${insights.length}):`;
+
+        return { content: [{ type: "text" as const, text: `${header}\n${lines.join("\n")}` }] };
+      } catch (_e) {
+        return {
+          content: [{ type: "text" as const, text: `Failed to list insights.` }],
+          isError: true,
+        };
+      }
     },
   );
 

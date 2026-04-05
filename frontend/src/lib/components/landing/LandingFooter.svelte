@@ -9,6 +9,7 @@
       <div class="footer-col">
         <h4 class="footer-heading">Company</h4>
         <a href="mailto:metanmai@gmail.com" class="footer-link">Contact</a>
+        <a href="https://linkedin.com/in/tanmai-niranjan" class="footer-link" target="_blank" rel="noopener noreferrer">LinkedIn</a>
       </div>
       <div class="footer-col">
         <h4 class="footer-heading">Legal</h4>

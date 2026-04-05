@@ -7,6 +7,8 @@ export const SYNAPSE_INSTRUCTIONS = `# Synapse — Shared Context Layer
 You have access to a Synapse MCP server — a remote workspace for storing and retrieving context across sessions.
 
 ## Available Tools
+
+### Context (filesystem-style)
 - search — Semantic search across all files (finds by meaning, not just keywords)
 - read — Read a file's content
 - write — Create or update a file
@@ -14,6 +16,10 @@ You have access to a Synapse MCP server — a remote workspace for storing and r
 - tree — Show full directory tree
 - history — View version history
 - rm — Delete a file
+
+### Insights (structured knowledge)
+- save_insight — Save a decision, learning, preference, architecture note, or action item
+- list_insights — Browse saved insights, optionally filtered by type
 
 ## How to Use
 1. BEFORE writing anything, run tree() to see the existing workspace structure
@@ -23,6 +29,16 @@ You have access to a Synapse MCP server — a remote workspace for storing and r
    - Cross-project decisions, research, retrospectives → root-level directories
    - Settings and configuration → settings/
    - Determine the project name from the repo, codebase, or conversation context — not from a hardcoded value
+
+## Insights
+When something worth remembering comes up during a session, save it as an insight:
+- **decision** — A choice that was made and why (e.g. "Chose Postgres over DynamoDB because we need complex joins")
+- **learning** — Something discovered or debugged (e.g. "Supabase RLS policies don't apply to service role keys")
+- **preference** — A user or team preference (e.g. "User prefers functional components over class components")
+- **architecture** — A structural note (e.g. "Auth tokens flow: frontend cookie → server load → backend Bearer header")
+- **action_item** — Something to follow up on (e.g. "Add rate limiting to the import endpoint before launch")
+
+Save insights proactively — don't wait to be asked. If you make a decision, learn something non-obvious, or notice a pattern, save it.
 
 ## Key Behaviors
 - Always check the tree FIRST to understand the existing directory layout before writing
@@ -56,6 +72,10 @@ export const SYNAPSE_COMMAND_DEFS: Record<string, CommandDef> = {
   "synapse-clean": {
     description: "Clean up the Synapse workspace",
     body: "Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Use the Synapse MCP `tree` tool to list all files\n2. Identify duplicates, test files, empty entries\n3. Confirm with the user before deleting anything\n4. Delete confirmed entries using the Synapse MCP `rm` tool",
+  },
+  "synapse-insights": {
+    description: "List or save insights for the current project",
+    body: "List or save insights for the current project.\n\nUsage: $ARGUMENTS can be empty (list all), a type filter (e.g. \"decisions\"), or a new insight to save.\n\n1. Determine the current project name from the repo/codebase\n2. If $ARGUMENTS is empty or a type name (decision/learning/preference/architecture/action_item), use the Synapse MCP `list_insights` tool to show existing insights, optionally filtered by type\n3. If $ARGUMENTS describes something to save, use the Synapse MCP `save_insight` tool with the appropriate type, a concise summary, and optional detail\n4. Display results clearly — for listings show type badges, summaries, and dates",
   },
   "synapse-conversations": {
     description: "List synced conversations in the current project",

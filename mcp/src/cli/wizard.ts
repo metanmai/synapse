@@ -1,11 +1,30 @@
+import fs from "node:fs";
 import * as clack from "@clack/prompts";
 import { validateApiKey } from "./api.js";
 import { browserAuth } from "./browser-auth.js";
-import type { SetupScope } from "./editors/index.js";
+import type { SetupScope, ConfigLocation } from "./editors/index.js";
 import { detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors/index.js";
 import { createGlyphSpinner } from "./spinner.js";
 import { accent, bold, muted, success, error as themeError } from "./theme.js";
 import { showWelcome } from "./welcome.js";
+
+function formatLocationStatus(loc: ConfigLocation, keyValid: boolean | null): string {
+  const label = loc.label.padEnd(42);
+  if (loc.status === "instructions_only") {
+    return `  ${muted("\u25CB")} ${muted(label)} ${muted("instructions only")}`;
+  }
+  if (loc.status === "no_key") {
+    return `  ${themeError("\u2717")} ${muted(label)} ${themeError("missing API key")}`;
+  }
+  // has_key
+  if (keyValid === true) {
+    return `  ${success("\u2713")} ${muted(label)} ${success("connected")}`;
+  }
+  if (keyValid === false) {
+    return `  ${themeError("\u2717")} ${muted(label)} ${themeError("invalid key")}`;
+  }
+  return `  ${muted("?")} ${muted(label)} ${muted("unchecked")}`;
+}
 
 export async function runWizard(version: string): Promise<void> {
   // Step 1: Animated welcome
@@ -16,56 +35,76 @@ export async function runWizard(version: string): Promise<void> {
   // Check for existing setup
   const existing = detectExistingSetup();
   if (existing.configured) {
-    const locations = existing.locations.map((l) => `  ${muted(l)}`).join("\n");
-
-    // Validate existing API keys — try each until one works
+    // Validate each unique API key
+    const keyResults = new Map<string, boolean>(); // key -> valid
     let validKey: string | null = null;
     let keyExpired = false;
+
     if (existing.apiKeys.length > 0) {
       const spin = createGlyphSpinner();
-      spin.start("Checking existing connection\u2026");
+      spin.start("Checking connections\u2026");
       for (const key of existing.apiKeys) {
         const keyStatus = await validateApiKey(key);
         if (keyStatus.status === "valid") {
-          validKey = key;
-          break;
-        }
-        if (keyStatus.status === "expired") {
-          keyExpired = true;
+          keyResults.set(key, true);
+          if (!validKey) validKey = key;
+        } else {
+          keyResults.set(key, false);
+          if (keyStatus.status === "expired") keyExpired = true;
         }
       }
-      if (validKey) {
-        spin.stop(`${success("\u2713")} Connected`);
-      } else if (keyExpired) {
-        spin.stop(themeError("API key expired or revoked"));
-      } else {
-        spin.stop(muted("Could not verify connection"));
-      }
+      spin.stop("Connection check complete");
     }
 
+    // Build per-location status lines
+    const statusLines = existing.locations.map((loc) => {
+      const keyValid = loc.apiKey ? (keyResults.get(loc.apiKey) ?? null) : null;
+      return formatLocationStatus(loc, keyValid);
+    }).join("\n");
+
+    const hasProblems = existing.locations.some(
+      (loc) => loc.status === "no_key" || (loc.apiKey != null && keyResults.get(loc.apiKey) === false),
+    );
+
     if (keyExpired && !validKey) {
-      clack.log.warn(`Synapse is configured but your API key has expired:\n${locations}`);
+      clack.log.warn(`Synapse is configured but your API key has expired:\n${statusLines}`);
       clack.log.info("Sign in again to get a new API key.");
       // Fall through to full auth flow
     } else {
-      clack.log.info(`Synapse is already configured:\n${locations}`);
+      if (hasProblems) {
+        clack.log.warn(`Synapse has configuration issues:\n${statusLines}`);
+      } else {
+        clack.log.info(`Synapse status:\n${statusLines}`);
+      }
 
-      const action = await clack.select({
-        message: "What would you like to do?",
-        options: [
-          { value: "reconfigure" as const, label: "Reconfigure", hint: "new API key + choose editors" },
-          {
-            value: "add" as const,
-            label: "Add more editors",
-            hint: validKey ? "keep current API key" : "paste your API key",
-          },
-          { value: "cancel" as const, label: "Cancel" },
-        ],
-      });
+      const options: { value: string; label: string; hint?: string }[] = [];
+      if (hasProblems && validKey) {
+        options.push({
+          value: "fix",
+          label: "Fix issues",
+          hint: "apply working API key to broken configs",
+        });
+      }
+      options.push(
+        { value: "reconfigure", label: "Reconfigure", hint: "new API key + choose editors" },
+        {
+          value: "add",
+          label: "Add more editors",
+          hint: validKey ? "keep current API key" : "paste your API key",
+        },
+        { value: "cancel", label: "Cancel" },
+      );
+
+      const action = await clack.select({ message: "What would you like to do?", options });
 
       if (clack.isCancel(action) || action === "cancel") {
         clack.cancel("No changes made.");
         process.exit(0);
+      }
+
+      if (action === "fix" && validKey) {
+        await runFixIssues(existing.locations, validKey);
+        return;
       }
 
       if (action === "add") {
@@ -143,6 +182,74 @@ export async function runWizard(version: string): Promise<void> {
   }
 
   await runEditorSetup(apiKey);
+}
+
+async function runFixIssues(locations: ConfigLocation[], validKey: string): Promise<void> {
+  const broken = locations.filter((l) => l.status === "no_key");
+  if (broken.length === 0) {
+    clack.log.info("No issues to fix.");
+    clack.outro("All good!");
+    return;
+  }
+
+  const preview = broken.map((l) => `  ${muted(l.label)}`).join("\n");
+  clack.log.message(`Will add API key to:\n${preview}`);
+
+  const confirmed = await clack.confirm({ message: "Apply fix?" });
+  if (clack.isCancel(confirmed) || !confirmed) {
+    clack.cancel("No changes made.");
+    process.exit(0);
+  }
+
+  const spin = createGlyphSpinner();
+  spin.start("Fixing configs\u2026");
+
+  const fixed: string[] = [];
+  const errors: string[] = [];
+
+  for (const loc of broken) {
+    try {
+      injectApiKey(loc.filePath, validKey);
+      fixed.push(loc.label);
+    } catch (err) {
+      errors.push(`${loc.label}: ${(err as Error).message}`);
+    }
+  }
+
+  spin.stop("Done");
+
+  if (fixed.length > 0) {
+    const summary = fixed.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
+    clack.log.message(summary);
+  }
+  for (const e of errors) {
+    clack.log.warn(`${themeError("\u2717")} ${e}`);
+  }
+
+  clack.outro(`Restart your editor to connect. ${muted("synapsesync.app/docs")}`);
+}
+
+/** Inject SYNAPSE_API_KEY into an existing config file that has a synapse server entry but no key. */
+function injectApiKey(filePath: string, apiKey: string): void {
+  const raw = fs.readFileSync(filePath, "utf-8");
+  const parsed = JSON.parse(raw);
+
+  // Find the synapse server object in whichever format
+  const synapse =
+    parsed?.mcpServers?.synapse ??
+    parsed?.mcp?.servers?.synapse ??
+    parsed?.servers?.synapse;
+
+  if (synapse && typeof synapse === "object") {
+    if (!synapse.env || typeof synapse.env !== "object") {
+      synapse.env = {};
+    }
+    synapse.env.SYNAPSE_API_KEY = apiKey;
+    fs.writeFileSync(filePath, `${JSON.stringify(parsed, null, 2)}\n`);
+    return;
+  }
+
+  throw new Error("Could not find synapse server config");
 }
 
 async function runEditorSetup(apiKey: string): Promise<void> {
