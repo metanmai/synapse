@@ -28,7 +28,7 @@ import {
   detectExistingSetup,
   writeAllDetected,
   writeEditorConfigs,
-} from "../../src/cli/editors/index.js";
+} from "../../src/cli/editors.js";
 
 /** Find an editor by id, throwing if not found (avoids non-null assertion lint errors). */
 function findEditor(editors: ReturnType<typeof detectEditors>, id: string) {
