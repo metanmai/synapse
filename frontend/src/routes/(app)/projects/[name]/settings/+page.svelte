@@ -1,7 +1,6 @@
 <script>
 import InviteDialog from "$lib/components/sharing/InviteDialog.svelte";
 import MemberList from "$lib/components/sharing/MemberList.svelte";
-import ShareLinkManager from "$lib/components/sharing/ShareLinkManager.svelte";
 
 let { data, form } = $props();
 </script>
@@ -15,10 +14,5 @@ let { data, form } = $props();
     <div class="mt-4">
       <MemberList members={data.project.project_members ?? []} projectId={data.project.id} />
     </div>
-  </section>
-
-  <section class="mb-8">
-    <h2 class="text-lg font-medium mb-3">Share Links</h2>
-    <ShareLinkManager links={data.shareLinks} projectId={data.project.id} tier={data.tier} />
   </section>
 </div>

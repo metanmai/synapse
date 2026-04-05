@@ -59,6 +59,10 @@ export const schemas = {
     role: z.enum(["editor", "viewer"]),
   }),
 
+  updateMemberRole: z.object({
+    role: z.enum(["editor", "viewer"]),
+  }),
+
   setPreference: z.object({
     key: z.string().min(1, "Key is required"),
     value: z.string().min(1, "Value is required"),

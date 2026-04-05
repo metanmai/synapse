@@ -122,6 +122,16 @@ export async function countMembers(db: SupabaseClient, projectId: string): Promi
   return count ?? 0;
 }
 
+export async function updateMemberRole(
+  db: SupabaseClient,
+  projectId: string,
+  userId: string,
+  role: "editor" | "viewer",
+): Promise<void> {
+  const { error } = await db.from("project_members").update({ role }).eq("project_id", projectId).eq("user_id", userId);
+  if (error) throw error;
+}
+
 export async function removeMember(db: SupabaseClient, projectId: string, userId: string): Promise<void> {
   const { error } = await db.from("project_members").delete().eq("project_id", projectId).eq("user_id", userId);
   if (error) throw error;
