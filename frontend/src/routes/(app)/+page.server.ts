@@ -1,4 +1,4 @@
-import { fail } from "@sveltejs/kit";
+import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { createApi } from "$lib/server/api";
 
@@ -6,6 +6,9 @@ export const load: PageServerLoad = async ({ locals }) => {
   const api = createApi(locals.token);
   try {
     const projects = await api.listProjects();
+    if (projects.length > 0) {
+      redirect(303, `/projects/${encodeURIComponent(projects[0].name)}`);
+    }
     return { projects, error: null };
   } catch (err) {
     console.error("[dashboard] API error:", err);
@@ -27,6 +30,6 @@ export const actions: Actions = {
       return fail(400, { error: err instanceof Error ? err.message : "Failed to create project" });
     }
 
-    return { success: true };
+    redirect(303, `/projects/${encodeURIComponent(name)}`);
   },
 };
