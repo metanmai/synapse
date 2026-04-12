@@ -22,11 +22,10 @@
   "triggers": {
     "crons": ["*/5 * * * *"]
   },
-  "vars": {
-    "CREEM_PRO_PRODUCT_ID": "prod_PLACEHOLDER",
-    "EMBEDDING_SERVICE_URL": "",
-    "EMBEDDING_SERVICE_KEY": ""
-  },
+  // CREEM_PRO_PRODUCT_ID, EMBEDDING_SERVICE_URL, EMBEDDING_SERVICE_KEY,
+  // SUPABASE_URL, SUPABASE_SERVICE_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+  // are all set via `wrangler secret put` — do NOT define them as vars here
+  // or they will be overwritten with empty values on every deploy.
   "observability": {
     "enabled": true,
     "logs": {
