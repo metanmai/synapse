@@ -14,6 +14,10 @@ async function request<T>(
   token: string | null,
   options: RequestInit = {},
 ): Promise<T> {
+  if (!API_URL) {
+    throw new ApiError(500, `API_URL is not configured. Set it in your environment variables.`);
+  }
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...((options.headers as Record<string, string>) ?? {}),
@@ -23,12 +27,23 @@ async function request<T>(
   }
 
   const url = `${API_URL}${path}`;
-  console.log(`[api] ${options.method ?? "GET"} ${url}`);
-  const res = await fetch(url, { ...options, headers });
+  const method = options.method ?? "GET";
+  console.log(`[api] ${method} ${url}`);
+
+  let res: Response;
+  try {
+    res = await fetch(url, { ...options, headers });
+  } catch (err) {
+    throw new ApiError(503, `Cannot reach API at ${API_URL}${path}: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, body.error || `Request failed: ${res.status}`);
+    const detail = body.detail ? ` (${body.detail})` : "";
+    throw new ApiError(
+      res.status,
+      `${method} ${path} → ${res.status}: ${body.error || res.statusText}${detail}`
+    );
   }
 
   return res.json();
