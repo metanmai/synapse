@@ -1,5 +1,7 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
+  import { page } from "$app/stores";
+  import { hasPassphrase, encrypt } from "$lib/crypto";
   import type { Entry } from "$lib/types";
 
   let { entry, projectName, isNew = false } = $props<{
@@ -9,7 +11,28 @@
   }>();
 </script>
 
-<form method="POST" action="?/saveEntry" use:enhance={() => {
+<form method="POST" action="?/saveEntry" use:enhance={({ formData }) => {
+  // Encrypt content client-side before sending to server
+  const content = formData.get("content") as string;
+  const userEmail = $page.data.user?.email;
+  if (hasPassphrase() && userEmail && content) {
+    // Replace form submission with async encryption
+    return async ({ result, update }) => {
+      const encrypted = await encrypt(content, userEmail);
+      formData.set("content", encrypted);
+      // Re-submit with encrypted content via fetch
+      const res = await fetch("?/saveEntry", {
+        method: "POST",
+        body: formData,
+      });
+      const savedPath = (formData.get("path") as string)?.trim();
+      if (res.ok && savedPath) {
+        window.location.href = `/projects/${encodeURIComponent(projectName)}?path=${encodeURIComponent(savedPath)}`;
+      } else {
+        await update();
+      }
+    };
+  }
   return async ({ result, update }) => {
     if (result.type === "success" && result.data?.savedPath) {
       window.location.href = `/projects/${encodeURIComponent(projectName)}?path=${encodeURIComponent(result.data.savedPath as string)}`;
