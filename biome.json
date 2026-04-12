@@ -35,6 +35,16 @@
       "linter": {
         "enabled": false
       }
+    },
+    {
+      "include": ["backend/src/mcp/agent.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
     }
   ]
 }

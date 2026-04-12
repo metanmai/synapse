@@ -13,8 +13,14 @@ import { registerContextRetrievalTools } from "./tools/context-retrieval";
 import { registerGoogleSyncTools } from "./tools/google-sync";
 import { registerProjectManagementTools } from "./tools/project-management";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+/* McpAgent expects the SDK copy bundled inside `agents`; our top-level McpServer is a different nominal type. */
 type AnyMcpAgent = any;
+
+type McpAgentWithRequest = {
+  env: Env;
+  request?: { headers: { get(name: string): string | null } };
+  ctx?: { request?: { headers: { get(name: string): string | null } } };
+};
 
 export class SynapseAgent extends (McpAgent as AnyMcpAgent) {
   server = new McpServer({
@@ -29,13 +35,12 @@ export class SynapseAgent extends (McpAgent as AnyMcpAgent) {
     // Authenticate from the request's Authorization header.
     // The MCP HTTP transport passes the original request to the Durable Object.
     // Extract the Bearer token and resolve the user.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const self = this as any;
+    const self = this as unknown as McpAgentWithRequest;
     const authHeader = self.request?.headers?.get("Authorization") ?? self.ctx?.request?.headers?.get("Authorization");
     if (authHeader?.startsWith("Bearer ")) {
       const apiKey = authHeader.slice(7);
       const apiKeyHash = await hashApiKey(apiKey);
-      const db = createSupabaseClient(self.env as Env);
+      const db = createSupabaseClient(self.env);
       const result = await findUserByApiKeyHash(db, apiKeyHash);
       if (result) {
         this.userId = result.user.id;
