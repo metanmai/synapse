@@ -2,10 +2,12 @@ import { Hono } from "hono";
 
 import { authMiddleware } from "../lib/auth";
 import { createSupabaseClient } from "../db/client";
-import { createProject, listProjectsForUser, getProjectByName, getMemberRole, addMember, removeMember, findUserByEmail, setPreference, getPreferences, createShareLink, listShareLinks, deleteShareLink, getActivityLog, getAllEntries } from "../db/queries";
+import { createProject, listProjectsForUser, getProjectByName, getMemberRole, addMember, removeMember, findUserByEmail, setPreference, getPreferences, createShareLink, listShareLinks, deleteShareLink, getActivityLog, getAllEntries, countEntries } from "../db/queries";
 import { logActivity } from "../db/activity-logger";
 import { AppError, NotFoundError, ForbiddenError } from "../lib/errors";
 import { buildProjectZip } from "../lib/export";
+import { parseZipEntries, importEntries } from "../lib/import";
+import { getTierLimits } from "../lib/tier";
 
 import type { Env } from "../lib/env";
 
@@ -215,6 +217,65 @@ projects.get("/:id/export", async (c) => {
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });
+});
+
+// POST /api/projects/:id/import
+projects.post("/:id/import", async (c) => {
+  const user = c.get("user");
+  const projectId = c.req.param("id");
+
+  const db = createSupabaseClient(c.env);
+  const callerRole = await getMemberRole(db, projectId, user.id);
+  if (!callerRole || callerRole === "viewer") {
+    throw new ForbiddenError("Only owners and editors can import");
+  }
+
+  // Parse multipart form data
+  const formData = await c.req.formData();
+  const file = formData.get("file");
+  if (!file || !(file instanceof File)) {
+    throw new AppError("file is required", 400, "VALIDATION_ERROR");
+  }
+
+  const arrayBuffer = await file.arrayBuffer();
+  const zipData = new Uint8Array(arrayBuffer);
+
+  let parsed;
+  try {
+    parsed = parseZipEntries(zipData);
+  } catch {
+    throw new AppError("Invalid zip file", 400, "VALIDATION_ERROR");
+  }
+
+  // Validate Synapse export
+  if (!parsed.meta || parsed.meta.version !== 1) {
+    throw new AppError("Not a valid Synapse export (missing or invalid _synapse_meta.json)", 400, "VALIDATION_ERROR");
+  }
+
+  // Tier enforcement: check if import would exceed file limit
+  const currentCount = await countEntries(db, projectId);
+  const existingPaths = new Set<string>();
+  const { data: existingEntries } = await db
+    .from("entries")
+    .select("path")
+    .eq("project_id", projectId);
+  if (existingEntries) {
+    for (const e of existingEntries) existingPaths.add(e.path);
+  }
+
+  const newEntryCount = parsed.entries.filter((e) => !existingPaths.has(e.path)).length;
+  const limits = getTierLimits(c);
+  if (currentCount + newEntryCount > limits.maxFiles) {
+    throw new AppError(
+      `Import would exceed file limit (${currentCount} existing + ${newEntryCount} new = ${currentCount + newEntryCount}, limit: ${limits.maxFiles})`,
+      403,
+      "TIER_LIMIT"
+    );
+  }
+
+  const result = await importEntries(db, projectId, parsed.entries, user.id);
+
+  return c.json(result);
 });
 
 export { projects };
