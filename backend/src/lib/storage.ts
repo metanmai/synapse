@@ -1,7 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-
-const BUCKET_NAME = "conversation-media";
-const SIGNED_URL_EXPIRY = 3600; // 1 hour
+import { MEDIA_BUCKET, SIGNED_URL_EXPIRY_SECONDS } from "./constants";
 
 export async function uploadMedia(
   db: SupabaseClient,
@@ -12,7 +10,7 @@ export async function uploadMedia(
   mimeType: string,
 ): Promise<string> {
   const storagePath = `conversations/${conversationId}/${messageId}/${filename}`;
-  const { error } = await db.storage.from(BUCKET_NAME).upload(storagePath, content, {
+  const { error } = await db.storage.from(MEDIA_BUCKET).upload(storagePath, content, {
     contentType: mimeType,
     upsert: false,
   });
@@ -21,13 +19,13 @@ export async function uploadMedia(
 }
 
 export async function getSignedUrl(db: SupabaseClient, storagePath: string): Promise<string> {
-  const { data, error } = await db.storage.from(BUCKET_NAME).createSignedUrl(storagePath, SIGNED_URL_EXPIRY);
+  const { data, error } = await db.storage.from(MEDIA_BUCKET).createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SECONDS);
   if (error) throw error;
   return data.signedUrl;
 }
 
 export async function deleteMedia(db: SupabaseClient, storagePaths: string[]): Promise<void> {
   if (storagePaths.length === 0) return;
-  const { error } = await db.storage.from(BUCKET_NAME).remove(storagePaths);
+  const { error } = await db.storage.from(MEDIA_BUCKET).remove(storagePaths);
   if (error) throw error;
 }

@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { getTierLimitsFromEnv } from "../db/types";
+import { DEFAULT_APP_URL, DEFAULT_TIER_PLUS_PRICE } from "./constants";
 import { envOr } from "./env";
 import type { Env } from "./env";
 import { AppError } from "./errors";
@@ -13,8 +14,8 @@ export function getTierLimits(c: Context<{ Bindings: Env }>) {
 export function requirePlus(c: Context<{ Bindings: Env }>, feature: string) {
   const tier = c.get("tier") ?? "free";
   if (tier !== "plus") {
-    const price = envOr(c.env, "TIER_PLUS_PRICE", "5.99");
-    const appUrl = envOr(c.env, "APP_URL", "https://synapsesync.app");
+    const price = envOr(c.env, "TIER_PLUS_PRICE", DEFAULT_TIER_PLUS_PRICE);
+    const appUrl = envOr(c.env, "APP_URL", DEFAULT_APP_URL);
     throw new AppError(
       `${feature} requires a Plus subscription ($${price}/mo). Upgrade at ${appUrl}/account`,
       403,
@@ -37,7 +38,7 @@ export function enforceMemberLimit(currentMemberCount: number, c: Context<{ Bind
   if (limits.maxMembers === 0) return; // 0 = unlimited
   if (currentMemberCount >= limits.maxMembers) {
     const tier = c.get("tier") ?? "free";
-    const price = envOr(c.env, "TIER_PLUS_PRICE", "5.99");
+    const price = envOr(c.env, "TIER_PLUS_PRICE", DEFAULT_TIER_PLUS_PRICE);
     throw new AppError(
       `Member limit reached (${limits.maxMembers} members on ${tier} tier). Upgrade to Plus ($${price}/mo) for unlimited team members.`,
       403,
@@ -50,7 +51,7 @@ export function enforceFileLimit(currentCount: number, c: Context<{ Bindings: En
   const limits = getTierLimits(c);
   if (currentCount >= limits.maxFiles) {
     const tier = c.get("tier") ?? "free";
-    const price = envOr(c.env, "TIER_PLUS_PRICE", "5.99");
+    const price = envOr(c.env, "TIER_PLUS_PRICE", DEFAULT_TIER_PLUS_PRICE);
     throw new AppError(
       `File limit reached (${limits.maxFiles} files on ${tier} tier). Upgrade to Plus ($${price}/mo) for more files.`,
       403,
@@ -64,7 +65,7 @@ export function enforceConnectionLimit(currentConnections: number, _source: stri
   if (limits.maxConnections === 0) return; // 0 = unlimited
   if (currentConnections >= limits.maxConnections) {
     const tier = c.get("tier") ?? "free";
-    const price = envOr(c.env, "TIER_PLUS_PRICE", "5.99");
+    const price = envOr(c.env, "TIER_PLUS_PRICE", DEFAULT_TIER_PLUS_PRICE);
     throw new AppError(
       `Connection limit reached (${limits.maxConnections} sources on ${tier} tier). Upgrade to Plus ($${price}/mo) for unlimited connections.`,
       403,

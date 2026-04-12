@@ -1,3 +1,5 @@
+import { EMBEDDING_TIMEOUT_MS } from "./constants";
+
 export interface EmbeddingConfig {
   url?: string;
   key?: string;
@@ -23,7 +25,7 @@ export async function embedTexts(
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), config.timeoutMs ?? 3000);
+    const timeout = setTimeout(() => controller.abort(), config.timeoutMs ?? EMBEDDING_TIMEOUT_MS);
 
     const resp = await fetchFn(`${config.url}/embed`, {
       method: "POST",
@@ -60,6 +62,6 @@ export function embeddingConfigFromEnv(env: {
   return {
     url: env.EMBEDDING_SERVICE_URL,
     key: env.EMBEDDING_SERVICE_KEY,
-    timeoutMs: 3000,
+    timeoutMs: EMBEDDING_TIMEOUT_MS,
   };
 }

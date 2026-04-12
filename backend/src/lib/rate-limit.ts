@@ -1,10 +1,11 @@
 import type { Context, Next } from "hono";
+import { RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "./constants";
 import type { Env } from "./env";
 import { AppError } from "./errors";
 
 const requests = new Map<string, { count: number; resetAt: number }>();
 
-export function rateLimit(limit = 60, windowMs = 60000) {
+export function rateLimit(limit = RATE_LIMIT_MAX, windowMs = RATE_LIMIT_WINDOW_MS) {
   return async (c: Context<{ Bindings: Env }>, next: Next) => {
     const key = c.req.header("Authorization") || c.req.header("cf-connecting-ip") || "anonymous";
     const now = Date.now();
