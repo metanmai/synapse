@@ -66,7 +66,7 @@
     <p>We may update this policy from time to time. Changes will be posted on this page with an updated "Last updated" date.</p>
 
     <h2>Contact</h2>
-    <p>Questions about this policy? Email <a href="mailto:metanmai@gmail.com">metanmai@gmail.com</a>.</p>
+    <p>Questions about this policy? Email <a href="mailto:metanmai@gmail.com">metanmai@gmail.com</a> or reach out on <a href="https://linkedin.com/in/tanmai-niranjan" target="_blank" rel="noopener noreferrer">LinkedIn</a>.</p>
   </div>
 </div>
 
