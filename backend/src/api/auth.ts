@@ -65,8 +65,16 @@ auth.post("/login", async (c) => {
     throw new AppError("User not found. Please sign up first.", 404, "NOT_FOUND");
   }
 
-  // Create a new API key for this login
+  // Check if user already has a key with this label
   const keyLabel = body.label || "cli";
+  const existingKeys = await listApiKeys(db, user.id);
+  const existingKey = existingKeys.find((k) => k.label === keyLabel);
+
+  if (existingKey) {
+    // Delete the old key with the same label and create a fresh one
+    await deleteApiKey(db, existingKey.id, user.id);
+  }
+
   const apiKey = crypto.randomUUID() + "-" + crypto.randomUUID();
   const apiKeyHash = await hashApiKey(apiKey);
   await createApiKey(db, user.id, apiKeyHash, keyLabel);
