@@ -16,7 +16,7 @@ describe("singleOrNull", () => {
   it("returns null when no rows found (PGRST116)", () => {
     const result = singleOrNull({
       data: null,
-      error: { code: "PGRST116", message: "No rows found", details: "", hint: "" },
+      error: { name: "PostgrestError", code: "PGRST116", message: "No rows found", details: "", hint: "" },
       count: null,
       status: 406,
       statusText: "Not Acceptable",
@@ -28,7 +28,7 @@ describe("singleOrNull", () => {
     expect(() =>
       singleOrNull({
         data: null,
-        error: { code: "42P01", message: 'relation "users" does not exist', details: "", hint: "" },
+        error: { name: "PostgrestError", code: "42P01", message: 'relation "users" does not exist', details: "", hint: "" },
         count: null,
         status: 400,
         statusText: "Bad Request",
@@ -40,7 +40,7 @@ describe("singleOrNull", () => {
     expect(() =>
       singleOrNull({
         data: null,
-        error: { code: "42501", message: "permission denied for table users", details: "", hint: "" },
+        error: { name: "PostgrestError", code: "42501", message: "permission denied for table users", details: "", hint: "" },
         count: null,
         status: 403,
         statusText: "Forbidden",
@@ -52,7 +52,7 @@ describe("singleOrNull", () => {
     expect(() =>
       singleOrNull({
         data: null,
-        error: { code: "08001", message: "could not connect to server", details: "", hint: "" },
+        error: { name: "PostgrestError", code: "08001", message: "could not connect to server", details: "", hint: "" },
         count: null,
         status: 500,
         statusText: "Internal Server Error",
