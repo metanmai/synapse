@@ -8,7 +8,7 @@
 <div class="max-w-3xl mx-auto p-8">
   <div class="flex items-center justify-between mb-6">
     <div>
-      <h1 class="text-2xl font-semibold">Projects</h1>
+      <h1 class="text-2xl font-semibold" style="color: var(--color-accent);">Projects</h1>
       <p class="text-sm mt-1" style="color: var(--color-text-muted);">
         {data.projects.length} project{data.projects.length !== 1 ? "s" : ""}
       </p>
@@ -57,7 +57,7 @@
       {#each data.projects as project}
         <a href="/projects/{encodeURIComponent(project.name)}"
           class="block p-4 rounded-xl transition-colors"
-          style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border);">
+          style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border); border-left: 3px solid var(--color-accent);">
           <div class="font-medium">{project.name}</div>
           <div class="text-sm mt-1" style="color: var(--color-text-muted);">
             Created {new Date(project.created_at).toLocaleDateString()}
