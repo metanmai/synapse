@@ -16,7 +16,7 @@
       ],
       "result": {
         "timings": { "firstProgress": 500, "totalElapsed": 1200 },
-        "metadata": { "sessionId": "ses_cursor_001", "agentId": "github.copilot" }
+        "metadata": { "sessionId": "b2c3d4e5-f6a7-8901-bcde-f12345678901", "agentId": "github.copilot" }
       },
       "timestamp": 1743588000000,
       "agent": { "id": "github.copilot" },
@@ -37,14 +37,14 @@
       "response": [{ "value": "I'll refactor the auth middleware to use session cookies. Here's the updated code..." }],
       "result": {
         "timings": { "firstProgress": 300, "totalElapsed": 900 },
-        "metadata": { "sessionId": "ses_cursor_001", "agentId": "github.copilot" }
+        "metadata": { "sessionId": "b2c3d4e5-f6a7-8901-bcde-f12345678901", "agentId": "github.copilot" }
       },
       "timestamp": 1743588060000,
       "agent": { "id": "github.copilot" },
       "modelId": "gpt-4.1"
     }
   ],
-  "sessionId": "ses_cursor_001",
+  "sessionId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
   "creationDate": 1743588000000,
   "lastMessageDate": 1743588060000,
   "isImported": false
