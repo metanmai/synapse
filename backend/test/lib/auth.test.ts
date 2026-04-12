@@ -7,6 +7,7 @@ const mockFrom = vi.fn();
 const mockSelect = vi.fn();
 const mockEq = vi.fn();
 const mockSingle = vi.fn();
+const mockSubscriptionQuery = vi.fn();
 
 vi.mock("@supabase/supabase-js", () => ({
   createClient: () => ({
@@ -24,12 +25,22 @@ vi.mock("../../src/db/client", () => ({
       return {
         select: (...args: unknown[]) => {
           mockSelect(...args);
-          return {
-            eq: (...eqArgs: unknown[]) => {
-              mockEq(...eqArgs);
-              return { single: mockSingle };
-            },
+          // Build a chainable query object supporting both .single() and .in().order().limit()
+          const chainable: Record<string, unknown> = {};
+          chainable.eq = (...eqArgs: unknown[]) => {
+            mockEq(...eqArgs);
+            return {
+              single: mockSingle,
+              in: (..._inArgs: unknown[]) => ({
+                order: (..._orderArgs: unknown[]) => ({
+                  limit: (..._limitArgs: unknown[]) => ({
+                    maybeSingle: () => mockSubscriptionQuery(),
+                  }),
+                }),
+              }),
+            };
           };
+          return chainable;
         },
       };
     },
@@ -56,6 +67,8 @@ describe("authMiddleware", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    // Default: no active subscription (free tier)
+    mockSubscriptionQuery.mockResolvedValue({ data: [], error: null });
     // Dynamic import to get fresh module with mocks
     const mod = await import("../../src/lib/auth");
     authMiddleware = mod.authMiddleware;
@@ -139,6 +152,7 @@ describe("authMiddleware", () => {
 
     expect(next).toHaveBeenCalled();
     expect(c.vars.user).toEqual(mockUser);
+    expect(c.vars.tier).toBe("free");
   });
 
   it("accepts valid API key", async () => {
@@ -154,6 +168,7 @@ describe("authMiddleware", () => {
 
     expect(next).toHaveBeenCalled();
     expect(c.vars.user).toEqual(mockUser);
+    expect(c.vars.tier).toBe("free");
   });
 
   it("rejects invalid API key", async () => {

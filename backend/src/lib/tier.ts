@@ -5,15 +5,13 @@ import { envOr } from "./env";
 import type { Env } from "./env";
 
 export function getTierLimits(c: Context<{ Bindings: Env }>) {
-  const user = c.get("user");
-  const tier = user.tier ?? "free";
+  const tier = c.get("tier") ?? "free";
   const limits = getTierLimitsFromEnv(c.env as unknown as Record<string, string>);
   return limits[tier] ?? limits.free;
 }
 
 export function requirePro(c: Context<{ Bindings: Env }>, feature: string) {
-  const user = c.get("user");
-  const tier = user.tier ?? "free";
+  const tier = c.get("tier") ?? "free";
   if (tier !== "pro") {
     const price = envOr(c.env, "TIER_PRO_PRICE", "5.99");
     const appUrl = envOr(c.env, "APP_URL", "https://app.synapse.dev");
@@ -31,7 +29,7 @@ export function enforceFileLimit(
 ) {
   const limits = getTierLimits(c);
   if (currentCount >= limits.maxFiles) {
-    const tier = c.get("user").tier ?? "free";
+    const tier = c.get("tier") ?? "free";
     const price = envOr(c.env, "TIER_PRO_PRICE", "5.99");
     throw new AppError(
       `File limit reached (${limits.maxFiles} files on ${tier} tier). Upgrade to Pro ($${price}/mo) for more files.`,
@@ -49,7 +47,7 @@ export function enforceConnectionLimit(
   const limits = getTierLimits(c);
   if (limits.maxConnections === 0) return; // 0 = unlimited
   if (currentConnections >= limits.maxConnections) {
-    const tier = c.get("user").tier ?? "free";
+    const tier = c.get("tier") ?? "free";
     const price = envOr(c.env, "TIER_PRO_PRICE", "5.99");
     throw new AppError(
       `Connection limit reached (${limits.maxConnections} sources on ${tier} tier). Upgrade to Pro ($${price}/mo) for unlimited connections.`,
