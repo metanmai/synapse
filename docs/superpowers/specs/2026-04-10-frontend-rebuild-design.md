@@ -213,9 +213,285 @@ Minimal — most infrastructure exists:
 3. Opens claude.ai in new tab with the prompt copied to clipboard (MVP)
 4. Future: browser extension intercepts and auto-fills the prompt
 
+## Page Wireframes
+
+### 1. Home / Dashboard
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  [logo] Synapse                          tanmai@synapse.dev │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Your Projects                            [+ New Project]   │
+│                                                             │
+│  ┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐
+│  │ synapse            │ │ octopay            │ │ meal-prep    AUTO │
+│  │ 34 convos · 8 ins  │ │ 12 convos · 3 ins  │ │ 5 convos · 1 ins  │
+│  │ 2h ago             │ │ 3d ago             │ │ 1w ago             │
+│  │ [claude] [cursor]  │ │ [gemini] [chatgpt] │ │ [claude.ai]        │
+│  └───────────────────┘ └───────────────────┘ └───────────────────┘
+│                                                             │
+│  ─── Inbox (3 unassigned) ─────────────────────────────     │
+│  "Help me write a cover letter"   claude.ai · 2h   Assign  │
+│  "Debug nginx config"             chatgpt · 5h     Assign  │
+│  "Recipe for dal makhani"         gemini · 1d      Assign  │
+│                                                             │
+│  Projects: 3/5 · Pulls today: 12/50        Upgrade to Plus │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 2. Project Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  [logo] Synapse  ›  synapse                                 │
+├──────────┬──────────────────────────────────────────────────┤
+│          │                                                  │
+│ Overview │  Insights (8)                                    │
+│ ──────── │                                                  │
+│ Convos   │  ● Auth uses Supabase with PKCE for CLI          │
+│ Context  │    #auth #supabase #cli                          │
+│ Settings │                                                  │
+│          │  ● Chose Hono over Express for CF Workers        │
+│          │    #backend #framework                           │
+│          │                                                  │
+│          │  ● Tier gating: usage limits, not features       │
+│          │    #billing #product                             │
+│          │                                                  │
+│          │  Show all 8 →                                    │
+│          │                                                  │
+│          │  ──────────────────────────────────────────      │
+│          │                                                  │
+│          │  Recent Conversations                            │
+│          │                                                  │
+│          │  ┌────────────────────────────────────────┐      │
+│          │  │ Backend restructuring           2h ago │      │
+│          │  │ [claude-code] · 45 messages             │      │
+│          │  │ Discussed new tier model, MCP...        │      │
+│          │  │ #backend #tiers #architecture           │      │
+│          │  └────────────────────────────────────────┘      │
+│          │  ┌────────────────────────────────────────┐      │
+│          │  │ Capture adapter expansion       5d ago │      │
+│          │  │ [claude-code] · 120 messages            │      │
+│          │  │ Added Cline, Roo Code, Copilot CLI...   │      │
+│          │  │ #capture #adapters #testing             │      │
+│          │  └────────────────────────────────────────┘      │
+│          │                                                  │
+│          │  View all conversations →                        │
+│          │                                                  │
+└──────────┴──────────────────────────────────────────────────┘
+```
+
+### 3. Conversations List
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  [logo] Synapse  ›  synapse  ›  Conversations               │
+├──────────┬──────────────────────────────────────────────────┤
+│          │                                                  │
+│ Overview │  [Search conversations...                    ]   │
+│ Convos   │                                                  │
+│ ──────── │  (All) (Claude Code) (Cursor) (claude.ai)        │
+│ Context  │  (ChatGPT) (Gemini)                              │
+│ Settings │                                                  │
+│          │  ┌────────────────────────────────────────┐      │
+│          │  │ Backend restructuring           2h ago │      │
+│          │  │ [claude-code] · 45 messages             │      │
+│          │  │ Discussed new tier model, MCP...        │      │
+│          │  │ #backend #tiers #architecture           │      │
+│          │  └────────────────────────────────────────┘      │
+│          │  ┌────────────────────────────────────────┐      │
+│          │  │ Capture adapter expansion       5d ago │      │
+│          │  │ [claude-code] · 120 messages            │      │
+│          │  │ Added Cline, Roo Code, Copilot CLI...   │      │
+│          │  │ #capture #adapters #testing             │      │
+│          │  └────────────────────────────────────────┘      │
+│          │  ┌────────────────────────────────────────┐      │
+│          │  │ Auth middleware debugging        2w ago │      │
+│          │  │ [claude.ai] · 22 messages               │      │
+│          │  │ Fixed JWT validation for expired...     │      │
+│          │  │ #auth #debugging                       │      │
+│          │  └────────────────────────────────────────┘      │
+│          │  ┌────────────────────────────────────────┐      │
+│          │  │ Glassmorphism restyle            2w ago │      │
+│          │  │ [claude-code] · 85 messages             │      │
+│          │  │ Restyled the app UI to match...         │      │
+│          │  │ #frontend #styling                     │      │
+│          │  └────────────────────────────────────────┘      │
+│          │                                                  │
+└──────────┴──────────────────────────────────────────────────┘
+```
+
+### 4. Conversation Detail — Compact View
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  [logo] Synapse  ›  synapse  ›  Convos  ›  Backend restr... │
+├──────────┬──────────────────────────────────────────────────┤
+│          │                                                  │
+│ Overview │  Backend restructuring                           │
+│ Convos   │  claude-code · 45 msgs · ~32k tokens · Apr 10   │
+│ Context  │                                                  │
+│ Settings │  [Compact] [Full transcript]   [Continue in.. ▾] │
+│          │                                                  │
+│          │  ┌────────────────────────────────────────┐      │
+│          │  │ Discussed restructuring the backend    │      │
+│          │  │ to match new product direction.        │      │
+│          │  │ Conversations become the primary data  │      │
+│          │  │ model, replacing entries/files.         │      │
+│          │  │                                        │      │
+│          │  │ Key Decisions                          │      │
+│          │  │ • Entries table deprecated              │      │
+│          │  │ • Usage limits, not feature gates       │      │
+│          │  │ • Free: 5 projects, 50 pulls/day       │      │
+│          │  │ • MCP becomes read-only                │      │
+│          │  │                                        │      │
+│          │  │ Architecture Changes                   │      │
+│          │  │ • Conversations are the core model      │      │
+│          │  │ • Insights auto-extracted w/ auto-tags  │      │
+│          │  │ • Compaction replaces distill           │      │
+│          │  │                                        │      │
+│          │  │ ── Insights extracted (3) ───────────  │      │
+│          │  │ ● Entries deprecated → projects         │      │
+│          │  │   #architecture #migration             │      │
+│          │  │ ● Projects: user/dir/auto-clustered    │      │
+│          │  │   #product #projects                   │      │
+│          │  │ ● Compaction replaces distill           │      │
+│          │  │   #architecture #compaction            │      │
+│          │  ├────────────────────────────────────────┤      │
+│          │  │ Source: claude-code · 45 msgs · ~32k   │      │
+│          │  └────────────────────────────────────────┘      │
+│          │                                                  │
+└──────────┴──────────────────────────────────────────────────┘
+```
+
+### 4b. Conversation Detail — Full Transcript View
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  [logo] Synapse  ›  synapse  ›  Convos  ›  Backend restr... │
+├──────────┬──────────────────────────────────────────────────┤
+│          │                                                  │
+│ Overview │  Backend restructuring                           │
+│ Convos   │  claude-code · 45 msgs · ~32k tokens · Apr 10   │
+│ Context  │                                                  │
+│ Settings │  [Compact] [Full transcript]   [Continue in.. ▾] │
+│          │                                                  │
+│          │  ┌────────────────────────────────────────┐      │
+│          │  │                                        │      │
+│          │  │  (T) YOU                               │      │
+│          │  │  Where are we in terms of              │      │
+│          │  │  implementation?                       │      │
+│          │  │                                        │      │
+│          │  │  (S) CLAUDE CODE                       │      │
+│          │  │  Here's where Synapse stands:          │      │
+│          │  │  • Core Platform — Backend API, ...     │      │
+│          │  │  • Capture Phase 1 — 7 adapters...     │      │
+│          │  │  • Distill Phase 2 — LLM-powered...    │      │
+│          │  │                                        │      │
+│          │  │  (T) YOU                               │      │
+│          │  │  I feel like the MCP idea and the      │      │
+│          │  │  daemon idea are sort of conflicting?  │      │
+│          │  │                                        │      │
+│          │  │  (S) CLAUDE CODE                       │      │
+│          │  │  That's a sharp observation — yes,     │      │
+│          │  │  there's tension there...              │      │
+│          │  │                                        │      │
+│          │  │        ··· 38 more messages ···        │      │
+│          │  │                                        │      │
+│          │  │  (T) YOU                               │      │
+│          │  │  We need to start re-structuring       │      │
+│          │  │  the backend                           │      │
+│          │  │                                        │      │
+│          │  │  (S) CLAUDE CODE                       │      │
+│          │  │  I recommend Approach B: Evolve in     │      │
+│          │  │  Place — restructure in phases...      │      │
+│          │  │                                        │      │
+│          │  ├────────────────────────────────────────┤      │
+│          │  │ Source: claude-code · 45 msgs · ~32k   │      │
+│          │  └────────────────────────────────────────┘      │
+│          │                                                  │
+└──────────┴──────────────────────────────────────────────────┘
+```
+
+### 5. Project Context
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  [logo] Synapse  ›  synapse  ›  Context                     │
+├──────────┬──────────────────────────────────────────────────┤
+│          │                                                  │
+│ Overview │  Project Context                                 │
+│ Convos   │  Auto-generated from 34 conversations · 2h ago   │
+│ Context  │                                                  │
+│ ──────── │  ┌────────────────────────────────────────┐      │
+│ Settings │  │ Synapse is a context management tool   │      │
+│          │  │ with a SvelteKit frontend, Cloudflare  │      │
+│          │  │ Workers backend, and an MCP server.    │      │
+│          │  │                                        │      │
+│          │  │ Architecture                           │      │
+│          │  │ • Backend: Hono on CF Workers           │      │
+│          │  │ • DB: Supabase (Postgres + Auth)        │      │
+│          │  │ • Frontend: SvelteKit on CF Pages       │      │
+│          │  │ • Billing: Creem                        │      │
+│          │  │                                        │      │
+│          │  │ Current Direction                      │      │
+│          │  │ • Conversations as primary data model  │      │
+│          │  │ • Auto-capture from 7 AI tools          │      │
+│          │  │ • Browser extension for web UIs         │      │
+│          │  │ • Usage-based tiers, not features       │      │
+│          │  │                                        │      │
+│          │  │ Key Decisions                          │      │
+│          │  │ • Entries/files deprecated              │      │
+│          │  │ • Insights = single type + auto-tags   │      │
+│          │  │ • MCP = read-only interface             │      │
+│          │  │ • Compaction replaces distill           │      │
+│          │  │                                        │      │
+│          │  │ This is what agents receive when they  │      │
+│          │  │ call get_context("synapse")            │      │
+│          │  │                                        │      │
+│          │  │ [Regenerate]  [Edit]                   │      │
+│          │  └────────────────────────────────────────┘      │
+│          │                                                  │
+└──────────┴──────────────────────────────────────────────────┘
+```
+
+### 6. Settings
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  [logo] Synapse                          tanmai@synapse.dev │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Settings                                                   │
+│                                                             │
+│  ┌─ Plan ─────────────────────────────────────────────┐     │
+│  │ Current plan          Free                         │     │
+│  │ Projects              3 / 5      [████████░░░░] 60%│     │
+│  │ Context pulls today   12 / 50    [████░░░░░░░░] 24%│     │
+│  │                                                    │     │
+│  │ [Upgrade to Plus — $9/mo]                          │     │
+│  └────────────────────────────────────────────────────┘     │
+│                                                             │
+│  ┌─ Capture Status ───────────────────────────────────┐     │
+│  │ Daemon              ● Running (PID 4821)           │     │
+│  │ Browser Extension   ● Connected                    │     │
+│  │ Sessions today      3                              │     │
+│  └────────────────────────────────────────────────────┘     │
+│                                                             │
+│  ┌─ API Keys ─────────────────────────────────────────┐     │
+│  │ cli-default         ● Active            [Revoke]   │     │
+│  │ cursor-plugin       ● Active            [Revoke]   │     │
+│  │                                                    │     │
+│  │ [+ New API Key]                                    │     │
+│  └────────────────────────────────────────────────────┘     │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ## Interactive Mockup
 
-All 6 pages with clickable navigation available at:
+Full clickable prototype with Synapse's glassmorphism styling available at:
 `.superpowers/brainstorm/91265-1775820605/content/full-app-flow.html`
 
-Serve locally to view: open the HTML file in a browser.
+Open in a browser to navigate between all 6 pages.
