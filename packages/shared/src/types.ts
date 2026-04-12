@@ -73,3 +73,5 @@ export interface ActivityLogEntry {
   metadata: Record<string, unknown> | null;
   created_at: string;
 }
+
+export type { Insight, InsightListItem, InsightType, InsightSource } from "./insights";
