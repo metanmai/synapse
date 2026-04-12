@@ -24,7 +24,7 @@ import { AppError, NotFoundError } from "../lib/errors";
 import { buildProjectZip } from "../lib/export";
 import { idempotency } from "../lib/idempotency";
 import { importEntries, parseZipEntries } from "../lib/import";
-import { enforceMemberLimit, requirePlus } from "../lib/tier";
+import { enforceMemberLimit, enforceProjectQuota, requirePlus } from "../lib/tier";
 import { getTierLimits } from "../lib/tier";
 import { parseBody, schemas } from "../lib/validate";
 import { requireRole } from "../middleware/project-auth";
@@ -41,6 +41,11 @@ projects.post("/", async (c) => {
   const { name } = await parseBody(c, schemas.createProject);
 
   const db = c.get("db");
+
+  // Enforce project quota before creating
+  const existing = await listProjectsForUser(db, user.id);
+  enforceProjectQuota(existing.length, c);
+
   const project = await createProject(db, name, user.id);
   await logActivity(db, {
     project_id: project.id,
