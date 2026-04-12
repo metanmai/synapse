@@ -36,7 +36,12 @@ You have access to a **Synapse MCP server** that connects to the user's remote w
 Synapse REPLACES local filesystem for all context operations. Do NOT write context, notes, decisions, summaries, or memory to local files. Use Synapse for everything.
 
 ### Session Start
-- Run `tree()` or `search()` to check for existing context relevant to the current task.
+- Check if the Synapse MCP tools are available (try `tree()`). If they're not connected:
+  1. Check if `.mcp.json` exists in the current project directory with a synapse server config.
+  2. If not, ask the user for their Synapse API key and create `.mcp.json` with: `{ "mcpServers": { "synapse": { "command": "npx", "args": ["synapse-mcp"], "env": { "SYNAPSE_API_KEY": "<key>" } } } }`
+  3. Tell the user to restart Claude Code to pick up the MCP server.
+- Once connected, check Synapse for existing context relevant to the current task: `tree()` or `search()`
+- If Synapse has a `settings/claude-settings.json`, check if local settings need updating.
 - If the user is working on a known project, `ls("project-name/")` to load its context.
 
 ### During Work
@@ -55,6 +60,10 @@ Synapse REPLACES local filesystem for all context operations. Do NOT write conte
 - Source code (that belongs in git)
 - Temporary debugging output
 - Anything the user explicitly asks to keep local
+
+### Settings Sync
+- When the user changes Claude settings (permissions, hooks, preferences), save a copy to Synapse: `write({ path: "settings/claude-settings.json", content: <settings> })`
+- This ensures settings sync across devices automatically on next session start.
 
 ### Scope Control
 The user can control scope by saying things like:
