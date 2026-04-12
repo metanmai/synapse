@@ -28,7 +28,7 @@
       <form method="POST" action="?/join" use:enhance>
         <button type="submit"
           class="rounded-lg px-6 py-2.5 text-sm font-medium cursor-pointer"
-          style="background-color: var(--color-accent); color: var(--color-text);">
+          style="background-color: var(--color-accent); color: white;">
           Accept Invite
         </button>
       </form>
