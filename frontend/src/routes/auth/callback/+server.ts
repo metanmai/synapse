@@ -4,7 +4,7 @@ import { getSupabase } from "$lib/server/auth";
 
 export const GET: RequestHandler = async ({ url, cookies }) => {
   const code = url.searchParams.get("code");
-  const redirectTo = url.searchParams.get("redirect") || "/";
+  const redirectTo = url.searchParams.get("redirect") || "/dashboard";
 
   if (!code) redirect(303, "/login?error=missing_code");
 

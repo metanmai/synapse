@@ -3,7 +3,7 @@ import type { Actions, PageServerLoad } from "./$types";
 import { getSupabase } from "$lib/server/auth";
 
 export const load: PageServerLoad = async ({ locals }) => {
-  if (locals.user) redirect(303, "/");
+  if (locals.user) redirect(303, "/dashboard");
 };
 
 export const actions: Actions = {
@@ -20,7 +20,7 @@ export const actions: Actions = {
 
     if (error) return fail(400, { error: error.message, email });
 
-    const redirectTo = url.searchParams.get("redirect") || "/";
+    const redirectTo = url.searchParams.get("redirect") || "/dashboard";
     redirect(303, redirectTo);
   },
 
@@ -39,7 +39,7 @@ export const actions: Actions = {
   oauth: async ({ request, cookies, url }) => {
     const data = await request.formData();
     const provider = data.get("provider") as "google" | "github";
-    const redirectTo = url.searchParams.get("redirect") || "/";
+    const redirectTo = url.searchParams.get("redirect") || "/dashboard";
 
     const supabase = getSupabase(cookies);
     const { data: oauthData, error } = await supabase.auth.signInWithOAuth({
