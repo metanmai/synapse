@@ -9,10 +9,23 @@ export interface User {
   created_at: string;
 }
 
-export const TIER_LIMITS = {
-  free: { maxFiles: 50, maxConnections: 3, history: false },
-  pro: { maxFiles: 500, maxConnections: Infinity, history: true },
-} as const;
+// Default tier limits — can be overridden by env vars:
+// TIER_FREE_MAX_FILES, TIER_FREE_MAX_CONNECTIONS
+// TIER_PRO_MAX_FILES, TIER_PRO_MAX_CONNECTIONS
+export function getTierLimitsFromEnv(env?: Record<string, string>) {
+  return {
+    free: {
+      maxFiles: parseInt(env?.TIER_FREE_MAX_FILES ?? "50"),
+      maxConnections: parseInt(env?.TIER_FREE_MAX_CONNECTIONS ?? "3"),
+      history: false,
+    },
+    pro: {
+      maxFiles: parseInt(env?.TIER_PRO_MAX_FILES ?? "500"),
+      maxConnections: parseInt(env?.TIER_PRO_MAX_CONNECTIONS ?? "0"), // 0 = unlimited
+      history: true,
+    },
+  };
+}
 
 export interface GoogleOAuthTokens {
   access_token: string;
