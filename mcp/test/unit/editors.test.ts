@@ -358,60 +358,59 @@ describe("editors", () => {
   // ─── writeJsonSafe (tested via VS Code local write) ────────────────
 
   describe("writeJsonSafe (via VS Code writes)", () => {
-    it("creates dirs recursively", () => {
+    it("creates .vscode/mcp.json", () => {
       const editors = detectEditors("local");
       const vscode = findEditor(editors, "vscode");
       vscode.write("sk-test");
 
-      expect(fs.existsSync(path.join(tmpDir, ".vscode", "settings.json"))).toBe(true);
+      expect(fs.existsSync(path.join(tmpDir, ".vscode", "mcp.json"))).toBe(true);
     });
 
     it("backs up invalid JSON (arrays)", () => {
       const settingsDir = path.join(tmpDir, ".vscode");
       fs.mkdirSync(settingsDir, { recursive: true });
-      const settingsPath = path.join(settingsDir, "settings.json");
-      fs.writeFileSync(settingsPath, "[1, 2, 3]");
+      const mcpPath = path.join(settingsDir, "mcp.json");
+      fs.writeFileSync(mcpPath, "[1, 2, 3]");
 
       const editors = detectEditors("local");
       const vscode = findEditor(editors, "vscode");
       vscode.write("sk-test");
 
-      expect(fs.existsSync(`${settingsPath}.bak`)).toBe(true);
-      expect(fs.readFileSync(`${settingsPath}.bak`, "utf-8")).toBe("[1, 2, 3]");
+      expect(fs.existsSync(`${mcpPath}.bak`)).toBe(true);
+      expect(fs.readFileSync(`${mcpPath}.bak`, "utf-8")).toBe("[1, 2, 3]");
     });
 
     it("backs up corrupted JSON", () => {
       const settingsDir = path.join(tmpDir, ".vscode");
       fs.mkdirSync(settingsDir, { recursive: true });
-      const settingsPath = path.join(settingsDir, "settings.json");
-      fs.writeFileSync(settingsPath, "not json at all!!!");
+      const mcpPath = path.join(settingsDir, "mcp.json");
+      fs.writeFileSync(mcpPath, "not json at all!!!");
 
       const editors = detectEditors("local");
       const vscode = findEditor(editors, "vscode");
       vscode.write("sk-test");
 
-      expect(fs.existsSync(`${settingsPath}.bak`)).toBe(true);
-      const newContent = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-      expect(newContent.mcp.servers.synapse).toBeDefined();
+      expect(fs.existsSync(`${mcpPath}.bak`)).toBe(true);
+      const newContent = JSON.parse(fs.readFileSync(mcpPath, "utf-8"));
+      expect(newContent.servers.synapse).toBeDefined();
     });
 
     it("merges with valid existing JSON", () => {
       const settingsDir = path.join(tmpDir, ".vscode");
       fs.mkdirSync(settingsDir, { recursive: true });
-      const settingsPath = path.join(settingsDir, "settings.json");
+      const mcpPath = path.join(settingsDir, "mcp.json");
       fs.writeFileSync(
-        settingsPath,
-        JSON.stringify({ "editor.fontSize": 14, mcp: { servers: { other: { command: "x" } } } }, null, 2),
+        mcpPath,
+        JSON.stringify({ servers: { other: { command: "x" } } }, null, 2),
       );
 
       const editors = detectEditors("local");
       const vscode = findEditor(editors, "vscode");
       vscode.write("sk-test");
 
-      const content = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-      expect(content["editor.fontSize"]).toBe(14);
-      expect(content.mcp.servers.other.command).toBe("x");
-      expect(content.mcp.servers.synapse).toBeDefined();
+      const content = JSON.parse(fs.readFileSync(mcpPath, "utf-8"));
+      expect(content.servers.other.command).toBe("x");
+      expect(content.servers.synapse).toBeDefined();
     });
   });
 
@@ -715,15 +714,15 @@ describe("editors", () => {
   });
 
   describe("Claude Code global writer", () => {
-    it("writes CLAUDE.md instructions and .mcp.json in home dir", () => {
+    it("writes CLAUDE.md instructions and ~/.claude.json", () => {
       const editors = detectEditors("global");
       const claude = findEditor(editors, "claude-code");
       const written = claude.write("sk-global-key");
 
       expect(written.some((f) => f.includes("CLAUDE.md"))).toBe(true);
-      expect(written.some((f) => f.includes(".mcp.json"))).toBe(true);
+      expect(written.some((f) => f.includes(".claude.json"))).toBe(true);
 
-      const mcpPath = path.join(tmpHomeDir, ".claude", ".mcp.json");
+      const mcpPath = path.join(tmpHomeDir, ".claude.json");
       expect(fs.existsSync(mcpPath)).toBe(true);
       const content = JSON.parse(fs.readFileSync(mcpPath, "utf-8"));
       expect(content.mcpServers.synapse.env.SYNAPSE_API_KEY).toBe("sk-global-key");
