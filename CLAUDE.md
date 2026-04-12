@@ -15,7 +15,7 @@ You have access to a **Synapse MCP server** that connects to the user's remote w
 | `mcp__synapse__ls` | List files in a directory | `ls()` or `ls({ path: "decisions" })` |
 | `mcp__synapse__read` | Read a file's content | `read({ path: "decisions/chose-svelte.md" })` |
 | `mcp__synapse__write` | Create or update a file | `write({ path: "notes/meeting.md", content: "..." })` |
-| `mcp__synapse__search` | Search across all files | `search({ query: "authentication" })` |
+| `mcp__synapse__search` | Semantic search across all files (understands meaning, not just keywords) | `search({ query: "authentication" })` |
 | `mcp__synapse__history` | View version history | `history({ path: "decisions/chose-svelte.md" })` |
 | `mcp__synapse__tree` | Show full directory tree | `tree()` |
 
