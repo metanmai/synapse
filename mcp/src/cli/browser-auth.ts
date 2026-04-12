@@ -14,9 +14,14 @@ function generateChallenge(verifier: string): string {
   return crypto.createHash("sha256").update(verifier).digest("hex");
 }
 
-function openBrowser(url: string): void {
-  const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-  exec(`${cmd} ${JSON.stringify(url)}`);
+function openBrowser(url: string): boolean {
+  try {
+    const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+    exec(`${cmd} ${JSON.stringify(url)}`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function successHtml(): string {
@@ -33,7 +38,11 @@ function successHtml(): string {
 </html>`;
 }
 
-export async function browserAuth(): Promise<{ api_key: string; email: string }> {
+export interface BrowserAuthCallbacks {
+  onUrl?: (url: string) => void;
+}
+
+export async function browserAuth(callbacks?: BrowserAuthCallbacks): Promise<{ api_key: string; email: string }> {
   const codeVerifier = generateVerifier();
   const codeChallenge = generateChallenge(codeVerifier);
   const state = crypto.randomUUID();
@@ -42,10 +51,17 @@ export async function browserAuth(): Promise<{ api_key: string; email: string }>
     const server = http.createServer();
     let settled = false;
 
-    const timeout = setTimeout(() => {
+    function settle(): void {
       if (!settled) {
         settled = true;
+        clearTimeout(timeout);
         server.close();
+      }
+    }
+
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settle();
         reject(new Error("Browser login timed out after 120 seconds. Please try again."));
       }
     }, AUTH_TIMEOUT);
@@ -81,31 +97,40 @@ export async function browserAuth(): Promise<{ api_key: string; email: string }>
       if (settled) return;
 
       // Exchange code + verifier for API key over HTTPS
-      const result = await cliExchangeCode(code, codeVerifier);
+      try {
+        const result = await cliExchangeCode(code, codeVerifier);
+        settle();
 
-      settled = true;
-      clearTimeout(timeout);
-      server.close();
-
-      if (result.ok) {
-        resolve({ api_key: result.data.api_key, email: result.data.email });
-      } else {
-        reject(new Error(`Login failed: ${result.message}`));
+        if (result.ok) {
+          resolve({ api_key: result.data.api_key, email: result.data.email });
+        } else {
+          reject(new Error(`Login failed: ${result.message}`));
+        }
+      } catch (err) {
+        settle();
+        reject(new Error(`Login failed: ${(err as Error).message}`));
       }
+    });
+
+    server.on("error", (err) => {
+      settle();
+      reject(new Error(`Failed to start local server: ${err.message}`));
     });
 
     // Bind to localhost only, random port
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address();
       if (!addr || typeof addr === "string") {
-        settled = true;
-        clearTimeout(timeout);
+        settle();
         reject(new Error("Failed to start local server"));
         return;
       }
 
       const port = addr.port;
       const authUrl = `${APP_URL}/cli-auth?challenge=${encodeURIComponent(codeChallenge)}&state=${encodeURIComponent(state)}&port=${port}`;
+
+      // Notify caller of the URL (for displaying as fallback)
+      callbacks?.onUrl?.(authUrl);
 
       openBrowser(authUrl);
     });
