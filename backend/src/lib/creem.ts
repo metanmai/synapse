@@ -18,7 +18,7 @@ export async function creemRequest<T>(
   });
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ message: res.statusText }));
+    const error = await res.json().catch(() => ({ message: res.statusText })) as { message?: string };
     throw new Error(error.message || `Creem API error: ${res.status}`);
   }
 
