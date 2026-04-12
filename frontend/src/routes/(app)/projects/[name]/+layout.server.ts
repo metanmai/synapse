@@ -47,11 +47,10 @@ export const load: LayoutServerLoad = async ({ params, locals, depends }) => {
     error(500, `Failed to list entries: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  const [shareLinks, activity, billing] = await Promise.all([
+  const [shareLinks, activity] = await Promise.all([
     api.listShareLinks(project.id).catch(() => []),
     api.getActivity(project.id, 50, 0).catch(() => []),
-    api.getBillingStatus().catch(() => ({ tier: "free" as const, subscription: null })),
   ]);
 
-  return { project, entries, shareLinks, activity, tier: billing.tier };
+  return { project, entries, shareLinks, activity };
 };

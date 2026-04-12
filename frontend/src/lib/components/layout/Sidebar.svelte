@@ -13,9 +13,7 @@ const navSections = $derived([
   },
   {
     heading: "Activity",
-    items: [
-      { href: `/projects/${encodeURIComponent(projectName)}/activity`, label: "Recent", icon: "📋" },
-    ],
+    items: [{ href: `/projects/${encodeURIComponent(projectName)}/activity`, label: "Recent", icon: "📋" }],
   },
 ]);
 </script>

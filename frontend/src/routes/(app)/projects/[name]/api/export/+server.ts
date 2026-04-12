@@ -5,8 +5,8 @@ export const GET: RequestHandler = async ({ locals, params }) => {
   const projectsRes = await fetch(`${API_URL}/api/projects`, {
     headers: { Authorization: `Bearer ${locals.token}` },
   });
-  const projects = await projectsRes.json();
-  const project = projects.find((p: any) => p.name === params.name);
+  const projects = (await projectsRes.json()) as { id: string; name: string }[];
+  const project = projects.find((p) => p.name === params.name);
   if (!project) return new Response("Not found", { status: 404 });
 
   const res = await fetch(`${API_URL}/api/projects/${project.id}/export`, {
