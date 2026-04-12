@@ -20,7 +20,10 @@ import ScrollReveal from "./ScrollReveal.svelte";
         <p class="pain-point">Decisions made yesterday are lost today</p>
       </ScrollReveal>
       <ScrollReveal delay={450}>
-        <p class="pain-point">Switching tools means losing context</p>
+        <p class="pain-point">Switching tools or devices means losing context</p>
+      </ScrollReveal>
+      <ScrollReveal delay={600}>
+        <p class="pain-point">Teammates can’t see what your AI already “knows”</p>
       </ScrollReveal>
     </div>
   </div>

@@ -26,14 +26,15 @@ onMount(() => {
 
   <div class="hero-container">
     <div class="hero-content" style="transform: translateY({scrollY * 0.08}px);">
-      <div class="hero-badge">Shared context layer for AI</div>
+      <div class="hero-badge">One workspace — every tool, every device, your whole team</div>
       <h1 class="hero-headline">
         Your AI tools
         <span class="gradient-text">finally remember</span>
       </h1>
       <p class="hero-sub">
-        Synapse is a shared context layer that gives Claude, ChatGPT, Cursor,
-        and every AI tool persistent memory across sessions.
+        Save context once and use it everywhere: Claude, ChatGPT, Cursor, and any MCP-capable
+        client; your laptop, phone, or browser; and teammates you invite — all reading and
+        writing the same cloud workspace.
       </p>
       <div class="hero-actions">
         <a href="#how-it-works" class="hero-secondary">See how it works</a>

@@ -4,12 +4,14 @@ import ScrollReveal from "./ScrollReveal.svelte";
 const features = [
   {
     title: "Context that persists",
-    description: "Decisions, architecture notes, and session summaries \u2014 saved automatically, loaded on demand.",
+    description:
+      "Decisions, architecture notes, and session summaries \u2014 in the cloud, on every device, every session.",
     illustrationType: "timeline",
   },
   {
     title: "Every tool, one brain",
-    description: "Switch between AI tools without losing a beat. They all share the same context.",
+    description:
+      "Claude, ChatGPT, Cursor, and more \u2014 they all read and write the same workspace, not separate silos.",
     illustrationType: "hub",
   },
   {
@@ -19,7 +21,8 @@ const features = [
   },
   {
     title: "Team sharing",
-    description: "Share projects with your team. Everyone\u2019s AI tools stay in sync.",
+    description:
+      "Invite users to a project so everyone\u2019s assistants share the same context \u2014 no re-briefing in every chat.",
     illustrationType: "sharing",
   },
   {
