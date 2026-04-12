@@ -201,10 +201,10 @@ function menuPathIsFile(menuPath: string): boolean {
     </div>
     {#if expanded.has(child.path)}
       <div role="group">
+        {@render folder(child, depth + 1)}
         {#each child.files.sort((a, b) => a.name.localeCompare(b.name)) as file}
           {@render fileRow(file.path, file.name, depth + 1)}
         {/each}
-        {@render folder(child, depth + 1)}
       </div>
     {/if}
   {/each}
@@ -257,10 +257,10 @@ function menuPathIsFile(menuPath: string): boolean {
     {/if}
   {:else}
     <!-- Normal tree view -->
+    {@render folder(tree, 0)}
     {#each tree.files.sort((a, b) => a.name.localeCompare(b.name)) as file}
       {@render fileRow(file.path, file.name, 0)}
     {/each}
-    {@render folder(tree, 0)}
     {#if entries.length === 0}
       <p class="search-status-text px-1">No entries yet</p>
     {/if}
