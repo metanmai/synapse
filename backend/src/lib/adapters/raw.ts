@@ -1,4 +1,4 @@
-import type { CanonicalMessage, FidelityMode, AgentAdapter } from "./types";
+import type { AgentAdapter, CanonicalMessage, FidelityMode } from "./types";
 
 /**
  * Raw/passthrough adapter — treats input as already in canonical format.
@@ -20,14 +20,11 @@ export const rawAdapter: AgentAdapter = {
         typeof msg === "object" &&
         msg !== null &&
         typeof (msg as Record<string, unknown>).role === "string" &&
-        typeof (msg as Record<string, unknown>).content === "string"
+        typeof (msg as Record<string, unknown>).content === "string",
     );
   },
 
-  fromCanonical(
-    messages: CanonicalMessage[],
-    _fidelity: FidelityMode
-  ): CanonicalMessage[] {
+  fromCanonical(messages: CanonicalMessage[], _fidelity: FidelityMode): CanonicalMessage[] {
     // Passthrough — return as-is regardless of fidelity
     return messages;
   },

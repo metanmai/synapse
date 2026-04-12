@@ -15,9 +15,7 @@ export function registerInsightTools(server: McpServer, env: Env, getContext: Ge
     "Save a key insight about a project — a decision, learning, preference, architecture note, or action item. Call this whenever something worth remembering comes up.",
     {
       project: z.string().describe("Project name"),
-      type: z
-        .enum(["decision", "learning", "preference", "architecture", "action_item"])
-        .describe("Type of insight"),
+      type: z.enum(["decision", "learning", "preference", "architecture", "action_item"]).describe("Type of insight"),
       summary: z.string().describe("Short summary of the insight"),
       detail: z.string().optional().describe("Optional longer explanation or context"),
     },
@@ -81,9 +79,7 @@ export function registerInsightTools(server: McpServer, env: Env, getContext: Ge
         };
       }
 
-      const lines = insights.map(
-        (i) => `- [${i.type}] ${i.summary} (${new Date(i.updated_at).toLocaleDateString()})`,
-      );
+      const lines = insights.map((i) => `- [${i.type}] ${i.summary} (${new Date(i.updated_at).toLocaleDateString()})`);
       const header = type
         ? `${total} ${type} insight(s) in "${project}" (showing ${insights.length}):`
         : `${total} insight(s) in "${project}" (showing ${insights.length}):`;
