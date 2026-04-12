@@ -68,11 +68,15 @@ function buildTree(items: EntryListItem[]): TreeNode {
 
 let tree = $derived(buildTree(entries));
 
+let expandedInitialized = false;
 let expanded = $state<Set<string>>(new Set());
 let menuOpen = $state<string | null>(null);
 let menuPos = $state<{ x: number; y: number }>({ x: 0, y: 0 });
 
+// Expand all directories on first load only — not on every re-render
 $effect(() => {
+  if (expandedInitialized) return;
+  if (entries.length === 0) return;
   const dirs = new Set<string>();
   for (const item of entries) {
     const parts = item.path.split("/");
@@ -81,6 +85,7 @@ $effect(() => {
     }
   }
   expanded = dirs;
+  expandedInitialized = true;
 });
 
 function toggle(path: string) {
