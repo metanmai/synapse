@@ -8,6 +8,8 @@ export interface Project {
   id: string;
   name: string;
   owner_id: string;
+  owner_email?: string;
+  role?: string;
   google_drive_folder_id: string | null;
   created_at: string;
   project_members?: ProjectMember[];
