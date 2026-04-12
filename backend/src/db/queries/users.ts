@@ -29,31 +29,35 @@ async function safeDelete(label: string, fn: () => PromiseLike<unknown>): Promis
 /** Delete per-project data for a list of project IDs. */
 async function deleteProjectData(db: SupabaseClient, projectIds: string[]): Promise<void> {
   for (const pid of projectIds) {
-    // Conversations: media → messages → context → conversations
-    const { data: convos } = await db.from("conversations").select("id").eq("project_id", pid);
-    const convoIds = (convos ?? []).map((c) => (c as { id: string }).id);
-    if (convoIds.length > 0) {
-      await safeDelete(`conversation_media (project ${pid})`, () =>
-        db.from("conversation_media").delete().in("conversation_id", convoIds),
-      );
-      await safeDelete(`conversation_messages (project ${pid})`, () =>
-        db.from("conversation_messages").delete().in("conversation_id", convoIds),
-      );
-      await safeDelete(`conversation_context (project ${pid})`, () =>
-        db.from("conversation_context").delete().in("conversation_id", convoIds),
-      );
-      await safeDelete(`conversations (project ${pid})`, () => db.from("conversations").delete().in("id", convoIds));
-    }
+    try {
+      // Conversations: media → messages → context → conversations
+      const { data: convos } = await db.from("conversations").select("id").eq("project_id", pid);
+      const convoIds = (convos ?? []).map((c) => (c as { id: string }).id);
+      if (convoIds.length > 0) {
+        await safeDelete(`conversation_media (project ${pid})`, () =>
+          db.from("conversation_media").delete().in("conversation_id", convoIds),
+        );
+        await safeDelete(`conversation_messages (project ${pid})`, () =>
+          db.from("conversation_messages").delete().in("conversation_id", convoIds),
+        );
+        await safeDelete(`conversation_context (project ${pid})`, () =>
+          db.from("conversation_context").delete().in("conversation_id", convoIds),
+        );
+        await safeDelete(`conversations (project ${pid})`, () => db.from("conversations").delete().in("id", convoIds));
+      }
 
-    // Entries: history → entries
-    const { data: entries } = await db.from("entries").select("id").eq("project_id", pid);
-    const entryIds = (entries ?? []).map((e) => (e as { id: string }).id);
-    if (entryIds.length > 0) {
-      await safeDelete(`entry_history (project ${pid})`, () =>
-        db.from("entry_history").delete().in("entry_id", entryIds),
-      );
+      // Entries: history → entries
+      const { data: entries } = await db.from("entries").select("id").eq("project_id", pid);
+      const entryIds = (entries ?? []).map((e) => (e as { id: string }).id);
+      if (entryIds.length > 0) {
+        await safeDelete(`entry_history (project ${pid})`, () =>
+          db.from("entry_history").delete().in("entry_id", entryIds),
+        );
+      }
+      await safeDelete(`entries (project ${pid})`, () => db.from("entries").delete().eq("project_id", pid));
+    } catch (err) {
+      console.error(`[deleteProjectData] Error querying project ${pid}:`, err);
     }
-    await safeDelete(`entries (project ${pid})`, () => db.from("entries").delete().eq("project_id", pid));
 
     await safeDelete(`insights (project ${pid})`, () => db.from("insights").delete().eq("project_id", pid));
     await safeDelete(`activity_log (project ${pid})`, () => db.from("activity_log").delete().eq("project_id", pid));
