@@ -1,9 +1,12 @@
 <script lang="ts">
+import { enhance } from "$app/forms";
 import MessageThread from "$lib/components/conversations/MessageThread.svelte";
 
-let { data } = $props();
+let { data, form } = $props();
 
 let showTools = $state(false);
+let showExportMenu = $state(false);
+let confirmDelete = $state(false);
 
 const conv = $derived(data.conversation);
 const messages = $derived(data.messages);
@@ -29,7 +32,42 @@ function formatDate(iso: string): string {
     hour12: true,
   });
 }
+
+function toggleExportMenu() {
+  showExportMenu = !showExportMenu;
+}
+
+function closeExportMenu() {
+  showExportMenu = false;
+}
+
+function handleExportResult() {
+  showExportMenu = false;
+  return async ({ result }: { result: { type: string; data?: Record<string, unknown> } }) => {
+    if (result.type === "success" && result.data?.exportData) {
+      const blob = new Blob([result.data.exportData as string], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const title = conv.title?.replace(/[^a-zA-Z0-9_-]/g, "_") || "conversation";
+      a.download = `${title}_${result.data.exportFormat}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  };
+}
+
+function handleActionResult() {
+  return async ({ update }: { update: (opts?: { reset?: boolean }) => Promise<void> }) => {
+    await update();
+    confirmDelete = false;
+  };
+}
 </script>
+
+<svelte:window onclick={closeExportMenu} />
 
 <div class="max-w-4xl p-6">
   <!-- Header -->
@@ -40,7 +78,88 @@ function formatDate(iso: string): string {
       </a>
     </div>
 
-    <h1 class="conv-title">{conv.title || "Untitled Conversation"}</h1>
+    <div class="title-row">
+      <h1 class="conv-title">{conv.title || "Untitled Conversation"}</h1>
+
+      <div class="action-buttons">
+        <!-- Export dropdown -->
+        <div class="dropdown" role="group">
+          <button
+            type="button"
+            class="action-btn"
+            aria-haspopup="true"
+            aria-expanded={showExportMenu}
+            aria-label="Export conversation"
+            onclick={(e: MouseEvent) => { e.stopPropagation(); toggleExportMenu(); }}
+          >
+            Export
+          </button>
+          {#if showExportMenu}
+            <div class="dropdown-menu" role="menu" onclick={(e: MouseEvent) => e.stopPropagation()}>
+              <form method="POST" action="?/export" use:enhance={handleExportResult}>
+                <input type="hidden" name="format" value="raw" />
+                <button type="submit" class="dropdown-item" role="menuitem">Raw JSON</button>
+              </form>
+              <form method="POST" action="?/export" use:enhance={handleExportResult}>
+                <input type="hidden" name="format" value="anthropic" />
+                <button type="submit" class="dropdown-item" role="menuitem">Anthropic</button>
+              </form>
+              <form method="POST" action="?/export" use:enhance={handleExportResult}>
+                <input type="hidden" name="format" value="openai" />
+                <button type="submit" class="dropdown-item" role="menuitem">OpenAI</button>
+              </form>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Archive / Restore -->
+        {#if conv.status === "active"}
+          <form method="POST" action="?/archive" use:enhance={handleActionResult}>
+            <button type="submit" class="action-btn" aria-label="Archive conversation">
+              Archive
+            </button>
+          </form>
+        {:else if conv.status === "archived"}
+          <form method="POST" action="?/restore" use:enhance={handleActionResult}>
+            <button type="submit" class="action-btn action-btn-restore" aria-label="Restore conversation">
+              Restore
+            </button>
+          </form>
+        {/if}
+
+        <!-- Delete -->
+        {#if conv.status !== "deleted"}
+          {#if confirmDelete}
+            <form method="POST" action="?/delete" use:enhance>
+              <button type="submit" class="action-btn action-btn-danger" aria-label="Confirm delete">
+                Confirm Delete
+              </button>
+            </form>
+            <button
+              type="button"
+              class="action-btn"
+              onclick={() => { confirmDelete = false; }}
+              aria-label="Cancel delete"
+            >
+              Cancel
+            </button>
+          {:else}
+            <button
+              type="button"
+              class="action-btn action-btn-danger"
+              onclick={() => { confirmDelete = true; }}
+              aria-label="Delete conversation"
+            >
+              Delete
+            </button>
+          {/if}
+        {/if}
+      </div>
+    </div>
+
+    {#if form?.error}
+      <div class="error-msg">{form.error}</div>
+    {/if}
 
     <div class="conv-meta">
       <span class="meta-item">{conv.message_count} message{conv.message_count === 1 ? "" : "s"}</span>
@@ -95,11 +214,111 @@ function formatDate(iso: string): string {
     text-decoration: underline;
   }
 
+  .title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
   .conv-title {
     font-size: 1.25rem;
     font-weight: 600;
     color: var(--color-accent);
-    margin-bottom: 0.5rem;
+    min-width: 0;
+    word-break: break-word;
+  }
+
+  .action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .action-btn {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-pink-dark);
+    padding: 5px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    background: transparent;
+    cursor: pointer;
+    transition: var(--transition-base);
+    white-space: nowrap;
+  }
+
+  .action-btn:hover {
+    background: rgba(86, 28, 36, 0.06);
+    border-color: var(--color-pink);
+  }
+
+  .action-btn-restore {
+    color: var(--color-success);
+    border-color: var(--color-success);
+  }
+
+  .action-btn-restore:hover {
+    background: rgba(45, 80, 22, 0.06);
+    border-color: var(--color-success);
+  }
+
+  .action-btn-danger {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+  }
+
+  .action-btn-danger:hover {
+    background: rgba(139, 0, 0, 0.06);
+    border-color: var(--color-danger);
+  }
+
+  .dropdown {
+    position: relative;
+  }
+
+  .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    min-width: 140px;
+    background: var(--color-bg-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+    z-index: 20;
+    overflow: hidden;
+  }
+
+  .dropdown-item {
+    display: block;
+    width: 100%;
+    padding: 8px 14px;
+    font-size: 0.8125rem;
+    color: var(--color-text);
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    transition: var(--transition-base);
+  }
+
+  .dropdown-item:hover {
+    background: var(--color-bg-muted);
+  }
+
+  .error-msg {
+    font-size: 0.8125rem;
+    color: var(--color-danger);
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(139, 0, 0, 0.2);
+    background: rgba(139, 0, 0, 0.06);
+    margin-bottom: 0.75rem;
   }
 
   .conv-meta {

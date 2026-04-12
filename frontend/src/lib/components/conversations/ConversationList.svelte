@@ -2,9 +2,14 @@
 import type { ConversationListItem } from "$lib/types";
 import { formatRelativeDate, statusColors } from "./conversation-helpers";
 
-let { conversations, projectName } = $props<{
+let {
+  conversations,
+  projectName,
+  emptyLabel = null,
+} = $props<{
   conversations: ConversationListItem[];
   projectName: string;
+  emptyLabel?: string | null;
 }>();
 
 const encodedProject = $derived(encodeURIComponent(projectName));
@@ -12,15 +17,23 @@ const encodedProject = $derived(encodeURIComponent(projectName));
 
 {#if conversations.length === 0}
   <div class="empty-state">
-    <div class="empty-icon">💬</div>
-    <p class="empty-title">No conversations yet</p>
-    <p class="empty-desc">
-      Sync your agent conversations to keep a searchable history across tools.
-      Import a Claude Code or ChatGPT export to get started.
-    </p>
-    <a href="/projects/{encodedProject}/conversations/import" class="import-link">
-      Import Conversations
-    </a>
+    {#if emptyLabel}
+      <div class="empty-icon">💬</div>
+      <p class="empty-title">No {emptyLabel} conversations</p>
+      <p class="empty-desc">
+        There are no conversations with status "{emptyLabel}". Try changing the filter or import a new conversation.
+      </p>
+    {:else}
+      <div class="empty-icon">💬</div>
+      <p class="empty-title">No conversations yet</p>
+      <p class="empty-desc">
+        Sync your agent conversations to keep a searchable history across tools.
+        Import a Claude Code or ChatGPT export to get started.
+      </p>
+      <a href="/projects/{encodedProject}/conversations/import" class="import-link">
+        Import Conversations
+      </a>
+    {/if}
   </div>
 {:else}
   <div class="conversation-list">
