@@ -43,8 +43,7 @@ Synapse REPLACES local filesystem for all context operations. Do NOT write conte
 - Once connected, check Synapse for existing context relevant to the current task: `tree()` or `search()`
 - Check Synapse for `settings/claude-settings.json` and `settings/CLAUDE.md`. Compare with local versions:
   - **If they match** — no action needed.
-  - **If only one side has changes** — ask the user: "Your [local/Synapse] settings are newer. Update the other?" Then sync whichever direction they choose.
-  - **If both sides differ** (conflict) — show the user the differences and ask which version to keep, or whether to merge them. Never overwrite silently.
+  - **If they differ** — show the user what's different between local and Synapse (e.g., "Local has permission X that Synapse doesn't, Synapse has hook Y that local doesn't"). Ask the user how to resolve: keep local, keep Synapse, or merge both. Never overwrite silently.
 - If the user is working on a known project, `ls("project-name/")` to load its context.
 
 ### During Work
