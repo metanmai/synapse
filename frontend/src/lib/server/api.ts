@@ -234,16 +234,23 @@ export function createApi(token: string | null) {
         method: "POST",
         body: JSON.stringify({ project_id: projectId, title }),
       }),
-    updateConversation: (conversationId: string, updates: { title?: string; status?: string; fidelity_mode?: string }) =>
+    updateConversation: (
+      conversationId: string,
+      updates: { title?: string; status?: string; fidelity_mode?: string },
+    ) =>
       request<import("$lib/types").Conversation>(`/api/conversations/${conversationId}`, token, {
         method: "PATCH",
         body: JSON.stringify(updates),
       }),
     importConversation: (projectId: string, format: string, messages: unknown, title?: string) =>
-      request<{ conversation: import("$lib/types").Conversation; messageCount: number }>("/api/conversations/import", token, {
-        method: "POST",
-        body: JSON.stringify({ project_id: projectId, format, messages, title }),
-      }),
+      request<{ conversation: import("$lib/types").Conversation; messageCount: number }>(
+        "/api/conversations/import",
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({ project_id: projectId, format, messages, title }),
+        },
+      ),
     exportConversation: (conversationId: string, format: string) =>
       request<{ conversation: any; messages: any; format: string }>(
         `/api/conversations/${conversationId}/export/${format}`,

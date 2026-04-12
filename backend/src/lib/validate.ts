@@ -159,10 +159,7 @@ export const schemas = {
           .optional(),
         source_agent: z.string(),
         source_model: z.string().nullable().optional(),
-        token_count: z
-          .object({ input: z.number().optional(), output: z.number().optional() })
-          .nullable()
-          .optional(),
+        token_count: z.object({ input: z.number().optional(), output: z.number().optional() }).nullable().optional(),
         cost: z.number().nullable().optional(),
       }),
     ),

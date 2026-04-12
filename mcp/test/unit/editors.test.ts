@@ -30,6 +30,13 @@ import {
   writeEditorConfigs,
 } from "../../src/cli/editors.js";
 
+/** Find an editor by id, throwing if not found (avoids non-null assertion lint errors). */
+function findEditor(editors: ReturnType<typeof detectEditors>, id: string) {
+  const editor = editors.find((e) => e.id === id);
+  if (!editor) throw new Error(`Editor "${id}" not found`);
+  return editor;
+}
+
 function mkTempDir(prefix: string): string {
   // Use real tmpdir (from the named import captured before mock)
   return fs.mkdtempSync(path.join(tmpdir(), prefix));
@@ -222,7 +229,7 @@ describe("editors", () => {
   describe("writeMcpJson (via editor writes)", () => {
     it("creates new file with correct JSON structure", () => {
       const editors = detectEditors("local");
-      const generic = editors.find((e) => e.id === "generic")!;
+      const generic = findEditor(editors, "generic");
       generic.write("sk-new-key");
 
       const filePath = path.join(tmpDir, ".mcp.json");
@@ -238,7 +245,7 @@ describe("editors", () => {
       fs.writeFileSync(filePath, JSON.stringify({ mcpServers: { other: { command: "other-tool" } } }, null, 2));
 
       const editors = detectEditors("local");
-      const generic = editors.find((e) => e.id === "generic")!;
+      const generic = findEditor(editors, "generic");
       generic.write("sk-merge-key");
 
       const content = JSON.parse(fs.readFileSync(filePath, "utf-8"));
@@ -253,7 +260,7 @@ describe("editors", () => {
       fs.writeFileSync(filePath, "this is not valid JSON{{{");
 
       const editors = detectEditors("local");
-      const generic = editors.find((e) => e.id === "generic")!;
+      const generic = findEditor(editors, "generic");
       generic.write("sk-corrupt-key");
 
       expect(fs.existsSync(`${filePath}.bak`)).toBe(true);
@@ -269,7 +276,7 @@ describe("editors", () => {
   describe("appendInstructions (via editor writes)", () => {
     it("adds Synapse instructions block to .cursorrules", () => {
       const editors = detectEditors("local");
-      const cursor = editors.find((e) => e.id === "cursor")!;
+      const cursor = findEditor(editors, "cursor");
       cursor.write("sk-test");
 
       const rulesPath = path.join(tmpDir, ".cursorrules");
@@ -281,7 +288,7 @@ describe("editors", () => {
 
     it("skips if already present (idempotent)", () => {
       const editors = detectEditors("local");
-      const cursor = editors.find((e) => e.id === "cursor")!;
+      const cursor = findEditor(editors, "cursor");
       cursor.write("sk-test");
       const contentAfterFirst = fs.readFileSync(path.join(tmpDir, ".cursorrules"), "utf-8");
 
@@ -297,7 +304,7 @@ describe("editors", () => {
       fs.writeFileSync(rulesPath, "# My existing rules\nBe helpful.\n");
 
       const editors = detectEditors("local");
-      const cursor = editors.find((e) => e.id === "cursor")!;
+      const cursor = findEditor(editors, "cursor");
       cursor.write("sk-test");
 
       const content = fs.readFileSync(rulesPath, "utf-8");
@@ -311,7 +318,7 @@ describe("editors", () => {
   describe("ensureGitignore (via editor writes)", () => {
     it("creates .gitignore if missing", () => {
       const editors = detectEditors("local");
-      const generic = editors.find((e) => e.id === "generic")!;
+      const generic = findEditor(editors, "generic");
       generic.write("sk-test");
 
       const gitignore = path.join(tmpDir, ".gitignore");
@@ -325,7 +332,7 @@ describe("editors", () => {
       fs.writeFileSync(gitignore, "node_modules/\n");
 
       const editors = detectEditors("local");
-      const generic = editors.find((e) => e.id === "generic")!;
+      const generic = findEditor(editors, "generic");
       generic.write("sk-test");
       generic.write("sk-test"); // write twice
 
@@ -339,7 +346,7 @@ describe("editors", () => {
       fs.writeFileSync(gitignore, "node_modules/"); // no trailing newline
 
       const editors = detectEditors("local");
-      const generic = editors.find((e) => e.id === "generic")!;
+      const generic = findEditor(editors, "generic");
       generic.write("sk-test");
 
       const content = fs.readFileSync(gitignore, "utf-8");
@@ -353,7 +360,7 @@ describe("editors", () => {
   describe("writeJsonSafe (via VS Code writes)", () => {
     it("creates dirs recursively", () => {
       const editors = detectEditors("local");
-      const vscode = editors.find((e) => e.id === "vscode")!;
+      const vscode = findEditor(editors, "vscode");
       vscode.write("sk-test");
 
       expect(fs.existsSync(path.join(tmpDir, ".vscode", "settings.json"))).toBe(true);
@@ -366,7 +373,7 @@ describe("editors", () => {
       fs.writeFileSync(settingsPath, "[1, 2, 3]");
 
       const editors = detectEditors("local");
-      const vscode = editors.find((e) => e.id === "vscode")!;
+      const vscode = findEditor(editors, "vscode");
       vscode.write("sk-test");
 
       expect(fs.existsSync(`${settingsPath}.bak`)).toBe(true);
@@ -380,7 +387,7 @@ describe("editors", () => {
       fs.writeFileSync(settingsPath, "not json at all!!!");
 
       const editors = detectEditors("local");
-      const vscode = editors.find((e) => e.id === "vscode")!;
+      const vscode = findEditor(editors, "vscode");
       vscode.write("sk-test");
 
       expect(fs.existsSync(`${settingsPath}.bak`)).toBe(true);
@@ -398,7 +405,7 @@ describe("editors", () => {
       );
 
       const editors = detectEditors("local");
-      const vscode = editors.find((e) => e.id === "vscode")!;
+      const vscode = findEditor(editors, "vscode");
       vscode.write("sk-test");
 
       const content = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
@@ -413,7 +420,7 @@ describe("editors", () => {
   describe("Cursor commands", () => {
     it("creates .cursor/commands/synapse-*.md files", () => {
       const editors = detectEditors("local");
-      const cursor = editors.find((e) => e.id === "cursor")!;
+      const cursor = findEditor(editors, "cursor");
       cursor.write("sk-test");
 
       const cmdDir = path.join(tmpDir, ".cursor", "commands");
@@ -425,7 +432,7 @@ describe("editors", () => {
 
     it("command files have content", () => {
       const editors = detectEditors("local");
-      const cursor = editors.find((e) => e.id === "cursor")!;
+      const cursor = findEditor(editors, "cursor");
       cursor.write("sk-test");
 
       const cmdDir = path.join(tmpDir, ".cursor", "commands");
@@ -438,7 +445,7 @@ describe("editors", () => {
 
     it("skips existing files (idempotent)", () => {
       const editors = detectEditors("local");
-      const cursor = editors.find((e) => e.id === "cursor")!;
+      const cursor = findEditor(editors, "cursor");
       cursor.write("sk-test");
 
       // Modify one file
@@ -454,7 +461,7 @@ describe("editors", () => {
   describe("VS Code prompts", () => {
     it("creates .github/prompts/synapse-*.prompt.md files with YAML frontmatter", () => {
       const editors = detectEditors("local");
-      const vscode = editors.find((e) => e.id === "vscode")!;
+      const vscode = findEditor(editors, "vscode");
       vscode.write("sk-test");
 
       const promptDir = path.join(tmpDir, ".github", "prompts");
@@ -474,7 +481,7 @@ describe("editors", () => {
 
     it("skips existing files (idempotent)", () => {
       const editors = detectEditors("local");
-      const vscode = editors.find((e) => e.id === "vscode")!;
+      const vscode = findEditor(editors, "vscode");
       vscode.write("sk-test");
 
       const promptDir = path.join(tmpDir, ".github", "prompts");
@@ -489,7 +496,7 @@ describe("editors", () => {
   describe("Windsurf workflows", () => {
     it("creates .windsurf/workflows/synapse-*.md files", () => {
       const editors = detectEditors("local");
-      const windsurf = editors.find((e) => e.id === "windsurf")!;
+      const windsurf = findEditor(editors, "windsurf");
       windsurf.write("sk-test");
 
       const workflowDir = path.join(tmpDir, ".windsurf", "workflows");
@@ -501,7 +508,7 @@ describe("editors", () => {
 
     it("skips existing files (idempotent)", () => {
       const editors = detectEditors("local");
-      const windsurf = editors.find((e) => e.id === "windsurf")!;
+      const windsurf = findEditor(editors, "windsurf");
       windsurf.write("sk-test");
 
       const workflowDir = path.join(tmpDir, ".windsurf", "workflows");
@@ -668,7 +675,7 @@ describe("editors", () => {
   describe("Claude Code local writer", () => {
     it("writes CLAUDE.md instructions and .mcp.json", () => {
       const editors = detectEditors("local");
-      const claude = editors.find((e) => e.id === "claude-code")!;
+      const claude = findEditor(editors, "claude-code");
       const written = claude.write("sk-claude-key");
 
       expect(written.some((f) => f.includes("CLAUDE.md"))).toBe(true);
@@ -677,7 +684,7 @@ describe("editors", () => {
 
     it("creates Claude Code command files", () => {
       const editors = detectEditors("local");
-      const claude = editors.find((e) => e.id === "claude-code")!;
+      const claude = findEditor(editors, "claude-code");
       claude.write("sk-test");
 
       const cmdDir = path.join(tmpHomeDir, ".claude", "commands", "synapse");
@@ -693,7 +700,7 @@ describe("editors", () => {
 
     it("command files are idempotent (skip existing)", () => {
       const editors = detectEditors("local");
-      const claude = editors.find((e) => e.id === "claude-code")!;
+      const claude = findEditor(editors, "claude-code");
       claude.write("sk-test");
 
       const target = path.join(tmpHomeDir, ".claude", "commands", "synapse", "search.md");
@@ -707,7 +714,7 @@ describe("editors", () => {
   describe("Claude Code global writer", () => {
     it("writes CLAUDE.md instructions and .mcp.json in home dir", () => {
       const editors = detectEditors("global");
-      const claude = editors.find((e) => e.id === "claude-code")!;
+      const claude = findEditor(editors, "claude-code");
       const written = claude.write("sk-global-key");
 
       expect(written.some((f) => f.includes("CLAUDE.md"))).toBe(true);
