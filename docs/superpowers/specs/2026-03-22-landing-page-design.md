@@ -131,19 +131,43 @@ All animations use CSS only (no JS animation libraries) for performance:
 
 ### Route structure
 
+The existing `(app)/+page.svelte` handles `/` for authenticated users (auto-redirect to first project). A `(public)/+page.svelte` would conflict since both route groups match `/`.
+
+**Solution**: Add a root-level `+page.server.ts` that conditionally redirects:
+- Authenticated → redirect to `/(app)` flow (which auto-redirects to first project)
+- Unauthenticated → render the landing page
+
 ```
 frontend/src/routes/
-├── (public)/              # New route group — no auth required
-│   ├── +layout.svelte     # Landing layout (no app shell, own nav/footer)
-│   ├── +page.svelte       # Landing page
-│   └── +page.server.ts    # Redirect to /projects if authenticated
-├── (app)/                 # Existing — requires auth
+├── +page.server.ts         # Root: auth check, redirect authenticated users
+├── +page.svelte            # Landing page (for unauthenticated users)
+├── (public)/               # New route group — landing page layout
+│   └── +layout.svelte      # Landing layout (no app shell, own nav/footer)
+├── (app)/                  # Existing — requires auth
+│   ├── +page.server.ts     # Existing: redirect to first project (rename to dashboard/)
 │   └── ...
 ```
 
-### Auth redirect
+Actually, the simplest approach: **move the existing `(app)/+page.svelte` and `+page.server.ts` to `(app)/dashboard/`**, freeing up `/` for the landing page. Then the landing page lives at the root route `/` inside a `(public)` group:
 
-`(public)/+page.server.ts` checks if the user is authenticated. If yes, redirect to `/projects`. If no, render the landing page.
+```
+frontend/src/routes/
+├── (public)/               # Landing page layout (no app shell)
+│   ├── +layout.svelte      # Own nav/footer, Lato font, tiramisu palette
+│   ├── +page.svelte        # Landing page
+│   └── +page.server.ts     # If authenticated, redirect to /dashboard
+├── (app)/                  # Existing — requires auth
+│   ├── dashboard/          # Moved from (app)/+page — auto-redirect to first project
+│   │   └── +page.server.ts
+│   └── projects/[name]/    # Existing
+│       └── ...
+```
+
+The `(app)/+layout.server.ts` auth guard redirects unauthenticated users to `/login`. The `(public)/+page.server.ts` redirects authenticated users to `/dashboard`. No ambiguity.
+
+### Landing page font scoping
+
+The landing page layout (`(public)/+layout.svelte`) wraps everything in a container with `font-family: 'Lato', sans-serif` to override the app's global font. The tiramisu-specific CSS variables (like `--color-burgundy`, `--color-brown`) are scoped to this layout, not polluting `app.css`.
 
 ### Components
 

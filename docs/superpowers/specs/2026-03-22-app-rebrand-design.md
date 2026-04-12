@@ -6,66 +6,97 @@
 
 ## Overview
 
-Rebrand the Synapse web app from its current dark theme with pink accents to the "Tiramisu" palette (burgundy, warm brown, tan, cream) with Lato font. The landing page uses this palette; the app should match for a consistent experience.
+Rebrand the Synapse web app from its current light warm theme (Armata font, periwinkle/pink accents) to the "Tiramisu" palette (burgundy, warm brown, tan, cream) with Lato font. The landing page uses this palette; the app should match for a consistent experience.
 
 ## Current State
 
-The app uses CSS custom properties defined in `frontend/src/app.css` (or equivalent). Components reference variables like `--color-bg`, `--color-bg-raised`, `--color-accent`, `--color-pink`, `--color-text`, `--color-text-muted`, `--color-border`, `--color-link`, `--color-danger`, etc.
+The app uses CSS custom properties defined in `frontend/src/app.css`. Current font is **Armata** (loaded via Google Fonts in `app.html`). Current theme is light with warm undertones — not dark.
 
-Current theme: dark backgrounds, white/gray text, pink accent color (`--color-pink`, `--color-pink-dark`).
+```css
+:root {
+  --color-bg: #faf8f5;
+  --color-bg-raised: #ffffff;
+  --color-bg-muted: #fce8ee;
+  --color-border: #ebe5dd;
+  --color-text: #3d3327;
+  --color-text-muted: #8a7e72;
+  --color-accent: #667BC6;
+  --color-accent-hover: #5568b0;
+  --color-link: #DA7297;
+  --color-pink: #FFB4C2;
+  --color-pink-dark: #DA7297;
+  --color-success: #4ade80;
+  --color-danger: #ef4444;
+}
+```
 
 ## New Palette Mapping
 
-| CSS Variable | Old Value (approx) | New Value | Notes |
-|-------------|-------------------|-----------|-------|
-| `--color-bg` | `#1a1a2e` (dark navy) | `#E8D8C4` (cream) | Main background |
-| `--color-bg-raised` | `#25253e` (slightly lighter dark) | `#FFFDF8` (warm white) | Cards, panels |
-| `--color-bg-muted` | `#2a2a4a` (muted dark) | `#F5EDE0` (light cream) | Code blocks, inputs |
-| `--color-text` | `#e0e0e0` (light gray) | `#561C24` (burgundy) | Primary text |
-| `--color-text-muted` | `#888` (gray) | `#C7B7A3` (tan) | Secondary text |
-| `--color-accent` | `#e0e0e0` (white) | `#561C24` (burgundy) | Headings, emphasis |
-| `--color-pink` | `#ff6b8a` (pink) | `#6D2932` (warm brown) | Primary action color |
-| `--color-pink-dark` | `#cc5570` (dark pink) | `#561C24` (burgundy) | Hover/active state |
-| `--color-border` | `#333` (dark gray) | `#C7B7A3` (tan) | Borders, dividers |
-| `--color-link` | `#88ccff` (light blue) | `#6D2932` (warm brown) | Links |
-| `--color-danger` | `#ff4444` (red) | `#8B0000` (dark red) | Errors, destructive |
-| `--color-success` | `#065f46` (green) | `#2D5016` (olive green) | Success states |
-| `--color-success-bg` | `#ecfdf5` (light green) | `#E8F0D8` (light olive) | Success backgrounds |
+| CSS Variable | Current Value | New Value | Notes |
+|-------------|--------------|-----------|-------|
+| `--color-bg` | `#faf8f5` (warm off-white) | `#E8D8C4` (cream) | Main background |
+| `--color-bg-raised` | `#ffffff` (white) | `#FFFDF8` (warm white) | Cards, panels |
+| `--color-bg-muted` | `#fce8ee` (light pink) | `#F5EDE0` (light cream) | Code blocks, inputs |
+| `--color-border` | `#ebe5dd` (warm gray) | `#C7B7A3` (tan) | Borders, dividers |
+| `--color-text` | `#3d3327` (dark brown) | `#561C24` (burgundy) | Primary text |
+| `--color-text-muted` | `#8a7e72` (warm gray) | `#8A7565` (muted brown) | Secondary text — slightly darker than tan for readability |
+| `--color-accent` | `#667BC6` (periwinkle) | `#561C24` (burgundy) | Headings, emphasis |
+| `--color-accent-hover` | `#5568b0` (dark periwinkle) | `#3D1018` (dark burgundy) | Hover state for accent |
+| `--color-link` | `#DA7297` (pink) | `#6D2932` (warm brown) | Links |
+| `--color-pink` | `#FFB4C2` (light pink) | `#6D2932` (warm brown) | Primary action color, badges |
+| `--color-pink-dark` | `#DA7297` (medium pink) | `#561C24` (burgundy) | Hover/active state |
+| `--color-success` | `#4ade80` (green) | `#2D5016` (olive green) | Success states |
+| `--color-danger` | `#ef4444` (red) | `#8B0000` (dark red) | Errors, destructive |
+
+**New variables to add:**
+
+| CSS Variable | Value | Notes |
+|-------------|-------|-------|
+| `--color-success-bg` | `#E8F0D8` (light olive) | Success backgrounds — currently only defined as inline fallback in components |
 
 ## Typography
 
-Replace the current font stack with Lato:
+Replace Armata with Lato. In `app.html`, swap the Google Fonts link:
 
-```css
-font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;
+```html
+<!-- Remove -->
+<link href="https://fonts.googleapis.com/css2?family=Armata&display=swap" rel="stylesheet">
+
+<!-- Add -->
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" rel="stylesheet">
 ```
 
-The Lato font link is already added in the landing page spec (in `app.html`), so it's available app-wide.
+In `app.css`, update the body font:
 
-## What Changes
+```css
+body {
+  font-family: 'Lato', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+```
 
-### CSS custom properties file
+## Component Audit
 
-Update the root `:root` block (or the existing theme definition) with the new values. Since all components use CSS variables, this single change rebrands the entire app.
+Components using CSS variables rebrand automatically. The following need manual attention:
 
-### Component-specific adjustments
+**Hardcoded `color: white` on accent backgrounds** — these elements use `color: white` on `--color-pink` or `--color-accent` backgrounds. With the new dark burgundy/brown values, white text will still have good contrast. **No change needed** — just confirming this is intentional.
 
-Some components have inline styles or hardcoded colors that bypass the CSS variables. These need to be audited and updated:
+Affected components:
+- `BillingCard.svelte` — Pro badge, upgrade button
+- `ApiKeysCard.svelte` — Create Key button
+- `Sidebar.svelte` — active nav item
+- `AppShell.svelte` — header uses `rgba(255,255,255,0.75)` on accent background
+- `FolderTree.svelte` — context menu items
+- `EntryViewer.svelte`, `EntryEditor.svelte` — tag badges
+- `ShareLinkManager.svelte`, `MemberList.svelte` — role badges
 
-- **BillingCard.svelte**: Uses `var(--color-pink)` for the Pro badge and upgrade button — this maps automatically.
-- **ApiKeysCard.svelte**: Uses `var(--color-pink)` for Create Key button — maps automatically.
-- **Sidebar.svelte**: Uses `var(--color-pink-dark)` for active nav item — maps automatically.
-- **Login/Signup pages**: May have hardcoded styles that need checking.
+**Inline fallback values to remove** — these components have `var(--color-success-bg, #ecfdf5)` with old fallback values. Once `--color-success-bg` is added to `:root`, remove the fallbacks:
 
-Most components should rebrand automatically through the CSS variable update. A manual audit identifies any that don't.
+- `BillingCard.svelte` — success toast
+- `frontend/src/routes/(app)/projects/[name]/+page.svelte` — import result notification
 
-### Scrollbar and selection colors
+## Favicon and Meta
 
-Update `::selection` and scrollbar styles to match the new palette.
-
-### Favicon and meta
-
-Update the favicon/meta theme color to burgundy (`#561C24`).
+Update `<meta name="theme-color">` in `app.html` to `#561C24` (burgundy).
 
 ## What Doesn't Change
 
@@ -76,17 +107,20 @@ Update the favicon/meta theme color to burgundy (`#561C24`).
 
 ## Implementation Approach
 
-1. Update CSS variables in the global stylesheet
-2. Add Lato font import (shared with landing page)
-3. Audit all components for hardcoded colors — grep for hex codes and `rgb(` in `.svelte` files
-4. Update any hardcoded values to use CSS variables
-5. Update favicon/meta theme-color
-6. Visual QA
+1. Swap Armata → Lato in `app.html`
+2. Update all CSS variables in `app.css` `:root` block
+3. Add `--color-success-bg` to `:root`
+4. Grep for hardcoded hex codes in `.svelte` files — audit and fix any that should use variables
+5. Remove inline fallback values where CSS variable is now defined
+6. Update meta theme-color
+7. Visual QA
 
 ## Files touched
 
 | File | Change |
 |------|--------|
-| `frontend/src/app.css` (or global styles) | Update all CSS custom property values |
-| `frontend/src/app.html` | Add Lato font link (if not already from landing page), update meta theme-color |
-| Various `.svelte` components | Fix any hardcoded colors that don't use CSS variables |
+| `frontend/src/app.css` | Update all CSS custom property values, add `--color-success-bg` |
+| `frontend/src/app.html` | Swap Armata → Lato font link, update meta theme-color |
+| `frontend/src/lib/components/account/BillingCard.svelte` | Remove inline `--color-success-bg` fallback |
+| `frontend/src/routes/(app)/projects/[name]/+page.svelte` | Remove inline `--color-success-bg` fallback |
+| Any components with hardcoded hex colors | Replace with CSS variable references |
