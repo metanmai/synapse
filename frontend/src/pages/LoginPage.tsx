@@ -41,7 +41,7 @@ export function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white p-8 rounded-lg shadow-sm border max-w-sm w-full">
-        <h1 className="text-xl font-semibold mb-6">Sign in to MCP-Sync</h1>
+        <h1 className="text-xl font-semibold mb-6">Sign in to Synapse</h1>
 
         <div className="space-y-3 mb-6">
           <button

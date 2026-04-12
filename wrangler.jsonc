@@ -1,20 +1,20 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mcp-sync",
+  "name": "synapse",
   "main": "src/index.ts",
   "compatibility_date": "2025-04-01",
   "compatibility_flags": ["nodejs_compat"],
   "durable_objects": {
     "bindings": [
       {
-        "class_name": "McpSyncAgent",
+        "class_name": "SynapseAgent",
         "name": "MCP_OBJECT"
       }
     ]
   },
   "migrations": [
     {
-      "new_sqlite_classes": ["McpSyncAgent"],
+      "new_sqlite_classes": ["SynapseAgent"],
       "tag": "v1"
     }
   ],

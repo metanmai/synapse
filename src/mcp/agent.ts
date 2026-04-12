@@ -16,9 +16,9 @@ import { registerResources } from "./resources";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyMcpAgent = any;
 
-export class McpSyncAgent extends (McpAgent as AnyMcpAgent) {
+export class SynapseAgent extends (McpAgent as AnyMcpAgent) {
   server = new McpServer({
-    name: "mcp-sync",
+    name: "synapse",
     version: "1.0.0",
   });
 
