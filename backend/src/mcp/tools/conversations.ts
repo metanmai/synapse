@@ -1,15 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { logActivity } from "../../db/activity-logger";
-import { createSupabaseClient } from "../../db/client";
 import {
   appendMessages,
   createConversation,
   getConversation,
   getConversationLimits,
   getMessages,
-  getProjectByName,
   insertMedia,
   listConversations,
 } from "../../db/queries";
@@ -18,10 +17,10 @@ import { uploadMedia } from "../../lib/storage";
 
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
-import { requireMcpUserId } from "../mcp-context";
+import { mcpError, mcpResolveProject, mcpSuccess, requireMcpUserId } from "../mcp-context";
 
 /** Helper: check if user has Plus tier with sync enabled. Returns error text or null. */
-async function requirePlusSync(db: ReturnType<typeof createSupabaseClient>, userId: string): Promise<string | null> {
+async function requirePlusSync(db: SupabaseClient, userId: string): Promise<string | null> {
   const sub = await getActiveSubscription(db, userId);
   const tier = sub ? "plus" : "free";
   const limits = await getConversationLimits(db, tier);
@@ -40,7 +39,7 @@ function mediaTypeFromMime(mime: string): "image" | "file" | "pdf" | "audio" | "
   return "file";
 }
 
-export function registerConversationTools(server: McpServer, env: Env, getContext: GetMcpContext) {
+export function registerConversationTools(server: McpServer, _env: Env, getContext: GetMcpContext, db: SupabaseClient) {
   // --- sync_conversation ---
   server.tool(
     "sync_conversation",
@@ -74,15 +73,14 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
         .describe("Messages to append"),
     },
     async ({ project, conversationId, title, systemPrompt, workingContext, fidelity, messages }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
       // Tier check
       const tierError = await requirePlusSync(db, userId);
-      if (tierError) return { content: [{ type: "text" as const, text: tierError }] };
+      if (tierError) return mcpError(tierError);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text" as const, text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       let convId = conversationId;
       let action: string;
@@ -103,14 +101,10 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
         // Verify the conversation exists and belongs to this project
         const existing = await getConversation(db, convId);
         if (!existing) {
-          return { content: [{ type: "text" as const, text: `Conversation "${convId}" not found.` }] };
+          return mcpError(`Conversation "${convId}" not found.`);
         }
         if (existing.project_id !== proj.id) {
-          return {
-            content: [
-              { type: "text" as const, text: `Conversation "${convId}" does not belong to project "${project}".` },
-            ],
-          };
+          return mcpError(`Conversation "${convId}" does not belong to project "${project}".`);
         }
         action = "Updated";
       }
@@ -137,14 +131,7 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
         metadata: { conversation_id: convId, messages_appended: appended },
       });
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `${action} conversation "${convId}" in project "${project}". ${appended} message(s) appended.`,
-          },
-        ],
-      };
+      return mcpSuccess(`${action} conversation "${convId}" in project "${project}". ${appended} message(s) appended.`);
     },
   );
 
@@ -165,29 +152,21 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
         .describe("Start from this message sequence number (for partial loads / pagination)"),
     },
     async ({ project, conversationId, fidelity, fromSequence }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
       // Tier check
       const tierError = await requirePlusSync(db, userId);
-      if (tierError) return { content: [{ type: "text" as const, text: tierError }] };
+      if (tierError) return mcpError(tierError);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text" as const, text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       const conv = await getConversation(db, conversationId);
       if (!conv) {
-        return { content: [{ type: "text" as const, text: `Conversation "${conversationId}" not found.` }] };
+        return mcpError(`Conversation "${conversationId}" not found.`);
       }
       if (conv.project_id !== proj.id) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Conversation "${conversationId}" does not belong to project "${project}".`,
-            },
-          ],
-        };
+        return mcpError(`Conversation "${conversationId}" does not belong to project "${project}".`);
       }
 
       const messages = await getMessages(db, conversationId, {
@@ -273,15 +252,14 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
       limit: z.number().optional().describe("Maximum number of conversations to return (default 20)"),
     },
     async ({ project, status, limit }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
       // Tier check
       const tierError = await requirePlusSync(db, userId);
-      if (tierError) return { content: [{ type: "text" as const, text: tierError }] };
+      if (tierError) return mcpError(tierError);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text" as const, text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       const { conversations, total } = await listConversations(db, proj.id, {
         status: status ?? undefined,
@@ -290,9 +268,7 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
 
       if (conversations.length === 0) {
         const filterNote = status ? ` with status "${status}"` : "";
-        return {
-          content: [{ type: "text" as const, text: `No conversations${filterNote} found in project "${project}".` }],
-        };
+        return mcpError(`No conversations${filterNote} found in project "${project}".`);
       }
 
       const lines = conversations.map((c) => {
@@ -322,20 +298,19 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
       content: z.string().describe("Base64-encoded file content"),
     },
     async ({ conversationId, messageId, filename, mimeType, content }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
       // Tier check
       const tierError = await requirePlusSync(db, userId);
-      if (tierError) return { content: [{ type: "text" as const, text: tierError }] };
+      if (tierError) return mcpError(tierError);
 
       // Verify conversation exists
       const conv = await getConversation(db, conversationId);
       if (!conv) {
-        return { content: [{ type: "text" as const, text: `Conversation "${conversationId}" not found.` }] };
+        return mcpError(`Conversation "${conversationId}" not found.`);
       }
       if (conv.user_id !== userId) {
-        return { content: [{ type: "text" as const, text: "You do not have access to this conversation." }] };
+        return mcpError("You do not have access to this conversation.");
       }
 
       // Decode base64
@@ -347,7 +322,7 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
           bytes[i] = binary.charCodeAt(i);
         }
       } catch {
-        return { content: [{ type: "text" as const, text: "Invalid base64 content." }] };
+        return mcpError("Invalid base64 content.");
       }
 
       // Upload to Supabase Storage
@@ -379,14 +354,9 @@ export function registerConversationTools(server: McpServer, env: Env, getContex
         },
       });
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Uploaded "${filename}" (${bytes.length} bytes, ${mediaType}) to conversation "${conversationId}", message "${messageId}".`,
-          },
-        ],
-      };
+      return mcpSuccess(
+        `Uploaded "${filename}" (${bytes.length} bytes, ${mediaType}) to conversation "${conversationId}", message "${messageId}".`,
+      );
     },
   );
 }
