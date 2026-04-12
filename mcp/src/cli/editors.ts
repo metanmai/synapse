@@ -420,7 +420,8 @@ export function detectEditors(scope: SetupScope): EditorInfo[] {
 export interface ExistingSetup {
   configured: boolean;
   locations: string[];
-  apiKey: string | null;
+  /** All unique API keys found across config files (first = local, last = global). */
+  apiKeys: string[];
 }
 
 /** Extract SYNAPSE_API_KEY from a JSON MCP config file. */
@@ -439,9 +440,9 @@ export function detectExistingSetup(): ExistingSetup {
   const home = os.homedir();
   const cwd = process.cwd();
   const locations: string[] = [];
-  let apiKey: string | null = null;
+  const apiKeySet = new Set<string>();
 
-  // Check MCP JSON files — extract API key from the first one found
+  // Check MCP JSON files — collect ALL unique API keys (local first, global last)
   const mcpFiles: [string, string][] = [
     [path.join(cwd, ".mcp.json"), ".mcp.json"],
     [path.join(cwd, ".cursor", "mcp.json"), ".cursor/mcp.json"],
@@ -456,7 +457,8 @@ export function detectExistingSetup(): ExistingSetup {
         const content = fs.readFileSync(filePath, "utf-8");
         if (content.includes("synapsesync-mcp")) {
           locations.push(label);
-          if (!apiKey) apiKey = extractApiKey(filePath);
+          const key = extractApiKey(filePath);
+          if (key) apiKeySet.add(key);
         }
       } catch {
         /* ignore */
@@ -475,7 +477,7 @@ export function detectExistingSetup(): ExistingSetup {
     }
   }
 
-  return { configured: locations.length > 0, locations, apiKey };
+  return { configured: locations.length > 0, locations, apiKeys: [...apiKeySet] };
 }
 
 /** Write configs for selected editors. Continues on per-editor failure. */

@@ -516,11 +516,11 @@ describe("editors", () => {
   // ─── detectExistingSetup ───────────────────────────────────────────
 
   describe("detectExistingSetup", () => {
-    it("returns {configured: false, locations: [], apiKey: null} when no configs exist", () => {
+    it("returns {configured: false, locations: [], apiKeys: []} when no configs exist", () => {
       const result = detectExistingSetup();
       expect(result.configured).toBe(false);
       expect(result.locations).toEqual([]);
-      expect(result.apiKey).toBeNull();
+      expect(result.apiKeys).toEqual([]);
     });
 
     it("detects .mcp.json with synapsesync-mcp entry", () => {
@@ -562,7 +562,52 @@ describe("editors", () => {
       );
 
       const result = detectExistingSetup();
-      expect(result.apiKey).toBe("sk-extracted-key");
+      expect(result.apiKeys).toContain("sk-extracted-key");
+    });
+
+    it("collects multiple unique API keys from different config files", () => {
+      // Local .mcp.json has key A
+      fs.writeFileSync(
+        path.join(tmpDir, ".mcp.json"),
+        JSON.stringify({
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: "sk-local" } } },
+        }),
+      );
+      // Global ~/.claude/.mcp.json has key B
+      const claudeDir = path.join(tmpHomeDir, ".claude");
+      fs.mkdirSync(claudeDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(claudeDir, ".mcp.json"),
+        JSON.stringify({
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: "sk-global" } } },
+        }),
+      );
+
+      const result = detectExistingSetup();
+      expect(result.apiKeys).toContain("sk-local");
+      expect(result.apiKeys).toContain("sk-global");
+      expect(result.apiKeys).toHaveLength(2);
+    });
+
+    it("deduplicates identical API keys across config files", () => {
+      const sameKey = "sk-same-everywhere";
+      fs.writeFileSync(
+        path.join(tmpDir, ".mcp.json"),
+        JSON.stringify({
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: sameKey } } },
+        }),
+      );
+      const cursorDir = path.join(tmpDir, ".cursor");
+      fs.mkdirSync(cursorDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(cursorDir, "mcp.json"),
+        JSON.stringify({
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: sameKey } } },
+        }),
+      );
+
+      const result = detectExistingSetup();
+      expect(result.apiKeys).toEqual([sameKey]);
     });
 
     it("handles corrupted JSON gracefully", () => {
@@ -574,7 +619,7 @@ describe("editors", () => {
       // The code does: try { content = readFileSync(...); if (content.includes("synapsesync-mcp")) }
       // "not valid json{{{" does not include "synapsesync-mcp" so it won't be added.
       expect(result.locations).not.toContain(".mcp.json");
-      expect(result.apiKey).toBeNull();
+      expect(result.apiKeys).toEqual([]);
     });
 
     it("detects CLAUDE.md with Synapse mention", () => {
