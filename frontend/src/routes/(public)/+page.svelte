@@ -1,5 +1,4 @@
 <script>
-import CliSetupWizard from "$lib/components/landing/CliSetupWizard.svelte";
 import Comparison from "$lib/components/landing/Comparison.svelte";
 import CtaSection from "$lib/components/landing/CtaSection.svelte";
 import Faq from "$lib/components/landing/Faq.svelte";
@@ -23,7 +22,6 @@ const loggedIn = $derived(!!data.user);
 <ProblemSection />
 <Stats />
 <HowItWorks />
-<CliSetupWizard />
 <SetupGuide />
 <FeatureCards />
 <Comparison />
