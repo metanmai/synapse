@@ -128,25 +128,25 @@ function closePanel() {
     <div class="flex items-center justify-between mb-2 px-1">
       <span class="font-medium uppercase tracking-wide"
         style="color: var(--color-text-muted); font-size: 11px;">Files</span>
-      <div class="flex items-center gap-1">
+      <div class="flex items-center gap-2">
         <button onclick={() => startNew()}
           class="cursor-pointer"
-          style="font-size: 11px; padding: 3px 10px; border-radius: 9999px; border: 1px solid var(--color-border); background: rgba(86, 28, 36, 0.04); color: var(--color-text); cursor: pointer; transition: all 150ms ease;"
-          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
+          style="font-size: 12px; padding: 6px 14px; border-radius: 9999px; border: 1px solid var(--color-border); background: rgba(86, 28, 36, 0.04); color: var(--color-text); font-weight: 500; cursor: pointer; transition: all 150ms ease;"
+          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.1)')}
           onmouseleave={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.04)')}>
           + New
         </button>
         <a href={`/projects/${encodeURIComponent(data.project.name)}/api/export`}
           download
-          style="font-size: 11px; padding: 3px 10px; border-radius: 9999px; border: 1px solid var(--color-border); background: rgba(86, 28, 36, 0.04); color: var(--color-text); cursor: pointer; transition: all 150ms ease; text-decoration: none; display: inline-block;"
-          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
+          style="font-size: 12px; padding: 6px 14px; border-radius: 9999px; border: 1px solid var(--color-border); background: rgba(86, 28, 36, 0.04); color: var(--color-text); font-weight: 500; cursor: pointer; transition: all 150ms ease; text-decoration: none; display: inline-block;"
+          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.1)')}
           onmouseleave={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.04)')}>
           ↓ Export
         </a>
         <button onclick={() => importInput?.click()}
           class="cursor-pointer"
-          style="font-size: 11px; padding: 3px 10px; border-radius: 9999px; border: 1px solid var(--color-border); background: rgba(86, 28, 36, 0.04); color: var(--color-text); cursor: pointer; transition: all 150ms ease;"
-          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
+          style="font-size: 12px; padding: 6px 14px; border-radius: 9999px; border: 1px solid var(--color-border); background: rgba(86, 28, 36, 0.04); color: var(--color-text); font-weight: 500; cursor: pointer; transition: all 150ms ease;"
+          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.1)')}
           onmouseleave={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.04)')}>
           ↑ Import
         </button>
