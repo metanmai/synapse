@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { env } from "$env/dynamic/private";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "$env/static/private";
 import type { Cookies } from "@sveltejs/kit";
 
 const COOKIE_NAME = "synapse_session";
@@ -10,7 +10,7 @@ interface SessionData {
 }
 
 export function getSupabase() {
-  return createClient(env.SUPABASE_URL!, env.SUPABASE_ANON_KEY!);
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
 export function setSessionCookie(cookies: Cookies, session: SessionData) {
