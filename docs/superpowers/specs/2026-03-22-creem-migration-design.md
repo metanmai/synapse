@@ -158,9 +158,16 @@ STRIPE_PRO_PRICE_ID    → CREEM_PRO_PRODUCT_ID
 #### `POST /api/billing/checkout`
 
 ```typescript
+// Guard against duplicate subscriptions (same as Stripe version)
+const existingSub = await getActiveSubscription(db, user.id);
+if (existingSub) {
+  throw new AppError("You already have an active subscription.", 400, "VALIDATION_ERROR");
+}
+
 const result = await creemRequest(c.env, "POST", "/checkouts", {
   product_id: c.env.CREEM_PRO_PRODUCT_ID,
   success_url: `${appUrl}/account?upgraded=true`,
+  request_url: `${appUrl}/account`,  // Creem's cancel/return URL field
   customer_email: user.email,
   metadata: { synapse_user_id: user.id },
 });
@@ -200,7 +207,26 @@ Verify `creem-signature` header with HMAC-SHA256, then handle events:
 | `subscription.canceled` / `subscription.expired` | Set status=inactive, cancel_at_period_end=false |
 | `subscription.past_due` | Set status=past_due |
 
-**User resolution in webhooks**: Creem supports `metadata` on checkouts. We pass `{ synapse_user_id: user.id }` during checkout creation. The `checkout.completed` webhook payload includes this metadata — used to find the user. For subscription events, we look up by `provider_subscription_id`.
+**Webhook payload structure** (Creem sends JSON with these fields):
+
+```json
+{
+  "event_type": "checkout.completed",
+  "object": {
+    "id": "checkout_...",
+    "product_id": "prod_...",
+    "customer": { "id": "cust_...", "email": "..." },
+    "subscription": { "id": "sub_...", "status": "active", "current_period_end": "..." },
+    "metadata": { "synapse_user_id": "uuid" }
+  }
+}
+```
+
+For subscription events, the `object` is the subscription itself with `id`, `status`, `current_period_end`, `customer`, etc.
+
+**User resolution in webhooks**:
+- `checkout.completed`: Resolve user via `object.metadata.synapse_user_id`. If missing or invalid, log and skip (don't crash).
+- All other subscription events: Look up by `provider_subscription_id` from `object.id`.
 
 ### Subscription query changes
 
@@ -240,6 +266,7 @@ Replace `STRIPE_PRO_PRICE_ID` with `CREEM_PRO_PRODUCT_ID` in `vars`. Secrets: `C
 | `backend/src/lib/env.ts` | Replace Stripe env vars with Creem env vars |
 | `backend/src/api/billing.ts` | Rewrite: Creem checkout, portal, webhook handlers |
 | `backend/src/db/queries/subscriptions.ts` | Rename columns: stripe_* → provider_* |
+| `backend/src/db/queries/users.ts` | Remove `updateStripeCustomerId` function |
 | `backend/wrangler.jsonc` | Replace STRIPE_PRO_PRICE_ID with CREEM_PRO_PRODUCT_ID |
 
 ## Creem Dashboard Setup (manual, one-time)
