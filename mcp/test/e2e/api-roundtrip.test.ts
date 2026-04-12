@@ -8,7 +8,9 @@
  * Run:  TEST_E2E=1 npm run test:e2e
  * With custom API:  TEST_E2E=1 TEST_API_URL=http://localhost:8787 npm run test:e2e
  *
- * Creates a fresh test user each run. Cleans up after itself.
+ * Each run creates a unique test user (timestamped email).
+ * All test data (entries, extra keys) is cleaned up in afterAll.
+ * Test users remain in the DB but are inert (no project data left).
  */
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -686,13 +688,30 @@ suite("Full User Journey", () => {
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   afterAll(async () => {
-    if (!KEY || !PROJECT_NAME) return;
+    if (!KEY) return;
+
+    // 1. Delete all remaining entries
+    if (PROJECT_NAME) {
+      try {
+        const { data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/list`, KEY);
+        if (Array.isArray(data)) {
+          for (const entry of data) {
+            await api("DELETE", `/api/context/${enc(PROJECT_NAME)}/${enc(entry.path)}`, KEY);
+          }
+        }
+      } catch {
+        // best-effort
+      }
+    }
+
+    // 2. Revoke all API keys except the primary one (which we're using)
     try {
-      // Delete remaining entries
-      const { data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/list`, KEY);
-      if (Array.isArray(data)) {
-        for (const entry of data) {
-          await api("DELETE", `/api/context/${enc(PROJECT_NAME)}/${enc(entry.path)}`, KEY);
+      const { data: keys } = await api("GET", "/api/account/keys", KEY);
+      if (Array.isArray(keys)) {
+        for (const key of keys) {
+          if (key.label !== "default") {
+            await api("DELETE", `/api/account/keys/${key.id}`, KEY);
+          }
         }
       }
     } catch {
