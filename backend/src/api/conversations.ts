@@ -19,7 +19,7 @@ import type { Env } from "../lib/env";
 import { AppError, ForbiddenError, NotFoundError } from "../lib/errors";
 import { idempotency } from "../lib/idempotency";
 import { getSignedUrl, uploadMedia } from "../lib/storage";
-import { requireConversationSync } from "../lib/tier";
+
 import { parseBody, schemas } from "../lib/validate";
 import { requireRole } from "../middleware/project-auth";
 
@@ -29,7 +29,6 @@ conversations.use("*", idempotency);
 
 // POST /api/conversations — create a new conversation
 conversations.post("/", async (c) => {
-  requireConversationSync(c);
   const user = c.get("user");
   const body = await parseBody(c, schemas.createConversation);
 
@@ -61,7 +60,6 @@ conversations.post("/", async (c) => {
 
 // GET /api/conversations — list conversations for a project
 conversations.get("/", async (c) => {
-  requireConversationSync(c);
   const user = c.get("user");
   const projectId = c.req.query("project_id");
   if (!projectId) {
@@ -87,7 +85,6 @@ conversations.get("/", async (c) => {
 
 // POST /api/conversations/import — import from external format
 conversations.post("/import", async (c) => {
-  requireConversationSync(c);
   const user = c.get("user");
   const body = await parseBody(c, schemas.importConversation);
 
@@ -145,7 +142,6 @@ conversations.post("/import", async (c) => {
 
 // GET /api/conversations/:id — get full conversation with messages, context, media
 conversations.get("/:id", async (c) => {
-  requireConversationSync(c);
   const user = c.get("user");
   const conversationId = c.req.param("id");
 
@@ -179,7 +175,6 @@ conversations.get("/:id", async (c) => {
 
 // PATCH /api/conversations/:id — update metadata / soft-delete
 conversations.patch("/:id", async (c) => {
-  requireConversationSync(c);
   const user = c.get("user");
   const conversationId = c.req.param("id");
   const body = await parseBody(c, schemas.updateConversation);
@@ -209,7 +204,6 @@ conversations.patch("/:id", async (c) => {
 
 // POST /api/conversations/:id/messages — append messages with optional context
 conversations.post("/:id/messages", async (c) => {
-  requireConversationSync(c);
   const user = c.get("user");
   const conversationId = c.req.param("id");
   const body = await parseBody(c, schemas.appendMessages);
@@ -249,7 +243,6 @@ conversations.post("/:id/messages", async (c) => {
 
 // POST /api/conversations/:id/media — upload media via FormData
 conversations.post("/:id/media", async (c) => {
-  requireConversationSync(c);
   const user = c.get("user");
   const conversationId = c.req.param("id");
 
@@ -311,7 +304,6 @@ conversations.post("/:id/media", async (c) => {
 
 // GET /api/conversations/:id/media/:mediaId — get signed download URL
 conversations.get("/:id/media/:mediaId", async (c) => {
-  requireConversationSync(c);
   const user = c.get("user");
   const conversationId = c.req.param("id");
   const mediaId = c.req.param("mediaId");
@@ -336,7 +328,6 @@ conversations.get("/:id/media/:mediaId", async (c) => {
 
 // GET /api/conversations/:id/export/:format — export to target format
 conversations.get("/:id/export/:format", async (c) => {
-  requireConversationSync(c);
   const user = c.get("user");
   const conversationId = c.req.param("id");
   const format = c.req.param("format");
