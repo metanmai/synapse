@@ -5,16 +5,56 @@ const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio
 const { z } = require("zod");
 
 const crypto = require("crypto");
+const { spawn, execSync } = require("child_process");
+const path = require("path");
 
 const API_URL = process.env.SYNAPSE_API_URL || "http://localhost:8787";
 const API_KEY = process.env.SYNAPSE_API_KEY;
 const PROJECT = process.env.SYNAPSE_PROJECT || "My Workspace";
 const PASSPHRASE = process.env.SYNAPSE_PASSPHRASE;
 const USER_EMAIL = process.env.SYNAPSE_USER_EMAIL;
+const BACKEND_DIR = path.resolve(__dirname, "..", "backend");
 
 if (!API_KEY) {
   console.error("SYNAPSE_API_KEY is required");
   process.exit(1);
+}
+
+// --- Auto-start backend if not running ---
+let backendProcess = null;
+
+async function ensureBackend() {
+  try {
+    const res = await fetch(`${API_URL}/health`, { signal: AbortSignal.timeout(2000) });
+    if (res.ok) return; // already running
+  } catch {
+    // not running — start it
+  }
+
+  console.error("[synapse-mcp] Backend not running, starting wrangler dev...");
+  backendProcess = spawn("npx", ["wrangler", "dev", "--test-scheduled"], {
+    cwd: BACKEND_DIR,
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
+  });
+
+  // Don't let the backend process keep the MCP server alive if it exits
+  backendProcess.unref();
+
+  // Wait for backend to be ready (poll health endpoint)
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      const res = await fetch(`${API_URL}/health`, { signal: AbortSignal.timeout(2000) });
+      if (res.ok) {
+        console.error("[synapse-mcp] Backend started successfully");
+        return;
+      }
+    } catch {
+      // still starting up
+    }
+  }
+  console.error("[synapse-mcp] Warning: Backend may not have started properly");
 }
 
 // --- E2E Encryption (matches frontend crypto.ts) ---
@@ -253,6 +293,7 @@ server.tool(
 );
 
 async function main() {
+  await ensureBackend();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
