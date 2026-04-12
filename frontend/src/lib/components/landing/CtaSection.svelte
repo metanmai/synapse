@@ -1,5 +1,7 @@
 <script>
 import ScrollReveal from "./ScrollReveal.svelte";
+
+let { loggedIn = false } = $props();
 </script>
 
 <section class="cta">
@@ -14,7 +16,11 @@ import ScrollReveal from "./ScrollReveal.svelte";
       <p class="cta-sub">Free to start. Plus at $5.99/mo for teams and power users.</p>
       <div class="cta-button-wrap">
         <div class="cta-glow" aria-hidden="true"></div>
-        <a href="/signup" class="cta-button">Get Started Free</a>
+        {#if loggedIn}
+          <a href="/dashboard" class="cta-button">Go to Dashboard</a>
+        {:else}
+          <a href="/signup" class="cta-button">Get Started Free</a>
+        {/if}
       </div>
     </ScrollReveal>
   </div>

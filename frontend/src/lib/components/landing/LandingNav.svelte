@@ -1,6 +1,7 @@
 <script lang="ts">
 import { onMount } from "svelte";
 
+let { loggedIn = false } = $props<{ loggedIn?: boolean }>();
 let mobileOpen = $state(false);
 let scrolled = $state(false);
 
@@ -25,7 +26,11 @@ onMount(() => {
       <a href="#how-it-works" class="nav-link">How It Works</a>
     </div>
 
-    <a href="/signup" class="nav-cta">Get Started Free</a>
+    {#if loggedIn}
+      <a href="/dashboard" class="nav-cta">Go to Dashboard</a>
+    {:else}
+      <a href="/signup" class="nav-cta">Get Started Free</a>
+    {/if}
 
     <button class="nav-hamburger" onclick={() => mobileOpen = !mobileOpen} aria-label="Toggle menu">
       <span class="hamburger-bar" class:open={mobileOpen}></span>
@@ -38,7 +43,11 @@ onMount(() => {
     <div class="mobile-menu">
       <a href="#features" class="mobile-link" onclick={() => mobileOpen = false}>Features</a>
       <a href="#how-it-works" class="mobile-link" onclick={() => mobileOpen = false}>How It Works</a>
-      <a href="/signup" class="mobile-cta" onclick={() => mobileOpen = false}>Get Started Free</a>
+      {#if loggedIn}
+        <a href="/dashboard" class="mobile-cta" onclick={() => mobileOpen = false}>Go to Dashboard</a>
+      {:else}
+        <a href="/signup" class="mobile-cta" onclick={() => mobileOpen = false}>Get Started Free</a>
+      {/if}
     </div>
   {/if}
 </nav>
