@@ -34,3 +34,12 @@ export interface ProjectMember {
 }
 
 export type { Insight, InsightListItem, InsightType, InsightSource } from "@synapse/shared";
+
+export type {
+  Conversation,
+  ConversationListItem,
+  ConversationMessage,
+  ConversationMediaRecord,
+  CanonicalMessage,
+  MediaAttachment,
+} from "@synapse/shared";
