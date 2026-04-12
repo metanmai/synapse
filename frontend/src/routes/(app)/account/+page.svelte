@@ -1,6 +1,7 @@
 <script>
   import ApiKeyCard from "$lib/components/account/ApiKeyCard.svelte";
   import ConnectedAccounts from "$lib/components/account/ConnectedAccounts.svelte";
+  import BillingCard from "$lib/components/account/BillingCard.svelte";
 
   let { data, form } = $props();
 </script>
@@ -11,6 +12,7 @@
     Signed in as {data.user.email}
   </div>
   <div class="space-y-6">
+    <BillingCard billing={data.billing} />
     <ApiKeyCard apiKey={form?.apiKey} error={form?.error} />
     <ConnectedAccounts />
   </div>
