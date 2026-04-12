@@ -51,7 +51,7 @@ const renewalDate = $derived(
     </div>
   {/if}
 
-  {#if billing.tier === "free"}
+  {#if billing.tier === "free" && !showUpgradeSuccess}
     <p class="text-sm mb-3" style="color: var(--color-text-muted);">
       You're on the <strong>Free</strong> plan. Upgrade to Plus for 500 files, unlimited
       connections, and version history.
