@@ -1,5 +1,10 @@
+import type { Context } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { hashApiKey } from "../../src/lib/auth";
+import type { Env } from "../../src/lib/env";
+
+/** Minimal Hono context mock: `set()` records into `vars` for assertions. */
+type MockAuthContext = Context<{ Bindings: Env }> & { vars: Record<string, unknown> };
 
 // Mock Supabase client
 const mockGetUser = vi.fn();
@@ -82,7 +87,7 @@ describe("authMiddleware", () => {
     authMiddleware = mod.authMiddleware;
   });
 
-  function createMockContext(authHeader?: string) {
+  function createMockContext(authHeader?: string): MockAuthContext {
     const vars: Record<string, unknown> = {};
     return {
       req: {
@@ -99,7 +104,7 @@ describe("authMiddleware", () => {
         vars[key] = value;
       },
       vars,
-    } as any;
+    } as unknown as MockAuthContext;
   }
 
   it("rejects request with no Authorization header", async () => {
