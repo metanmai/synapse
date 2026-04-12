@@ -1,10 +1,10 @@
 {
-  "name": "synapse-mcp",
+  "name": "synapsesync-mcp",
   "version": "0.1.0",
   "description": "MCP server for Synapse — shared AI context across tools and devices",
   "main": "index.js",
   "bin": {
-    "synapse-mcp": "index.js"
+    "synapsesync-mcp": "index.js"
   },
   "scripts": {
     "start": "node index.js"
