@@ -1,14 +1,24 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import type { Env } from "./lib/env";
 import { AppError } from "./lib/errors";
-import { auth } from "./api/auth";
+import { auth, account } from "./api/auth";
 import { context } from "./api/context";
 import { projects } from "./api/projects";
 import { sync } from "./api/sync";
+import { share } from "./api/share";
 import { McpSyncAgent } from "./mcp/agent";
 import { runScheduledGoogleSync } from "./sync/from-google";
 
 const app = new Hono<{ Bindings: Env }>();
+
+// CORS for frontend
+app.use("*", cors({
+  origin: ["http://localhost:5173", "https://app.mcp-sync.dev"],
+  allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+}));
 
 app.onError((err, c) => {
   if (err instanceof AppError) {
@@ -27,6 +37,8 @@ app.route("/auth", auth);
 app.route("/api/context", context);
 app.route("/api/projects", projects);
 app.route("/api/sync", sync);
+app.route("/api/share", share);
+app.route("/api/account", account);
 
 // Mount MCP server (Streamable HTTP transport)
 app.mount("/mcp", McpSyncAgent.serve("/mcp").fetch);

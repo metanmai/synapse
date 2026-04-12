@@ -98,3 +98,23 @@ auth.get("/google/callback", async (c) => {
 });
 
 export { auth };
+
+// POST /api/account/regenerate-key — mounted separately in index.ts, not under /auth
+export const account = new Hono<{ Bindings: Env }>();
+account.use("*", authMiddleware);
+
+account.post("/regenerate-key", async (c) => {
+  const user = c.get("user");
+
+  const apiKey = crypto.randomUUID() + "-" + crypto.randomUUID();
+  const apiKeyHash = await hashApiKey(apiKey);
+
+  const db = createSupabaseClient(c.env);
+  const { error } = await db
+    .from("users")
+    .update({ api_key_hash: apiKeyHash })
+    .eq("id", user.id);
+  if (error) throw error;
+
+  return c.json({ api_key: apiKey });
+});
