@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { badgeColors, formatInsightDate, formatInsightType, getBadgeColor } from "./insight-helpers";
+import {
+  badgeColors,
+  formatInsightDate,
+  formatInsightType,
+  getBadgeColor,
+  groupInsightsByType,
+} from "./insight-helpers";
 
 // ---------- badgeColors ----------
 
@@ -98,5 +104,62 @@ describe("formatInsightType", () => {
 
   it("handles empty string", () => {
     expect(formatInsightType("")).toBe("");
+  });
+});
+
+// ---------- groupInsightsByType ----------
+
+describe("groupInsightsByType", () => {
+  const makeInsight = (type: string, id: string) => ({
+    id,
+    type,
+    summary: `${type} summary`,
+    detail: null,
+    source: { type: "session" as const, agent: "test" },
+    updated_at: "2026-04-03T10:00:00Z",
+    created_at: "2026-04-03T10:00:00Z",
+  });
+
+  it("groups insights by type with correct labels", () => {
+    const insights = [
+      makeInsight("decision", "1"),
+      makeInsight("decision", "2"),
+      makeInsight("learning", "3"),
+      makeInsight("architecture", "4"),
+    ];
+    const groups = groupInsightsByType(insights);
+    expect(groups).toHaveLength(3);
+    expect(groups[0].type).toBe("decision");
+    expect(groups[0].label).toBe("Decisions");
+    expect(groups[0].items).toHaveLength(2);
+    expect(groups[1].type).toBe("architecture");
+    expect(groups[1].label).toBe("Architecture");
+    expect(groups[1].items).toHaveLength(1);
+    expect(groups[2].type).toBe("learning");
+    expect(groups[2].label).toBe("Learnings");
+    expect(groups[2].items).toHaveLength(1);
+  });
+
+  it("omits empty groups", () => {
+    const insights = [makeInsight("decision", "1")];
+    const groups = groupInsightsByType(insights);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].type).toBe("decision");
+  });
+
+  it("returns empty array for no insights", () => {
+    expect(groupInsightsByType([])).toEqual([]);
+  });
+
+  it("preserves type order: decision, architecture, learning, preference, action_item", () => {
+    const insights = [
+      makeInsight("action_item", "1"),
+      makeInsight("decision", "2"),
+      makeInsight("learning", "3"),
+      makeInsight("preference", "4"),
+      makeInsight("architecture", "5"),
+    ];
+    const groups = groupInsightsByType(insights);
+    expect(groups.map((g) => g.type)).toEqual(["decision", "architecture", "learning", "preference", "action_item"]);
   });
 });
