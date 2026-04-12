@@ -2,23 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { User } from "../types";
 import { singleOrNull } from "../query-helpers";
 
-export async function findUserByApiKeyHash(
-  db: SupabaseClient,
-  apiKeyHash: string
-): Promise<User | null> {
-  return singleOrNull<User>(
-    await db.from("users").select("*").eq("api_key_hash", apiKeyHash).single()
-  );
-}
-
 export async function createUser(
   db: SupabaseClient,
-  email: string,
-  apiKeyHash: string
+  email: string
 ): Promise<User> {
   const { data, error } = await db
     .from("users")
-    .insert({ email, api_key_hash: apiKeyHash })
+    .insert({ email })
     .select()
     .single();
 

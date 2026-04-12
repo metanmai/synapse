@@ -1,5 +1,6 @@
 /** Database query functions for all entities */
 export * from "./users";
+export * from "./api-keys";
 export * from "./projects";
 export * from "./entries";
 export * from "./preferences";
