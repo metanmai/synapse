@@ -338,7 +338,7 @@ describe("Cross-agent conversation sync", () => {
         const toolCallMsg = result.find((m) => m.tool_calls && m.tool_calls.length > 0);
         expect(toolCallMsg).toBeDefined();
         expect(toolCallMsg?.tool_calls?.[0].function.name).toBe("Grep");
-        const args = JSON.parse(toolCallMsg?.tool_calls?.[0].function.arguments);
+        const args = JSON.parse(toolCallMsg?.tool_calls?.[0].function.arguments ?? "{}");
         expect(args).toEqual({ pattern: "throw.*Error", path: "/src" });
       });
 
@@ -1125,7 +1125,7 @@ describe("Fidelity mode roundtrip", () => {
     const toolCallMsg = result.find((m) => m.tool_calls && m.tool_calls.length > 0);
     expect(toolCallMsg).toBeDefined();
     expect(toolCallMsg?.tool_calls?.[0].function.name).toBe("Grep");
-    const args = JSON.parse(toolCallMsg?.tool_calls?.[0].function.arguments);
+    const args = JSON.parse(toolCallMsg?.tool_calls?.[0].function.arguments ?? "{}");
     expect(args).toEqual({ pattern: "auth.*bug", path: "/src" });
   });
 

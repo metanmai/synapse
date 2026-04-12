@@ -80,7 +80,7 @@ export async function runFulltextSearch<T extends { id: string }>(
     console.error(`[search] ${table} fulltext error:`, error.message);
     return [];
   }
-  return (data ?? []).map((row: T) => ({ entry: row, score }));
+  return ((data ?? []) as unknown as T[]).map((row) => ({ entry: row, score }));
 }
 
 /**
@@ -118,5 +118,5 @@ export async function runIlikeSearch<T extends { id: string }>(
     console.error(`[search] ${table} ilike error:`, error.message);
     return [];
   }
-  return (data ?? []).map((row: T) => ({ entry: row, score }));
+  return ((data ?? []) as unknown as T[]).map((row) => ({ entry: row, score }));
 }
