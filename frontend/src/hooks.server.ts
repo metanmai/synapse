@@ -24,7 +24,8 @@ export const handle: Handle = async ({ event, resolve }) => {
     data: { session },
   } = await supabase.auth.getSession();
 
-  event.locals.user = { id: user.id, email: user.email ?? "" };
+  const providers: string[] = (user.app_metadata?.providers as string[]) ?? [];
+  event.locals.user = { id: user.id, email: user.email ?? "", providers };
   event.locals.token = session?.access_token ?? null;
 
   return resolve(event, {
