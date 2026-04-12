@@ -15,6 +15,7 @@ import { runWizard } from "./cli/wizard.js";
 // --- Interfaces for MCP server response shapes ---
 
 interface ProjectResponse {
+  id: string;
   name: string;
 }
 
@@ -76,7 +77,7 @@ interface ConversationDetail {
   updated_at: string;
 }
 
-interface ProjectListItem {
+interface ProjectResponse {
   id: string;
   name: string;
 }
@@ -649,8 +650,8 @@ if (!isMcpServerMode(args)) {
   // --- Conversation tools (Plus tier) ---
 
   /** Resolve a project name to its ID using fuzzy matching: exact → starts-with → includes. */
-  async function resolveProjectId(projectName: string): Promise<string | null> {
-    const projects = (await api("GET", "/api/projects")) as ProjectListItem[];
+  async function resolveProjectId(projectName: string, autoCreate = false): Promise<string | null> {
+    const projects = (await api("GET", "/api/projects")) as ProjectResponse[];
     const q = projectName.toLowerCase();
 
     // 1. Exact match
@@ -668,6 +669,12 @@ if (!isMcpServerMode(args)) {
     // 4. Reverse: query contains project name (e.g. "my synapse project" matches "synapse")
     const reverse = projects.filter((p) => q.includes(p.name.toLowerCase()));
     if (reverse.length === 1) return reverse[0].id;
+
+    // 5. Auto-create if requested
+    if (autoCreate) {
+      const created = (await api("POST", "/api/projects", { name: projectName })) as ProjectResponse;
+      return created.id;
+    }
 
     return null;
   }
@@ -853,7 +860,7 @@ if (!isMcpServerMode(args)) {
         .describe("Messages to sync"),
     },
     async ({ project, conversationId, title, systemPrompt, workingContext, fidelity, messages }) => {
-      const projectId = await resolveProjectId(project);
+      const projectId = await resolveProjectId(project, true);
       if (!projectId) {
         return { content: [{ type: "text" as const, text: `Project "${project}" not found.` }], isError: true };
       }
