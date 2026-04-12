@@ -3,7 +3,7 @@ import { getSupabase } from "$lib/server/auth";
 import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, url }) => {
   const api = createApi(locals.token);
   let billing: {
     tier: "free" | "plus";
@@ -16,6 +16,16 @@ export const load: PageServerLoad = async ({ locals }) => {
     last_used_at: string | null;
     created_at: string;
   }[] = [];
+
+  // If returning from Creem checkout, verify and activate the subscription directly
+  const checkoutId = url.searchParams.get("checkout_id");
+  if (checkoutId && url.searchParams.has("upgraded")) {
+    try {
+      await api.verifyCheckout(checkoutId);
+    } catch {
+      // Best-effort — webhook may still handle it
+    }
+  }
 
   const [billingResult, keysResult] = await Promise.allSettled([api.getBillingStatus(), api.listApiKeys()]);
 
