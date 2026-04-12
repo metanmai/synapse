@@ -77,11 +77,6 @@ interface ConversationDetail {
   updated_at: string;
 }
 
-interface ProjectResponse {
-  id: string;
-  name: string;
-}
-
 // --- CLI utilities ---
 
 function isInteractiveTerminal(): boolean {
