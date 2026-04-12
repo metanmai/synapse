@@ -5,6 +5,23 @@
 <svelte:head>
   <title>Synapse — Your AI tools finally remember</title>
   <meta name="description" content="Synapse is a shared context layer that gives Claude, ChatGPT, Cursor, and every AI tool persistent memory across sessions." />
+  {@html `<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Synapse",
+  "url": "https://synapsesync.app",
+  "description": "A shared context layer that gives AI tools like Claude, ChatGPT, and Cursor persistent memory across sessions.",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Web",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD",
+    "description": "Free tier with 50 files, 3 connections"
+  }
+}
+</script>`}
 </svelte:head>
 
 <div class="landing">
