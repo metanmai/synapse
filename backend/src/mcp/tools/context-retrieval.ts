@@ -42,10 +42,10 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
 
   server.tool(
     "search_context",
-    "Search across all context in a project using keywords. Use this to find relevant decisions, conventions, or documentation.",
+    "Search across all context in a project using semantic + full-text + keyword search. Understands meaning — e.g., 'auth flow' finds documents about 'login and session tokens'.",
     {
       project: z.string().describe("Project name"),
-      query: z.string().describe("Search query (keywords)"),
+      query: z.string().describe("Search query (natural language or keywords)"),
       tags: z.array(z.string()).optional().describe("Filter by tags"),
       folder: z.string().optional().describe("Limit search to a folder path prefix"),
     },

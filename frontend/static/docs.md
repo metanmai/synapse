@@ -144,9 +144,16 @@ Response:
 ### Search entries
 `GET /api/context/:project/search?q=query&tags=decision&folder=decisions`
 
+Search uses a 3-tier strategy, run in parallel and merged by relevance:
+1. **Semantic search** — finds conceptually similar content using vector embeddings (e.g., "auth flow" matches "login and session tokens")
+2. **Full-text search** — Postgres `tsvector` websearch matching
+3. **Keyword search** — ILIKE fallback for partial/fuzzy matches
+
+Semantic search requires the optional embedding service. Without it, search gracefully degrades to full-text + keyword only.
+
 Response:
 ```json
-[{ "path": "decisions/chose-redis.md", "content": "...", "tags": ["decision"], "score": 0.95 }]
+[{ "path": "decisions/chose-redis.md", "content": "...", "tags": ["decision"] }]
 ```
 
 ### Delete entry
