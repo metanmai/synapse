@@ -14,7 +14,9 @@
     "format": "biome format --write ."
   },
   "overrides": {
-    "zod": "^4.3.6"
+    "synapsesync-mcp": {
+      "zod": "^4.3.6"
+    }
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0"
