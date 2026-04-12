@@ -18,7 +18,16 @@ export const actions: Actions = {
       password,
     });
 
-    if (error) return fail(400, { error: error.message, email });
+    if (error) {
+      // User exists via OAuth but has no password
+      if (error.message.includes("Invalid login credentials")) {
+        return fail(400, {
+          error: "An account with this email exists but was created with a different sign-in method (e.g. GitHub). Try signing in with that method, or use \"Forgot password\" to set a password.",
+          email,
+        });
+      }
+      return fail(400, { error: error.message, email });
+    }
 
     const redirectTo = url.searchParams.get("redirect") || "/dashboard";
     redirect(303, redirectTo);
