@@ -1,12 +1,10 @@
 import { Hono } from "hono";
 
 import { logActivity } from "../db/activity-logger";
-import { createSupabaseClient } from "../db/client";
 import { addMember, getMemberRole, getShareLinkByToken } from "../db/queries";
 import { authMiddleware } from "../lib/auth";
-import { AppError, NotFoundError } from "../lib/errors";
-
 import type { Env } from "../lib/env";
+import { AppError, NotFoundError } from "../lib/errors";
 
 const share = new Hono<{ Bindings: Env }>();
 
@@ -15,7 +13,7 @@ share.post("/:token/join", authMiddleware, async (c) => {
   const user = c.get("user");
   const token = c.req.param("token") ?? "";
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
   const link = await getShareLinkByToken(db, token);
 
   if (!link) throw new NotFoundError("Share link not found or expired");
