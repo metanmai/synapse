@@ -55,3 +55,25 @@ export interface UserPreferences {
   auto_capture: "aggressive" | "moderate" | "manual_only";
   context_loading: "full" | "smart" | "on_demand" | "summary_only";
 }
+
+export interface ShareLink {
+  id: string;
+  project_id: string;
+  token: string;
+  role: "editor" | "viewer";
+  created_by: string;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export interface ActivityLogEntry {
+  id: string;
+  project_id: string;
+  user_id: string | null;
+  action: string;
+  target_path: string | null;
+  target_email: string | null;
+  source: "claude" | "chatgpt" | "human" | "google_docs";
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
