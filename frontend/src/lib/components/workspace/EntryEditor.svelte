@@ -41,8 +41,8 @@
   />
   <div class="flex gap-2">
     <button type="submit"
-      class="rounded-lg px-4 py-2.5 text-sm font-medium text-white cursor-pointer"
-      style="background-color: var(--color-accent);">
+      class="rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
+      style="background-color: var(--color-accent); color: var(--color-text);">
       Save
     </button>
     <a href="/projects/{encodeURIComponent(projectName)}{entry ? `?path=${encodeURIComponent(entry.path)}` : ''}"

@@ -45,7 +45,7 @@
         </div>
         <div class="flex gap-3">
           <button onclick={() => copyLink(link.token)}
-            class="text-xs cursor-pointer" style="color: var(--color-accent);">
+            class="text-xs cursor-pointer" style="color: var(--color-link);">
             {copied === link.token ? "Copied!" : "Copy"}
           </button>
           <form method="POST" action="?/revokeLink" use:enhance class="inline">

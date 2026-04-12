@@ -18,7 +18,7 @@
       <p style="color: var(--color-success);">Joined! Redirecting to dashboard...</p>
     {:else if form?.error}
       <p style="color: var(--color-danger);">{form.error}</p>
-      <a href="/" class="inline-block mt-4 text-sm" style="color: var(--color-accent);">
+      <a href="/" class="inline-block mt-4 text-sm" style="color: var(--color-link);">
         Go to dashboard
       </a>
     {:else}
@@ -27,8 +27,8 @@
       </p>
       <form method="POST" action="?/join" use:enhance>
         <button type="submit"
-          class="rounded-lg px-6 py-2.5 text-sm font-medium text-white cursor-pointer"
-          style="background-color: var(--color-accent);">
+          class="rounded-lg px-6 py-2.5 text-sm font-medium cursor-pointer"
+          style="background-color: var(--color-accent); color: var(--color-text);">
           Accept Invite
         </button>
       </form>
