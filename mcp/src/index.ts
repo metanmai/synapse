@@ -16,7 +16,17 @@ const API_URL = "https://api.synapsesync.app";
 // --- Interfaces for MCP server response shapes ---
 
 interface ProjectResponse {
+  id: string;
   name: string;
+  created_at: string;
+  role: string;
+}
+
+interface ActivityLogEntry {
+  action: string;
+  source: string;
+  target_path: string | null;
+  created_at: string;
 }
 
 interface EntryListResponse {
@@ -457,6 +467,133 @@ if (!isMcpServerMode(args)) {
 
     return { content: [{ type: "text" as const, text: lines.join("\n") }] };
   });
+
+  // --- stats: show lifetime workspace stats ---
+  server.tool(
+    "stats",
+    "Show lifetime stats for your Synapse workspace — files, activity, sources, tags, and more.",
+    {},
+    async () => {
+      const projects = (await api("GET", "/api/projects")) as ProjectResponse[];
+      if (projects.length === 0) {
+        return { content: [{ type: "text" as const, text: "No projects yet." }] };
+      }
+
+      let totalFiles = 0;
+      let totalActivity = 0;
+      const tagCounts: Record<string, number> = {};
+      const sourceCounts: Record<string, number> = {};
+      const actionCounts: Record<string, number> = {};
+      let oldestFile: string | null = null;
+      let newestFile: string | null = null;
+      const projectStats: { name: string; files: number; activity: number }[] = [];
+
+      for (const project of projects) {
+        // Fetch all files
+        const entries = (await api(
+          "GET",
+          `/api/context/${encodeURIComponent(project.name)}/list`,
+        )) as EntryListResponse[];
+        totalFiles += entries.length;
+
+        for (const entry of entries) {
+          for (const tag of entry.tags) {
+            tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+          }
+          if (!oldestFile || entry.updated_at < oldestFile) oldestFile = entry.updated_at;
+          if (!newestFile || entry.updated_at > newestFile) newestFile = entry.updated_at;
+        }
+
+        // Fetch activity (up to 500 most recent)
+        const activity = (await api(
+          "GET",
+          `/api/projects/${encodeURIComponent(project.id)}/activity?limit=500`,
+        )) as ActivityLogEntry[];
+        totalActivity += activity.length;
+
+        for (const a of activity) {
+          actionCounts[a.action] = (actionCounts[a.action] || 0) + 1;
+          if (a.source) sourceCounts[a.source] = (sourceCounts[a.source] || 0) + 1;
+        }
+
+        projectStats.push({ name: project.name, files: entries.length, activity: activity.length });
+      }
+
+      // Build output
+      const lines: string[] = [];
+
+      // Header
+      const accountAge = projects[0]?.created_at
+        ? Math.floor((Date.now() - new Date(projects[0].created_at).getTime()) / 86_400_000)
+        : 0;
+      lines.push(`Synapse Lifetime Stats`);
+      lines.push(`${"─".repeat(40)}`);
+      lines.push(`Account age: ${accountAge} days`);
+      lines.push(`Projects: ${projects.length}`);
+      lines.push(`Total files: ${totalFiles}`);
+      lines.push(`Total activity events: ${totalActivity}`);
+      lines.push("");
+
+      // Activity breakdown
+      if (Object.keys(actionCounts).length > 0) {
+        lines.push("Activity breakdown:");
+        const actionLabels: Record<string, string> = {
+          entry_created: "Files created",
+          entry_updated: "Files updated",
+          entry_deleted: "Files deleted",
+          member_added: "Members added",
+          member_removed: "Members removed",
+          project_created: "Projects created",
+          share_link_created: "Share links created",
+          share_link_revoked: "Share links revoked",
+          settings_changed: "Settings changed",
+        };
+        for (const [action, count] of Object.entries(actionCounts).sort((a, b) => b[1] - a[1])) {
+          lines.push(`  ${actionLabels[action] || action}: ${count}`);
+        }
+        lines.push("");
+      }
+
+      // Source breakdown
+      if (Object.keys(sourceCounts).length > 0) {
+        const total = Object.values(sourceCounts).reduce((a, b) => a + b, 0);
+        lines.push("Contributions by source:");
+        for (const [source, count] of Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])) {
+          const pct = Math.round((count / total) * 100);
+          lines.push(`  ${source}: ${count} (${pct}%)`);
+        }
+        lines.push("");
+      }
+
+      // Top tags
+      const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+      if (sortedTags.length > 0) {
+        lines.push(`Tags (${sortedTags.length} unique):`);
+        for (const [tag, count] of sortedTags.slice(0, 10)) {
+          lines.push(`  ${tag}: ${count} files`);
+        }
+        if (sortedTags.length > 10) lines.push(`  … and ${sortedTags.length - 10} more`);
+        lines.push("");
+      }
+
+      // Per-project summary
+      if (projectStats.length > 1) {
+        lines.push("Per-project:");
+        for (const p of projectStats.sort((a, b) => b.files - a.files)) {
+          lines.push(`  ${p.name}: ${p.files} files, ${p.activity} events`);
+        }
+        lines.push("");
+      }
+
+      // Timeline
+      if (oldestFile && newestFile) {
+        lines.push(`Oldest file: ${new Date(oldestFile).toLocaleDateString()}`);
+        lines.push(`Newest file: ${new Date(newestFile).toLocaleDateString()}`);
+      }
+
+      return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+    },
+  );
 
   async function main(): Promise<void> {
     const transport = new StdioServerTransport();

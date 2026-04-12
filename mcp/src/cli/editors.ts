@@ -70,6 +70,10 @@ const SYNAPSE_COMMAND_DEFS: Record<string, CommandDef> = {
     description: "Clean up the Synapse workspace",
     body: "Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Use the Synapse MCP `tree` tool to list all files\n2. Identify duplicates, test files, empty entries\n3. Confirm with the user before deleting anything\n4. Delete confirmed entries using the Synapse MCP `rm` tool",
   },
+  "synapse-stats": {
+    description: "Show lifetime stats for your Synapse workspace",
+    body: "Show the user's lifetime Synapse workspace stats.\n\nUse the Synapse MCP `stats` tool and display the results. This shows files, activity breakdown, contribution sources, tags, and per-project summaries.",
+  },
 };
 
 // --- Shared helpers ---
@@ -293,6 +297,8 @@ function writeClaudeCodeLocal(apiKey: string, home: string, cwd: string): string
     "whoami.md": `Show current Synapse account info.\n\n1. Run \`mcp__synapse__ls()\` to verify connection\n2. Run \`mcp__synapse__tree()\` to count files\n3. Show: "Connected. Files: [count]."\n`,
     "clean.md":
       "Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Run `mcp__synapse__tree()`\n2. Identify duplicates, test files, empty entries\n3. Confirm with user before deleting\n4. Delete confirmed entries with `mcp__synapse__rm()`\n",
+    "stats.md":
+      "Show lifetime Synapse workspace stats.\n\nRun `mcp__synapse__stats()` and display the results. Shows files, activity, sources, tags, and per-project summaries.\n",
   };
   for (const [filename, content] of Object.entries(commands)) {
     const filepath = path.join(cmdDir, filename);
@@ -328,6 +334,8 @@ function writeClaudeCodeGlobal(apiKey: string, home: string): string[] {
     "whoami.md": `Show current Synapse account info.\n\n1. Run \`mcp__synapse__ls()\` to verify connection\n2. Run \`mcp__synapse__tree()\` to count files\n3. Show: "Connected. Files: [count]."\n`,
     "clean.md":
       "Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Run `mcp__synapse__tree()`\n2. Identify duplicates, test files, empty entries\n3. Confirm with user before deleting\n4. Delete confirmed entries with `mcp__synapse__rm()`\n",
+    "stats.md":
+      "Show lifetime Synapse workspace stats.\n\nRun `mcp__synapse__stats()` and display the results. Shows files, activity, sources, tags, and per-project summaries.\n",
   };
   for (const [filename, content] of Object.entries(commands)) {
     const filepath = path.join(cmdDir, filename);
