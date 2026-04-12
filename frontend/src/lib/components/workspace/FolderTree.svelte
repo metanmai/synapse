@@ -128,33 +128,28 @@ function menuPathIsFile(menuPath: string): boolean {
 
 <!-- Fixed-position dropdown menu -->
 {#if menuOpen}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div onclick={(e) => e.stopPropagation()}
+    onkeydown={(e) => { if (e.key === 'Escape') menuOpen = null; }}
     role="menu"
-    class="fixed rounded-lg shadow-lg py-1"
-    style="left: {menuPos.x}px; top: {menuPos.y}px; z-index: 9999;
-      background-color: var(--color-bg-raised); border: 1px solid var(--color-border); min-width: 120px;">
+    class="fixed rounded-lg shadow-lg py-1 context-menu"
+    style="left: {menuPos.x}px; top: {menuPos.y}px;">
     <button role="menuitem" onclick={() => handleAction("activity", menuOpen!, menuPathIsFolder(menuOpen!))}
-      class="block w-full text-left px-3 py-1.5 cursor-pointer hover:opacity-80"
-      style="font-size: 11px; color: var(--color-text);">
+      class="menu-item block w-full text-left px-3 py-1.5 cursor-pointer">
       Activity
     </button>
     <button role="menuitem" onclick={() => handleAction("share", menuOpen!, menuPathIsFolder(menuOpen!))}
-      class="block w-full text-left px-3 py-1.5 cursor-pointer hover:opacity-80"
-      style="font-size: 11px; color: var(--color-text);">
+      class="menu-item block w-full text-left px-3 py-1.5 cursor-pointer">
       Share
     </button>
     <a role="menuitem" href={`/projects/${encodeURIComponent(projectName)}/api/export`}
       download
-      class="block w-full text-left px-3 py-1.5 cursor-pointer hover:opacity-80"
-      style="font-size: 11px; color: var(--color-text); text-decoration: none;"
+      class="menu-item menu-link block w-full text-left px-3 py-1.5 cursor-pointer"
       onclick={() => { menuOpen = null; }}>
       Export
     </a>
     {#if menuOpen && menuPathIsFile(menuOpen)}
       <button role="menuitem" onclick={() => handleAction("delete", menuOpen!, false)}
-        class="block w-full text-left px-3 py-1.5 cursor-pointer hover:opacity-80"
-        style="font-size: 11px; color: var(--color-danger);">
+        class="menu-item-danger block w-full text-left px-3 py-1.5 cursor-pointer">
         Delete
       </button>
     {/if}
@@ -163,52 +158,43 @@ function menuPathIsFile(menuPath: string): boolean {
 
 {#snippet fileRow(filePath: string, fileName: string, depth: number)}
   {@const isSelected = selectedPath === filePath}
-  <div class="group flex items-center gap-1 cursor-pointer"
+  <div class="tree-row group flex items-center gap-1 cursor-pointer"
+    class:tree-row-selected={isSelected}
     role="treeitem"
     tabindex="0"
     aria-selected={isSelected}
     onclick={() => onSelect(filePath)}
     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(filePath); } }}
-    style="padding: 6px 8px 6px {depth * 12 + 8}px; font-size: 12px;
-      border-radius: 8px; transition: all 150ms ease;
-      {isSelected
-        ? `background: rgba(86, 28, 36, 0.08); color: var(--color-pink-dark); font-weight: 500; border-left: 3px solid var(--color-pink-dark);`
-        : `color: var(--color-text); border-left: 3px solid transparent;`}"
-    onmouseenter={(e) => { if (!isSelected) e.currentTarget.style.background = 'rgba(86, 28, 36, 0.05)'; }}
-    onmouseleave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
+    style="--depth: {depth};"
   >
     <span class="flex-1 min-w-0 truncate">{fileName}</span>
     <button onclick={(e) => { e.stopPropagation(); toggleMenu(e, filePath); }}
       aria-label="Actions for {fileName}"
-      class="opacity-0 group-hover:opacity-100 shrink-0 px-0.5 rounded cursor-pointer"
-      style="font-size: 12px; color: {isSelected ? 'var(--color-pink-dark)' : 'var(--color-text-muted)'}; line-height: 1;"
+      class="tree-action-btn opacity-0 group-hover:opacity-100 shrink-0 px-0.5 rounded cursor-pointer"
+      style="color: {isSelected ? 'var(--color-pink-dark)' : 'var(--color-text-muted)'};"
     >...</button>
   </div>
 {/snippet}
 
 {#snippet folder(node: TreeNode, depth: number)}
   {#each Object.values(node.children).sort((a, b) => a.name.localeCompare(b.name)) as child}
-    <div class="group flex items-center gap-1 cursor-pointer"
+    <div class="tree-row tree-row-folder group flex items-center gap-1 cursor-pointer"
       role="treeitem"
       tabindex="0"
       aria-expanded={expanded.has(child.path)}
       onclick={() => toggle(child.path)}
       onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(child.path); } else if (e.key === 'ArrowRight' && !expanded.has(child.path)) { e.preventDefault(); toggle(child.path); } else if (e.key === 'ArrowLeft' && expanded.has(child.path)) { e.preventDefault(); toggle(child.path); } }}
-      style="padding: 6px 8px 6px {depth * 12 + 8}px; border-radius: 8px; transition: all 150ms ease; border-left: 3px solid transparent;"
-      onmouseenter={(e) => { e.currentTarget.style.background = 'rgba(86, 28, 36, 0.05)'; }}
-      onmouseleave={(e) => { e.currentTarget.style.background = ''; }}>
-      <span class="opacity-60 shrink-0" aria-hidden="true" style="font-size: 10px; color: var(--color-accent);">{expanded.has(child.path) ? "▼" : "▶"}</span>
-      <span class="flex-1 min-w-0 truncate" style="color: var(--color-accent); font-size: 12px; font-weight: 500;">{child.name}</span>
+      style="--depth: {depth};">
+      <span class="folder-icon opacity-60 shrink-0" aria-hidden="true">{expanded.has(child.path) ? "▼" : "▶"}</span>
+      <span class="folder-name flex-1 min-w-0 truncate">{child.name}</span>
       <button onclick={(e) => { e.stopPropagation(); onNewInFolder?.(child.path); }}
         aria-label="New file in {child.name}"
-        class="opacity-0 group-hover:opacity-100 shrink-0 rounded cursor-pointer"
-        style="font-size: 14px; color: var(--color-text-muted); line-height: 1; padding: 0 3px;"
+        class="new-file-btn opacity-0 group-hover:opacity-100 shrink-0 rounded cursor-pointer"
         title="New file in {child.name}"
       >+</button>
       <button onclick={(e) => { e.stopPropagation(); toggleMenu(e, child.path); }}
         aria-label="Actions for {child.name}"
-        class="opacity-0 group-hover:opacity-100 shrink-0 px-0.5 rounded cursor-pointer"
-        style="font-size: 12px; color: var(--color-text-muted); line-height: 1;"
+        class="tree-action-btn opacity-0 group-hover:opacity-100 shrink-0 px-0.5 rounded cursor-pointer"
       >...</button>
     </div>
     {#if expanded.has(child.path)}
@@ -229,43 +215,38 @@ function menuPathIsFile(menuPath: string): boolean {
     <input id="folder-tree-search" type="text" placeholder="Search files..." bind:value={searchQuery}
       oninput={onSearchInput}
       class="w-full rounded-md px-2 py-1.5 folder-tree-search"
-      style="font-size: 12px; border: 1px solid var(--color-border); background: var(--color-bg);
-        outline: none;"
     />
-    <p style="font-size: 10px; color: var(--color-text-muted); margin-top: 3px; padding: 0 2px;">
+    <p class="search-hint">
       Semantic search — finds by meaning
     </p>
   </div>
 
   {#if searchLoading}
     <div class="flex items-center gap-2 px-2 py-1">
-      <div class="spinner" style="width: 12px; height: 12px; border-width: 1.5px;"></div>
-      <span style="color: var(--color-text-muted); font-size: 12px;">Searching...</span>
+      <div class="spinner search-spinner"></div>
+      <span class="search-status-text">Searching...</span>
     </div>
   {:else if searchResults !== null}
     <!-- Semantic search results -->
     {#if searchResults.length === 0}
-      <p class="px-2 py-1" style="color: var(--color-text-muted); font-size: 12px;">No matches</p>
+      <p class="search-status-text px-2 py-1">No matches</p>
     {:else}
       {#each searchResults as result}
-        <div class="cursor-pointer"
+        {@const isResultSelected = selectedPath === result.path}
+        <div class="search-result cursor-pointer"
+          class:search-result-selected={isResultSelected}
           role="treeitem"
           tabindex="0"
-          aria-selected={selectedPath === result.path}
+          aria-selected={isResultSelected}
           onclick={() => onSelect(result.path)}
           onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(result.path); } }}
-          style="padding: 6px 8px; border-radius: 8px; transition: all 150ms ease;
-            {selectedPath === result.path
-              ? `background: rgba(86, 28, 36, 0.08); border-left: 3px solid var(--color-pink-dark);`
-              : `border-left: 3px solid transparent;`}"
-          onmouseenter={(e) => { if (selectedPath !== result.path) e.currentTarget.style.background = 'rgba(86, 28, 36, 0.05)'; }}
-          onmouseleave={(e) => { if (selectedPath !== result.path) e.currentTarget.style.background = ''; }}
         >
-          <div class="truncate" style="font-size: 12px; color: {selectedPath === result.path ? 'var(--color-pink-dark)' : 'var(--color-text)'}; font-weight: {selectedPath === result.path ? '500' : '400'};">
+          <div class="search-result-path truncate"
+            class:search-result-path-selected={isResultSelected}>
             {result.path}
           </div>
           {#if result.content}
-            <div class="truncate" style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px;">
+            <div class="search-result-preview truncate">
               {result.content.slice(0, 100)}
             </div>
           {/if}
@@ -279,13 +260,158 @@ function menuPathIsFile(menuPath: string): boolean {
     {/each}
     {@render folder(tree, 0)}
     {#if entries.length === 0}
-      <p class="px-1" style="color: var(--color-text-muted); font-size: 12px;">No entries yet</p>
+      <p class="search-status-text px-1">No entries yet</p>
     {/if}
   {/if}
 </div>
 
 <style>
+  /* Context menu (dropdown) */
+  .context-menu {
+    z-index: 9999;
+    background-color: var(--color-bg-raised);
+    border: 1px solid var(--color-border);
+    min-width: 120px;
+  }
+
+  .menu-item {
+    font-size: 11px;
+    color: var(--color-text);
+  }
+
+  .menu-item:hover {
+    opacity: 0.8;
+  }
+
+  .menu-item-danger {
+    font-size: 11px;
+    color: var(--color-danger);
+  }
+
+  .menu-item-danger:hover {
+    opacity: 0.8;
+  }
+
+  .menu-link {
+    text-decoration: none;
+  }
+
+  /* Tree rows (shared by file rows and folder rows) */
+  .tree-row {
+    padding: 6px 8px 6px calc(var(--depth) * 12px + 8px);
+    font-size: 12px;
+    border-radius: 8px;
+    transition: all 150ms ease;
+    color: var(--color-text);
+    border-left: 3px solid transparent;
+  }
+
+  .tree-row:hover {
+    background: rgba(86, 28, 36, 0.05);
+  }
+
+  .tree-row-selected {
+    background: rgba(86, 28, 36, 0.08);
+    color: var(--color-pink-dark);
+    font-weight: 500;
+    border-left: 3px solid var(--color-pink-dark);
+  }
+
+  .tree-row-selected:hover {
+    background: rgba(86, 28, 36, 0.08);
+  }
+
+  /* Folder-specific elements */
+  .folder-icon {
+    font-size: 10px;
+    color: var(--color-accent);
+  }
+
+  .folder-name {
+    color: var(--color-accent);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .new-file-btn {
+    font-size: 14px;
+    color: var(--color-text-muted);
+    line-height: 1;
+    padding: 0 3px;
+  }
+
+  .tree-action-btn {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    line-height: 1;
+  }
+
+  /* Search input */
+  .folder-tree-search {
+    font-size: 12px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg);
+    outline: none;
+  }
+
   .folder-tree-search:focus {
     border-color: var(--color-pink) !important;
+  }
+
+  .search-hint {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    margin-top: 3px;
+    padding: 0 2px;
+  }
+
+  /* Search status / empty states */
+  .search-status-text {
+    color: var(--color-text-muted);
+    font-size: 12px;
+  }
+
+  /* Search results */
+  .search-result {
+    padding: 6px 8px;
+    border-radius: 8px;
+    transition: all 150ms ease;
+    border-left: 3px solid transparent;
+  }
+
+  .search-result:hover {
+    background: rgba(86, 28, 36, 0.05);
+  }
+
+  .search-result-selected {
+    background: rgba(86, 28, 36, 0.08);
+    border-left: 3px solid var(--color-pink-dark);
+  }
+
+  .search-result-selected:hover {
+    background: rgba(86, 28, 36, 0.08);
+  }
+
+  .search-result-path {
+    font-size: 12px;
+    color: var(--color-text);
+    font-weight: 400;
+  }
+
+  .search-result-path-selected {
+    color: var(--color-pink-dark);
+    font-weight: 500;
+  }
+
+  .search-result-preview {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+
+  .search-spinner {
+    width: 12px;
+    height: 12px;
+    border-width: 1.5px;
   }
 </style>
