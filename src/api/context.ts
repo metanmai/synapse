@@ -1,0 +1,159 @@
+import { Hono } from "hono";
+import type { Env } from "../lib/env";
+import { authMiddleware } from "../lib/auth";
+import { createSupabaseClient } from "../db/client";
+import { getProjectByName } from "../db/queries/projects";
+import { upsertEntry, getEntry, listEntries, searchEntries, getRecentEntries, getAllEntries } from "../db/queries/entries";
+import { getPreferences } from "../db/queries/preferences";
+import { NotFoundError, AppError } from "../lib/errors";
+
+const context = new Hono<{ Bindings: Env }>();
+context.use("*", authMiddleware);
+
+// POST /api/context/save
+context.post("/save", async (c) => {
+  const user = c.get("user");
+  const { project, path, content, tags } = await c.req.json();
+  if (!project || !path || !content) {
+    throw new AppError("project, path, and content are required", 400, "VALIDATION_ERROR");
+  }
+
+  const db = createSupabaseClient(c.env);
+  const proj = await getProjectByName(db, project, user.id);
+  if (!proj) throw new NotFoundError(`Project "${project}" not found`);
+
+  const entry = await upsertEntry(db, {
+    project_id: proj.id, path, content, tags, author_id: user.id, source: "human",
+  });
+  return c.json(entry, 201);
+});
+
+// POST /api/context/session-summary
+context.post("/session-summary", async (c) => {
+  const user = c.get("user");
+  const { project, summary, decisions, pending } = await c.req.json();
+  if (!project || !summary) {
+    throw new AppError("project and summary are required", 400, "VALIDATION_ERROR");
+  }
+
+  const db = createSupabaseClient(c.env);
+  const proj = await getProjectByName(db, project, user.id);
+  if (!proj) throw new NotFoundError(`Project "${project}" not found`);
+
+  const date = new Date().toISOString().split("T")[0];
+  const slug = summary.slice(0, 40).replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  const path = `context/session-summaries/${date}-${slug}.md`;
+
+  let fullContent = `# Session Summary — ${date}\n\n${summary}`;
+  if (pending?.length) {
+    fullContent += `\n\n## Pending\n${pending.map((p: string) => `- ${p}`).join("\n")}`;
+  }
+
+  const entry = await upsertEntry(db, {
+    project_id: proj.id, path, content: fullContent, tags: ["session-summary"],
+    author_id: user.id, source: "human",
+  });
+
+  return c.json(entry, 201);
+});
+
+// POST /api/context/file
+context.post("/file", async (c) => {
+  const user = c.get("user");
+  const { project, path, content, content_type } = await c.req.json();
+  if (!project || !path || !content) {
+    throw new AppError("project, path, and content are required", 400, "VALIDATION_ERROR");
+  }
+
+  const db = createSupabaseClient(c.env);
+  const proj = await getProjectByName(db, project, user.id);
+  if (!proj) throw new NotFoundError(`Project "${project}" not found`);
+
+  const entry = await upsertEntry(db, {
+    project_id: proj.id, path, content, content_type: content_type ?? "markdown",
+    author_id: user.id, source: "human",
+  });
+  return c.json(entry, 201);
+});
+
+// GET /api/context/:project/search?q=&tags=&folder=
+context.get("/:project/search", async (c) => {
+  const user = c.get("user");
+  const projectName = c.req.param("project");
+  const query = c.req.query("q");
+  const tags = c.req.query("tags")?.split(",");
+  const folder = c.req.query("folder");
+
+  if (!query) throw new AppError("q query parameter is required", 400, "VALIDATION_ERROR");
+
+  const db = createSupabaseClient(c.env);
+  const proj = await getProjectByName(db, projectName, user.id);
+  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
+
+  const results = await searchEntries(db, proj.id, query, { tags, folder });
+  return c.json(results);
+});
+
+// GET /api/context/:project/list?folder=
+context.get("/:project/list", async (c) => {
+  const user = c.get("user");
+  const projectName = c.req.param("project");
+  const folder = c.req.query("folder");
+
+  const db = createSupabaseClient(c.env);
+  const proj = await getProjectByName(db, projectName, user.id);
+  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
+
+  const entries = await listEntries(db, proj.id, folder);
+  return c.json(entries);
+});
+
+// GET /api/context/:project/load
+context.get("/:project/load", async (c) => {
+  const user = c.get("user");
+  const projectName = c.req.param("project");
+
+  const db = createSupabaseClient(c.env);
+  const proj = await getProjectByName(db, projectName, user.id);
+  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
+
+  const prefs = await getPreferences(db, user.id, proj.id);
+
+  switch (prefs.context_loading) {
+    case "full": {
+      const entries = await getAllEntries(db, proj.id);
+      return c.json({ mode: "full", entries });
+    }
+    case "smart": {
+      const entries = await getRecentEntries(db, proj.id, 20);
+      return c.json({ mode: "smart", entries });
+    }
+    case "on_demand": {
+      const tree = await listEntries(db, proj.id);
+      return c.json({ mode: "on_demand", tree });
+    }
+    case "summary_only": {
+      const entries = await getAllEntries(db, proj.id);
+      const summary = entries.map((e) => `- **${e.path}**: ${e.content.slice(0, 100)}...`).join("\n");
+      return c.json({ mode: "summary_only", summary });
+    }
+  }
+});
+
+// GET /api/context/:project/:path{.+} — must be last (catch-all)
+context.get("/:project/:path{.+}", async (c) => {
+  const user = c.get("user");
+  const projectName = c.req.param("project");
+  const path = c.req.param("path");
+
+  const db = createSupabaseClient(c.env);
+  const proj = await getProjectByName(db, projectName, user.id);
+  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
+
+  const entry = await getEntry(db, proj.id, path);
+  if (!entry) throw new NotFoundError(`Entry "${path}" not found in project "${projectName}"`);
+
+  return c.json(entry);
+});
+
+export { context };
