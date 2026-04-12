@@ -30,18 +30,18 @@ $effect(() => {
     top: 0;
     left: 0;
     right: 0;
-    height: 3px;
+    height: 5px;
     z-index: 9999;
     overflow: hidden;
   }
 
   .nav-progress-bar {
     height: 100%;
-    background: linear-gradient(90deg, var(--color-pink), var(--color-pink-dark), var(--color-pink));
+    background: linear-gradient(90deg, #e8a04e, #d4782f, #e8a04e);
     background-size: 200% 100%;
     animation: progress-slide 1.5s ease-in-out infinite, progress-grow 0.8s ease-out forwards;
     border-radius: 0 2px 2px 0;
-    box-shadow: 0 0 8px rgba(109, 41, 50, 0.4);
+    box-shadow: 0 0 8px rgba(212, 120, 47, 0.4);
   }
 
   @keyframes progress-slide {
