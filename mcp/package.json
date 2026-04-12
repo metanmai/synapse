@@ -1,16 +1,19 @@
 {
   "name": "synapse-mcp",
   "version": "1.0.0",
-  "description": "MCP server that exposes Synapse as a filesystem",
+  "description": "MCP server for Synapse — shared AI context across tools and devices",
   "main": "index.js",
-  "bin": "index.js",
+  "bin": {
+    "synapse-mcp": "index.js"
+  },
   "scripts": {
     "start": "node index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["mcp", "synapse", "ai", "context", "claude", "chatgpt", "cursor"],
+  "author": "tanmain",
+  "license": "MIT",
   "type": "commonjs",
+  "files": ["index.js"],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1"
   }
