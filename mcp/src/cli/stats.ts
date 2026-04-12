@@ -73,68 +73,57 @@ export async function runStats(): Promise<void> {
     process.exit(1);
   }
 
-  // Fetch data
-  spin.update("Fetching projects\u2026");
+  // Fetch workspace data
+  spin.update("Fetching workspace\u2026");
   const projects = await apiFetch<ProjectResponse[]>(apiKey, "/api/projects");
   if (projects.length === 0) {
-    spin.stop("No projects yet.");
-    clack.outro(muted("Create your first project at synapsesync.app"));
+    spin.stop("No workspace yet.");
+    clack.outro(muted("Create your workspace at synapsesync.app"));
     return;
   }
 
-  let totalFiles = 0;
-  let totalActivity = 0;
+  const project = projects[0];
   const tagCounts: Record<string, number> = {};
   const sourceCounts: Record<string, number> = {};
   const actionCounts: Record<string, number> = {};
   let oldestDate: string | null = null;
   let newestDate: string | null = null;
-  const projectStats: { name: string; files: number; activity: number }[] = [];
 
-  for (const project of projects) {
-    spin.update(`Fetching ${project.name}\u2026`);
+  spin.update("Fetching files\u2026");
+  const entries = await apiFetch<EntryListItem[]>(apiKey, `/api/context/${encodeURIComponent(project.name)}/list`);
 
-    const entries = await apiFetch<EntryListItem[]>(apiKey, `/api/context/${encodeURIComponent(project.name)}/list`);
-    totalFiles += entries.length;
-
-    for (const entry of entries) {
-      for (const tag of entry.tags) {
-        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-      }
-      if (!oldestDate || entry.updated_at < oldestDate) oldestDate = entry.updated_at;
-      if (!newestDate || entry.updated_at > newestDate) newestDate = entry.updated_at;
+  for (const entry of entries) {
+    for (const tag of entry.tags) {
+      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
     }
+    if (!oldestDate || entry.updated_at < oldestDate) oldestDate = entry.updated_at;
+    if (!newestDate || entry.updated_at > newestDate) newestDate = entry.updated_at;
+  }
 
-    const activity = await apiFetch<ActivityEntry[]>(
-      apiKey,
-      `/api/projects/${encodeURIComponent(project.id)}/activity?limit=500`,
-    );
-    totalActivity += activity.length;
+  spin.update("Fetching activity\u2026");
+  const activity = await apiFetch<ActivityEntry[]>(
+    apiKey,
+    `/api/projects/${encodeURIComponent(project.id)}/activity?limit=500`,
+  );
 
-    for (const a of activity) {
-      actionCounts[a.action] = (actionCounts[a.action] || 0) + 1;
-      if (a.source) sourceCounts[a.source] = (sourceCounts[a.source] || 0) + 1;
-    }
-
-    projectStats.push({ name: project.name, files: entries.length, activity: activity.length });
+  for (const a of activity) {
+    actionCounts[a.action] = (actionCounts[a.action] || 0) + 1;
+    if (a.source) sourceCounts[a.source] = (sourceCounts[a.source] || 0) + 1;
   }
 
   spin.stop(`${success("\u2713")} Data loaded`);
 
   // --- Display ---
 
-  const accountAge = projects[0]?.created_at
-    ? Math.floor((Date.now() - new Date(projects[0].created_at).getTime()) / 86_400_000)
-    : 0;
+  const accountAge = Math.floor((Date.now() - new Date(project.created_at).getTime()) / 86_400_000);
+  const LW = 22;
 
   // Overview
-  const LW = 22;
   clack.log.message(
     [
       `${pad(muted("Account age"), LW)} ${bold(String(accountAge))} days`,
-      `${pad(muted("Projects"), LW)} ${bold(String(projects.length))}`,
-      `${pad(muted("Total files"), LW)} ${bold(String(totalFiles))}`,
-      `${pad(muted("Activity events"), LW)} ${bold(String(totalActivity))}`,
+      `${pad(muted("Total files"), LW)} ${bold(String(entries.length))}`,
+      `${pad(muted("Activity events"), LW)} ${bold(String(activity.length))}`,
     ].join("\n"),
   );
 
@@ -145,7 +134,6 @@ export async function runStats(): Promise<void> {
     entry_deleted: "Files deleted",
     member_added: "Members added",
     member_removed: "Members removed",
-    project_created: "Projects created",
     share_link_created: "Links shared",
     share_link_revoked: "Links revoked",
     settings_changed: "Settings changed",
@@ -180,14 +168,6 @@ export async function runStats(): Promise<void> {
       lines.push(`  ${muted(`\u2026 and ${sortedTags.length - 8} more`)}`);
     }
     clack.log.message(`${bold("Tags")}  ${muted(`(${sortedTags.length} unique)`)}\n${lines.join("\n")}`);
-  }
-
-  // Per-project (only if multiple)
-  if (projectStats.length > 1) {
-    const lines = projectStats
-      .sort((a, b) => b.files - a.files)
-      .map((p) => `  ${pad(muted(p.name), LW)} ${accent(String(p.files))} files  ${muted(`${p.activity} events`)}`);
-    clack.log.message(`${bold("Projects")}\n${lines.join("\n")}`);
   }
 
   // Timeline
