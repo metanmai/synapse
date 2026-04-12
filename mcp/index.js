@@ -26,66 +26,91 @@ if (!API_KEY) {
 // e.g. /Users/tanmai/Documents/csk-auth-service/overview.md
 //   -> github.com/tanmain/csk-auth-service/overview.md
 
-let gitRoot = null;
-let gitRemotePrefix = null;
-
-function detectGit() {
-  if (gitRemotePrefix !== null) return; // already detected (or failed)
-  try {
-    gitRoot = execSync("git rev-parse --show-toplevel", { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
-    const remoteUrl = execSync("git remote get-url origin", { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
-    gitRemotePrefix = normalizeRemoteUrl(remoteUrl);
-    console.error(`[synapse-mcp] Git detected: ${gitRemotePrefix} (root: ${gitRoot})`);
-  } catch {
-    gitRoot = null;
-    gitRemotePrefix = null;
-    console.error("[synapse-mcp] Not a git repo or no remote — using paths as-is");
-  }
-}
+// Cache git info per directory to handle cross-repo writes
+const gitCache = new Map(); // dir -> { root, remote } | null
 
 function normalizeRemoteUrl(url) {
-  // https://github.com/tanmain/repo.git -> github.com/tanmain/repo
-  // git@github.com:tanmain/repo.git    -> github.com/tanmain/repo
-  // git@bitbucket.org:team/repo.git    -> bitbucket.org/team/repo
-  let normalized = url
+  return url
     .replace(/^https?:\/\//, "")
     .replace(/^git@/, "")
     .replace(":", "/")
     .replace(/\.git$/, "")
     .replace(/\/$/, "");
-  return normalized;
+}
+
+function detectGitForDir(dir) {
+  if (gitCache.has(dir)) return gitCache.get(dir);
+  try {
+    const root = execSync("git rev-parse --show-toplevel", {
+      cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
+    // Check cache by root (another dir in the same repo)
+    if (gitCache.has(root)) {
+      const cached = gitCache.get(root);
+      gitCache.set(dir, cached);
+      return cached;
+    }
+    const remoteUrl = execSync("git remote get-url origin", {
+      cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
+    const info = { root, remote: normalizeRemoteUrl(remoteUrl) };
+    gitCache.set(dir, info);
+    gitCache.set(root, info);
+    return info;
+  } catch {
+    gitCache.set(dir, null);
+    return null;
+  }
+}
+
+// Detect CWD git info once
+let cwdGit = null;
+let cwdGitDetected = false;
+
+function detectCwdGit() {
+  if (cwdGitDetected) return cwdGit;
+  cwdGitDetected = true;
+  cwdGit = detectGitForDir(process.cwd());
+  if (cwdGit) {
+    console.error(`[synapse-mcp] CWD git: ${cwdGit.remote} (root: ${cwdGit.root})`);
+  } else {
+    console.error("[synapse-mcp] CWD is not a git repo — relative paths won't be mapped");
+  }
+  return cwdGit;
 }
 
 function toSynapsePath(localPath) {
-  detectGit();
-  if (!gitRemotePrefix || !gitRoot) return localPath;
-
-  // If the path is absolute and inside the git root, make it relative
-  const absPath = pathModule.isAbsolute(localPath) ? localPath : pathModule.resolve(localPath);
-  if (absPath.startsWith(gitRoot)) {
-    const relative = absPath.slice(gitRoot.length).replace(/^\//, "");
-    return relative ? `${gitRemotePrefix}/${relative}` : gitRemotePrefix;
+  if (pathModule.isAbsolute(localPath)) {
+    // For absolute paths, detect git info of the TARGET directory
+    const dir = require("fs").existsSync(localPath)
+      ? (require("fs").statSync(localPath).isDirectory() ? localPath : pathModule.dirname(localPath))
+      : pathModule.dirname(localPath);
+    const git = detectGitForDir(dir);
+    if (git) {
+      const relative = localPath.slice(git.root.length).replace(/^\//, "");
+      return relative ? `${git.remote}/${relative}` : git.remote;
+    }
+    return localPath; // not in any git repo
   }
 
-  // If it's already a relative path, prefix with remote
-  if (!pathModule.isAbsolute(localPath)) {
-    return `${gitRemotePrefix}/${localPath}`;
+  // Relative paths use CWD's git info
+  const cwd = detectCwdGit();
+  if (cwd) {
+    return `${cwd.remote}/${localPath}`;
   }
-
-  // Path is outside the git repo — use as-is
   return localPath;
 }
 
 function fromSynapsePath(synapsePath) {
-  detectGit();
-  if (!gitRemotePrefix || !gitRoot) return synapsePath;
-
-  // Strip the remote prefix to get a relative path
-  if (synapsePath.startsWith(gitRemotePrefix + "/")) {
-    return synapsePath.slice(gitRemotePrefix.length + 1);
+  // Strip any known git remote prefix to show a clean relative path
+  const cwd = detectCwdGit();
+  if (cwd && synapsePath.startsWith(cwd.remote + "/")) {
+    return synapsePath.slice(cwd.remote.length + 1);
   }
-  if (synapsePath === gitRemotePrefix) {
-    return "";
+  // For cross-repo paths, try to show repo/file instead of full canonical
+  const match = synapsePath.match(/^[^/]+\/[^/]+\/([^/]+)\/(.*)/);
+  if (match) {
+    return `${match[1]}/${match[2]}`; // e.g. csk-auth-service/overview.md
   }
   return synapsePath;
 }
