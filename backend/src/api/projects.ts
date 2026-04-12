@@ -26,6 +26,7 @@ import { idempotency } from "../lib/idempotency";
 import { importEntries, parseZipEntries } from "../lib/import";
 import { enforceMemberLimit, requirePlus } from "../lib/tier";
 import { getTierLimits } from "../lib/tier";
+import { parseBody, schemas } from "../lib/validate";
 
 import type { Env } from "../lib/env";
 
@@ -36,8 +37,7 @@ projects.use("*", idempotency);
 // POST /api/projects
 projects.post("/", async (c) => {
   const user = c.get("user");
-  const { name } = await c.req.json();
-  if (!name) throw new AppError("name is required", 400, "VALIDATION_ERROR");
+  const { name } = await parseBody(c, schemas.createProject);
 
   const db = createSupabaseClient(c.env);
   const project = await createProject(db, name, user.id);
@@ -63,9 +63,7 @@ projects.get("/", async (c) => {
 projects.post("/:id/members", async (c) => {
   const user = c.get("user");
   const projectId = c.req.param("id");
-  const { email, role } = await c.req.json();
-
-  if (!email || !role) throw new AppError("email and role are required", 400, "VALIDATION_ERROR");
+  const { email, role } = await parseBody(c, schemas.addMember);
 
   const db = createSupabaseClient(c.env);
   const callerRole = await getMemberRole(db, projectId, user.id);
@@ -118,9 +116,7 @@ projects.delete("/:id/members/:email", async (c) => {
 projects.put("/preferences/:project", async (c) => {
   const user = c.get("user");
   const projectName = c.req.param("project");
-  const { key, value } = await c.req.json();
-
-  if (!key || !value) throw new AppError("key and value are required", 400, "VALIDATION_ERROR");
+  const { key, value } = await parseBody(c, schemas.setPreference);
 
   const db = createSupabaseClient(c.env);
   const proj = await getProjectByName(db, projectName, user.id);
@@ -136,11 +132,7 @@ projects.post("/:id/share-links", async (c) => {
 
   const user = c.get("user");
   const projectId = c.req.param("id");
-  const { role, expires_at } = await c.req.json();
-
-  if (!role || !["editor", "viewer"].includes(role)) {
-    throw new AppError("role must be 'editor' or 'viewer'", 400, "VALIDATION_ERROR");
-  }
+  const { role, expires_at } = await parseBody(c, schemas.createShareLink);
 
   const db = createSupabaseClient(c.env);
   const callerRole = await getMemberRole(db, projectId, user.id);
