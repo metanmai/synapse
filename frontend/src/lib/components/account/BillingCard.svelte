@@ -14,6 +14,8 @@ let { billing } = $props<{
 }>();
 
 let showUpgradeSuccess = $state($page.url.searchParams.has("upgraded"));
+let checkoutLoading = $state(false);
+let portalLoading = $state(false);
 
 const renewalDate = $derived(
   billing.subscription?.current_period_end
@@ -54,27 +56,66 @@ const renewalDate = $derived(
       You're on the <strong>Free</strong> plan. Upgrade to Plus for 500 files, unlimited
       connections, and version history.
     </p>
-    <form method="POST" action="?/checkout" use:enhance>
-      <button type="submit" class="btn-primary cursor-pointer">
-        Upgrade to Plus — $5.99/mo
+    <form method="POST" action="?/checkout" use:enhance={() => {
+      checkoutLoading = true;
+      return async ({ update }) => {
+        checkoutLoading = false;
+        await update();
+      };
+    }}>
+      <button type="submit" disabled={checkoutLoading} class="btn-primary cursor-pointer">
+        {#if checkoutLoading}
+          <span class="flex items-center justify-center gap-2">
+            <span class="spinner spinner-sm spinner-white"></span>
+            Redirecting...
+          </span>
+        {:else}
+          Upgrade to Plus — $5.99/mo
+        {/if}
       </button>
     </form>
   {:else if billing.subscription?.cancel_at_period_end}
     <p class="text-sm mb-3" style="color: var(--color-text-muted);">
       Your Plus subscription is active until <strong>{renewalDate}</strong>. It will not renew.
     </p>
-    <form method="POST" action="?/portal" use:enhance>
-      <button type="submit" class="btn-secondary cursor-pointer">
-        Manage Subscription
+    <form method="POST" action="?/portal" use:enhance={() => {
+      portalLoading = true;
+      return async ({ update }) => {
+        portalLoading = false;
+        await update();
+      };
+    }}>
+      <button type="submit" disabled={portalLoading} class="btn-secondary cursor-pointer">
+        {#if portalLoading}
+          <span class="flex items-center justify-center gap-2">
+            <span class="spinner spinner-sm"></span>
+            Redirecting...
+          </span>
+        {:else}
+          Manage Subscription
+        {/if}
       </button>
     </form>
   {:else}
     <p class="text-sm mb-3" style="color: var(--color-text-muted);">
       Plus plan — renews <strong>{renewalDate}</strong>.
     </p>
-    <form method="POST" action="?/portal" use:enhance>
-      <button type="submit" class="btn-secondary cursor-pointer">
-        Manage Subscription
+    <form method="POST" action="?/portal" use:enhance={() => {
+      portalLoading = true;
+      return async ({ update }) => {
+        portalLoading = false;
+        await update();
+      };
+    }}>
+      <button type="submit" disabled={portalLoading} class="btn-secondary cursor-pointer">
+        {#if portalLoading}
+          <span class="flex items-center justify-center gap-2">
+            <span class="spinner spinner-sm"></span>
+            Redirecting...
+          </span>
+        {:else}
+          Manage Subscription
+        {/if}
       </button>
     </form>
   {/if}

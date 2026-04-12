@@ -154,7 +154,10 @@ function closePanel() {
   <!-- Main content -->
   <div class="flex-1 p-8 overflow-y-auto min-w-0">
     {#if loading}
-      <div class="text-center mt-20" style="color: var(--color-text-muted);">Loading...</div>
+      <div class="flex flex-col items-center justify-center mt-20 gap-3">
+        <div class="spinner"></div>
+        <span style="color: var(--color-text-muted); font-size: 13px;">Loading entry...</span>
+      </div>
     {:else if mode === "activity" && contextPath}
       <PathActivityPanel
         path={contextPath}
