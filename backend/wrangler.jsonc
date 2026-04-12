@@ -21,7 +21,9 @@
   "triggers": {
     "crons": ["*/5 * * * *"]
   },
-  "vars": {},
+  "vars": {
+    "STRIPE_PRO_PRICE_ID": "price_PLACEHOLDER"
+  },
   "observability": {
     "enabled": true,
     "logs": {
