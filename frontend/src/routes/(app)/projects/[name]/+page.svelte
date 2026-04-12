@@ -123,19 +123,19 @@ function closePanel() {
 
 <div class="flex h-full" style={dragging ? "user-select: none; cursor: col-resize;" : ""}>
   <!-- File tree sidebar -->
-  <div class="p-2 overflow-y-auto shrink-0"
-    style="width: {sidebarWidth}px; border-right: 1px solid var(--color-border); background-color: var(--color-bg-raised);">
+  <div class="glass p-3 overflow-y-auto shrink-0"
+    style="width: {sidebarWidth}px; border-radius: 0;">
     <div class="flex items-center justify-between mb-2 px-1">
       <span class="font-medium uppercase tracking-wide"
-        style="color: var(--color-text-muted); font-size: 10px;">Files</span>
+        style="color: var(--color-text-muted); font-size: 11px;">Files</span>
       <div class="flex items-center gap-1">
         <button onclick={() => startNew()}
-          class="cursor-pointer" style="color: var(--color-link); font-size: 10px;">+ New</button>
+          class="cursor-pointer" style="color: var(--color-link); font-size: 12px;">+ New</button>
         <a href={`/projects/${encodeURIComponent(data.project.name)}/api/export`}
-          class="cursor-pointer" style="color: var(--color-link); font-size: 10px;"
+          class="cursor-pointer" style="color: var(--color-link); font-size: 12px;"
           download>Export</a>
         <button onclick={() => importInput?.click()}
-          class="cursor-pointer" style="color: var(--color-link); font-size: 10px;">Import</button>
+          class="cursor-pointer" style="color: var(--color-link); font-size: 12px;">Import</button>
       </div>
     </div>
     <FolderTree entries={data.entries} {selectedPath}
@@ -145,14 +145,14 @@ function closePanel() {
   <!-- Resize handle -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div onmousedown={onDragStart}
-    class="w-1 shrink-0 cursor-col-resize hover:opacity-100 transition-opacity"
+    class="w-1.5 rounded-full shrink-0 cursor-col-resize hover:opacity-100 transition-opacity"
     style="background-color: {dragging ? 'var(--color-pink)' : 'transparent'}; opacity: {dragging ? 1 : 0.5};"
     onmouseenter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-pink)'}
     onmouseleave={(e) => { if (!dragging) e.currentTarget.style.backgroundColor = 'transparent'; }}>
   </div>
 
   <!-- Main content -->
-  <div class="flex-1 p-6 overflow-y-auto min-w-0">
+  <div class="flex-1 p-8 overflow-y-auto min-w-0">
     {#if loading}
       <div class="text-center mt-20" style="color: var(--color-text-muted);">Loading...</div>
     {:else if mode === "activity" && contextPath}
@@ -177,7 +177,7 @@ function closePanel() {
     {:else if mode === "view" && entry}
       <EntryViewer {entry} projectName={data.project.name} onEdit={startEdit} />
     {:else}
-      <div class="text-center mt-20" style="color: var(--color-text-muted); font-size: 12px;">
+      <div class="text-center mt-20" style="color: var(--color-text-muted); font-size: 14px;">
         Select a file or create a new one
       </div>
     {/if}
