@@ -1,6 +1,8 @@
 import type { Env } from "./env";
 
-const CREEM_API_URL = "https://api.creem.io/v1";
+function getCreemUrl(apiKey: string): string {
+  return apiKey.startsWith("creem_test_") ? "https://test-api.creem.io/v1" : "https://api.creem.io/v1";
+}
 
 export async function creemRequest<T>(
   env: Env,
@@ -13,7 +15,8 @@ export async function creemRequest<T>(
     throw new Error("Billing is not configured");
   }
 
-  const res = await fetch(`${CREEM_API_URL}${path}`, {
+  const baseUrl = getCreemUrl(env.CREEM_API_KEY);
+  const res = await fetch(`${baseUrl}${path}`, {
     method,
     headers: {
       "x-api-key": env.CREEM_API_KEY,
