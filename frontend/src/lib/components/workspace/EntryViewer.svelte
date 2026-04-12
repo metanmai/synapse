@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { Entry } from "$lib/types";
+import DOMPurify from "dompurify";
 import { marked } from "marked";
 
 let { entry, projectName, onEdit } = $props<{
@@ -8,7 +9,7 @@ let { entry, projectName, onEdit } = $props<{
   onEdit: () => void;
 }>();
 
-let html = $derived(marked.parse(entry.content, { async: false }) as string);
+let html = $derived(DOMPurify.sanitize(marked.parse(entry.content, { async: false }) as string));
 </script>
 
 <div class="glass" style="padding: 2rem;">
