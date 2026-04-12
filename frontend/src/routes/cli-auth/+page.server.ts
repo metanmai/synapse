@@ -139,10 +139,10 @@ export const actions: Actions = {
     }
 
     const data = (await res.json()) as { code: string };
-    redirect(
-      303,
-      `http://localhost:${cli.port}/callback?code=${encodeURIComponent(data.code)}&state=${encodeURIComponent(cli.state)}`,
-    );
+    const callbackUrl = `http://localhost:${cli.port}/callback?code=${encodeURIComponent(data.code)}&state=${encodeURIComponent(cli.state)}`;
+
+    // Return URL instead of redirect — cross-origin redirect to localhost doesn't work with use:enhance
+    return { redirectTo: callbackUrl };
   },
 
   switchAccount: async ({ request, cookies }) => {

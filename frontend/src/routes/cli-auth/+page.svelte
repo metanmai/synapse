@@ -22,12 +22,28 @@ let loading = $state(false);
         <p class="text-sm mt-1" style="color: var(--color-text-muted);">Connecting from the terminal</p>
       </div>
 
-      <form method="POST" action="?/continueAs" use:enhance>
+      <form method="POST" action="?/continueAs" use:enhance={() => {
+        loading = true;
+        return async ({ result, update }) => {
+          loading = false;
+          if (result.type === "success" && result.data?.redirectTo) {
+            window.location.href = result.data.redirectTo as string;
+            return;
+          }
+          await update();
+        };
+      }}>
         <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
         <input type="hidden" name="cli_state" value={data.state ?? ""} />
         <input type="hidden" name="cli_port" value={data.port ?? ""} />
-        <button type="submit" class="btn-primary w-full cursor-pointer">
-          Continue as {data.email}
+        <button type="submit" disabled={loading} class="btn-primary w-full cursor-pointer">
+          {#if loading}
+            <span class="flex items-center justify-center gap-2">
+              <span class="spinner spinner-sm spinner-white"></span> Connecting...
+            </span>
+          {:else}
+            Continue as {data.email}
+          {/if}
         </button>
       </form>
 
