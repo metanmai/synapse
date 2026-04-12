@@ -13,6 +13,7 @@ import {
 } from "../../db/queries/projects";
 import { findUserByEmail } from "../../db/queries/users";
 import { setPreference } from "../../db/queries/preferences";
+import { logActivity } from "../../db/activity-logger";
 
 export function registerProjectManagementTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   server.tool(
@@ -70,6 +71,10 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
       }
 
       await addMember(db, proj.id, invitee.id, role);
+      await logActivity(db, {
+        project_id: proj.id, user_id: userId, action: "member_added",
+        target_email: email, source: "claude",
+      });
       return {
         content: [{ type: "text", text: `Invited ${email} as ${role} to "${project}".` }],
       };
@@ -101,6 +106,10 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
       }
 
       await removeMember(db, proj.id, target.id);
+      await logActivity(db, {
+        project_id: proj.id, user_id: userId, action: "member_removed",
+        target_email: email, source: "claude",
+      });
       return {
         content: [{ type: "text", text: `Removed ${email} from "${project}".` }],
       };
@@ -123,6 +132,10 @@ export function registerProjectManagementTools(server: McpServer, env: Env, getC
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
 
       const prefs = await setPreference(db, userId, proj.id, key, value);
+      await logActivity(db, {
+        project_id: proj.id, user_id: userId, action: "settings_changed",
+        source: "claude", metadata: { key, value },
+      });
       return {
         content: [{ type: "text", text: `Set ${key} = ${value} for project "${project}".` }],
       };
