@@ -2,9 +2,9 @@ import { exec } from "node:child_process";
 import crypto from "node:crypto";
 import http from "node:http";
 import { cliExchangeCode } from "./api.js";
+import { APP_URL } from "./config.js";
 
 const AUTH_TIMEOUT = 120_000; // 120 seconds
-const APP_URL = "https://synapsesync.app";
 
 const SSH_ENV_VARS = ["SSH_TTY", "SSH_CONNECTION", "SSH_CLIENT"];
 

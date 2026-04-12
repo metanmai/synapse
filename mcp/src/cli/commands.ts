@@ -1,11 +1,10 @@
 import child_process from "node:child_process";
 import * as clack from "@clack/prompts";
 import { validateApiKey } from "./api.js";
+import { API_URL, pad } from "./config.js";
 import { type ExistingSetup, detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors.js";
 import { createGlyphSpinner } from "./spinner.js";
 import { accent, bold, muted, success, error as themeError } from "./theme.js";
-
-const API_URL = "https://api.synapsesync.app";
 
 // biome-ignore lint/suspicious/noExplicitAny: API responses
 type R = Record<string, any>;
@@ -137,7 +136,6 @@ export async function runStatus(): Promise<void> {
 
   // Show config locations
   const LW = 24;
-  const pad = (s: string, w: number) => s + " ".repeat(Math.max(0, w - s.length));
   clack.log.message(
     `${bold("Configured in")}\n${existing.locations.map((l) => `  ${accent("\u2713")} ${muted(l)}`).join("\n")}`,
   );
@@ -251,7 +249,6 @@ export async function runWhoami(): Promise<void> {
 
   const email = projects[0]?.owner_email ?? "unknown";
   const LW = 20;
-  const pad = (s: string, w: number) => s + " ".repeat(Math.max(0, w - s.length));
 
   clack.log.message(
     [
