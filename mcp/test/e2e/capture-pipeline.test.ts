@@ -18,6 +18,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { AdapterRegistry } from "../../src/capture/adapter-registry.js";
 import { ClaudeCodeAdapter } from "../../src/capture/adapters/claude-code.js";
 import { ClineAdapter } from "../../src/capture/adapters/cline.js";
+import { RooCodeAdapter } from "../../src/capture/adapters/roo-code.js";
 import { CodexAdapter } from "../../src/capture/adapters/codex.js";
 import { CursorAdapter } from "../../src/capture/adapters/cursor.js";
 import { GeminiAdapter } from "../../src/capture/adapters/gemini.js";
@@ -198,6 +199,28 @@ const CLINE_JSON = JSON.stringify([
   {
     role: "assistant",
     content: [{ type: "text", text: "Rate limiting is now active." }],
+  },
+]);
+
+const ROO_CODE_JSON = JSON.stringify([
+  {
+    role: "user",
+    content: [{ type: "text", text: "implement search endpoint" }],
+  },
+  {
+    role: "assistant",
+    content: [
+      { type: "text", text: "I'll create the search endpoint." },
+      { type: "tool_use", id: "toolu_10", name: "read_file", input: { path: "src/routes.ts" } },
+    ],
+  },
+  {
+    role: "user",
+    content: [{ type: "tool_result", tool_use_id: "toolu_10", content: "const router = express.Router();" }],
+  },
+  {
+    role: "assistant",
+    content: [{ type: "text", text: "Search endpoint is live at GET /api/search." }],
   },
 ]);
 
@@ -477,6 +500,46 @@ suite("Capture Pipeline E2E", () => {
       const s = sessions[0];
       expect(s.id).toMatch(/^ses_[0-9a-f]{16}$/);
       expect(s.tool).toBe("cline");
+      expect(s.messages.length).toBeGreaterThan(0);
+
+      const stored = store.load(s.id);
+      expect(stored).not.toBeNull();
+      expect(stored?.id).toBe(s.id);
+    });
+
+    it("Roo Code: file -> watcher -> adapter -> store", async () => {
+      const watchDir = path.join(pipelineTmp, "roo-code-tasks");
+      fs.mkdirSync(watchDir, { recursive: true });
+      const storeDir = path.join(pipelineTmp, "sessions");
+
+      const adapter = new RooCodeAdapter();
+      adapter.watchPaths = () => [watchDir];
+
+      const registry = new AdapterRegistry();
+      registry.register(adapter);
+      const store = new SessionStore(storeDir);
+
+      const watcher = new CaptureWatcher(registry, 300);
+      const sessions: CapturedSession[] = [];
+      watcher.on("session", (s: CapturedSession) => {
+        sessions.push(s);
+        store.save(s);
+      });
+
+      await watcher.start();
+
+      const taskDir = path.join(watchDir, "b2c3d4e5-f6a7-8901-bcde-f12345678901");
+      fs.mkdirSync(taskDir, { recursive: true });
+      const sessionFile = path.join(taskDir, "api_conversation_history.json");
+      fs.writeFileSync(sessionFile, ROO_CODE_JSON);
+
+      await waitFor(() => sessions.length > 0);
+      await watcher.stop();
+
+      expect(sessions.length).toBe(1);
+      const s = sessions[0];
+      expect(s.id).toMatch(/^ses_[0-9a-f]{16}$/);
+      expect(s.tool).toBe("roo-code");
       expect(s.messages.length).toBeGreaterThan(0);
 
       const stored = store.load(s.id);
@@ -772,7 +835,114 @@ suite("Capture Pipeline E2E", () => {
   });
 
   /* ------------------------------------------------------------------ */
-  /*  8. Safe Read                                                      */
+  /*  8. Roo Code Adapter E2E                                           */
+  /* ------------------------------------------------------------------ */
+
+  describe("Roo Code Adapter E2E", () => {
+    let adapterTmp: string;
+
+    beforeEach(() => {
+      adapterTmp = fs.mkdtempSync(path.join(os.tmpdir(), "syn-cap-roo-"));
+    });
+
+    afterEach(() => {
+      fs.rmSync(adapterTmp, { recursive: true, force: true });
+    });
+
+    it("parses Anthropic Messages API format with tool_result filtering", () => {
+      const taskDir = path.join(adapterTmp, "b2c3d4e5-f6a7-8901-bcde-f12345678901");
+      fs.mkdirSync(taskDir, { recursive: true });
+      const filePath = path.join(taskDir, "api_conversation_history.json");
+      fs.writeFileSync(filePath, ROO_CODE_JSON);
+
+      const adapter = new RooCodeAdapter();
+      const session = adapter.parse(filePath);
+
+      expect(session).not.toBeNull();
+      expect(session?.id).toMatch(/^ses_[0-9a-f]{16}$/);
+      expect(session?.tool).toBe("roo-code");
+
+      // 4 raw messages: user, assistant(text+tool_use), user(tool_result FILTERED),
+      // assistant(text)
+      // = 3 messages: 1 user + 2 assistant
+      expect(session?.messages.length).toBe(3);
+
+      // First message is user
+      expect(session?.messages[0].role).toBe("user");
+      expect(session?.messages[0].content).toBe("implement search endpoint");
+
+      // Second message is assistant with tool call
+      expect(session?.messages[1].role).toBe("assistant");
+      expect(session?.messages[1].content).toBe("I'll create the search endpoint.");
+      expect(session?.messages[1].toolCalls).toBeDefined();
+      expect(session?.messages[1].toolCalls?.length).toBe(1);
+      expect(session?.messages[1].toolCalls?.[0].name).toBe("read_file");
+
+      // Third message is assistant text
+      expect(session?.messages[2].role).toBe("assistant");
+      expect(session?.messages[2].content).toBe("Search endpoint is live at GET /api/search.");
+    });
+
+    it("ignores Roo-specific extra fields without errors", () => {
+      const taskDir = path.join(adapterTmp, "c3d4e5f6-a7b8-9012-cdef-123456789012");
+      fs.mkdirSync(taskDir, { recursive: true });
+      const filePath = path.join(taskDir, "api_conversation_history.json");
+
+      const rooSpecificData = JSON.stringify([
+        {
+          role: "user",
+          content: [{ type: "text", text: "refactor auth module" }],
+          apiProtocol: "anthropic",
+          isProtected: true,
+          condenseParent: "parent-id-123",
+          isSummary: false,
+        },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "I'll refactor the auth module." }],
+          apiProtocol: "anthropic",
+          isProtected: false,
+          condenseParent: null,
+          isSummary: true,
+        },
+      ]);
+
+      fs.writeFileSync(filePath, rooSpecificData);
+
+      const adapter = new RooCodeAdapter();
+      const session = adapter.parse(filePath);
+
+      expect(session).not.toBeNull();
+      expect(session?.messages.length).toBe(2);
+      expect(session?.messages[0].role).toBe("user");
+      expect(session?.messages[0].content).toBe("refactor auth module");
+      expect(session?.messages[1].role).toBe("assistant");
+      expect(session?.messages[1].content).toBe("I'll refactor the auth module.");
+    });
+
+    it("returns null for non-JSON files", () => {
+      const taskDir = path.join(adapterTmp, "some-task-id");
+      fs.mkdirSync(taskDir, { recursive: true });
+      const filePath = path.join(taskDir, "api_conversation_history.jsonl");
+      fs.writeFileSync(filePath, "some content");
+
+      const adapter = new RooCodeAdapter();
+      expect(adapter.parse(filePath)).toBeNull();
+    });
+
+    it("returns null for empty conversation", () => {
+      const taskDir = path.join(adapterTmp, "some-task-id");
+      fs.mkdirSync(taskDir, { recursive: true });
+      const filePath = path.join(taskDir, "api_conversation_history.json");
+      fs.writeFileSync(filePath, "[]");
+
+      const adapter = new RooCodeAdapter();
+      expect(adapter.parse(filePath)).toBeNull();
+    });
+  });
+
+  /* ------------------------------------------------------------------ */
+  /*  9. Safe Read                                                      */
   /* ------------------------------------------------------------------ */
 
   describe("Safe Read", () => {
