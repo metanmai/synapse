@@ -26,15 +26,15 @@ onMount(() => {
 
   <div class="hero-container">
     <div class="hero-content" style="transform: translateY({scrollY * 0.08}px);">
-      <div class="hero-badge">One workspace — every tool, every device, your whole team</div>
+      <div class="hero-badge">Capture sessions — distill knowledge — feed it back</div>
       <h1 class="hero-headline">
-        Your AI tools
-        <span class="gradient-text">finally remember</span>
+        Your AI sessions,
+        <span class="gradient-text">remembered and distilled</span>
       </h1>
       <p class="hero-sub">
-        Save context once and use it everywhere: Claude, ChatGPT, Cursor, and any MCP-capable
-        client; your laptop, phone, or browser; and teammates you invite — all reading and
-        writing the same cloud workspace.
+        Synapse automatically captures your AI coding sessions from Claude, Cursor, Codex, and
+        Gemini. When you go idle, it distills the valuable parts — decisions, architecture,
+        learnings — into a searchable workspace your tools can read next time.
       </p>
       <div class="hero-actions">
         <a href="#how-it-works" class="hero-secondary">See how it works</a>
@@ -85,16 +85,16 @@ onMount(() => {
             </div>
           </div>
           <div class="mockup-content">
-            <div class="content-header">api-design.md</div>
+            <div class="content-header">decisions/chose-session-cookies.md</div>
             <div class="content-lines">
-              <div class="content-line line-heading"># API Gateway Design</div>
-              <div class="content-line line-text">We chose a gateway pattern for...</div>
-              <div class="content-line line-text short">Rate limiting at the edge</div>
-              <div class="content-line line-heading small">## Decision</div>
-              <div class="content-line line-text">Use Cloudflare Workers with...</div>
+              <div class="content-line line-heading"># Chose Session Cookies</div>
+              <div class="content-line line-text">Switched from JWT to session cookies...</div>
+              <div class="content-line line-text short">Refresh token rotation was unreliable</div>
+              <div class="content-line line-heading small">## Extracted from</div>
+              <div class="content-line line-text">Claude Code session, Apr 2 2026</div>
               <div class="content-line line-tag-row">
-                <span class="content-tag">architecture</span>
                 <span class="content-tag">decision</span>
+                <span class="content-tag">auto-distilled</span>
               </div>
             </div>
             <!-- Tool badges floating -->
