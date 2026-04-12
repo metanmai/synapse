@@ -223,7 +223,7 @@ export function createApi(token: string | null) {
       request<{
         conversation: import("$lib/types").Conversation;
         messages: import("$lib/types").ConversationMessage[];
-        context: any[];
+        context: Record<string, unknown>[];
         media: import("$lib/types").ConversationMediaRecord[];
       }>(
         `/api/conversations/${conversationId}?${fidelity ? `fidelity=${fidelity}&` : ""}page=${page}&limit=${limit}`,
@@ -252,7 +252,7 @@ export function createApi(token: string | null) {
         },
       ),
     exportConversation: (conversationId: string, format: string) =>
-      request<{ conversation: any; messages: any; format: string }>(
+      request<{ conversation: Record<string, unknown>; messages: unknown; format: string }>(
         `/api/conversations/${conversationId}/export/${format}`,
         token,
       ),
