@@ -1,0 +1,780 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Synapse API",
+    "version": "1.0.0",
+    "description": "Shared context layer for AI tools — persistent memory across sessions."
+  },
+  "servers": [
+    { "url": "https://api.synapsesync.app" }
+  ],
+  "security": [
+    { "BearerAuth": [] }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "API key from account page or CLI login"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" },
+          "code": { "type": "string" }
+        },
+        "required": ["error", "code"]
+      },
+      "Project": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "owner_id": { "type": "string", "format": "uuid" },
+          "owner_email": { "type": "string" },
+          "role": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Entry": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "project_id": { "type": "string", "format": "uuid" },
+          "path": { "type": "string" },
+          "content": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "source": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ApiKey": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "label": { "type": "string" },
+          "api_key": { "type": "string", "description": "Only returned on creation" },
+          "expires_at": { "type": "string", "format": "date-time", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "HistoryEntry": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "content": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/auth/signup": {
+      "post": {
+        "summary": "Create account",
+        "security": [],
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Account created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "email": { "type": "string" },
+                    "api_key": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "User already exists",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Login and get API key",
+        "security": [],
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" },
+                  "label": { "type": "string", "default": "cli" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "email": { "type": "string" },
+                    "api_key": { "type": "string" },
+                    "label": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/projects": {
+      "get": {
+        "summary": "List projects",
+        "tags": ["Projects"],
+        "responses": {
+          "200": {
+            "description": "List of projects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Project" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create project",
+        "tags": ["Projects"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Project created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Project" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/members": {
+      "post": {
+        "summary": "Add member to project",
+        "tags": ["Projects"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "role"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "role": { "type": "string", "enum": ["editor", "viewer"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Member added" },
+          "403": { "description": "Only owners can invite", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/projects/{id}/members/{email}": {
+      "delete": {
+        "summary": "Remove member from project",
+        "tags": ["Projects"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "email", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Member removed" },
+          "403": { "description": "Only owners can remove members" }
+        }
+      }
+    },
+    "/api/projects/{id}/export": {
+      "get": {
+        "summary": "Export project as zip",
+        "tags": ["Projects"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Zip file",
+            "content": {
+              "application/zip": {
+                "schema": { "type": "string", "format": "binary" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/import": {
+      "post": {
+        "summary": "Import project from zip",
+        "tags": ["Projects"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": { "type": "string", "format": "binary" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Import result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": { "type": "integer" },
+                    "updated": { "type": "integer" },
+                    "skipped": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/share-links": {
+      "post": {
+        "summary": "Create share link",
+        "tags": ["Projects"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["role"],
+                "properties": {
+                  "role": { "type": "string", "enum": ["editor", "viewer"] },
+                  "expires_at": { "type": "string", "format": "date-time" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Share link created" }
+        }
+      },
+      "get": {
+        "summary": "List share links",
+        "tags": ["Projects"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "List of share links" }
+        }
+      }
+    },
+    "/api/projects/{id}/share-links/{token}": {
+      "delete": {
+        "summary": "Revoke share link",
+        "tags": ["Projects"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "token", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Share link revoked" }
+        }
+      }
+    },
+    "/api/projects/{id}/activity": {
+      "get": {
+        "summary": "Get activity log",
+        "tags": ["Projects"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+        ],
+        "responses": {
+          "200": { "description": "Activity log entries" }
+        }
+      }
+    },
+    "/api/context/save": {
+      "post": {
+        "summary": "Save context entry",
+        "tags": ["Context"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["project", "path", "content"],
+                "properties": {
+                  "project": { "type": "string" },
+                  "path": { "type": "string" },
+                  "content": { "type": "string" },
+                  "tags": { "type": "array", "items": { "type": "string" } },
+                  "source": { "type": "string", "enum": ["human", "claude", "chatgpt", "cursor", "copilot", "windsurf", "google_docs"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Entry saved",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Entry" }
+              }
+            }
+          },
+          "403": {
+            "description": "Tier limit exceeded",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/context/{project}/search": {
+      "get": {
+        "summary": "Search entries",
+        "tags": ["Context"],
+        "parameters": [
+          { "name": "project", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "q", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "tags", "in": "query", "schema": { "type": "string", "description": "Comma-separated tags" } },
+          { "name": "folder", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Entry" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/context/{project}/list": {
+      "get": {
+        "summary": "List entries",
+        "tags": ["Context"],
+        "parameters": [
+          { "name": "project", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "folder", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Entry" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/context/{project}/load": {
+      "get": {
+        "summary": "Load project context",
+        "tags": ["Context"],
+        "parameters": [
+          { "name": "project", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Context entries based on user preference mode",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mode": { "type": "string", "enum": ["full", "smart", "on_demand", "summary_only"] },
+                    "entries": { "type": "array", "items": { "$ref": "#/components/schemas/Entry" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/context/{project}/history/{path}": {
+      "get": {
+        "summary": "Get version history",
+        "tags": ["Context"],
+        "parameters": [
+          { "name": "project", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "path", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Version history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/HistoryEntry" }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not available on free plan",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/context/{project}/restore": {
+      "post": {
+        "summary": "Restore version",
+        "tags": ["Context"],
+        "parameters": [
+          { "name": "project", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["path", "historyId"],
+                "properties": {
+                  "path": { "type": "string" },
+                  "historyId": { "type": "string", "format": "uuid" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Entry restored",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Entry" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/context/{project}/{path}": {
+      "get": {
+        "summary": "Get entry by path",
+        "tags": ["Context"],
+        "parameters": [
+          { "name": "project", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "path", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Entry",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Entry" }
+              }
+            }
+          },
+          "404": {
+            "description": "Entry not found",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete entry",
+        "tags": ["Context"],
+        "parameters": [
+          { "name": "project", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "path", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Entry deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "ok": { "type": "boolean" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account/keys": {
+      "get": {
+        "summary": "List API keys",
+        "tags": ["Account"],
+        "responses": {
+          "200": {
+            "description": "List of API keys",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ApiKey" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create API key",
+        "tags": ["Account"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["label"],
+                "properties": {
+                  "label": { "type": "string" },
+                  "expires_at": { "type": "string", "format": "date-time", "nullable": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "API key created (key shown once)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiKey" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account/keys/{id}": {
+      "delete": {
+        "summary": "Revoke API key",
+        "tags": ["Account"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Key revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "ok": { "type": "boolean" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/status": {
+      "get": {
+        "summary": "Get billing status",
+        "tags": ["Billing"],
+        "responses": {
+          "200": {
+            "description": "Billing status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tier": { "type": "string", "enum": ["free", "pro"] },
+                    "subscription": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "status": { "type": "string" },
+                        "current_period_end": { "type": "string", "format": "date-time", "nullable": true },
+                        "cancel_at_period_end": { "type": "boolean" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/checkout": {
+      "post": {
+        "summary": "Create checkout session",
+        "tags": ["Billing"],
+        "responses": {
+          "200": {
+            "description": "Checkout URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": { "type": "string", "format": "uri" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/portal": {
+      "post": {
+        "summary": "Open billing portal",
+        "tags": ["Billing"],
+        "responses": {
+          "200": {
+            "description": "Portal URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": { "type": "string", "format": "uri" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/webhook": {
+      "post": {
+        "summary": "Payment provider webhook",
+        "security": [],
+        "tags": ["Billing"],
+        "responses": {
+          "200": {
+            "description": "Webhook received",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "received": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "security": [],
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "Service healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string" },
+                    "service": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
