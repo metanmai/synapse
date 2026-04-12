@@ -24,7 +24,7 @@ Install: npx synapsesync-mcp login --email <email> --password <password>
 
 ## Tiers
 - Free: 50 files, 3 connections, 3 version history, 2 team members
-- Pro ($5.99/mo): 500 files, unlimited connections, full history, unlimited members
+- Plus ($5.99/mo): 500 files, unlimited connections, full history, unlimited members
 
 ## Documentation
 - API docs: https://synapsesync.app/docs.md

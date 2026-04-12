@@ -20,12 +20,12 @@ const faqs: FaqItem[] = [
   {
     question: "Can I use Synapse with my team?",
     answer:
-      "Absolutely. The Pro plan supports team workspaces where multiple people can share context, decisions, and architecture notes. Every team member's AI tools stay in sync automatically.",
+      "Absolutely. The Plus plan supports team workspaces where multiple people can share context, decisions, and architecture notes. Every team member's AI tools stay in sync automatically.",
   },
   {
     question: "What happens when I hit the free tier limit?",
     answer:
-      "The free tier includes 50 files and 3 connected devices. When you hit the limit, your existing files remain accessible. You just cannot create new ones until you upgrade to Pro or delete some files.",
+      "The free tier includes 50 files and 3 connected devices. When you hit the limit, your existing files remain accessible. You just cannot create new ones until you upgrade to Plus or delete some files.",
   },
   {
     question: "How does the MCP server work?",

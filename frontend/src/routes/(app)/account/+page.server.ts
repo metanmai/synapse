@@ -6,7 +6,7 @@ import type { Actions, PageServerLoad } from "./$types";
 export const load: PageServerLoad = async ({ locals }) => {
   const api = createApi(locals.token);
   let billing: {
-    tier: "free" | "pro";
+    tier: "free" | "plus";
     subscription: { status: string; current_period_end: string | null; cancel_at_period_end: boolean } | null;
   } = { tier: "free", subscription: null };
   let keys: {

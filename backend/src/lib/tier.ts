@@ -10,13 +10,13 @@ export function getTierLimits(c: Context<{ Bindings: Env }>) {
   return limits[tier] ?? limits.free;
 }
 
-export function requirePro(c: Context<{ Bindings: Env }>, feature: string) {
+export function requirePlus(c: Context<{ Bindings: Env }>, feature: string) {
   const tier = c.get("tier") ?? "free";
-  if (tier !== "pro") {
-    const price = envOr(c.env, "TIER_PRO_PRICE", "5.99");
+  if (tier !== "plus") {
+    const price = envOr(c.env, "TIER_PLUS_PRICE", "5.99");
     const appUrl = envOr(c.env, "APP_URL", "https://synapsesync.app");
     throw new AppError(
-      `${feature} requires a Pro subscription ($${price}/mo). Upgrade at ${appUrl}/account`,
+      `${feature} requires a Plus subscription ($${price}/mo). Upgrade at ${appUrl}/account`,
       403,
       "TIER_LIMIT",
     );
@@ -37,9 +37,9 @@ export function enforceMemberLimit(currentMemberCount: number, c: Context<{ Bind
   if (limits.maxMembers === 0) return; // 0 = unlimited
   if (currentMemberCount >= limits.maxMembers) {
     const tier = c.get("tier") ?? "free";
-    const price = envOr(c.env, "TIER_PRO_PRICE", "5.99");
+    const price = envOr(c.env, "TIER_PLUS_PRICE", "5.99");
     throw new AppError(
-      `Member limit reached (${limits.maxMembers} members on ${tier} tier). Upgrade to Pro ($${price}/mo) for unlimited team members.`,
+      `Member limit reached (${limits.maxMembers} members on ${tier} tier). Upgrade to Plus ($${price}/mo) for unlimited team members.`,
       403,
       "TIER_LIMIT",
     );
@@ -50,9 +50,9 @@ export function enforceFileLimit(currentCount: number, c: Context<{ Bindings: En
   const limits = getTierLimits(c);
   if (currentCount >= limits.maxFiles) {
     const tier = c.get("tier") ?? "free";
-    const price = envOr(c.env, "TIER_PRO_PRICE", "5.99");
+    const price = envOr(c.env, "TIER_PLUS_PRICE", "5.99");
     throw new AppError(
-      `File limit reached (${limits.maxFiles} files on ${tier} tier). Upgrade to Pro ($${price}/mo) for more files.`,
+      `File limit reached (${limits.maxFiles} files on ${tier} tier). Upgrade to Plus ($${price}/mo) for more files.`,
       403,
       "TIER_LIMIT",
     );
@@ -64,9 +64,9 @@ export function enforceConnectionLimit(currentConnections: number, _source: stri
   if (limits.maxConnections === 0) return; // 0 = unlimited
   if (currentConnections >= limits.maxConnections) {
     const tier = c.get("tier") ?? "free";
-    const price = envOr(c.env, "TIER_PRO_PRICE", "5.99");
+    const price = envOr(c.env, "TIER_PLUS_PRICE", "5.99");
     throw new AppError(
-      `Connection limit reached (${limits.maxConnections} sources on ${tier} tier). Upgrade to Pro ($${price}/mo) for unlimited connections.`,
+      `Connection limit reached (${limits.maxConnections} sources on ${tier} tier). Upgrade to Plus ($${price}/mo) for unlimited connections.`,
       403,
       "TIER_LIMIT",
     );
