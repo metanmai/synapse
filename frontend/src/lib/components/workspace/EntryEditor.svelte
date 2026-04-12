@@ -9,11 +9,13 @@ let {
   projectName,
   isNew = false,
   onCancel,
+  pathPrefix = "",
 } = $props<{
   entry?: Entry | null;
   projectName: string;
   isNew?: boolean;
   onCancel?: () => void;
+  pathPrefix?: string;
 }>();
 </script>
 
@@ -50,6 +52,7 @@ let {
   {#if isNew}
     <input type="text" name="path" placeholder="Path (e.g., decisions/chose-svelte.md)"
       required autofocus
+      value={pathPrefix}
       class="w-full text-sm"
       style="border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 16px;
         transition: var(--transition-base); outline: none;"
