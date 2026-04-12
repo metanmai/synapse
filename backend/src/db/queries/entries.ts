@@ -154,6 +154,33 @@ export async function getAllEntries(
   return (data ?? []) as Entry[];
 }
 
+export async function countEntries(
+  db: SupabaseClient,
+  projectId: string
+): Promise<number> {
+  const { count, error } = await db
+    .from("entries")
+    .select("*", { count: "exact", head: true })
+    .eq("project_id", projectId);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+export async function countUniqueConnections(
+  db: SupabaseClient,
+  projectId: string
+): Promise<number> {
+  // Count unique sources that have written to this project
+  const { data, error } = await db
+    .from("activity_log")
+    .select("source")
+    .eq("project_id", projectId)
+    .in("action", ["entry_created", "entry_updated"]);
+  if (error) throw error;
+  const uniqueSources = new Set((data ?? []).map((d: { source: string }) => d.source));
+  return uniqueSources.size;
+}
+
 export async function deleteEntry(
   db: SupabaseClient,
   projectId: string,
