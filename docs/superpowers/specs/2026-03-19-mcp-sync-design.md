@@ -76,7 +76,7 @@ Project (e.g., "mcp-sync")
 **entries**
 - `id` (uuid, PK)
 - `project_id` (uuid, FK → projects)
-- `path` (text) — virtual filesystem path, e.g., `decisions/2026-03-19-use-cloudflare.md`
+- `path` (text, unique per project) — virtual filesystem path, e.g., `decisions/2026-03-19-use-cloudflare.md`. Unique constraint on `(project_id, path)`.
 - `content` (text) — markdown or JSON
 - `content_type` (text: 'markdown' | 'json')
 - `author_id` (uuid, FK → users, nullable — null for AI-authored)
@@ -145,7 +145,7 @@ Project (e.g., "mcp-sync")
 - Params: `project` (string)
 - Loads context based on user's `context_loading` preference:
   - `full`: returns all entries
-  - `smart`: returns entries related to current working context (recent, frequently accessed)
+  - `smart`: returns recent and frequently accessed entries (recency-based heuristic — server is stateless, so no session awareness)
   - `on_demand`: returns just the folder tree (user fetches individually)
   - `summary_only`: returns a generated summary of all context
 
