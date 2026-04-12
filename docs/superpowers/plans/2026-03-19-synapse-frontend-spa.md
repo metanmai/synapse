@@ -1,4 +1,4 @@
-# MCP-Sync Frontend SPA Implementation Plan
+# Synapse Frontend SPA Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,7 +8,7 @@
 
 **Tech Stack:** React 18, Vite, TypeScript, React Router, Supabase Auth JS, TanStack Query, Tailwind CSS
 
-**Spec:** `docs/superpowers/specs/2026-03-19-mcp-sync-frontend-design.md`
+**Spec:** `docs/superpowers/specs/2026-03-19-synapse-frontend-design.md`
 
 ---
 
@@ -83,7 +83,7 @@ frontend/
 - [ ] **Step 1: Initialize frontend project**
 
 ```bash
-cd /Users/Tanmai.N/Documents/mcp-sync
+cd /Users/Tanmai.N/Documents/synapse
 mkdir -p frontend/src
 cd frontend
 npm init -y
@@ -142,7 +142,7 @@ Create `frontend/index.html`:
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MCP-Sync</title>
+    <title>Synapse</title>
   </head>
   <body>
     <div id="root"></div>
@@ -188,7 +188,7 @@ Create `frontend/src/main.css`:
 Create `frontend/src/App.tsx` (placeholder):
 ```tsx
 export default function App() {
-  return <div className="p-8 text-xl">MCP-Sync</div>;
+  return <div className="p-8 text-xl">Synapse</div>;
 }
 ```
 
@@ -216,15 +216,15 @@ Update `frontend/package.json` scripts:
 - [ ] **Step 5: Verify it runs**
 
 ```bash
-cd /Users/Tanmai.N/Documents/mcp-sync/frontend
+cd /Users/Tanmai.N/Documents/synapse/frontend
 npm run dev
 ```
-Visit http://localhost:5173 — should show "MCP-Sync". Stop the dev server.
+Visit http://localhost:5173 — should show "Synapse". Stop the dev server.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/Tanmai.N/Documents/mcp-sync
+cd /Users/Tanmai.N/Documents/synapse
 git add frontend/
 git commit -m "feat: scaffold frontend project with React, Vite, Tailwind, and TanStack Query"
 ```
@@ -687,7 +687,7 @@ export function AppShell() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
         <Link to="/" className="text-lg font-semibold text-gray-900">
-          MCP-Sync
+          Synapse
         </Link>
         <div className="flex items-center gap-4">
           <span className="text-sm text-gray-600">{user?.email}</span>
@@ -811,7 +811,7 @@ Create identical placeholders for: `SignupPage.tsx`, `DashboardPage.tsx`, `Proje
 - [ ] **Step 5: Verify it compiles and runs**
 
 ```bash
-cd /Users/Tanmai.N/Documents/mcp-sync/frontend
+cd /Users/Tanmai.N/Documents/synapse/frontend
 npx tsc --noEmit
 npm run dev
 ```
@@ -879,7 +879,7 @@ export function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white p-8 rounded-lg shadow-sm border max-w-sm w-full">
-        <h1 className="text-xl font-semibold mb-6">Sign in to MCP-Sync</h1>
+        <h1 className="text-xl font-semibold mb-6">Sign in to Synapse</h1>
 
         <div className="space-y-3 mb-6">
           <button
@@ -2003,7 +2003,7 @@ export function ShareAcceptPage() {
 - [ ] **Step 5: Verify frontend compiles**
 
 ```bash
-cd /Users/Tanmai.N/Documents/mcp-sync/frontend
+cd /Users/Tanmai.N/Documents/synapse/frontend
 npx tsc --noEmit
 ```
 Expected: No errors
@@ -2026,7 +2026,7 @@ git commit -m "feat: add activity, history, account, and share accept pages"
 - [ ] **Step 1: TypeScript check**
 
 ```bash
-cd /Users/Tanmai.N/Documents/mcp-sync/frontend
+cd /Users/Tanmai.N/Documents/synapse/frontend
 npx tsc --noEmit
 ```
 Expected: No errors

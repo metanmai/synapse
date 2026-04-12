@@ -1,4 +1,4 @@
-# MCP-Sync Implementation Plan
+# Synapse Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,14 +8,14 @@
 
 **Tech Stack:** TypeScript, Cloudflare Workers, Hono, `agents` (Cloudflare Agents SDK), `@modelcontextprotocol/sdk`, `@supabase/supabase-js`, Zod, Vitest
 
-**Spec:** `docs/superpowers/specs/2026-03-19-mcp-sync-design.md`
+**Spec:** `docs/superpowers/specs/2026-03-19-synapse-design.md`
 
 ---
 
 ## File Structure
 
 ```
-mcp-sync/
+synapse/
 ├── src/
 │   ├── index.ts                    # Hono app + Worker export + McpAgent DO export
 │   ├── mcp/
@@ -81,7 +81,7 @@ mcp-sync/
 - [ ] **Step 1: Initialize project and install dependencies**
 
 ```bash
-cd /Users/Tanmai.N/Documents/mcp-sync
+cd /Users/Tanmai.N/Documents/synapse
 npm init -y
 npm install hono agents @supabase/supabase-js zod
 npm install -D wrangler typescript @cloudflare/vitest-pool-workers vitest @types/node
@@ -119,21 +119,21 @@ Create `wrangler.jsonc`:
 ```jsonc
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mcp-sync",
+  "name": "synapse",
   "main": "src/index.ts",
   "compatibility_date": "2025-04-01",
   "compatibility_flags": ["nodejs_compat"],
   "durable_objects": {
     "bindings": [
       {
-        "class_name": "McpSyncAgent",
+        "class_name": "SynapseAgent",
         "name": "MCP_OBJECT"
       }
     ]
   },
   "migrations": [
     {
-      "new_sqlite_classes": ["McpSyncAgent"],
+      "new_sqlite_classes": ["SynapseAgent"],
       "tag": "v1"
     }
   ],
@@ -185,7 +185,7 @@ import type { Env } from "./lib/env";
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.get("/health", (c) => c.json({ status: "ok", service: "mcp-sync" }));
+app.get("/health", (c) => c.json({ status: "ok", service: "synapse" }));
 
 export default app;
 ```
@@ -213,7 +213,7 @@ describe("GET /health", () => {
     await waitOnExecutionContext(ctx);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({ status: "ok", service: "mcp-sync" });
+    expect(body).toEqual({ status: "ok", service: "synapse" });
   });
 });
 ```
@@ -226,7 +226,7 @@ Expected: PASS
 - [ ] **Step 9: Verify Worker runs locally**
 
 Run: `npx wrangler dev --test-scheduled`
-Test: `curl http://localhost:8787/health` → `{"status":"ok","service":"mcp-sync"}`
+Test: `curl http://localhost:8787/health` → `{"status":"ok","service":"synapse"}`
 Stop wrangler after verifying.
 
 - [ ] **Step 10: Commit**
@@ -677,7 +677,7 @@ app.onError((err, c) => {
   return c.json({ error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
 });
 
-app.get("/health", (c) => c.json({ status: "ok", service: "mcp-sync" }));
+app.get("/health", (c) => c.json({ status: "ok", service: "synapse" }));
 
 export default app;
 ```
@@ -823,7 +823,7 @@ app.onError((err, c) => {
   return c.json({ error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
 });
 
-app.get("/health", (c) => c.json({ status: "ok", service: "mcp-sync" }));
+app.get("/health", (c) => c.json({ status: "ok", service: "synapse" }));
 app.route("/auth", auth);
 
 export default app;
@@ -1216,7 +1216,7 @@ git commit -m "feat: add DB query functions for projects, entries, and preferenc
 **Files:**
 - Create: `src/mcp/agent.ts`
 - Create: `src/mcp/tools/project-management.ts`
-- Modify: `src/index.ts` — export McpSyncAgent DO, mount MCP
+- Modify: `src/index.ts` — export SynapseAgent DO, mount MCP
 - Modify: `src/lib/env.ts` — add MCP agent context type
 
 - [ ] **Step 1: Create the McpAgent subclass**
@@ -1236,9 +1236,9 @@ import { registerGoogleSyncTools } from "./tools/google-sync";
 import { registerPrompts } from "./prompts";
 import { registerResources } from "./resources";
 
-export class McpSyncAgent extends McpAgent<Env> {
+export class SynapseAgent extends McpAgent<Env> {
   server = new McpServer({
-    name: "mcp-sync",
+    name: "synapse",
     version: "1.0.0",
   });
 
@@ -1468,7 +1468,7 @@ export function registerResources(server: McpServer, env: Env) {
 }
 ```
 
-- [ ] **Step 4: Wire McpSyncAgent into index.ts**
+- [ ] **Step 4: Wire SynapseAgent into index.ts**
 
 Update `src/index.ts`:
 ```typescript
@@ -1476,7 +1476,7 @@ import { Hono } from "hono";
 import type { Env } from "./lib/env";
 import { AppError } from "./lib/errors";
 import { auth } from "./api/auth";
-import { McpSyncAgent } from "./mcp/agent";
+import { SynapseAgent } from "./mcp/agent";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -1488,13 +1488,13 @@ app.onError((err, c) => {
   return c.json({ error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
 });
 
-app.get("/health", (c) => c.json({ status: "ok", service: "mcp-sync" }));
+app.get("/health", (c) => c.json({ status: "ok", service: "synapse" }));
 app.route("/auth", auth);
 
 // Mount MCP server on /mcp (Streamable HTTP transport)
-app.mount("/mcp", McpSyncAgent.serve("/mcp").fetch);
+app.mount("/mcp", SynapseAgent.serve("/mcp").fetch);
 
-export { McpSyncAgent };
+export { SynapseAgent };
 export default app;
 ```
 
@@ -2155,7 +2155,7 @@ export function registerPrompts(server: McpServer, env: Env) {
           role: "user" as const,
           content: {
             type: "text" as const,
-            text: `You have the mcp-sync context server connected. Project: "${project}".
+            text: `You have the synapse context server connected. Project: "${project}".
 
 To load this project's context, call the \`load_project_context\` tool with project="${project}".
 
@@ -2406,7 +2406,7 @@ async function upsertGoogleDoc(
     mimeType: entry.content_type === "json" ? "application/json" : "text/plain",
   };
 
-  const boundary = "mcp_sync_boundary";
+  const boundary = "synapse_boundary";
   const body = `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: text/plain\r\n\r\n${entry.content}\r\n--${boundary}--`;
 
   const res = await fetch(
@@ -2821,7 +2821,7 @@ import { auth } from "./api/auth";
 import { context } from "./api/context";
 import { projects } from "./api/projects";
 import { sync } from "./api/sync";
-import { McpSyncAgent } from "./mcp/agent";
+import { SynapseAgent } from "./mcp/agent";
 import { runScheduledGoogleSync } from "./sync/from-google";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -2834,7 +2834,7 @@ app.onError((err, c) => {
   return c.json({ error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
 });
 
-app.get("/health", (c) => c.json({ status: "ok", service: "mcp-sync" }));
+app.get("/health", (c) => c.json({ status: "ok", service: "synapse" }));
 
 // Auth routes (no auth middleware)
 app.route("/auth", auth);
@@ -2845,10 +2845,10 @@ app.route("/api/projects", projects);
 app.route("/api/sync", sync);
 
 // Mount MCP server (Streamable HTTP transport)
-app.mount("/mcp", McpSyncAgent.serve("/mcp").fetch);
+app.mount("/mcp", SynapseAgent.serve("/mcp").fetch);
 
 // Export Durable Object class (required by Wrangler)
-export { McpSyncAgent };
+export { SynapseAgent };
 
 // Default export for Cloudflare Workers
 export default {
@@ -2966,7 +2966,7 @@ Run: `npx wrangler dev --test-scheduled`
 Test manually:
 ```bash
 curl http://localhost:8787/health
-# → {"status":"ok","service":"mcp-sync"}
+# → {"status":"ok","service":"synapse"}
 ```
 
 - [ ] **Step 5: Commit**

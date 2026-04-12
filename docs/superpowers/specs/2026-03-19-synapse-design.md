@@ -1,8 +1,8 @@
-# MCP-Sync: Universal AI Context Layer
+# Synapse: Universal AI Context Layer
 
 ## Overview
 
-MCP-Sync is a cloud-hosted MCP server that captures, stores, and shares context across AI sessions (Claude, ChatGPT, Cursor, etc.) and team members. It acts as a universal context layer — AI tools connect via MCP or REST, humans browse and edit context via Google Docs sync.
+Synapse is a cloud-hosted MCP server that captures, stores, and shares context across AI sessions (Claude, ChatGPT, Cursor, etc.) and team members. It acts as a universal context layer — AI tools connect via MCP or REST, humans browse and edit context via Google Docs sync.
 
 ## Goals
 
@@ -35,7 +35,7 @@ MCP-Sync is a cloud-hosted MCP server that captures, stores, and shares context 
 Context is organized into a virtual filesystem within projects:
 
 ```
-Project (e.g., "mcp-sync")
+Project (e.g., "synapse")
 ├── settings/
 │   └── preferences.json
 ├── decisions/
@@ -266,7 +266,7 @@ Since this is a remote MCP server, auto-capture is instruction-driven rather tha
 ## User Onboarding
 
 1. **Sign up:** `POST /auth/signup` with email — creates Supabase user, returns API key
-2. **Connect to Claude:** `claude mcp add mcp-sync https://mcp-sync.<domain>.workers.dev --header "Authorization: Bearer <key>"`
+2. **Connect to Claude:** `claude mcp add synapse https://synapse.<domain>.workers.dev --header "Authorization: Bearer <key>"`
 3. **Connect to ChatGPT:** Create custom GPT with REST API as an action, configure API key
 4. **Create a project:** Call `create_project` from any connected AI session
 5. **Optional: Connect Google Drive:** Call `set_preference` with `google_drive_folder_id` and complete OAuth flow
@@ -275,7 +275,7 @@ Since this is a remote MCP server, auto-capture is instruction-driven rather tha
 ## Project Structure
 
 ```
-mcp-sync/
+synapse/
 ├── src/
 │   ├── index.ts              # Worker entry, Hono router
 │   ├── mcp/
