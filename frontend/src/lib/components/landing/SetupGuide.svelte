@@ -366,9 +366,8 @@ async function copySnippet() {
     position: relative;
     background: rgba(0, 0, 0, 0.3);
     border-radius: 10px;
-    padding: 1rem;
     margin-bottom: 0.75rem;
-    overflow-x: auto;
+    overflow: hidden;
   }
 
   .code-block pre {
@@ -378,6 +377,9 @@ async function copySnippet() {
     line-height: 1.6;
     color: var(--color-cream);
     white-space: pre;
+    overflow-x: auto;
+    padding: 1rem;
+    padding-right: 5rem;
   }
 
   .copy-btn {
@@ -385,18 +387,21 @@ async function copySnippet() {
     top: 0.5rem;
     right: 0.5rem;
     padding: 0.25rem 0.75rem;
-    background: rgba(199, 183, 163, 0.2);
-    border: 1px solid rgba(199, 183, 163, 0.2);
+    background: rgba(199, 183, 163, 0.3);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(199, 183, 163, 0.3);
     border-radius: 6px;
     font-size: 0.6875rem;
     font-weight: 600;
-    color: var(--color-tan);
+    color: var(--color-cream);
     cursor: pointer;
     transition: background 0.2s;
+    z-index: 2;
   }
 
   .copy-btn:hover {
-    background: rgba(199, 183, 163, 0.35);
+    background: rgba(199, 183, 163, 0.5);
   }
 
   .card-hint {
