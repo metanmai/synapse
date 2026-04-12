@@ -212,5 +212,44 @@ export function createApi(token: string | null) {
       }),
     deleteInsight: (insightId: string) =>
       request<{ ok: true }>(`/api/insights/${insightId}`, token, { method: "DELETE" }),
+
+    // Conversations
+    listConversations: (projectId: string, status?: string, limit = 20, offset = 0) =>
+      request<{ conversations: import("$lib/types").ConversationListItem[]; total: number }>(
+        `/api/conversations?project_id=${projectId}${status ? `&status=${status}` : ""}&limit=${limit}&offset=${offset}`,
+        token,
+      ),
+    getConversation: (conversationId: string, fidelity?: string, page = 1, limit = 50) =>
+      request<{
+        conversation: import("$lib/types").Conversation;
+        messages: import("$lib/types").ConversationMessage[];
+        context: any[];
+        media: import("$lib/types").ConversationMediaRecord[];
+      }>(
+        `/api/conversations/${conversationId}?${fidelity ? `fidelity=${fidelity}&` : ""}page=${page}&limit=${limit}`,
+        token,
+      ),
+    createConversation: (projectId: string, title?: string) =>
+      request<import("$lib/types").Conversation>("/api/conversations", token, {
+        method: "POST",
+        body: JSON.stringify({ project_id: projectId, title }),
+      }),
+    updateConversation: (conversationId: string, updates: { title?: string; status?: string; fidelity_mode?: string }) =>
+      request<import("$lib/types").Conversation>(`/api/conversations/${conversationId}`, token, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+      }),
+    importConversation: (projectId: string, format: string, messages: unknown, title?: string) =>
+      request<{ conversation: import("$lib/types").Conversation; messageCount: number }>("/api/conversations/import", token, {
+        method: "POST",
+        body: JSON.stringify({ project_id: projectId, format, messages, title }),
+      }),
+    exportConversation: (conversationId: string, format: string) =>
+      request<{ conversation: any; messages: any; format: string }>(
+        `/api/conversations/${conversationId}/export/${format}`,
+        token,
+      ),
+    getMediaUrl: (conversationId: string, mediaId: string) =>
+      request<{ url: string }>(`/api/conversations/${conversationId}/media/${mediaId}`, token),
   };
 }
