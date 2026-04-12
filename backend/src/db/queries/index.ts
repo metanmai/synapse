@@ -5,3 +5,4 @@ export * from "./entries";
 export * from "./preferences";
 export * from "./share-links";
 export * from "./activity";
+export * from "./subscriptions";
