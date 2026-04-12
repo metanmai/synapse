@@ -23,6 +23,10 @@ export interface Project {
   google_drive_folder_id: string | null;
   created_at: string;
   project_members?: ProjectMember[];
+  // Stats (enriched by backend)
+  conversation_count?: number;
+  insight_count?: number;
+  tools?: string[];
 }
 
 export interface ProjectMember {
