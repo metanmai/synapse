@@ -72,6 +72,7 @@ async function decryptSession(code: string, secret: string): Promise<CliSessionP
 
 const auth = new Hono<{ Bindings: Env }>();
 
+// POST /auth/signup — step 1: send verification OTP (no API key until verified)
 auth.post("/signup", async (c) => {
   const body = await parseBody(c, schemas.signup);
 
@@ -81,20 +82,58 @@ auth.post("/signup", async (c) => {
     throw new ConflictError("User with this email already exists");
   }
 
-  const user = await createUser(db, body.email);
+  // Send OTP via Supabase Auth (creates Supabase auth user if needed)
+  const { createClient } = await import("@supabase/supabase-js");
+  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 
+  const { error: otpError } = await supabase.auth.signInWithOtp({ email: body.email });
+  if (otpError) {
+    throw new AppError(`Failed to send verification email: ${otpError.message}`, 500, "EMAIL_ERROR");
+  }
+
+  return c.json({ email: body.email, message: "Verification email sent. Check your inbox for the code." }, 200);
+});
+
+// POST /auth/verify-email — step 2: verify OTP and create account + API key
+auth.post("/verify-email", async (c) => {
+  const body = await parseBody(c, schemas.verifyEmail);
+
+  // Verify OTP via Supabase Auth
+  const { createClient } = await import("@supabase/supabase-js");
+  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  const { data: authData, error: verifyError } = await supabase.auth.verifyOtp({
+    email: body.email,
+    token: body.code,
+    type: "email",
+  });
+
+  if (verifyError || !authData.user) {
+    throw new AppError("Invalid or expired verification code", 400, "VERIFICATION_FAILED");
+  }
+
+  // Create (or find) the user in public.users
+  const db = createSupabaseClient(c.env);
+  let user = await findUserByEmail(db, body.email);
+  if (!user) {
+    user = await createUser(db, body.email);
+  }
+
+  // Link Supabase Auth user if not already linked
+  if (!user.supabase_auth_id && authData.user.id) {
+    await db.from("users").update({ supabase_auth_id: authData.user.id }).eq("id", user.id);
+  }
+
+  // Create API key
   const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
   const apiKeyHash = await hashApiKey(apiKey);
   await createApiKey(db, user.id, apiKeyHash, "default");
 
-  return c.json(
-    {
-      id: user.id,
-      email: user.email,
-      api_key: apiKey,
-    },
-    201,
-  );
+  return c.json({ id: user.id, email: user.email, api_key: apiKey }, 201);
 });
 
 // POST /auth/login — authenticate with email+password, return an API key
