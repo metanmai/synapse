@@ -114,6 +114,7 @@ export async function runTree(): Promise<void> {
   render(root, "");
 
   clack.log.message(lines.join("\n"));
+  clack.log.message(muted(`Browse your files at ${accent("synapsesync.app")}`));
   clack.outro(muted("synapsesync.app"));
 }
 
@@ -254,9 +255,11 @@ export async function runWhoami(): Promise<void> {
   clack.log.message(
     [
       `${pad(muted("Email"), LW)} ${bold(email)}`,
-      `${pad(muted("Tier"), LW)} ${accent(billing.tier)}`,
+      `${pad(muted("Tier"), LW)} ${accent(billing.tier)}${billing.tier === "free" ? muted("  \u2192 npx synapsesync-mcp upgrade") : ""}`,
       `${pad(muted("Files"), LW)} ${accent(String(fileCount))}`,
       `${pad(muted("API keys"), LW)} ${accent(String(keys.length))}`,
+      `${pad(muted("Dashboard"), LW)} ${accent("synapsesync.app")}`,
+      `${pad(muted("Account"), LW)} ${accent("synapsesync.app/account")}`,
     ].join("\n"),
   );
 

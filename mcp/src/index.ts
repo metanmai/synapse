@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as clack from "@clack/prompts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -61,43 +60,42 @@ const CLI_SUBCOMMANDS = new Set(["wizard", "help", "stats", "tree", "status", "r
 
 // --- CLI help ---
 
-function printHelpPlain(): void {
-  const v = readPackageVersion();
-  console.log(`synapsesync-mcp v${v} \u2014 Synapse MCP server & CLI
-
-${bold("Setup")}
-  npx synapsesync-mcp              Interactive setup wizard
-  npx synapsesync-mcp status       Show where configured + connection health
-  npx synapsesync-mcp refresh      Generate new API key, update all configs
-
-${bold("Workspace")}
-  npx synapsesync-mcp tree         View workspace files as a tree
-  npx synapsesync-mcp stats        Show lifetime workspace stats
-  npx synapsesync-mcp whoami       Show account info
-
-${bold("Account")}
-  npx synapsesync-mcp upgrade      Upgrade to Plus ($5.99/mo)
-
-${bold("Other")}
-  npx synapsesync-mcp --help       Show this help
-  npx synapsesync-mcp --version    Show version
-
-${bold("MCP server")}
-  Runs automatically when stdin is not a TTY and SYNAPSE_API_KEY is set.
-
-${muted("Made by @metanmai \u00B7 github.com/metanmai/synapse")}
-${muted("If Synapse saves you time, consider sponsoring: github.com/sponsors/metanmai")}
-`);
-}
-
 function printHelp(): void {
-  if (isInteractiveTerminal()) {
-    clack.intro(`${accent("\u25C6")} Synapse \u00B7 synapsesync-mcp`);
-    clack.log.message(`Run ${accent("npx synapsesync-mcp")} to start the setup wizard.`);
-    clack.outro(`${muted("synapsesync.app/docs")}`);
-  } else {
-    printHelpPlain();
-  }
+  const v = readPackageVersion();
+  const s = (label: string, desc: string) => `  ${accent(label.padEnd(24))} ${desc}`;
+
+  const lines = [
+    `synapsesync-mcp v${v} \u2014 Synapse MCP server & CLI`,
+    "",
+    bold("Setup"),
+    s("npx synapsesync-mcp", "Interactive setup wizard"),
+    s("npx synapsesync-mcp status", "Show where configured + connection health"),
+    s("npx synapsesync-mcp refresh", "Generate new API key, update all configs"),
+    "",
+    bold("Workspace"),
+    s("npx synapsesync-mcp tree", "View workspace files as a tree"),
+    s("npx synapsesync-mcp stats", "Show lifetime workspace stats"),
+    s("npx synapsesync-mcp whoami", "Show account info"),
+    "",
+    bold("Account"),
+    s("npx synapsesync-mcp upgrade", "Upgrade to Plus ($5.99/mo)"),
+    "",
+    s("-h, --help", "Show this help"),
+    s("-v, --version", "Show version"),
+    "",
+    bold("MCP server"),
+    `  Runs automatically when stdin is not a TTY and SYNAPSE_API_KEY is set.`,
+    "",
+    bold("Web app"),
+    `  ${accent("synapsesync.app")}            Dashboard, file browser, settings`,
+    `  ${accent("synapsesync.app/account")}    API keys, billing, connected accounts`,
+    "",
+    muted(`Made by @metanmai \u00B7 github.com/metanmai/synapse`),
+    muted(`Star the repo or sponsor: github.com/sponsors/metanmai`),
+    "",
+  ];
+
+  console.log(lines.join("\n"));
 }
 
 function isHelpArgv(args: string[]): boolean {
@@ -118,13 +116,13 @@ function isMcpServerMode(raw: string[]): boolean {
 
 function unknownOption(flag: string): never {
   console.error(`Unknown option: ${flag}\n`);
-  printHelpPlain();
+  printHelp();
   process.exit(1);
 }
 
 function unknownSubcommand(cmd: string): never {
   console.error(`Unknown command: ${cmd}\n`);
-  printHelpPlain();
+  printHelp();
   process.exit(1);
 }
 
@@ -181,7 +179,7 @@ async function handleCli(raw: string[]): Promise<void> {
   }
 
   // Non-interactive + no MCP mode → show help
-  printHelpPlain();
+  printHelp();
   process.exit(0);
 }
 
@@ -298,7 +296,7 @@ if (!isMcpServerMode(args)) {
 
   const server = new McpServer({
     name: "synapse",
-    version: "0.5.0",
+    version: "0.6.0",
   });
 
   // --- ls: list files and folders ---
