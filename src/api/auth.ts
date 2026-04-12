@@ -71,7 +71,12 @@ auth.get("/google/callback", async (c) => {
     }),
   });
 
-  const tokens = await tokenRes.json() as any;
+  interface GoogleTokenResponse {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+  }
+  const tokens = await tokenRes.json() as GoogleTokenResponse;
   if (!tokens.access_token) {
     throw new AppError("Failed to exchange code for tokens", 400, "OAUTH_ERROR");
   }
@@ -84,7 +89,7 @@ auth.get("/google/callback", async (c) => {
       google_oauth_tokens: {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
-        expires_at: Date.now() + tokens.expires_in * 1000,
+        expires_at: Date.now() + (tokens.expires_in ?? 3600) * 1000,
       },
     })
     .eq("id", userId);

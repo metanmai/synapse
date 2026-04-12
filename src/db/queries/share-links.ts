@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ShareLink } from "../types";
+import { singleOrNull } from "../query-helpers";
 
 export async function createShareLink(
   db: SupabaseClient,
@@ -39,14 +40,9 @@ export async function getShareLinkByToken(
   db: SupabaseClient,
   token: string
 ): Promise<ShareLink | null> {
-  const { data, error } = await db
-    .from("share_links")
-    .select("*")
-    .eq("token", token)
-    .single();
-  if (error && error.code === "PGRST116") return null;
-  if (error) throw error;
-  return data as ShareLink;
+  return singleOrNull<ShareLink>(
+    await db.from("share_links").select("*").eq("token", token).single()
+  );
 }
 
 export async function deleteShareLink(
