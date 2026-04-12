@@ -1,8 +1,19 @@
 <script lang="ts">
+  import { onMount } from "svelte";
+
   let mobileOpen = $state(false);
+  let scrolled = $state(false);
+
+  onMount(() => {
+    const handleScroll = () => {
+      scrolled = window.scrollY > 20;
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  });
 </script>
 
-<nav class="landing-nav">
+<nav class="landing-nav" class:scrolled>
   <div class="nav-inner">
     <a href="/" class="nav-logo">
       <img src="/logo.svg" alt="" class="nav-logo-img" />
@@ -39,7 +50,17 @@
     left: 0;
     right: 0;
     z-index: 1000;
-    background-color: var(--color-burgundy);
+    background: rgba(86, 28, 36, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(109, 41, 50, 0.3);
+    transition: background 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  }
+
+  .landing-nav.scrolled {
+    background: rgba(86, 28, 36, 0.92);
+    box-shadow: 0 4px 24px rgba(86, 28, 36, 0.3);
+    border-bottom-color: rgba(109, 41, 50, 0.5);
   }
 
   .nav-inner {
@@ -60,6 +81,11 @@
     font-weight: 700;
     color: var(--color-cream);
     text-decoration: none;
+    transition: opacity 0.2s;
+  }
+
+  .nav-logo:hover {
+    opacity: 0.85;
   }
 
   .nav-logo-img {
@@ -79,26 +105,44 @@
     font-size: 0.9375rem;
     font-weight: 400;
     transition: color 0.2s;
+    position: relative;
+  }
+
+  .nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--color-cream);
+    border-radius: 1px;
+    transition: width 0.3s ease;
   }
 
   .nav-link:hover {
     color: var(--color-cream);
   }
 
+  .nav-link:hover::after {
+    width: 100%;
+  }
+
   .nav-cta {
-    background-color: var(--color-brown);
+    background: linear-gradient(135deg, var(--color-brown), #7d3340);
     color: var(--color-cream);
     padding: 0.625rem 1.5rem;
     border-radius: 9999px;
     font-size: 0.875rem;
     font-weight: 700;
     text-decoration: none;
-    transition: transform 0.2s, background-color 0.2s;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 2px 12px rgba(109, 41, 50, 0.3);
   }
 
   .nav-cta:hover {
     transform: scale(1.05);
-    background-color: #7d3340;
+    box-shadow: 0 4px 20px rgba(109, 41, 50, 0.5);
   }
 
   .nav-hamburger {
@@ -135,8 +179,10 @@
     display: none;
     flex-direction: column;
     padding: 1rem 2rem 1.5rem;
-    background-color: var(--color-burgundy);
-    border-top: 1px solid var(--color-brown);
+    background: rgba(86, 28, 36, 0.95);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid rgba(109, 41, 50, 0.4);
   }
 
   .mobile-link {
@@ -144,13 +190,18 @@
     text-decoration: none;
     padding: 0.75rem 0;
     font-size: 1rem;
-    border-bottom: 1px solid var(--color-brown);
+    border-bottom: 1px solid rgba(109, 41, 50, 0.3);
+    transition: color 0.2s;
+  }
+
+  .mobile-link:hover {
+    color: var(--color-cream);
   }
 
   .mobile-cta {
     display: inline-block;
     margin-top: 1rem;
-    background-color: var(--color-brown);
+    background: linear-gradient(135deg, var(--color-brown), #7d3340);
     color: var(--color-cream);
     padding: 0.75rem 1.5rem;
     border-radius: 9999px;
