@@ -7,6 +7,23 @@ let { data } = $props();
 
 const encodedProject = $derived(encodeURIComponent(data.project.name));
 let filtering = $state(false);
+let toolFilter = $state("all");
+
+const toolTabs = [
+  { value: "all", label: "All" },
+  { value: "claude-code", label: "Claude Code" },
+  { value: "cursor", label: "Cursor" },
+  { value: "codex", label: "Codex" },
+  { value: "gemini", label: "Gemini" },
+];
+
+const filteredConversations = $derived(
+  toolFilter === "all"
+    ? data.conversations
+    : data.conversations.filter(
+        (c) => (c as unknown as { working_context?: { tool?: string } }).working_context?.tool === toolFilter,
+      ),
+);
 
 const loadingConversationId = $derived.by(() => {
   if (!$navigating?.to?.url) return null;
@@ -53,7 +70,7 @@ const emptyLabel = $derived(data.statusFilter === "all" ? null : data.statusFilt
   <div class="max-w-4xl p-6">
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-xl font-semibold" style="color: var(--color-accent);">
-        Conversations
+        Sessions
       </h1>
       <div class="header-actions">
         <div class="filter-group">
@@ -78,6 +95,18 @@ const emptyLabel = $derived(data.statusFilter === "all" ? null : data.statusFilt
       </div>
     </div>
 
+    <div class="tool-tabs">
+      {#each toolTabs as tab}
+        <button
+          class="tool-tab cursor-pointer"
+          class:tool-tab-active={toolFilter === tab.value}
+          onclick={() => (toolFilter = tab.value)}
+        >
+          {tab.label}
+        </button>
+      {/each}
+    </div>
+
     {#if filtering}
       <div class="flex items-center gap-2 py-4" style="color: var(--color-text-muted); font-size: 13px;">
         <div class="spinner spinner-sm"></div>
@@ -85,7 +114,7 @@ const emptyLabel = $derived(data.statusFilter === "all" ? null : data.statusFilt
       </div>
     {:else}
       <ConversationList
-        conversations={data.conversations}
+        conversations={filteredConversations}
         projectName={data.project.name}
         {emptyLabel}
         {loadingConversationId}
@@ -260,5 +289,38 @@ const emptyLabel = $derived(data.statusFilter === "all" ? null : data.statusFilt
   .page-info {
     font-size: 0.75rem;
     color: var(--color-text-muted);
+  }
+
+  .tool-tabs {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 1rem;
+    padding: 0.25rem;
+    background: var(--color-bg-muted);
+    border-radius: 8px;
+    width: fit-content;
+  }
+
+  .tool-tab {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.375rem 0.75rem;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--color-text-muted);
+    transition: all 0.15s ease;
+  }
+
+  .tool-tab:hover {
+    color: var(--color-text);
+    background: rgba(86, 28, 36, 0.04);
+  }
+
+  .tool-tab-active {
+    background: var(--color-bg-raised);
+    color: var(--color-accent);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   }
 </style>
