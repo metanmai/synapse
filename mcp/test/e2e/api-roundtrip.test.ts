@@ -56,7 +56,7 @@ async function createTestUser(email: string): Promise<{ apiKey: string; userId: 
     throw new Error(`Failed to create Supabase auth user: ${authRes.status} ${await authRes.text()}`);
   }
 
-  // 2. Generate a magic link to get a valid OTP token
+  // 2. Generate a magiclink token via admin (no email sent)
   const linkRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
     method: "POST",
     headers: {
@@ -75,10 +75,10 @@ async function createTestUser(email: string): Promise<{ apiKey: string; userId: 
   const tokenMatch = actionLink.match(/token=([^&]+)/);
   const otp = tokenMatch?.[1];
   if (!otp) {
-    throw new Error(`Could not extract OTP from generate_link response: ${JSON.stringify(linkData)}`);
+    throw new Error(`Could not extract token from generate_link response: ${JSON.stringify(linkData)}`);
   }
 
-  // 3. Call verify-email to create the user in public.users + get API key
+  // 3. Call our verify-email endpoint with the token to create public.users + API key
   const { status, data } = await api("POST", "/auth/verify-email", undefined, { email, code: otp });
   if (status !== 201 || !data.api_key) {
     throw new Error(`verify-email failed: ${status} ${JSON.stringify(data)}`);
