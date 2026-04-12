@@ -61,6 +61,7 @@ conversations.post("/", async (c) => {
 
 // GET /api/conversations — list conversations for a project
 conversations.get("/", async (c) => {
+  requireConversationSync(c);
   const user = c.get("user");
   const projectId = c.req.query("project_id");
   if (!projectId) {
@@ -144,6 +145,7 @@ conversations.post("/import", async (c) => {
 
 // GET /api/conversations/:id — get full conversation with messages, context, media
 conversations.get("/:id", async (c) => {
+  requireConversationSync(c);
   const user = c.get("user");
   const conversationId = c.req.param("id");
 
@@ -309,6 +311,7 @@ conversations.post("/:id/media", async (c) => {
 
 // GET /api/conversations/:id/media/:mediaId — get signed download URL
 conversations.get("/:id/media/:mediaId", async (c) => {
+  requireConversationSync(c);
   const user = c.get("user");
   const conversationId = c.req.param("id");
   const mediaId = c.req.param("mediaId");
@@ -333,6 +336,7 @@ conversations.get("/:id/media/:mediaId", async (c) => {
 
 // GET /api/conversations/:id/export/:format — export to target format
 conversations.get("/:id/export/:format", async (c) => {
+  requireConversationSync(c);
   const user = c.get("user");
   const conversationId = c.req.param("id");
   const format = c.req.param("format");
