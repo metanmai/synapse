@@ -19,6 +19,9 @@
   let contextPath = $state<string | null>(null);
   let contextIsFolder = $state(false);
 
+  // Client-side entry cache
+  const entryCache = new Map<string, Entry>();
+
   // Resizable sidebar
   let sidebarWidth = $state(220);
   let dragging = $state(false);
@@ -40,12 +43,22 @@
 
   async function selectEntry(path: string) {
     selectedPath = path;
-    loading = true;
     mode = "view";
+
+    // Return cached entry instantly if available
+    const cached = entryCache.get(path);
+    if (cached) {
+      entry = cached;
+      return;
+    }
+
+    loading = true;
     try {
       const res = await fetch(`/projects/${encodeURIComponent(data.project.name)}/api/entry?path=${encodeURIComponent(path)}`);
       if (res.ok) {
-        entry = await res.json();
+        const fetched = await res.json();
+        entryCache.set(path, fetched);
+        entry = fetched;
       } else {
         entry = null;
       }
