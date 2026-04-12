@@ -1,17 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Project, ProjectMember } from "../types";
 import { singleOrNull } from "../query-helpers";
+import type { Project, ProjectMember } from "../types";
 
-export async function createProject(
-  db: SupabaseClient,
-  name: string,
-  ownerId: string
-): Promise<Project> {
-  const { data: project, error } = await db
-    .from("projects")
-    .insert({ name, owner_id: ownerId })
-    .select()
-    .single();
+export async function createProject(db: SupabaseClient, name: string, ownerId: string): Promise<Project> {
+  const { data: project, error } = await db.from("projects").insert({ name, owner_id: ownerId }).select().single();
   if (error) throw error;
 
   // Add owner as a member
@@ -25,7 +17,7 @@ export async function createProject(
 
 export async function listProjectsForUser(
   db: SupabaseClient,
-  userId: string
+  userId: string,
 ): Promise<(Project & { owner_email: string; role: string })[]> {
   const { data, error } = await db
     .from("project_members")
@@ -46,7 +38,7 @@ export async function listProjectsForUser(
 export async function getProjectByName(
   db: SupabaseClient,
   nameOrQualified: string,
-  userId: string
+  userId: string,
 ): Promise<Project | null> {
   // Check for qualified name format: owner-email~project-name
   if (nameOrQualified.includes("~")) {
@@ -93,18 +85,9 @@ export async function getProjectByName(
   return shared as Project | null;
 }
 
-export async function getMemberRole(
-  db: SupabaseClient,
-  projectId: string,
-  userId: string
-): Promise<string | null> {
+export async function getMemberRole(db: SupabaseClient, projectId: string, userId: string): Promise<string | null> {
   const result = singleOrNull<{ role: string }>(
-    await db
-      .from("project_members")
-      .select("role")
-      .eq("project_id", projectId)
-      .eq("user_id", userId)
-      .single()
+    await db.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).single(),
   );
   return result?.role ?? null;
 }
@@ -113,7 +96,7 @@ export async function addMember(
   db: SupabaseClient,
   projectId: string,
   userId: string,
-  role: "editor" | "viewer"
+  role: "editor" | "viewer",
 ): Promise<ProjectMember> {
   const { data, error } = await db
     .from("project_members")
@@ -124,10 +107,7 @@ export async function addMember(
   return data as ProjectMember;
 }
 
-export async function countMembers(
-  db: SupabaseClient,
-  projectId: string
-): Promise<number> {
+export async function countMembers(db: SupabaseClient, projectId: string): Promise<number> {
   const { count, error } = await db
     .from("project_members")
     .select("*", { count: "exact", head: true })
@@ -137,15 +117,7 @@ export async function countMembers(
   return count ?? 0;
 }
 
-export async function removeMember(
-  db: SupabaseClient,
-  projectId: string,
-  userId: string
-): Promise<void> {
-  const { error } = await db
-    .from("project_members")
-    .delete()
-    .eq("project_id", projectId)
-    .eq("user_id", userId);
+export async function removeMember(db: SupabaseClient, projectId: string, userId: string): Promise<void> {
+  const { error } = await db.from("project_members").delete().eq("project_id", projectId).eq("user_id", userId);
   if (error) throw error;
 }

@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 
 import { createSupabaseClient } from "../db/client";
-import { createUser, findUserByEmail, createApiKey, listApiKeys, deleteApiKey, countApiKeys } from "../db/queries";
-import { hashApiKey, authMiddleware } from "../lib/auth";
+import { countApiKeys, createApiKey, createUser, deleteApiKey, findUserByEmail, listApiKeys } from "../db/queries";
+import { authMiddleware, hashApiKey } from "../lib/auth";
 import { AppError, ConflictError } from "../lib/errors";
 
 import type { Env } from "../lib/env";
@@ -24,15 +24,18 @@ auth.post("/signup", async (c) => {
 
   const user = await createUser(db, body.email);
 
-  const apiKey = crypto.randomUUID() + "-" + crypto.randomUUID();
+  const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
   const apiKeyHash = await hashApiKey(apiKey);
   await createApiKey(db, user.id, apiKeyHash, "default");
 
-  return c.json({
-    id: user.id,
-    email: user.email,
-    api_key: apiKey,
-  }, 201);
+  return c.json(
+    {
+      id: user.id,
+      email: user.email,
+      api_key: apiKey,
+    },
+    201,
+  );
 });
 
 // POST /auth/login — authenticate with email+password, return an API key
@@ -75,7 +78,7 @@ auth.post("/login", async (c) => {
     await deleteApiKey(db, existingKey.id, user.id);
   }
 
-  const apiKey = crypto.randomUUID() + "-" + crypto.randomUUID();
+  const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
   const apiKeyHash = await hashApiKey(apiKey);
   await createApiKey(db, user.id, apiKeyHash, keyLabel);
 
@@ -130,7 +133,7 @@ auth.get("/google/callback", async (c) => {
     refresh_token?: string;
     expires_in?: number;
   }
-  const tokens = await tokenRes.json() as GoogleTokenResponse;
+  const tokens = (await tokenRes.json()) as GoogleTokenResponse;
   if (!tokens.access_token) {
     throw new AppError("Failed to exchange code for tokens", 400, "OAUTH_ERROR");
   }
@@ -177,18 +180,21 @@ account.post("/keys", async (c) => {
     throw new AppError("API key limit reached (10). Revoke an existing key first.", 400, "KEY_LIMIT");
   }
 
-  const apiKey = crypto.randomUUID() + "-" + crypto.randomUUID();
+  const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
   const apiKeyHash = await hashApiKey(apiKey);
 
   const created = await createApiKey(db, user.id, apiKeyHash, body.label.trim(), body.expires_at);
 
-  return c.json({
-    id: created.id,
-    label: created.label,
-    api_key: apiKey,
-    expires_at: created.expires_at,
-    created_at: created.created_at,
-  }, 201);
+  return c.json(
+    {
+      id: created.id,
+      label: created.label,
+      api_key: apiKey,
+      expires_at: created.expires_at,
+      created_at: created.created_at,
+    },
+    201,
+  );
 });
 
 // GET /api/account/keys — list all keys

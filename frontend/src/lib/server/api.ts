@@ -9,13 +9,9 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(
-  path: string,
-  token: string | null,
-  options: RequestInit = {},
-): Promise<T> {
+async function request<T>(path: string, token: string | null, options: RequestInit = {}): Promise<T> {
   if (!API_URL) {
-    throw new ApiError(500, `API_URL is not configured. Set it in your environment variables.`);
+    throw new ApiError(500, "API_URL is not configured. Set it in your environment variables.");
   }
 
   const headers: Record<string, string> = {
@@ -23,7 +19,7 @@ async function request<T>(
     ...((options.headers as Record<string, string>) ?? {}),
   };
   if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
 
   const url = `${API_URL}${path}`;
@@ -34,16 +30,16 @@ async function request<T>(
   try {
     res = await fetch(url, { ...options, headers });
   } catch (err) {
-    throw new ApiError(503, `Cannot reach API at ${API_URL}${path}: ${err instanceof Error ? err.message : String(err)}`);
+    throw new ApiError(
+      503,
+      `Cannot reach API at ${API_URL}${path}: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
     const detail = body.detail ? ` (${body.detail})` : "";
-    throw new ApiError(
-      res.status,
-      `${method} ${path} → ${res.status}: ${body.error || res.statusText}${detail}`
-    );
+    throw new ApiError(res.status, `${method} ${path} → ${res.status}: ${body.error || res.statusText}${detail}`);
   }
 
   return res.json();
@@ -61,42 +57,25 @@ export function createApi(token: string | null) {
 
     // Members
     addMember: (projectId: string, email: string, role: string) =>
-      request<import("$lib/types").ProjectMember>(
-        `/api/projects/${projectId}/members`,
-        token,
-        { method: "POST", body: JSON.stringify({ email, role }) },
-      ),
+      request<import("$lib/types").ProjectMember>(`/api/projects/${projectId}/members`, token, {
+        method: "POST",
+        body: JSON.stringify({ email, role }),
+      }),
     removeMember: (projectId: string, email: string) =>
-      request<void>(
-        `/api/projects/${projectId}/members/${encodeURIComponent(email)}`,
-        token,
-        { method: "DELETE" },
-      ),
+      request<void>(`/api/projects/${projectId}/members/${encodeURIComponent(email)}`, token, { method: "DELETE" }),
 
     // Share links
     createShareLink: (projectId: string, role: string, expiresAt?: string) =>
-      request<import("$lib/types").ShareLink>(
-        `/api/projects/${projectId}/share-links`,
-        token,
-        { method: "POST", body: JSON.stringify({ role, expires_at: expiresAt }) },
-      ),
+      request<import("$lib/types").ShareLink>(`/api/projects/${projectId}/share-links`, token, {
+        method: "POST",
+        body: JSON.stringify({ role, expires_at: expiresAt }),
+      }),
     listShareLinks: (projectId: string) =>
-      request<import("$lib/types").ShareLink[]>(
-        `/api/projects/${projectId}/share-links`,
-        token,
-      ),
+      request<import("$lib/types").ShareLink[]>(`/api/projects/${projectId}/share-links`, token),
     deleteShareLink: (projectId: string, linkToken: string) =>
-      request<void>(
-        `/api/projects/${projectId}/share-links/${linkToken}`,
-        token,
-        { method: "DELETE" },
-      ),
+      request<void>(`/api/projects/${projectId}/share-links/${linkToken}`, token, { method: "DELETE" }),
     joinShareLink: (linkToken: string) =>
-      request<{ message: string; role: string }>(
-        `/api/share/${linkToken}/join`,
-        token,
-        { method: "POST" },
-      ),
+      request<{ message: string; role: string }>(`/api/share/${linkToken}/join`, token, { method: "POST" }),
 
     // Entries
     listEntries: (project: string, folder?: string) =>
@@ -127,11 +106,10 @@ export function createApi(token: string | null) {
         token,
       ),
     restoreEntry: (project: string, path: string, historyId: string) =>
-      request<import("$lib/types").Entry>(
-        `/api/context/${encodeURIComponent(project)}/restore`,
-        token,
-        { method: "POST", body: JSON.stringify({ path, historyId }) },
-      ),
+      request<import("$lib/types").Entry>(`/api/context/${encodeURIComponent(project)}/restore`, token, {
+        method: "POST",
+        body: JSON.stringify({ path, historyId }),
+      }),
 
     // Activity
     getActivity: (projectId: string, limit = 50, offset = 0) =>
@@ -142,13 +120,15 @@ export function createApi(token: string | null) {
 
     // Account — API Keys
     listApiKeys: () =>
-      request<{
-        id: string;
-        label: string;
-        expires_at: string | null;
-        last_used_at: string | null;
-        created_at: string;
-      }[]>("/api/account/keys", token),
+      request<
+        {
+          id: string;
+          label: string;
+          expires_at: string | null;
+          last_used_at: string | null;
+          created_at: string;
+        }[]
+      >("/api/account/keys", token),
     createApiKey: (label: string, expiresAt?: string | null) =>
       request<{
         id: string;
@@ -167,11 +147,10 @@ export function createApi(token: string | null) {
 
     // Preferences
     setPreference: (project: string, key: string, value: string) =>
-      request<Record<string, string>>(
-        `/api/projects/preferences/${encodeURIComponent(project)}`,
-        token,
-        { method: "PUT", body: JSON.stringify({ key, value }) },
-      ),
+      request<Record<string, string>>(`/api/projects/preferences/${encodeURIComponent(project)}`, token, {
+        method: "PUT",
+        body: JSON.stringify({ key, value }),
+      }),
 
     // Billing
     getBillingStatus: () =>
@@ -195,7 +174,7 @@ export function createApi(token: string | null) {
     // Import/Export
     importProject: async (projectId: string, file: File) => {
       const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
+      if (token) headers.Authorization = `Bearer ${token}`;
       const body = new FormData();
       body.append("file", file);
       const res = await fetch(`${API_URL}/api/projects/${projectId}/import`, {

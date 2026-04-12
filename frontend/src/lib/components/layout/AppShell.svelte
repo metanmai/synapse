@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
+import { enhance } from "$app/forms";
 
-  let { user, children } = $props<{
-    user: { id: string; email: string };
-    children: import("svelte").Snippet;
-  }>();
+let { user, children } = $props<{
+  user: { id: string; email: string };
+  children: import("svelte").Snippet;
+}>();
 </script>
 
 <div class="min-h-screen" style="background-color: var(--color-bg);">

@@ -1,63 +1,63 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import ScrollReveal from "./ScrollReveal.svelte";
+import { onMount } from "svelte";
+import ScrollReveal from "./ScrollReveal.svelte";
 
-  interface StatItem {
-    label: string;
-    target: number;
-    suffix: string;
-  }
+interface StatItem {
+  label: string;
+  target: number;
+  suffix: string;
+}
 
-  const stats: StatItem[] = [
-    { label: "Files synced", target: 12400, suffix: "+" },
-    { label: "Decisions captured", target: 3200, suffix: "+" },
-    { label: "Teams connected", target: 580, suffix: "+" },
-  ];
+const stats: StatItem[] = [
+  { label: "Files synced", target: 12400, suffix: "+" },
+  { label: "Decisions captured", target: 3200, suffix: "+" },
+  { label: "Teams connected", target: 580, suffix: "+" },
+];
 
-  let values = $state<number[]>([0, 0, 0]);
-  let sectionEl: HTMLElement;
-  let hasAnimated = false;
+let values = $state<number[]>([0, 0, 0]);
+let sectionEl: HTMLElement;
+let hasAnimated = false;
 
-  function animateCounters() {
-    if (hasAnimated) return;
-    hasAnimated = true;
+function animateCounters() {
+  if (hasAnimated) return;
+  hasAnimated = true;
 
-    const duration = 2000;
-    const startTime = performance.now();
+  const duration = 2000;
+  const startTime = performance.now();
 
-    function tick(now: number) {
-      const elapsed = now - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      // Ease-out cubic
-      const eased = 1 - Math.pow(1 - progress, 3);
+  function tick(now: number) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    // Ease-out cubic
+    const eased = 1 - Math.pow(1 - progress, 3);
 
-      values = stats.map((s) => Math.round(eased * s.target));
+    values = stats.map((s) => Math.round(eased * s.target));
 
-      if (progress < 1) {
-        requestAnimationFrame(tick);
-      }
+    if (progress < 1) {
+      requestAnimationFrame(tick);
     }
-
-    requestAnimationFrame(tick);
   }
 
-  onMount(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          animateCounters();
-          observer.unobserve(sectionEl);
-        }
-      },
-      { threshold: 0.3 }
-    );
-    observer.observe(sectionEl);
-    return () => observer.disconnect();
-  });
+  requestAnimationFrame(tick);
+}
 
-  function formatNumber(n: number): string {
-    return n.toLocaleString();
-  }
+onMount(() => {
+  const observer = new IntersectionObserver(
+    ([entry]) => {
+      if (entry.isIntersecting) {
+        animateCounters();
+        observer.unobserve(sectionEl);
+      }
+    },
+    { threshold: 0.3 },
+  );
+  observer.observe(sectionEl);
+  return () => observer.disconnect();
+});
+
+function formatNumber(n: number): string {
+  return n.toLocaleString();
+}
 </script>
 
 <section class="stats" bind:this={sectionEl}>

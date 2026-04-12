@@ -1,13 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ShareLink } from "../types";
 import { singleOrNull } from "../query-helpers";
+import type { ShareLink } from "../types";
 
 export async function createShareLink(
   db: SupabaseClient,
   projectId: string,
   role: "editor" | "viewer",
   createdBy: string,
-  expiresAt?: string
+  expiresAt?: string,
 ): Promise<ShareLink> {
   const { data, error } = await db
     .from("share_links")
@@ -23,10 +23,7 @@ export async function createShareLink(
   return data as ShareLink;
 }
 
-export async function listShareLinks(
-  db: SupabaseClient,
-  projectId: string
-): Promise<ShareLink[]> {
+export async function listShareLinks(db: SupabaseClient, projectId: string): Promise<ShareLink[]> {
   const { data, error } = await db
     .from("share_links")
     .select("*")
@@ -36,24 +33,11 @@ export async function listShareLinks(
   return (data ?? []) as ShareLink[];
 }
 
-export async function getShareLinkByToken(
-  db: SupabaseClient,
-  token: string
-): Promise<ShareLink | null> {
-  return singleOrNull<ShareLink>(
-    await db.from("share_links").select("*").eq("token", token).single()
-  );
+export async function getShareLinkByToken(db: SupabaseClient, token: string): Promise<ShareLink | null> {
+  return singleOrNull<ShareLink>(await db.from("share_links").select("*").eq("token", token).single());
 }
 
-export async function deleteShareLink(
-  db: SupabaseClient,
-  projectId: string,
-  token: string
-): Promise<void> {
-  const { error } = await db
-    .from("share_links")
-    .delete()
-    .eq("project_id", projectId)
-    .eq("token", token);
+export async function deleteShareLink(db: SupabaseClient, projectId: string, token: string): Promise<void> {
+  const { error } = await db.from("share_links").delete().eq("project_id", projectId).eq("token", token);
   if (error) throw error;
 }

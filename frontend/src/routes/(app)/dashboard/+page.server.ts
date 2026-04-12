@@ -1,6 +1,7 @@
-import { redirect, error, isRedirect } from "@sveltejs/kit";
+import { ApiError, createApi } from "$lib/server/api";
+import type { Project } from "$lib/types";
+import { error, redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
-import { createApi, ApiError } from "$lib/server/api";
 
 export const load: PageServerLoad = async ({ locals }) => {
   if (!locals.token) {
@@ -9,7 +10,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   const api = createApi(locals.token);
 
-  let projects;
+  let projects: Project[];
   try {
     projects = await api.listProjects();
   } catch (err) {

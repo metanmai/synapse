@@ -1,5 +1,5 @@
-import type { Env } from "../lib/env";
 import type { GoogleOAuthTokens } from "../db/types";
+import type { Env } from "../lib/env";
 
 export async function getAccessToken(env: Env, tokens: GoogleOAuthTokens): Promise<string> {
   if (Date.now() < tokens.expires_at) {
@@ -17,7 +17,7 @@ export async function getAccessToken(env: Env, tokens: GoogleOAuthTokens): Promi
     }),
   });
 
-  const data = await res.json() as { access_token?: string; expires_in?: number };
+  const data = (await res.json()) as { access_token?: string; expires_in?: number };
   if (!data.access_token) throw new Error("Failed to refresh Google token");
 
   tokens.access_token = data.access_token;

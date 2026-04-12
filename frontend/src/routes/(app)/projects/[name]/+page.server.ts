@@ -1,6 +1,6 @@
+import { createApi } from "$lib/server/api";
 import { fail } from "@sveltejs/kit";
 import type { Actions } from "./$types";
-import { createApi } from "$lib/server/api";
 
 export const actions: Actions = {
   saveEntry: async ({ request, params, locals }) => {
@@ -8,7 +8,12 @@ export const actions: Actions = {
     const path = (data.get("path") as string)?.trim();
     const content = data.get("content") as string;
     const tagsRaw = data.get("tags") as string;
-    const tags = tagsRaw ? tagsRaw.split(",").map((t) => t.trim()).filter(Boolean) : [];
+    const tags = tagsRaw
+      ? tagsRaw
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : [];
 
     if (!path) return fail(400, { error: "Path is required" });
 

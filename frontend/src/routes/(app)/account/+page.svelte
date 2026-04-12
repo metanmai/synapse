@@ -1,9 +1,9 @@
 <script>
-  import ApiKeysCard from "$lib/components/account/ApiKeysCard.svelte";
-  import ConnectedAccounts from "$lib/components/account/ConnectedAccounts.svelte";
-  import BillingCard from "$lib/components/account/BillingCard.svelte";
+import ApiKeysCard from "$lib/components/account/ApiKeysCard.svelte";
+import BillingCard from "$lib/components/account/BillingCard.svelte";
+import ConnectedAccounts from "$lib/components/account/ConnectedAccounts.svelte";
 
-  let { data, form } = $props();
+let { data, form } = $props();
 </script>
 
 <div class="max-w-2xl mx-auto p-8">

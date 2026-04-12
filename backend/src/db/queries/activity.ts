@@ -4,8 +4,8 @@ import type { ActivityLogEntry } from "../types";
 export async function getActivityLog(
   db: SupabaseClient,
   projectId: string,
-  limit: number = 50,
-  offset: number = 0
+  limit = 50,
+  offset = 0,
 ): Promise<ActivityLogEntry[]> {
   const { data, error } = await db
     .from("activity_log")

@@ -1,6 +1,6 @@
+import { createApi } from "$lib/server/api";
 import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
-import { createApi } from "$lib/server/api";
 
 export const load: PageServerLoad = async ({ params, locals }) => {
   const api = createApi(locals.token);

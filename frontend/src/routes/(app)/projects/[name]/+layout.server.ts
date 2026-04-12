@@ -1,13 +1,14 @@
+import { ApiError, createApi } from "$lib/server/api";
+import type { EntryListItem, Project } from "$lib/types";
 import { error } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
-import { createApi, ApiError } from "$lib/server/api";
 
 export const load: LayoutServerLoad = async ({ params, locals, depends }) => {
   depends("app:project");
 
   const api = createApi(locals.token);
 
-  let projects;
+  let projects: Project[];
   try {
     projects = await api.listProjects();
   } catch (err) {
@@ -36,7 +37,7 @@ export const load: LayoutServerLoad = async ({ params, locals, depends }) => {
 
   if (!project) error(404, `Project "${decodedName}" not found. You have ${projects.length} project(s).`);
 
-  let entries;
+  let entries: EntryListItem[];
   try {
     entries = await api.listEntries(params.name);
   } catch (err) {

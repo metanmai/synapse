@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { type SupabaseClient, createClient } from "@supabase/supabase-js";
 import type { Env } from "../lib/env";
 
 export function createSupabaseClient(env: Env): SupabaseClient {

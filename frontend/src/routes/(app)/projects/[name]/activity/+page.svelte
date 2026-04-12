@@ -1,7 +1,7 @@
 <script>
-  import ActivityFeed from "$lib/components/activity/ActivityFeed.svelte";
+import ActivityFeed from "$lib/components/activity/ActivityFeed.svelte";
 
-  let { data } = $props();
+let { data } = $props();
 </script>
 
 <div class="max-w-3xl p-6">

@@ -1,10 +1,10 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { createSupabaseClient } from "../../db/client";
 import { getProjectByName } from "../../db/queries";
-import { syncProjectToGoogle } from "../../sync/to-google";
 import { syncProjectFromGoogle } from "../../sync/from-google";
+import { syncProjectToGoogle } from "../../sync/to-google";
 
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
@@ -34,7 +34,7 @@ export function registerGoogleSyncTools(server: McpServer, env: Env, getContext:
           content: [{ type: "text", text: `Sync failed: ${message}` }],
         };
       }
-    }
+    },
   );
 
   server.tool(
@@ -61,6 +61,6 @@ export function registerGoogleSyncTools(server: McpServer, env: Env, getContext:
           content: [{ type: "text", text: `Sync failed: ${message}` }],
         };
       }
-    }
+    },
   );
 }

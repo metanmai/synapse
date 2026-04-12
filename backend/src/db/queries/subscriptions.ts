@@ -1,11 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Subscription } from "../types";
 import { singleOrNull } from "../query-helpers";
+import type { Subscription } from "../types";
 
-export async function getActiveSubscription(
-  db: SupabaseClient,
-  userId: string
-): Promise<Subscription | null> {
+export async function getActiveSubscription(db: SupabaseClient, userId: string): Promise<Subscription | null> {
   // Matches active or past_due (past_due retains Pro access per spec)
   const { data, error } = await db
     .from("subscriptions")
@@ -20,10 +17,7 @@ export async function getActiveSubscription(
   return data as Subscription | null;
 }
 
-export async function getSubscriptionByUserId(
-  db: SupabaseClient,
-  userId: string
-): Promise<Subscription | null> {
+export async function getSubscriptionByUserId(db: SupabaseClient, userId: string): Promise<Subscription | null> {
   const { data, error } = await db
     .from("subscriptions")
     .select("*")
@@ -38,14 +32,10 @@ export async function getSubscriptionByUserId(
 
 export async function getSubscriptionByProviderId(
   db: SupabaseClient,
-  providerSubscriptionId: string
+  providerSubscriptionId: string,
 ): Promise<Subscription | null> {
   return singleOrNull<Subscription>(
-    await db
-      .from("subscriptions")
-      .select("*")
-      .eq("provider_subscription_id", providerSubscriptionId)
-      .single()
+    await db.from("subscriptions").select("*").eq("provider_subscription_id", providerSubscriptionId).single(),
   );
 }
 
@@ -59,7 +49,7 @@ export async function upsertSubscription(
     status: Subscription["status"];
     current_period_end?: string | null;
     cancel_at_period_end?: boolean;
-  }
+  },
 ): Promise<Subscription> {
   const { data, error } = await db
     .from("subscriptions")
@@ -74,7 +64,7 @@ export async function upsertSubscription(
         cancel_at_period_end: params.cancel_at_period_end ?? false,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "provider_subscription_id" }
+      { onConflict: "provider_subscription_id" },
     )
     .select()
     .single();

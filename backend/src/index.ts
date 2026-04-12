@@ -1,15 +1,15 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { account, auth } from "./api/auth";
+import { billing } from "./api/billing";
+import { context } from "./api/context";
+import { projects } from "./api/projects";
+import { share } from "./api/share";
+import { sync } from "./api/sync";
 import type { Env } from "./lib/env";
 import { envList } from "./lib/env";
 import { AppError } from "./lib/errors";
 import { rateLimit } from "./lib/rate-limit";
-import { auth, account } from "./api/auth";
-import { context } from "./api/context";
-import { projects } from "./api/projects";
-import { sync } from "./api/sync";
-import { share } from "./api/share";
-import { billing } from "./api/billing";
 import { SynapseAgent } from "./mcp/agent";
 import { runScheduledGoogleSync } from "./sync/from-google";
 
@@ -17,7 +17,11 @@ const app = new Hono<{ Bindings: Env }>();
 
 // CORS for frontend
 app.use("*", (c, next) => {
-  const origins = envList(c.env, "CORS_ORIGINS", "http://localhost:5173,https://synapsesync.app,https://synapse-7mq.pages.dev");
+  const origins = envList(
+    c.env,
+    "CORS_ORIGINS",
+    "http://localhost:5173,https://synapsesync.app,https://synapse-7mq.pages.dev",
+  );
   return cors({
     origin: origins,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -34,12 +38,15 @@ app.onError((err, c) => {
     return c.json({ error: err.message, code: err.code }, err.status as 400 | 401 | 403 | 404 | 409 | 410 | 500);
   }
   console.error(`[error] ${c.req.method} ${c.req.path}:`, err.message, err.stack);
-  return c.json({
-    error: err.message || "Internal server error",
-    code: "INTERNAL_ERROR",
-    detail: String(err),
-    path: c.req.path,
-  }, 500);
+  return c.json(
+    {
+      error: err.message || "Internal server error",
+      code: "INTERNAL_ERROR",
+      detail: String(err),
+      path: c.req.path,
+    },
+    500,
+  );
 });
 
 app.get("/health", (c) => c.json({ status: "ok", service: "synapse" }));
@@ -64,7 +71,7 @@ export { SynapseAgent };
 // Default export for Cloudflare Workers
 export default {
   fetch: app.fetch,
-  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(runScheduledGoogleSync(env));
   },
 };

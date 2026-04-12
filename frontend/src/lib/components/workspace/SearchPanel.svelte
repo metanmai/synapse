@@ -1,11 +1,11 @@
 <script lang="ts">
-  import type { Entry } from "$lib/types";
+import type { Entry } from "$lib/types";
 
-  let { results, query, projectName } = $props<{
-    results: Entry[] | null;
-    query: string | null;
-    projectName: string;
-  }>();
+let { results, query, projectName } = $props<{
+  results: Entry[] | null;
+  query: string | null;
+  projectName: string;
+}>();
 </script>
 
 <div class="space-y-3">

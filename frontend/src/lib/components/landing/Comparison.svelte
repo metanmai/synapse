@@ -1,24 +1,24 @@
 <script>
-  import ScrollReveal from "./ScrollReveal.svelte";
+import ScrollReveal from "./ScrollReveal.svelte";
 
-  const rows = [
-    {
-      without: "Every session starts fresh",
-      with: "Context persists across sessions",
-    },
-    {
-      without: "Switch tools, lose context",
-      with: "All tools share one brain",
-    },
-    {
-      without: "Manual notes and docs",
-      with: "Automatic context capture",
-    },
-    {
-      without: "No version history",
-      with: "Full history with restore",
-    },
-  ];
+const rows = [
+  {
+    without: "Every session starts fresh",
+    with: "Context persists across sessions",
+  },
+  {
+    without: "Switch tools, lose context",
+    with: "All tools share one brain",
+  },
+  {
+    without: "Manual notes and docs",
+    with: "Automatic context capture",
+  },
+  {
+    without: "No version history",
+    with: "Full history with restore",
+  },
+];
 </script>
 
 <section class="comparison">

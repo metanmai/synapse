@@ -1,29 +1,29 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
-  import { page } from "$app/stores";
+import { enhance } from "$app/forms";
+import { page } from "$app/stores";
 
-  let { billing } = $props<{
-    billing: {
-      tier: "free" | "pro";
-      subscription: {
-        status: string;
-        current_period_end: string | null;
-        cancel_at_period_end: boolean;
-      } | null;
-    };
-  }>();
+let { billing } = $props<{
+  billing: {
+    tier: "free" | "pro";
+    subscription: {
+      status: string;
+      current_period_end: string | null;
+      cancel_at_period_end: boolean;
+    } | null;
+  };
+}>();
 
-  let showUpgradeSuccess = $state($page.url.searchParams.has("upgraded"));
+let showUpgradeSuccess = $state($page.url.searchParams.has("upgraded"));
 
-  const renewalDate = $derived(
-    billing.subscription?.current_period_end
-      ? new Date(billing.subscription.current_period_end).toLocaleDateString("en-US", {
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        })
-      : null
-  );
+const renewalDate = $derived(
+  billing.subscription?.current_period_end
+    ? new Date(billing.subscription.current_period_end).toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null,
+);
 </script>
 
 <div

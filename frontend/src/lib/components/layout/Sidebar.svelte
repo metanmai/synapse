@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { page } from "$app/stores";
+import { page } from "$app/stores";
 
-  let { projectName } = $props<{ projectName: string }>();
+let { projectName } = $props<{ projectName: string }>();
 
-  const links = $derived([
-    { href: `/projects/${encodeURIComponent(projectName)}`, label: "Workspace", exact: true },
-    { href: `/projects/${encodeURIComponent(projectName)}/settings`, label: "Settings" },
-    { href: `/projects/${encodeURIComponent(projectName)}/activity`, label: "Activity" },
-  ]);
+const links = $derived([
+  { href: `/projects/${encodeURIComponent(projectName)}`, label: "Workspace", exact: true },
+  { href: `/projects/${encodeURIComponent(projectName)}/settings`, label: "Settings" },
+  { href: `/projects/${encodeURIComponent(projectName)}/activity`, label: "Activity" },
+]);
 </script>
 
 <nav class="w-40 p-3 space-y-0.5"

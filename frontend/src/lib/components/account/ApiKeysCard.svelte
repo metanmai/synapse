@@ -1,33 +1,33 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
+import { enhance } from "$app/forms";
 
-  let { keys, newKey, keyError } = $props<{
-    keys: {
-      id: string;
-      label: string;
-      expires_at: string | null;
-      last_used_at: string | null;
-      created_at: string;
-    }[];
-    newKey?: { id: string; label: string; api_key: string } | null;
-    keyError?: string | null;
-  }>();
+let { keys, newKey, keyError } = $props<{
+  keys: {
+    id: string;
+    label: string;
+    expires_at: string | null;
+    last_used_at: string | null;
+    created_at: string;
+  }[];
+  newKey?: { id: string; label: string; api_key: string } | null;
+  keyError?: string | null;
+}>();
 
-  let showCreateForm = $state(false);
+let showCreateForm = $state(false);
 
-  function formatDate(dateStr: string | null): string {
-    if (!dateStr) return "Never";
-    return new Date(dateStr).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return "Never";
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
-  function isExpired(expiresAt: string | null): boolean {
-    if (!expiresAt) return false;
-    return new Date(expiresAt) < new Date();
-  }
+function isExpired(expiresAt: string | null): boolean {
+  if (!expiresAt) return false;
+  return new Date(expiresAt) < new Date();
+}
 </script>
 
 <div

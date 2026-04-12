@@ -25,7 +25,7 @@ function hexEncode(buf: ArrayBuffer): string {
 function hexDecode(hex: string): Uint8Array {
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
   return bytes;
 }
@@ -55,13 +55,7 @@ export function clearPassphrase(): void {
 
 async function deriveKey(passphrase: string, salt: string): Promise<CryptoKey> {
   const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(passphrase),
-    "PBKDF2",
-    false,
-    ["deriveKey"]
-  );
+  const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(passphrase), "PBKDF2", false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
@@ -72,7 +66,7 @@ async function deriveKey(passphrase: string, salt: string): Promise<CryptoKey> {
     keyMaterial,
     { name: ALGORITHM, length: KEY_LENGTH },
     false,
-    ["encrypt", "decrypt"]
+    ["encrypt", "decrypt"],
   );
 }
 
@@ -88,11 +82,7 @@ export async function encrypt(plaintext: string, userEmail: string): Promise<str
   const key = await getKey(userEmail);
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
   const encoded = new TextEncoder().encode(plaintext);
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: ALGORITHM, iv },
-    key,
-    encoded
-  );
+  const ciphertext = await crypto.subtle.encrypt({ name: ALGORITHM, iv }, key, encoded);
   const ivHex = hexEncode(iv);
   const ctBase64 = btoa(String.fromCharCode(...new Uint8Array(ciphertext)));
   return `${PREFIX}${ivHex}:${ctBase64}`;
@@ -110,10 +100,6 @@ export async function decrypt(encrypted: string, userEmail: string): Promise<str
   const iv = hexDecode(ivHex);
   const ciphertext = Uint8Array.from(atob(ctBase64), (c) => c.charCodeAt(0));
 
-  const decrypted = await crypto.subtle.decrypt(
-    { name: ALGORITHM, iv },
-    key,
-    ciphertext
-  );
+  const decrypted = await crypto.subtle.decrypt({ name: ALGORITHM, iv }, key, ciphertext);
   return new TextDecoder().decode(decrypted);
 }

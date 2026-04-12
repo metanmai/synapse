@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+import { onMount } from "svelte";
 
-  let mobileOpen = $state(false);
-  let scrolled = $state(false);
+let mobileOpen = $state(false);
+let scrolled = $state(false);
 
-  onMount(() => {
-    const handleScroll = () => {
-      scrolled = window.scrollY > 20;
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  });
+onMount(() => {
+  const handleScroll = () => {
+    scrolled = window.scrollY > 20;
+  };
+  window.addEventListener("scroll", handleScroll, { passive: true });
+  return () => window.removeEventListener("scroll", handleScroll);
+});
 </script>
 
 <nav class="landing-nav" class:scrolled>

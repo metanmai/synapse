@@ -1,11 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UserPreferences } from "../types";
 
-export async function getPreferences(
-  db: SupabaseClient,
-  userId: string,
-  projectId: string
-): Promise<UserPreferences> {
+export async function getPreferences(db: SupabaseClient, userId: string, projectId: string): Promise<UserPreferences> {
   const { data, error } = await db
     .from("user_preferences")
     .select("*")
@@ -31,7 +27,7 @@ export async function setPreference(
   userId: string,
   projectId: string,
   key: string,
-  value: string
+  value: string,
 ): Promise<UserPreferences | { google_drive_folder_id: string }> {
   // google_drive_folder_id is stored on the project, not user_preferences
   if (key === "google_drive_folder_id") {
@@ -51,7 +47,9 @@ export async function setPreference(
   };
 
   if (!(key in validKeys)) {
-    throw new Error(`Invalid preference key: ${key}. Valid keys: ${Object.keys(validKeys).join(", ")}, google_drive_folder_id`);
+    throw new Error(
+      `Invalid preference key: ${key}. Valid keys: ${Object.keys(validKeys).join(", ")}, google_drive_folder_id`,
+    );
   }
 
   if (!validKeys[key].includes(value)) {
@@ -60,10 +58,7 @@ export async function setPreference(
 
   const { data, error } = await db
     .from("user_preferences")
-    .upsert(
-      { user_id: userId, project_id: projectId, [key]: value },
-      { onConflict: "user_id,project_id" }
-    )
+    .upsert({ user_id: userId, project_id: projectId, [key]: value }, { onConflict: "user_id,project_id" })
     .select()
     .single();
   if (error) throw error;

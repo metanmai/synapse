@@ -1,13 +1,27 @@
 import { Hono } from "hono";
 
-import { authMiddleware } from "../lib/auth";
-import { createSupabaseClient } from "../db/client";
-import { getProjectByName, upsertEntry, getEntry, listEntries, searchEntries, getRecentEntries, getAllEntries, getEntryHistory, restoreEntry, getPreferences, deleteEntry, countEntries, countUniqueConnections } from "../db/queries";
 import { logActivity } from "../db/activity-logger";
-import { NotFoundError, AppError } from "../lib/errors";
+import { createSupabaseClient } from "../db/client";
+import {
+  countEntries,
+  countUniqueConnections,
+  deleteEntry,
+  getAllEntries,
+  getEntry,
+  getEntryHistory,
+  getPreferences,
+  getProjectByName,
+  getRecentEntries,
+  listEntries,
+  restoreEntry,
+  searchEntries,
+  upsertEntry,
+} from "../db/queries";
+import { authMiddleware } from "../lib/auth";
 import { envList } from "../lib/env";
-import { enforceFileLimit, enforceConnectionLimit, getHistoryLimit } from "../lib/tier";
+import { AppError, NotFoundError } from "../lib/errors";
 import { idempotency } from "../lib/idempotency";
+import { enforceConnectionLimit, enforceFileLimit, getHistoryLimit } from "../lib/tier";
 
 import type { Env } from "../lib/env";
 
@@ -43,7 +57,12 @@ context.post("/save", async (c) => {
   }
 
   const entry = await upsertEntry(db, {
-    project_id: proj.id, path, content, tags, author_id: user.id, source: entrySource,
+    project_id: proj.id,
+    path,
+    content,
+    tags,
+    author_id: user.id,
+    source: entrySource,
   });
   await logActivity(db, {
     project_id: proj.id,
@@ -58,7 +77,7 @@ context.post("/save", async (c) => {
 // POST /api/context/session-summary
 context.post("/session-summary", async (c) => {
   const user = c.get("user");
-  const { project, summary, decisions, pending } = await c.req.json();
+  const { project, summary, decisions: _decisions, pending } = await c.req.json();
   if (!project || !summary) {
     throw new AppError("project and summary are required", 400, "VALIDATION_ERROR");
   }
@@ -68,7 +87,10 @@ context.post("/session-summary", async (c) => {
   if (!proj) throw new NotFoundError(`Project "${project}" not found`);
 
   const date = new Date().toISOString().split("T")[0];
-  const slug = summary.slice(0, 40).replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  const slug = summary
+    .slice(0, 40)
+    .replace(/[^a-z0-9]+/gi, "-")
+    .toLowerCase();
   const path = `context/session-summaries/${date}-${slug}.md`;
 
   let fullContent = `# Session Summary — ${date}\n\n${summary}`;
@@ -77,8 +99,12 @@ context.post("/session-summary", async (c) => {
   }
 
   const entry = await upsertEntry(db, {
-    project_id: proj.id, path, content: fullContent, tags: ["session-summary"],
-    author_id: user.id, source: "human",
+    project_id: proj.id,
+    path,
+    content: fullContent,
+    tags: ["session-summary"],
+    author_id: user.id,
+    source: "human",
   });
   await logActivity(db, {
     project_id: proj.id,
@@ -104,8 +130,12 @@ context.post("/file", async (c) => {
   if (!proj) throw new NotFoundError(`Project "${project}" not found`);
 
   const entry = await upsertEntry(db, {
-    project_id: proj.id, path, content, content_type: content_type ?? "markdown",
-    author_id: user.id, source: "human",
+    project_id: proj.id,
+    path,
+    content,
+    content_type: content_type ?? "markdown",
+    author_id: user.id,
+    source: "human",
   });
   await logActivity(db, {
     project_id: proj.id,

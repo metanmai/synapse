@@ -1,11 +1,11 @@
 import { Hono } from "hono";
-import type { Env } from "../lib/env";
-import { authMiddleware } from "../lib/auth";
 import { createSupabaseClient } from "../db/client";
 import { getProjectByName } from "../db/queries/projects";
-import { syncProjectToGoogle } from "../sync/to-google";
-import { syncProjectFromGoogle } from "../sync/from-google";
+import { authMiddleware } from "../lib/auth";
+import type { Env } from "../lib/env";
 import { NotFoundError } from "../lib/errors";
+import { syncProjectFromGoogle } from "../sync/from-google";
+import { syncProjectToGoogle } from "../sync/to-google";
 
 const sync = new Hono<{ Bindings: Env }>();
 sync.use("*", authMiddleware);

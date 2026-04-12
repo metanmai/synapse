@@ -1,4 +1,4 @@
-import { Context, Next } from "hono";
+import type { Context, Next } from "hono";
 import type { Env } from "./env";
 
 // In-memory idempotency cache (per-isolate, TTL 24 hours)

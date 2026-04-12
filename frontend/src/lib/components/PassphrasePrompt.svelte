@@ -1,21 +1,21 @@
 <script lang="ts">
-  import { setPassphrase } from "$lib/crypto";
+import { setPassphrase } from "$lib/crypto";
 
-  let { onUnlock } = $props<{ onUnlock: () => void }>();
-  let value = $state("");
-  let isNew = $state(false);
-  let confirm = $state("");
-  let error = $state("");
+let { onUnlock } = $props<{ onUnlock: () => void }>();
+let value = $state("");
+let isNew = $state(false);
+let confirm = $state("");
+let error = $state("");
 
-  function submit() {
-    if (!value) return;
-    if (isNew && value !== confirm) {
-      error = "Passphrases don't match";
-      return;
-    }
-    setPassphrase(value);
-    onUnlock();
+function submit() {
+  if (!value) return;
+  if (isNew && value !== confirm) {
+    error = "Passphrases don't match";
+    return;
   }
+  setPassphrase(value);
+  onUnlock();
+}
 </script>
 
 <div class="fixed inset-0 flex items-center justify-center z-50"

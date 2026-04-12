@@ -1,7 +1,7 @@
 <script>
-  import VersionTimeline from "$lib/components/activity/VersionTimeline.svelte";
+import VersionTimeline from "$lib/components/activity/VersionTimeline.svelte";
 
-  let { data } = $props();
+let { data } = $props();
 </script>
 
 <div class="max-w-3xl p-6">

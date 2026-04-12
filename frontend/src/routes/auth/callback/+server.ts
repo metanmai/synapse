@@ -1,6 +1,6 @@
+import { getSupabase } from "$lib/server/auth";
 import { redirect } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
-import { getSupabase } from "$lib/server/auth";
 
 export const GET: RequestHandler = async ({ url, cookies }) => {
   const code = url.searchParams.get("code");
