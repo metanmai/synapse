@@ -7,7 +7,7 @@ import { useProjects } from "../hooks/useProjects";
 export function ActivityPage() {
   const { name } = useParams<{ name: string }>();
   const { data: projects = [] } = useProjects();
-  const project = projects.find((p: any) => p.name === name);
+  const project = projects.find((p) => p.name === name);
   const { data: activity = [] } = useActivity(project?.id ?? "");
 
   return (
