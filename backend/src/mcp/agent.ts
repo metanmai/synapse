@@ -37,9 +37,9 @@ export class SynapseAgent extends (McpAgent as AnyMcpAgent) {
       const apiKey = authHeader.slice(7);
       const apiKeyHash = await hashApiKey(apiKey);
       const db = createSupabaseClient(self.env as Env);
-      const user = await findUserByApiKeyHash(db, apiKeyHash);
-      if (user) {
-        this.userId = user.id;
+      const result = await findUserByApiKeyHash(db, apiKeyHash);
+      if (result) {
+        this.userId = result.user.id;
       }
     }
 
