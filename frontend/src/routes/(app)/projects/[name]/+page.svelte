@@ -186,7 +186,7 @@
 
     {#if form?.importResult}
       <div class="rounded-lg p-3 text-sm mt-4"
-        style="background-color: var(--color-success-bg, #ecfdf5); color: var(--color-success, #065f46);">
+        style="background-color: var(--color-success-bg); color: var(--color-success);">
         Import complete: {form.importResult.imported} new, {form.importResult.updated} updated, {form.importResult.skipped} skipped
       </div>
     {/if}
