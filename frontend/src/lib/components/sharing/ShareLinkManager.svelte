@@ -2,7 +2,7 @@
 import { enhance } from "$app/forms";
 import type { ShareLink } from "$lib/types";
 
-let { links, projectId } = $props<{ links: ShareLink[]; projectId: string }>();
+let { links, projectId, tier = "free" } = $props<{ links: ShareLink[]; projectId: string; tier?: "free" | "plus" }>();
 let copied = $state<string | null>(null);
 
 function copyLink(token: string) {
@@ -13,24 +13,34 @@ function copyLink(token: string) {
 </script>
 
 <div>
-  <div class="flex gap-2 mb-4">
-    <form method="POST" action="?/createLink" use:enhance>
-      <input type="hidden" name="projectId" value={projectId} />
-      <input type="hidden" name="role" value="viewer" />
-      <button type="submit" class="rounded-lg px-3 py-2 text-sm cursor-pointer"
-        style="border: 1px solid var(--color-pink); color: var(--color-pink-dark);">
-        Create viewer link
-      </button>
-    </form>
-    <form method="POST" action="?/createLink" use:enhance>
-      <input type="hidden" name="projectId" value={projectId} />
-      <input type="hidden" name="role" value="editor" />
-      <button type="submit" class="rounded-lg px-3 py-2 text-sm cursor-pointer"
-        style="border: 1px solid var(--color-pink); color: var(--color-pink-dark);">
-        Create editor link
-      </button>
-    </form>
-  </div>
+  {#if tier === "plus"}
+    <div class="flex gap-2 mb-4">
+      <form method="POST" action="?/createLink" use:enhance>
+        <input type="hidden" name="projectId" value={projectId} />
+        <input type="hidden" name="role" value="viewer" />
+        <button type="submit" class="btn-secondary cursor-pointer" style="font-size: 13px;">
+          Create viewer link
+        </button>
+      </form>
+      <form method="POST" action="?/createLink" use:enhance>
+        <input type="hidden" name="projectId" value={projectId} />
+        <input type="hidden" name="role" value="editor" />
+        <button type="submit" class="btn-secondary cursor-pointer" style="font-size: 13px;">
+          Create editor link
+        </button>
+      </form>
+    </div>
+  {:else}
+    <div class="mb-4 p-3 rounded-xl text-sm" style="background: rgba(86, 28, 36, 0.04); border: 1px solid var(--color-border);">
+      <p style="color: var(--color-text);">Share links are available on the <strong>Plus</strong> plan.</p>
+      <p style="color: var(--color-text-muted); font-size: 12px; margin-top: 4px;">
+        Free tier: invite up to 2 people by email from project settings.
+      </p>
+      <a href="/account" class="btn-primary cursor-pointer" style="font-size: 12px; padding: 8px 20px; display: inline-block; margin-top: 8px; text-decoration: none;">
+        Upgrade to Plus
+      </a>
+    </div>
+  {/if}
 
   <div class="space-y-2">
     {#each links as link}

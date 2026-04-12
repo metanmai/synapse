@@ -19,6 +19,6 @@ let { data, form } = $props();
 
   <section class="mb-8">
     <h2 class="text-lg font-medium mb-3">Share Links</h2>
-    <ShareLinkManager links={data.shareLinks} projectId={data.project.id} />
+    <ShareLinkManager links={data.shareLinks} projectId={data.project.id} tier={data.tier} />
   </section>
 </div>
