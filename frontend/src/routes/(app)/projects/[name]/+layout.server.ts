@@ -2,7 +2,10 @@ import { error } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
 import { createApi } from "$lib/server/api";
 
-export const load: LayoutServerLoad = async ({ params, locals }) => {
+export const load: LayoutServerLoad = async ({ params, locals, depends }) => {
+  // Only re-run this layout when explicitly invalidated, not on every navigation
+  depends("app:project");
+
   const api = createApi(locals.token);
 
   // First get the project
