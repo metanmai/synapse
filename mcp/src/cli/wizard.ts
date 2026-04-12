@@ -1,7 +1,7 @@
 import * as clack from "@clack/prompts";
 import { browserAuth } from "./browser-auth.js";
 import type { SetupScope } from "./editors.js";
-import { detectEditors, writeEditorConfigs } from "./editors.js";
+import { detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors.js";
 import { createGlyphSpinner } from "./spinner.js";
 import { accent, bold, muted, success, error as themeError } from "./theme.js";
 import { showWelcome } from "./welcome.js";
@@ -10,9 +10,47 @@ export async function runWizard(version: string): Promise<void> {
   // Step 1: Animated welcome
   await showWelcome(version);
 
-  // Step 2: Auth method
   clack.intro(`${accent("\u25C6")} ${bold("Synapse setup")}`);
 
+  // Check for existing setup
+  const existing = detectExistingSetup();
+  if (existing.configured) {
+    const locations = existing.locations.map((l) => `  ${muted(l)}`).join("\n");
+    clack.log.warn(`Synapse is already configured:\n${locations}`);
+
+    const action = await clack.select({
+      message: "What would you like to do?",
+      options: [
+        { value: "reconfigure" as const, label: "Reconfigure", hint: "new API key + choose editors" },
+        { value: "add" as const, label: "Add more editors", hint: "keep current API key, add editors" },
+        { value: "cancel" as const, label: "Cancel" },
+      ],
+    });
+
+    if (clack.isCancel(action) || action === "cancel") {
+      clack.cancel("No changes made.");
+      process.exit(0);
+    }
+
+    if (action === "add") {
+      // Skip auth — ask for existing API key or read from .mcp.json
+      clack.log.info("Paste your existing API key to configure additional editors.");
+      const key = await clack.password({
+        message: "API key",
+        validate: (v) => (v?.trim() ? undefined : "Required"),
+      });
+      if (clack.isCancel(key)) {
+        clack.cancel("Cancelled.");
+        process.exit(0);
+      }
+      await runEditorSetup(key.trim());
+      return;
+    }
+
+    // action === "reconfigure" — fall through to full wizard
+  }
+
+  // Step 2: Auth method
   const authMethod = await clack.select({
     message: "How do you want to connect?",
     options: [
@@ -64,7 +102,11 @@ export async function runWizard(version: string): Promise<void> {
     apiKey = key.trim();
   }
 
-  // Step 5: Scope
+  await runEditorSetup(apiKey);
+}
+
+async function runEditorSetup(apiKey: string): Promise<void> {
+  // Scope
   const scope = await clack.select({
     message: "Where should Synapse be configured?",
     options: [
@@ -78,7 +120,7 @@ export async function runWizard(version: string): Promise<void> {
     process.exit(0);
   }
 
-  // Step 6: Editor selection
+  // Editor selection
   const allEditors = detectEditors(scope as SetupScope);
   const editorChoice = await clack.multiselect({
     message: "Which tools should Synapse connect to?",
@@ -98,7 +140,7 @@ export async function runWizard(version: string): Promise<void> {
 
   const selectedEditors = allEditors.filter((e) => (editorChoice as string[]).includes(e.id));
 
-  // Step 6: Confirmation
+  // Confirmation
   const filePreview = selectedEditors.map((e) => `  ${muted(e.hint)}`).join("\n");
   clack.log.message(`Files to create/update:\n${filePreview}`);
 
@@ -117,7 +159,7 @@ export async function runWizard(version: string): Promise<void> {
   const result = writeEditorConfigs(selectedEditors, apiKey);
   configSpin.stop("Config files written");
 
-  // Step 7: Success summary
+  // Success summary
   if (result.written.length > 0) {
     const summary = result.written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
     clack.log.message(summary);
