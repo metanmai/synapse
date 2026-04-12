@@ -20,7 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### MCP package
 
-Publish release notes for **synapsesync-mcp** in [GitHub Releases](https://github.com/tanmain/synapse/releases) or here under a dedicated subsection when you cut npm tags (e.g. `mcp-v*` per `.github/workflows/publish.yml`).
+Publish release notes for **synapsesync-mcp** in [GitHub Releases](https://github.com/metanmai/synapse/releases) or here under a dedicated subsection when you cut npm tags (e.g. `mcp-v*` per `.github/workflows/publish.yml`).
 
 <!-- Example:
 ## [0.2.0] - 2026-03-01
