@@ -12,7 +12,12 @@
       "role": "model",
       "content": [
         { "type": "text", "text": "I'll create a migration for the users table with the required columns." },
-        { "type": "tool_use", "toolName": "code_execution", "input": { "code": "CREATE TABLE users ..." }, "output": { "result": "Migration created" } }
+        {
+          "type": "tool_use",
+          "toolName": "code_execution",
+          "input": { "code": "CREATE TABLE users ..." },
+          "output": { "result": "Migration created" }
+        }
       ],
       "timestamp": "2026-04-02T10:00:10Z",
       "metadata": { "model": "gemini-2.0-flash", "tokens": { "input": 200, "output": 80 } }
