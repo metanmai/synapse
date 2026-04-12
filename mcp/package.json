@@ -10,7 +10,7 @@
     "build": "tsc && node ./scripts/add-shebang.mjs",
     "typecheck": "tsc --noEmit",
     "start": "node dist/index.js",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm install && npm run build"
   },
   "keywords": ["mcp", "synapse", "ai", "context", "claude", "chatgpt", "cursor"],
   "homepage": "https://synapsesync.app",
