@@ -15,15 +15,33 @@ import {
   listEntries,
   restoreEntry,
   searchEntries,
+  updateEmbedding,
   upsertEntry,
 } from "../db/queries";
 import { authMiddleware } from "../lib/auth";
+import { embeddingConfigFromEnv, embedTexts } from "../lib/embeddings";
 import { envList } from "../lib/env";
 import { AppError, NotFoundError } from "../lib/errors";
 import { idempotency } from "../lib/idempotency";
 import { enforceConnectionLimit, enforceFileLimit, getHistoryLimit } from "../lib/tier";
 
 import type { Env } from "../lib/env";
+
+/** Fire-and-forget: embed entry content and save the vector. */
+async function embedAndUpdate(
+  env: Env,
+  db: ReturnType<typeof createSupabaseClient>,
+  entryId: string,
+  path: string,
+  content: string,
+): Promise<void> {
+  const config = embeddingConfigFromEnv(env);
+  const textToEmbed = `${path}\n\n${content}`;
+  const vectors = await embedTexts([textToEmbed], "search_document", config);
+  if (vectors?.[0]) {
+    await updateEmbedding(db, entryId, vectors[0]);
+  }
+}
 
 const context = new Hono<{ Bindings: Env }>();
 context.use("*", authMiddleware);
@@ -71,6 +89,10 @@ context.post("/save", async (c) => {
     target_path: path,
     source: entrySource,
   });
+
+  // Fire-and-forget embedding (runs after response via waitUntil)
+  c.executionCtx.waitUntil(embedAndUpdate(c.env, db, entry.id, path, content));
+
   return c.json(entry, 201);
 });
 
@@ -114,6 +136,8 @@ context.post("/session-summary", async (c) => {
     source: "human",
   });
 
+  c.executionCtx.waitUntil(embedAndUpdate(c.env, db, entry.id, path, fullContent));
+
   return c.json(entry, 201);
 });
 
@@ -144,6 +168,9 @@ context.post("/file", async (c) => {
     target_path: path,
     source: "human",
   });
+
+  c.executionCtx.waitUntil(embedAndUpdate(c.env, db, entry.id, path, content));
+
   return c.json(entry, 201);
 });
 
@@ -161,7 +188,12 @@ context.get("/:project/search", async (c) => {
   const proj = await getProjectByName(db, projectName, user.id);
   if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
 
-  const results = await searchEntries(db, proj.id, query, { tags, folder });
+  // Embed the query for semantic search (returns null if service unavailable)
+  const config = embeddingConfigFromEnv(c.env);
+  const vectors = await embedTexts([query], "search_query", config);
+  const queryEmbedding = vectors?.[0] ?? null;
+
+  const results = await searchEntries(db, proj.id, query, { tags, folder }, queryEmbedding);
   return c.json(results);
 });
 
@@ -262,6 +294,8 @@ context.post("/:project/restore", async (c) => {
     source: "human",
     metadata: { restored_from: historyId },
   });
+
+  c.executionCtx.waitUntil(embedAndUpdate(c.env, db, entry.id, path, entry.content));
 
   return c.json(entry);
 });
