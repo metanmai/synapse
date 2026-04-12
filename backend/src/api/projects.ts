@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 
 import { logActivity } from "../db/activity-logger";
-import { createSupabaseClient } from "../db/client";
 import {
   addMember,
   countEntries,
@@ -12,7 +11,6 @@ import {
   findUserByEmail,
   getActivityLog,
   getAllEntries,
-  getMemberRole,
   getProjectByName,
   listProjectsForUser,
   listShareLinks,
@@ -20,13 +18,15 @@ import {
   setPreference,
 } from "../db/queries";
 import { authMiddleware } from "../lib/auth";
-import { AppError, ForbiddenError, NotFoundError } from "../lib/errors";
+import { DEFAULT_PAGE_LIMIT } from "../lib/constants";
+import { AppError, NotFoundError } from "../lib/errors";
 import { buildProjectZip } from "../lib/export";
 import { idempotency } from "../lib/idempotency";
 import { importEntries, parseZipEntries } from "../lib/import";
 import { enforceMemberLimit, requirePlus } from "../lib/tier";
 import { getTierLimits } from "../lib/tier";
 import { parseBody, schemas } from "../lib/validate";
+import { requireRole } from "../middleware/project-auth";
 
 import type { Env } from "../lib/env";
 
@@ -39,7 +39,7 @@ projects.post("/", async (c) => {
   const user = c.get("user");
   const { name } = await parseBody(c, schemas.createProject);
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
   const project = await createProject(db, name, user.id);
   await logActivity(db, {
     project_id: project.id,
@@ -54,7 +54,7 @@ projects.post("/", async (c) => {
 // GET /api/projects
 projects.get("/", async (c) => {
   const user = c.get("user");
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
   const list = await listProjectsForUser(db, user.id);
   return c.json(list);
 });
@@ -65,9 +65,8 @@ projects.post("/:id/members", async (c) => {
   const projectId = c.req.param("id");
   const { email, role } = await parseBody(c, schemas.addMember);
 
-  const db = createSupabaseClient(c.env);
-  const callerRole = await getMemberRole(db, projectId, user.id);
-  if (callerRole !== "owner") throw new ForbiddenError("Only project owners can invite members");
+  const db = c.get("db");
+  await requireRole(db, projectId, user.id, "owner");
 
   // Enforce member limit based on the project owner's tier
   const memberCount = await countMembers(db, projectId);
@@ -94,9 +93,8 @@ projects.delete("/:id/members/:email", async (c) => {
   const projectId = c.req.param("id");
   const email = c.req.param("email");
 
-  const db = createSupabaseClient(c.env);
-  const callerRole = await getMemberRole(db, projectId, user.id);
-  if (callerRole !== "owner") throw new ForbiddenError("Only project owners can remove members");
+  const db = c.get("db");
+  await requireRole(db, projectId, user.id, "owner");
 
   const target = await findUserByEmail(db, email);
   if (!target) throw new NotFoundError(`No user found with email ${email}`);
@@ -118,7 +116,7 @@ projects.put("/preferences/:project", async (c) => {
   const projectName = c.req.param("project");
   const { key, value } = await parseBody(c, schemas.setPreference);
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
   const proj = await getProjectByName(db, projectName, user.id);
   if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
 
@@ -134,11 +132,8 @@ projects.post("/:id/share-links", async (c) => {
   const projectId = c.req.param("id");
   const { role, expires_at } = await parseBody(c, schemas.createShareLink);
 
-  const db = createSupabaseClient(c.env);
-  const callerRole = await getMemberRole(db, projectId, user.id);
-  if (!callerRole || callerRole === "viewer") {
-    throw new ForbiddenError("Only owners and editors can create share links");
-  }
+  const db = c.get("db");
+  await requireRole(db, projectId, user.id, "editor");
 
   const link = await createShareLink(db, projectId, role, user.id, expires_at);
   await logActivity(db, {
@@ -157,11 +152,8 @@ projects.get("/:id/share-links", async (c) => {
   const user = c.get("user");
   const projectId = c.req.param("id");
 
-  const db = createSupabaseClient(c.env);
-  const callerRole = await getMemberRole(db, projectId, user.id);
-  if (!callerRole || callerRole === "viewer") {
-    throw new ForbiddenError("Only owners and editors can view share links");
-  }
+  const db = c.get("db");
+  await requireRole(db, projectId, user.id, "editor");
 
   const links = await listShareLinks(db, projectId);
   return c.json(links);
@@ -173,11 +165,8 @@ projects.delete("/:id/share-links/:token", async (c) => {
   const projectId = c.req.param("id");
   const token = c.req.param("token");
 
-  const db = createSupabaseClient(c.env);
-  const callerRole = await getMemberRole(db, projectId, user.id);
-  if (callerRole !== "owner") {
-    throw new ForbiddenError("Only owners can revoke share links");
-  }
+  const db = c.get("db");
+  await requireRole(db, projectId, user.id, "owner");
 
   await deleteShareLink(db, projectId, token);
   await logActivity(db, {
@@ -195,13 +184,12 @@ projects.delete("/:id/share-links/:token", async (c) => {
 projects.get("/:id/activity", async (c) => {
   const user = c.get("user");
   const projectId = c.req.param("id");
-  const defaultLimit = (c.env as unknown as Record<string, string>).ACTIVITY_PAGE_LIMIT ?? "50";
+  const defaultLimit = (c.env as unknown as Record<string, string>).ACTIVITY_PAGE_LIMIT ?? String(DEFAULT_PAGE_LIMIT);
   const limit = Number.parseInt(c.req.query("limit") ?? defaultLimit);
   const offset = Number.parseInt(c.req.query("offset") ?? "0");
 
-  const db = createSupabaseClient(c.env);
-  const callerRole = await getMemberRole(db, projectId, user.id);
-  if (!callerRole) throw new NotFoundError("Project not found");
+  const db = c.get("db");
+  await requireRole(db, projectId, user.id);
 
   const activity = await getActivityLog(db, projectId, limit, offset);
   return c.json(activity);
@@ -212,9 +200,8 @@ projects.get("/:id/export", async (c) => {
   const user = c.get("user");
   const projectId = c.req.param("id");
 
-  const db = createSupabaseClient(c.env);
-  const callerRole = await getMemberRole(db, projectId, user.id);
-  if (!callerRole) throw new NotFoundError("Project not found");
+  const db = c.get("db");
+  await requireRole(db, projectId, user.id);
 
   // Get project name for the zip filename
   const { data: project } = await db.from("projects").select("name").eq("id", projectId).single();
@@ -237,11 +224,8 @@ projects.post("/:id/import", async (c) => {
   const user = c.get("user");
   const projectId = c.req.param("id");
 
-  const db = createSupabaseClient(c.env);
-  const callerRole = await getMemberRole(db, projectId, user.id);
-  if (!callerRole || callerRole === "viewer") {
-    throw new ForbiddenError("Only owners and editors can import");
-  }
+  const db = c.get("db");
+  await requireRole(db, projectId, user.id, "editor");
 
   // Parse multipart form data
   const formData = await c.req.formData();
