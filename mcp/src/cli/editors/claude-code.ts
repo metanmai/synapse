@@ -26,6 +26,12 @@ export function writeClaudeCodeLocal(apiKey: string, home: string, cwd: string):
     "whoami.md": `Show current Synapse account info.\n\n1. Run \`mcp__synapse__ls()\` to verify connection\n2. Run \`mcp__synapse__tree()\` to count files\n3. Show: "Connected. Files: [count]."\n`,
     "clean.md":
       "Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Run `mcp__synapse__tree()`\n2. Identify duplicates, test files, empty entries\n3. Confirm with user before deleting\n4. Delete confirmed entries with `mcp__synapse__rm()`\n",
+    "conversations.md":
+      'List conversations synced to Synapse for the current project.\n\n1. Run `mcp__synapse__list_conversations({ project: "<project-name>" })` — determine the project name from the repo/codebase\n2. Display each conversation with its title, message count, status, and last-updated date\n3. Show the conversation ID so the user can resume or load it\n4. If no conversations exist, suggest using `/synapse:save-conversation` to sync one\n',
+    "resume.md":
+      'Resume a conversation synced from another agent or session. The argument is: $ARGUMENTS\n\n1. If $ARGUMENTS looks like a UUID, run `mcp__synapse__load_conversation({ project: "<project-name>", conversationId: "$ARGUMENTS" })`\n2. If $ARGUMENTS is a search term, first run `mcp__synapse__list_conversations({ project: "<project-name>" })` to find matches, then let the user pick\n3. Display the system prompt, working context, and message history\n4. Say: "Conversation loaded. I have the full context — you can continue where you left off."\n5. Adopt the conversation context and continue naturally from the last message\n',
+    "save-conversation.md":
+      'Save the current conversation to Synapse for cross-agent sync.\n\n1. Determine the project name from the repo/codebase\n2. Summarize the conversation — key topics, decisions, code changes, current state\n3. Run `mcp__synapse__sync_conversation({ project: "<project-name>", title: "<descriptive-title>", messages: [...] })` with:\n   - A descriptive title\n   - Messages summarized (collapse tool calls, keep user/assistant messages)\n   - Working context: current branch, repo path, key files\n4. Display the conversation ID\n5. Suggest: "Use `/synapse:resume <ID>` in any agent to pick up where you left off."\n',
   };
   for (const [filename, content] of Object.entries(commands)) {
     const filepath = path.join(cmdDir, filename);
@@ -60,6 +66,12 @@ export function writeClaudeCodeGlobal(apiKey: string, home: string): string[] {
     "whoami.md": `Show current Synapse account info.\n\n1. Run \`mcp__synapse__ls()\` to verify connection\n2. Run \`mcp__synapse__tree()\` to count files\n3. Show: "Connected. Files: [count]."\n`,
     "clean.md":
       "Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Run `mcp__synapse__tree()`\n2. Identify duplicates, test files, empty entries\n3. Confirm with user before deleting\n4. Delete confirmed entries with `mcp__synapse__rm()`\n",
+    "conversations.md":
+      'List conversations synced to Synapse for the current project.\n\n1. Run `mcp__synapse__list_conversations({ project: "<project-name>" })` — determine the project name from the repo/codebase\n2. Display each conversation with its title, message count, status, and last-updated date\n3. Show the conversation ID so the user can resume or load it\n4. If no conversations exist, suggest using `/synapse:save-conversation` to sync one\n',
+    "resume.md":
+      'Resume a conversation synced from another agent or session. The argument is: $ARGUMENTS\n\n1. If $ARGUMENTS looks like a UUID, run `mcp__synapse__load_conversation({ project: "<project-name>", conversationId: "$ARGUMENTS" })`\n2. If $ARGUMENTS is a search term, first run `mcp__synapse__list_conversations({ project: "<project-name>" })` to find matches, then let the user pick\n3. Display the system prompt, working context, and message history\n4. Say: "Conversation loaded. I have the full context — you can continue where you left off."\n5. Adopt the conversation context and continue naturally from the last message\n',
+    "save-conversation.md":
+      'Save the current conversation to Synapse for cross-agent sync.\n\n1. Determine the project name from the repo/codebase\n2. Summarize the conversation — key topics, decisions, code changes, current state\n3. Run `mcp__synapse__sync_conversation({ project: "<project-name>", title: "<descriptive-title>", messages: [...] })` with:\n   - A descriptive title\n   - Messages summarized (collapse tool calls, keep user/assistant messages)\n   - Working context: current branch, repo path, key files\n4. Display the conversation ID\n5. Suggest: "Use `/synapse:resume <ID>` in any agent to pick up where you left off."\n',
   };
   for (const [filename, content] of Object.entries(commands)) {
     const filepath = path.join(cmdDir, filename);
