@@ -1,11 +1,7 @@
 {
   "name": "mcp-sync",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
+  "description": "Universal AI context layer — MCP server for sharing context across AI tools and teams",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest"
@@ -15,6 +11,7 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@supabase/supabase-js": "^2.99.2",
     "agents": "^0.7.9",
     "hono": "^4.12.8",
