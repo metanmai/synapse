@@ -1,11 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { User } from "../types";
+import type { UserRow } from "../types";
 import { singleOrNull } from "../query-helpers";
 
 export async function createUser(
   db: SupabaseClient,
   email: string
-): Promise<User> {
+): Promise<UserRow> {
   const { data, error } = await db
     .from("users")
     .insert({ email })
@@ -13,14 +13,14 @@ export async function createUser(
     .single();
 
   if (error) throw error;
-  return data as User;
+  return data as UserRow;
 }
 
 export async function findUserByEmail(
   db: SupabaseClient,
   email: string
-): Promise<User | null> {
-  return singleOrNull<User>(
+): Promise<UserRow | null> {
+  return singleOrNull<UserRow>(
     await db.from("users").select("*").eq("email", email).single()
   );
 }
@@ -28,8 +28,8 @@ export async function findUserByEmail(
 export async function findUserBySupabaseAuthId(
   db: SupabaseClient,
   supabaseAuthId: string
-): Promise<User | null> {
-  return singleOrNull<User>(
+): Promise<UserRow | null> {
+  return singleOrNull<UserRow>(
     await db.from("users").select("*").eq("supabase_auth_id", supabaseAuthId).single()
   );
 }

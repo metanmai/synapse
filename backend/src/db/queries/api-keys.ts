@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { User, ApiKey } from "../types";
+import type { UserRow, ApiKey } from "../types";
 
 export class ApiKeyExpiredError extends Error {
   constructor() {
@@ -11,7 +11,7 @@ export class ApiKeyExpiredError extends Error {
 export async function findUserByApiKeyHash(
   db: SupabaseClient,
   keyHash: string
-): Promise<{ user: User; apiKeyId: string } | null> {
+): Promise<{ user: UserRow; apiKeyId: string } | null> {
   const { data, error } = await db
     .from("api_keys")
     .select("id, user_id, expires_at, users(*)")
@@ -27,7 +27,7 @@ export async function findUserByApiKeyHash(
     throw new ApiKeyExpiredError();
   }
 
-  return { user: data.users as unknown as User, apiKeyId: data.id };
+  return { user: data.users as unknown as UserRow, apiKeyId: data.id };
 }
 
 export async function createApiKey(
