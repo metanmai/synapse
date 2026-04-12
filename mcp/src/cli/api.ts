@@ -43,6 +43,22 @@ export async function cliAuthLogin(email: string, password: string, label: strin
   return { ok: true, data: (await res.json()) as LoginResponse };
 }
 
+export type KeyStatus = "valid" | "expired" | "error";
+
+/** Validate an API key by making a lightweight authenticated request. */
+export async function validateApiKey(apiKey: string): Promise<{ status: KeyStatus; email?: string }> {
+  try {
+    const res = await fetch(`${API_URL}/api/projects`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (res.ok) return { status: "valid" };
+    if (res.status === 401) return { status: "expired" };
+    return { status: "error" };
+  } catch {
+    return { status: "error" };
+  }
+}
+
 export interface ExchangeResponse {
   api_key: string;
   email: string;

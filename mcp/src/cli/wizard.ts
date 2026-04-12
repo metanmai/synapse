@@ -1,4 +1,5 @@
 import * as clack from "@clack/prompts";
+import { validateApiKey } from "./api.js";
 import { browserAuth } from "./browser-auth.js";
 import type { SetupScope } from "./editors.js";
 import { detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors.js";
@@ -16,38 +17,68 @@ export async function runWizard(version: string): Promise<void> {
   const existing = detectExistingSetup();
   if (existing.configured) {
     const locations = existing.locations.map((l) => `  ${muted(l)}`).join("\n");
-    clack.log.warn(`Synapse is already configured:\n${locations}`);
 
-    const action = await clack.select({
-      message: "What would you like to do?",
-      options: [
-        { value: "reconfigure" as const, label: "Reconfigure", hint: "new API key + choose editors" },
-        { value: "add" as const, label: "Add more editors", hint: "keep current API key, add editors" },
-        { value: "cancel" as const, label: "Cancel" },
-      ],
-    });
-
-    if (clack.isCancel(action) || action === "cancel") {
-      clack.cancel("No changes made.");
-      process.exit(0);
+    // Validate existing API key
+    let keyExpired = false;
+    if (existing.apiKey) {
+      const spin = createGlyphSpinner();
+      spin.start("Checking existing connection\u2026");
+      const keyStatus = await validateApiKey(existing.apiKey);
+      if (keyStatus.status === "expired") {
+        spin.stop(themeError("API key expired or revoked"));
+        keyExpired = true;
+      } else if (keyStatus.status === "valid") {
+        spin.stop(success("Connected"));
+      } else {
+        spin.stop(muted("Could not verify (offline?)"));
+      }
     }
 
-    if (action === "add") {
-      // Skip auth — ask for existing API key or read from .mcp.json
-      clack.log.info("Paste your existing API key to configure additional editors.");
-      const key = await clack.password({
-        message: "API key",
-        validate: (v) => (v?.trim() ? undefined : "Required"),
+    if (keyExpired) {
+      clack.log.warn(`Synapse is configured but your API key has expired:\n${locations}`);
+      clack.log.info("Sign in again to get a new API key.");
+      // Fall through to full auth flow
+    } else {
+      clack.log.info(`Synapse is already configured:\n${locations}`);
+
+      const action = await clack.select({
+        message: "What would you like to do?",
+        options: [
+          { value: "reconfigure" as const, label: "Reconfigure", hint: "new API key + choose editors" },
+          {
+            value: "add" as const,
+            label: "Add more editors",
+            hint: existing.apiKey ? "keep current API key" : "paste your API key",
+          },
+          { value: "cancel" as const, label: "Cancel" },
+        ],
       });
-      if (clack.isCancel(key)) {
-        clack.cancel("Cancelled.");
+
+      if (clack.isCancel(action) || action === "cancel") {
+        clack.cancel("No changes made.");
         process.exit(0);
       }
-      await runEditorSetup(key.trim());
-      return;
-    }
 
-    // action === "reconfigure" — fall through to full wizard
+      if (action === "add") {
+        if (existing.apiKey) {
+          await runEditorSetup(existing.apiKey);
+        } else {
+          clack.log.info("Paste your existing API key to configure additional editors.");
+          const key = await clack.password({
+            message: "API key",
+            validate: (v) => (v?.trim() ? undefined : "Required"),
+          });
+          if (clack.isCancel(key)) {
+            clack.cancel("Cancelled.");
+            process.exit(0);
+          }
+          await runEditorSetup(key.trim());
+        }
+        return;
+      }
+
+      // action === "reconfigure" — fall through to full wizard
+    }
   }
 
   // Step 2: Auth method
