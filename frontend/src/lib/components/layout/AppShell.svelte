@@ -15,13 +15,14 @@ let { user, children } = $props<{
   </div>
   <header class="flex items-center justify-between"
     style="background: rgba(86, 28, 36, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 4px 24px rgba(86, 28, 36, 0.15); padding: 1rem 1.5rem; position: sticky; top: 0; z-index: 50;">
-    <a href="/" class="flex items-center gap-2" style="color: white; font-size: 18px; font-weight: 800;">
+    <a href="/dashboard" class="flex items-center gap-2" style="color: white; font-size: 18px; font-weight: 800; text-decoration: none;">
       <img src="/logo.svg" alt="" class="w-7 h-7" />
       synapse
     </a>
     <div class="flex items-center gap-3 sm:gap-4">
+      <a href="/dashboard" style="font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.85); text-decoration: none; transition: var(--transition-base);">Workspace</a>
       <span class="hidden sm:inline" style="font-size: 14px; color: rgba(255,255,255,0.75);">{user.email}</span>
-      <a href="/account" style="font-size: 13px; font-weight: 500; color: white; transition: var(--transition-base);">Account</a>
+      <a href="/account" style="font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.75); text-decoration: none; transition: var(--transition-base);">Account</a>
       <form method="POST" action="/logout" use:enhance>
         <button type="submit" class="cursor-pointer"
           style="font-size: 13px; color: rgba(255,255,255,0.75); transition: var(--transition-base);">
