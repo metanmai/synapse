@@ -28,9 +28,10 @@ export function registerGoogleSyncTools(server: McpServer, env: Env, getContext:
         return {
           content: [{ type: "text", text: `Synced ${result.synced} entries to Google Drive.` }],
         };
-      } catch (err: any) {
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
         return {
-          content: [{ type: "text", text: `Sync failed: ${err.message}` }],
+          content: [{ type: "text", text: `Sync failed: ${message}` }],
         };
       }
     }
@@ -54,9 +55,10 @@ export function registerGoogleSyncTools(server: McpServer, env: Env, getContext:
         return {
           content: [{ type: "text", text: `Pulled ${result.synced} changed entries from Google Drive.` }],
         };
-      } catch (err: any) {
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
         return {
-          content: [{ type: "text", text: `Sync failed: ${err.message}` }],
+          content: [{ type: "text", text: `Sync failed: ${message}` }],
         };
       }
     }
