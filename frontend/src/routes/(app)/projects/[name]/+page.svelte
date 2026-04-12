@@ -2,17 +2,22 @@
   import FolderTree from "$lib/components/workspace/FolderTree.svelte";
   import EntryViewer from "$lib/components/workspace/EntryViewer.svelte";
   import EntryEditor from "$lib/components/workspace/EntryEditor.svelte";
-  import SearchPanel from "$lib/components/workspace/SearchPanel.svelte";
+  import PathActivityPanel from "$lib/components/workspace/PathActivityPanel.svelte";
+  import PathSharePanel from "$lib/components/workspace/PathSharePanel.svelte";
   import type { Entry } from "$lib/types";
 
   let { data, form } = $props();
 
-  let mode = $state<"view" | "edit" | "new" | "search" | "empty">("empty");
+  let mode = $state<"view" | "edit" | "new" | "search" | "activity" | "share" | "empty">("empty");
   let selectedPath = $state<string | null>(null);
   let entry = $state<Entry | null>(null);
   let searchQuery = $state("");
   let searchResults = $state<Entry[]>([]);
   let loading = $state(false);
+
+  // Context menu state
+  let contextPath = $state<string | null>(null);
+  let contextIsFolder = $state(false);
 
   // Resizable sidebar
   let sidebarWidth = $state(220);
@@ -22,7 +27,7 @@
     e.preventDefault();
     dragging = true;
     const onMove = (e: MouseEvent) => {
-      sidebarWidth = Math.min(Math.max(e.clientX - 192, 140), 500);
+      sidebarWidth = Math.min(Math.max(e.clientX, 140), 500);
     };
     const onUp = () => {
       dragging = false;
@@ -80,8 +85,23 @@
     searchResults = [];
   }
 
-  function handleSearchSelect(path: string) {
-    selectEntry(path);
+  function handleAction(action: "activity" | "share" | "delete", path: string, isFolder: boolean) {
+    contextPath = path;
+    contextIsFolder = isFolder;
+    if (action === "activity") {
+      mode = "activity";
+    } else if (action === "share") {
+      mode = "share";
+    } else if (action === "delete") {
+      if (confirm(`Delete ${path}?`)) {
+        // TODO: wire up delete API
+      }
+    }
+  }
+
+  function closePanel() {
+    mode = selectedPath ? "view" : "empty";
+    if (selectedPath && mode === "view") selectEntry(selectedPath);
   }
 </script>
 
@@ -100,7 +120,7 @@
       </div>
     </div>
     <FolderTree entries={data.entries} {selectedPath}
-      projectName={data.project.name} onSelect={selectEntry} />
+      projectName={data.project.name} onSelect={selectEntry} onAction={handleAction} />
   </div>
 
   <!-- Resize handle -->
@@ -116,6 +136,21 @@
   <div class="flex-1 p-6 overflow-y-auto min-w-0">
     {#if loading}
       <div class="text-center mt-20" style="color: var(--color-text-muted);">Loading...</div>
+    {:else if mode === "activity" && contextPath}
+      <PathActivityPanel
+        path={contextPath}
+        isFolder={contextIsFolder}
+        activity={data.activity}
+        onClose={closePanel}
+      />
+    {:else if mode === "share" && contextPath}
+      <PathSharePanel
+        path={contextPath}
+        isFolder={contextIsFolder}
+        projectId={data.project.id}
+        shareLinks={data.shareLinks}
+        onClose={closePanel}
+      />
     {:else if mode === "search"}
       <div class="space-y-3">
         <form onsubmit={(e) => { e.preventDefault(); doSearch(); }} class="flex gap-2">
@@ -131,7 +166,7 @@
           </button>
         </form>
         {#each searchResults as result}
-          <button onclick={() => handleSearchSelect(result.path)}
+          <button onclick={() => selectEntry(result.path)}
             class="block w-full text-left rounded-xl p-3 text-sm cursor-pointer"
             style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border);">
             <div class="font-medium">{result.path}</div>
