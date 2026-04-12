@@ -65,9 +65,10 @@
 
   .hero-sub {
     font-size: 1.25rem;
-    font-weight: 300;
+    font-weight: 400;
     line-height: 1.6;
-    color: var(--color-tan);
+    color: var(--color-burgundy);
+    opacity: 0.7;
     margin: 0 0 2rem;
   }
 
