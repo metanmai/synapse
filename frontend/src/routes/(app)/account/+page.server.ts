@@ -14,11 +14,11 @@ export const actions: Actions = {
     }
   },
 
-  connectOAuth: async ({ request, url }) => {
+  connectOAuth: async ({ request, cookies, url }) => {
     const data = await request.formData();
     const provider = data.get("provider") as "google" | "github";
 
-    const supabase = getSupabase();
+    const supabase = getSupabase(cookies);
     const { data: oauthData, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: `${url.origin}/auth/callback?redirect=/account` },

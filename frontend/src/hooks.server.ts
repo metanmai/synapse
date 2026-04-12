@@ -11,7 +11,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   }
 
   // Verify the token by getting user from Supabase
-  const supabase = getSupabase();
+  const supabase = getSupabase(event.cookies);
   const { data, error } = await supabase.auth.getUser(sessionData.access_token);
 
   if (error || !data.user) {
