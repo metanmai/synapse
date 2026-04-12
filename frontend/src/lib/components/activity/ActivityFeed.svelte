@@ -1,18 +1,8 @@
 <script lang="ts">
 import type { ActivityLogEntry } from "$lib/types";
+import { getActionLabel } from "./activity-helpers";
 
 let { entries } = $props<{ entries: ActivityLogEntry[] }>();
-
-const actionLabels: Record<string, string> = {
-  entry_created: "created",
-  entry_updated: "updated",
-  entry_deleted: "deleted",
-  member_added: "added member",
-  member_removed: "removed member",
-  settings_changed: "changed settings",
-  share_link_created: "created share link",
-  share_link_revoked: "revoked share link",
-};
 </script>
 
 <div class="space-y-3">
@@ -20,7 +10,7 @@ const actionLabels: Record<string, string> = {
     <div class="p-3 rounded-xl text-sm"
       style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border);">
       <div class="flex items-center gap-2">
-        <span class="font-medium">{actionLabels[entry.action] ?? entry.action}</span>
+        <span class="font-medium">{getActionLabel(entry.action)}</span>
         <span class="text-xs rounded-full px-2 py-0.5"
           style="background-color: var(--color-pink); color: white;">
           {entry.source}

@@ -1,49 +1,11 @@
 <script lang="ts">
 import type { ConversationMessage } from "$lib/types";
+import { getAgentColor, roleLabels, formatMessageTime, toolSummary } from "./conversation-helpers";
 
 let { messages, showTools = false } = $props<{
   messages: ConversationMessage[];
   showTools?: boolean;
 }>();
-
-const agentColors: Record<string, string> = {
-  "claude-code": "#ea580c",
-  claude: "#ea580c",
-  chatgpt: "#16a34a",
-  gpt: "#16a34a",
-  gemini: "#2563eb",
-};
-
-function getAgentColor(agent: string): string {
-  const lower = agent.toLowerCase();
-  for (const [key, color] of Object.entries(agentColors)) {
-    if (lower.includes(key)) return color;
-  }
-  return "#6b7280";
-}
-
-const roleLabels: Record<string, { label: string; color: string }> = {
-  user: { label: "User", color: "var(--color-accent)" },
-  assistant: { label: "Assistant", color: "#ea580c" },
-  system: { label: "System", color: "#6b7280" },
-  tool: { label: "Tool", color: "#9333ea" },
-};
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
-function toolSummary(msg: ConversationMessage): string {
-  if (!msg.tool_interaction) return "";
-  return msg.tool_interaction.summary || `Called ${msg.tool_interaction.name}`;
-}
 </script>
 
 <div class="thread">
@@ -59,7 +21,7 @@ function toolSummary(msg: ConversationMessage): string {
         {#if msg.source_model}
           <span class="model-tag">{msg.source_model}</span>
         {/if}
-        <span class="timestamp">{formatTime(msg.created_at)}</span>
+        <span class="timestamp">{formatMessageTime(msg.created_at)}</span>
       </div>
 
       {#if msg.content}

@@ -1,5 +1,6 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
+import { formatDate, isExpired } from "./account-helpers";
 
 let { keys, newKey, keyError } = $props<{
   keys: {
@@ -15,20 +16,6 @@ let { keys, newKey, keyError } = $props<{
 
 let showCreateForm = $state(false);
 let createLoading = $state(false);
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "Never";
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function isExpired(expiresAt: string | null): boolean {
-  if (!expiresAt) return false;
-  return new Date(expiresAt) < new Date();
-}
 </script>
 
 <div class="glass rounded-xl" style="padding: 2rem;">
