@@ -347,9 +347,7 @@ if (!isMcpServerMode(args)) {
    * Returns { match, suggestions } — match is the single resolved path (or null), suggestions
    * is a list of candidates when the match is ambiguous.
    */
-  async function resolvePath(
-    target: string,
-  ): Promise<{ match: string | null; suggestions: string[] }> {
+  async function resolvePath(target: string): Promise<{ match: string | null; suggestions: string[] }> {
     const project = await getProject();
 
     // 1. Try exact fetch — fast path, no listing needed
@@ -366,8 +364,7 @@ if (!isMcpServerMode(args)) {
     const q = target.toLowerCase().replace(/\.md$/, "");
 
     // Helper: filename without extension
-    const stem = (p: string) =>
-      (p.split("/").pop() ?? p).toLowerCase().replace(/\.md$/, "");
+    const stem = (p: string) => (p.split("/").pop() ?? p).toLowerCase().replace(/\.md$/, "");
 
     // Exact filename match (ignore directory)
     const byName = paths.filter((p) => stem(p) === q);
@@ -390,7 +387,16 @@ if (!isMcpServerMode(args)) {
     if (bySubstring.length === 1) return { match: bySubstring[0], suggestions: [] };
 
     // Multiple matches — return as suggestions, preferring narrower match sets
-    const candidates = byName.length > 0 ? byName : bySuffix.length > 0 ? bySuffix : byPrefix.length > 0 ? byPrefix : byFilenamePrefix.length > 0 ? byFilenamePrefix : bySubstring;
+    const candidates =
+      byName.length > 0
+        ? byName
+        : bySuffix.length > 0
+          ? bySuffix
+          : byPrefix.length > 0
+            ? byPrefix
+            : byFilenamePrefix.length > 0
+              ? byFilenamePrefix
+              : bySubstring;
     return { match: null, suggestions: candidates.slice(0, 8) };
   }
 
@@ -404,12 +410,12 @@ if (!isMcpServerMode(args)) {
       const project = await getProject();
       let entries: EntryListResponse[];
       try {
-        entries = (await api(
-          "GET",
-          `/api/context/${encodeURIComponent(project)}/list${qs}`,
-        )) as EntryListResponse[];
+        entries = (await api("GET", `/api/context/${encodeURIComponent(project)}/list${qs}`)) as EntryListResponse[];
       } catch (_e) {
-        return { content: [{ type: "text" as const, text: folder ? `Folder not found: ${folder}/` : "Workspace is empty." }], isError: true };
+        return {
+          content: [{ type: "text" as const, text: folder ? `Folder not found: ${folder}/` : "Workspace is empty." }],
+          isError: true,
+        };
       }
 
       if (entries.length === 0) {
@@ -437,7 +443,15 @@ if (!isMcpServerMode(args)) {
       const { match, suggestions } = await resolvePath(path);
       if (!match) {
         if (suggestions.length > 0) {
-          return { content: [{ type: "text" as const, text: `File not found: ${path}\n\nDid you mean:\n${suggestions.map((s) => `  - ${s}`).join("\n")}` }], isError: true };
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `File not found: ${path}\n\nDid you mean:\n${suggestions.map((s) => `  - ${s}`).join("\n")}`,
+              },
+            ],
+            isError: true,
+          };
         }
         return { content: [{ type: "text" as const, text: `File not found: ${path}` }], isError: true };
       }
@@ -496,7 +510,15 @@ if (!isMcpServerMode(args)) {
       const { match, suggestions } = await resolvePath(path);
       if (!match) {
         if (suggestions.length > 0) {
-          return { content: [{ type: "text" as const, text: `File not found: ${path}\n\nDid you mean:\n${suggestions.map((s) => `  - ${s}`).join("\n")}` }], isError: true };
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `File not found: ${path}\n\nDid you mean:\n${suggestions.map((s) => `  - ${s}`).join("\n")}`,
+              },
+            ],
+            isError: true,
+          };
         }
         return { content: [{ type: "text" as const, text: `File not found: ${path}` }], isError: true };
       }
@@ -565,7 +587,15 @@ if (!isMcpServerMode(args)) {
       const { match, suggestions } = await resolvePath(path);
       if (!match) {
         if (suggestions.length > 0) {
-          return { content: [{ type: "text" as const, text: `File not found: ${path}\n\nDid you mean:\n${suggestions.map((s) => `  - ${s}`).join("\n")}` }], isError: true };
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `File not found: ${path}\n\nDid you mean:\n${suggestions.map((s) => `  - ${s}`).join("\n")}`,
+              },
+            ],
+            isError: true,
+          };
         }
         return { content: [{ type: "text" as const, text: `File not found: ${path}` }], isError: true };
       }
