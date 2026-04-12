@@ -399,17 +399,22 @@ account.post("/reset", async (c) => {
     console.error("[account/reset] api_keys delete error:", err);
   }
 
-  // Create a fresh API key — delete any with "default" label first to avoid unique constraint
+  // Create a fresh API key via upsert to avoid unique constraint issues
   try {
-    await db.from("api_keys").delete().eq("user_id", user.id).eq("label", "default");
     const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
     const apiKeyHash = await hashApiKey(apiKey);
-    await createApiKey(db, user.id, apiKeyHash, "default");
+    const { error: upsertErr } = await db
+      .from("api_keys")
+      .upsert({ user_id: user.id, key_hash: apiKeyHash, label: "default" }, { onConflict: "user_id,label" });
+    if (upsertErr) throw upsertErr;
     return c.json({ ok: true, api_key: apiKey });
   } catch (err) {
-    console.error("[account/reset] createApiKey error:", err);
+    console.error("[account/reset] upsert api_key error:", err);
     return c.json(
-      { error: "Reset partially completed but failed to create new API key", code: "RESET_KEY_ERROR" },
+      {
+        error: `Reset partially completed but failed to create new API key: ${err instanceof Error ? err.message : String(err)}`,
+        code: "RESET_KEY_ERROR",
+      },
       500,
     );
   }
