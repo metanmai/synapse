@@ -10,17 +10,17 @@
   ]);
 </script>
 
-<nav class="w-48 p-4 space-y-1"
+<nav class="w-40 p-3 space-y-0.5"
   style="background-color: var(--color-bg-raised); border-right: 1px solid var(--color-border);">
   {#each links as link}
     {@const isActive = link.exact
       ? $page.url.pathname === link.href
       : $page.url.pathname.startsWith(link.href)}
     <a href={link.href}
-      class="block px-3 py-2 rounded-lg text-sm"
-      style={isActive
+      class="block px-2.5 py-1.5 rounded-lg"
+      style="font-size: 12px; {isActive
         ? `background-color: var(--color-pink-dark); color: white; font-weight: 500;`
-        : `color: var(--color-text); `}
+        : `color: var(--color-text);`}"
     >
       {link.label}
     </a>
