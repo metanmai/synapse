@@ -27,14 +27,21 @@ Integrate Stripe into Synapse to enable paid subscriptions. Two tiers: Free and 
 
 ## Database Changes
 
+### Alter `users` table
+
+```sql
+alter table users add column stripe_customer_id text unique;
+```
+
+`users.stripe_customer_id` is the **canonical owner** of the Stripe customer mapping. It is set once during the first checkout and used by all endpoints to look up or create Stripe resources. The `subscriptions` table references the user via `user_id` (not a separate `stripe_customer_id`).
+
 ### New `subscriptions` table
 
 ```sql
 create table subscriptions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
-  stripe_customer_id text unique not null,
-  stripe_subscription_id text unique,
+  stripe_subscription_id text unique not null,
   status text not null default 'inactive',  -- 'active', 'canceled', 'past_due', 'inactive'
   current_period_end timestamptz,
   cancel_at_period_end boolean default false,
@@ -43,14 +50,12 @@ create table subscriptions (
 );
 
 create index idx_subscriptions_user_id on subscriptions(user_id);
-create index idx_subscriptions_stripe_customer_id on subscriptions(stripe_customer_id);
+create index idx_subscriptions_stripe_sub_id on subscriptions(stripe_subscription_id);
 ```
 
-### Alter `users` table
+### Note on `tier` column
 
-```sql
-alter table users add column stripe_customer_id text unique;
-```
+The `tier` field exists only in the TypeScript `User` interface — there is no `tier` column in the database (migrations 001 and 002 don't include it; the code defaults via `user.tier ?? "free"`). This means no `ALTER TABLE ... DROP COLUMN` is needed. The change is purely at the TypeScript level: remove `tier` from the `User` interface.
 
 ## Backend API — Billing Endpoints
 
@@ -72,6 +77,7 @@ Creates a Stripe Checkout session for the Pro plan.
 
 - Lazily creates a Stripe Customer if the user doesn't have a `stripe_customer_id` yet
 - Stores `stripe_customer_id` on the `users` row
+- Sets `client_reference_id: user.id` on the Checkout session (used by webhook to resolve user)
 - Returns `{ url: string }` — the Stripe Checkout URL
 - Frontend redirects the user to this URL
 - `success_url`: `{APP_URL}/account?upgraded=true`
@@ -98,12 +104,17 @@ Receives Stripe webhook events. Skips auth middleware. Verifies `stripe-signatur
 
 **Events handled:**
 
+**User resolution strategy per event:**
+
+- `checkout.session.completed`: Resolve user via `session.client_reference_id` (set to `user.id` during checkout creation). Create subscription row linked to `user_id`.
+- All other subscription events: Look up subscription row by `stripe_subscription_id`.
+
 | Event | Action |
 |-------|--------|
-| `checkout.session.completed` | Create/update subscription row, set status=active |
-| `customer.subscription.updated` | Update status, current_period_end, cancel_at_period_end |
-| `customer.subscription.deleted` | Set status=inactive (downgrade to free) |
-| `invoice.payment_failed` | Set status=past_due |
+| `checkout.session.completed` | Look up user via `client_reference_id`. Expand `session.subscription` to get subscription details. Upsert subscription row with status=active, period end, stripe_subscription_id. |
+| `customer.subscription.updated` | Look up by `stripe_subscription_id`. Update status, current_period_end, cancel_at_period_end. |
+| `customer.subscription.deleted` | Look up by `stripe_subscription_id`. Set status=inactive (downgrade to free). |
+| `invoice.payment_failed` | Look up subscription by `stripe_subscription_id`. Set status=past_due. User retains Pro access while past_due — Stripe continues retry attempts. Downgrade only happens when Stripe exhausts retries and fires `customer.subscription.deleted`. |
 
 Idempotent: uses `stripe_subscription_id` as unique key — replayed events are safe.
 
@@ -123,7 +134,7 @@ Tier is resolved once per request in the auth middleware by querying the `subscr
 ```typescript
 // In auth middleware, after resolving user:
 const sub = await getActiveSubscription(db, user.id);
-const tier = sub?.status === "active" ? "pro" : "free";
+const tier = (sub?.status === "active" || sub?.status === "past_due") ? "pro" : "free";
 c.set("tier", tier);
 ```
 
@@ -131,7 +142,8 @@ All downstream functions (`enforceFileLimit`, `enforceConnectionLimit`, `require
 
 ### Type changes
 
-- Remove `tier` field from `User` interface
+- Remove `tier` field from `User` interface (TypeScript-only change — no DB column exists)
+- Add `stripe_customer_id` to `User` interface
 - Add `tier` to Hono's `ContextVariableMap` (like `user` is today)
 
 ### Downgrade behavior
