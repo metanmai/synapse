@@ -1163,14 +1163,26 @@ export async function setPreference(
   projectId: string,
   key: string,
   value: string
-): Promise<UserPreferences> {
+): Promise<UserPreferences | { google_drive_folder_id: string }> {
+  // google_drive_folder_id is stored on the project, not user_preferences
+  if (key === "google_drive_folder_id") {
+    const { data, error } = await db
+      .from("projects")
+      .update({ google_drive_folder_id: value })
+      .eq("id", projectId)
+      .select("google_drive_folder_id")
+      .single();
+    if (error) throw error;
+    return data as { google_drive_folder_id: string };
+  }
+
   const validKeys: Record<string, string[]> = {
     auto_capture: ["aggressive", "moderate", "manual_only"],
     context_loading: ["full", "smart", "on_demand", "summary_only"],
   };
 
   if (!(key in validKeys)) {
-    throw new Error(`Invalid preference key: ${key}. Valid keys: ${Object.keys(validKeys).join(", ")}`);
+    throw new Error(`Invalid preference key: ${key}. Valid keys: ${Object.keys(validKeys).join(", ")}, google_drive_folder_id`);
   }
 
   if (!validKeys[key].includes(value)) {
@@ -1214,6 +1226,9 @@ Create `src/mcp/agent.ts`:
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpAgent } from "agents/mcp";
 import type { Env } from "../lib/env";
+import { createSupabaseClient } from "../db/client";
+import { findUserByApiKeyHash } from "../db/queries/users";
+import { hashApiKey } from "../lib/auth";
 import { registerProjectManagementTools } from "./tools/project-management";
 import { registerContextCaptureTools } from "./tools/context-capture";
 import { registerContextRetrievalTools } from "./tools/context-retrieval";
@@ -1227,15 +1242,38 @@ export class McpSyncAgent extends McpAgent<Env> {
     version: "1.0.0",
   });
 
+  // Authenticated user ID, resolved from Authorization header on init
+  private userId: string | null = null;
+
   async init() {
-    registerProjectManagementTools(this.server, this.env);
-    registerContextCaptureTools(this.server, this.env);
-    registerContextRetrievalTools(this.server, this.env);
-    registerGoogleSyncTools(this.server, this.env);
+    // Authenticate from the request's Authorization header.
+    // The MCP HTTP transport passes the original request to the Durable Object.
+    // Extract the Bearer token and resolve the user.
+    const authHeader = this.request?.headers?.get("Authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const apiKey = authHeader.slice(7);
+      const apiKeyHash = await hashApiKey(apiKey);
+      const db = createSupabaseClient(this.env);
+      const user = await findUserByApiKeyHash(db, apiKeyHash);
+      if (user) {
+        this.userId = user.id;
+      }
+    }
+
+    // Pass userId getter to all tool registrations via a context object
+    const getContext = () => ({ userId: this.userId });
+
+    registerProjectManagementTools(this.server, this.env, getContext);
+    registerContextCaptureTools(this.server, this.env, getContext);
+    registerContextRetrievalTools(this.server, this.env, getContext);
+    registerGoogleSyncTools(this.server, this.env, getContext);
     registerPrompts(this.server, this.env);
     registerResources(this.server, this.env);
   }
 }
+
+// Type for the context getter passed to tool registration functions
+export type GetMcpContext = () => { userId: string | null };
 ```
 
 - [ ] **Step 2: Create project management tools**
@@ -1245,6 +1283,7 @@ Create `src/mcp/tools/project-management.ts`:
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Env } from "../../lib/env";
+import type { GetMcpContext } from "../agent";
 import { createSupabaseClient } from "../../db/client";
 import {
   createProject,
@@ -1257,7 +1296,7 @@ import {
 import { findUserByEmail } from "../../db/queries/users";
 import { setPreference } from "../../db/queries/preferences";
 
-export function registerProjectManagementTools(server: McpServer, env: Env) {
+export function registerProjectManagementTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   server.tool(
     "create_project",
     "Create a new project workspace for organizing context. You become the owner.",
@@ -1266,7 +1305,7 @@ export function registerProjectManagementTools(server: McpServer, env: Env) {
       const db = createSupabaseClient(env);
       // TODO: extract userId from MCP auth context
       // For now, this will be wired up when auth is integrated with MCP
-      const userId = (extra as any).userId;
+      const userId = getContext().userId!;
       const project = await createProject(db, name, userId);
       return {
         content: [{ type: "text", text: `Project "${project.name}" created (id: ${project.id})` }],
@@ -1278,9 +1317,9 @@ export function registerProjectManagementTools(server: McpServer, env: Env) {
     "list_projects",
     "List all projects you have access to.",
     {},
-    async (_args, extra) => {
+    async (_args) => {
       const db = createSupabaseClient(env);
-      const userId = (extra as any).userId;
+      const userId = getContext().userId!;
       const projects = await listProjectsForUser(db, userId);
       const list = projects.map((p) => `- ${p.name} (id: ${p.id})`).join("\n");
       return {
@@ -1297,9 +1336,9 @@ export function registerProjectManagementTools(server: McpServer, env: Env) {
       email: z.string().email().describe("Email of the person to invite"),
       role: z.enum(["editor", "viewer"]).describe("Role: 'editor' can read/write, 'viewer' can only read"),
     },
-    async ({ project, email, role }, extra) => {
+    async ({ project, email, role }) => {
       const db = createSupabaseClient(env);
-      const userId = (extra as any).userId;
+      const userId = getContext().userId!;
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -1328,9 +1367,9 @@ export function registerProjectManagementTools(server: McpServer, env: Env) {
       project: z.string().describe("Project name"),
       email: z.string().email().describe("Email of the person to remove"),
     },
-    async ({ project, email }, extra) => {
+    async ({ project, email }) => {
       const db = createSupabaseClient(env);
-      const userId = (extra as any).userId;
+      const userId = getContext().userId!;
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -1360,9 +1399,9 @@ export function registerProjectManagementTools(server: McpServer, env: Env) {
       key: z.string().describe("Preference key"),
       value: z.string().describe("Preference value"),
     },
-    async ({ project, key, value }, extra) => {
+    async ({ project, key, value }) => {
       const db = createSupabaseClient(env);
-      const userId = (extra as any).userId;
+      const userId = getContext().userId!;
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -1383,7 +1422,7 @@ Create `src/mcp/tools/context-capture.ts`:
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Env } from "../../lib/env";
 
-export function registerContextCaptureTools(server: McpServer, env: Env) {
+export function registerContextCaptureTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   // Implemented in Task 8
 }
 ```
@@ -1393,7 +1432,7 @@ Create `src/mcp/tools/context-retrieval.ts`:
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Env } from "../../lib/env";
 
-export function registerContextRetrievalTools(server: McpServer, env: Env) {
+export function registerContextRetrievalTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   // Implemented in Task 9
 }
 ```
@@ -1403,7 +1442,7 @@ Create `src/mcp/tools/google-sync.ts`:
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Env } from "../../lib/env";
 
-export function registerGoogleSyncTools(server: McpServer, env: Env) {
+export function registerGoogleSyncTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   // Implemented in Task 12
 }
 ```
@@ -1487,11 +1526,12 @@ Replace `src/mcp/tools/context-capture.ts`:
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Env } from "../../lib/env";
+import type { GetMcpContext } from "../agent";
 import { createSupabaseClient } from "../../db/client";
 import { getProjectByName } from "../../db/queries/projects";
 import { upsertEntry } from "../../db/queries/entries";
 
-export function registerContextCaptureTools(server: McpServer, env: Env) {
+export function registerContextCaptureTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   server.tool(
     "save_context",
     "Save a piece of context (decision, convention, learning, etc.) to a project. Call this when a technical decision is made, an architecture pattern is discussed, or a team convention is established.",
@@ -1501,9 +1541,9 @@ export function registerContextCaptureTools(server: McpServer, env: Env) {
       content: z.string().describe("The context content (markdown)"),
       tags: z.array(z.string()).optional().describe("Optional tags for categorization"),
     },
-    async ({ project, path, content, tags }, extra) => {
+    async ({ project, path, content, tags }) => {
       const db = createSupabaseClient(env);
-      const userId = (extra as any).userId;
+      const userId = getContext().userId!;
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -1533,9 +1573,9 @@ export function registerContextCaptureTools(server: McpServer, env: Env) {
       decisions: z.array(z.string()).optional().describe("Key decisions made during this session"),
       pending: z.array(z.string()).optional().describe("Pending items for follow-up"),
     },
-    async ({ project, summary, decisions, pending }, extra) => {
+    async ({ project, summary, decisions, pending }) => {
       const db = createSupabaseClient(env);
-      const userId = (extra as any).userId;
+      const userId = getContext().userId!;
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -1589,9 +1629,9 @@ export function registerContextCaptureTools(server: McpServer, env: Env) {
       content: z.string().describe("File content"),
       content_type: z.enum(["markdown", "json"]).describe("Content type"),
     },
-    async ({ project, path, content, content_type }, extra) => {
+    async ({ project, path, content, content_type }) => {
       const db = createSupabaseClient(env);
-      const userId = (extra as any).userId;
+      const userId = getContext().userId!;
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -1814,12 +1854,13 @@ Replace `src/mcp/tools/context-retrieval.ts`:
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Env } from "../../lib/env";
+import type { GetMcpContext } from "../agent";
 import { createSupabaseClient } from "../../db/client";
 import { getProjectByName } from "../../db/queries/projects";
 import { getEntry, listEntries, searchEntries, getRecentEntries, getAllEntries } from "../../db/queries/entries";
 import { getPreferences } from "../../db/queries/preferences";
 
-export function registerContextRetrievalTools(server: McpServer, env: Env) {
+export function registerContextRetrievalTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   server.tool(
     "get_context",
     "Retrieve a specific context entry by its path within a project.",
@@ -1827,9 +1868,9 @@ export function registerContextRetrievalTools(server: McpServer, env: Env) {
       project: z.string().describe("Project name"),
       path: z.string().describe("Path to the entry, e.g., 'decisions/chose-postgres.md'"),
     },
-    async ({ project, path }, extra) => {
+    async ({ project, path }) => {
       const db = createSupabaseClient(env);
-      const userId = (extra as any).userId;
+      const userId = getContext().userId!;
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -1852,9 +1893,9 @@ export function registerContextRetrievalTools(server: McpServer, env: Env) {
       tags: z.array(z.string()).optional().describe("Filter by tags"),
       folder: z.string().optional().describe("Limit search to a folder path prefix"),
     },
-    async ({ project, query, tags, folder }, extra) => {
+    async ({ project, query, tags, folder }) => {
       const db = createSupabaseClient(env);
-      const userId = (extra as any).userId;
+      const userId = getContext().userId!;
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -1882,9 +1923,9 @@ export function registerContextRetrievalTools(server: McpServer, env: Env) {
       project: z.string().describe("Project name"),
       folder: z.string().optional().describe("Folder path to list (omit for full project tree)"),
     },
-    async ({ project, folder }, extra) => {
+    async ({ project, folder }) => {
       const db = createSupabaseClient(env);
-      const userId = (extra as any).userId;
+      const userId = getContext().userId!;
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -1911,9 +1952,9 @@ export function registerContextRetrievalTools(server: McpServer, env: Env) {
     {
       project: z.string().describe("Project name"),
     },
-    async ({ project }, extra) => {
+    async ({ project }) => {
       const db = createSupabaseClient(env);
-      const userId = (extra as any).userId;
+      const userId = getContext().userId!;
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -2172,7 +2213,7 @@ import { createSupabaseClient } from "../db/client";
 import { listEntries, getEntry } from "../db/queries/entries";
 
 export function registerResources(server: McpServer, env: Env) {
-  // Resource template for project tree
+  // Resource templates for project tree and individual entries
   server.resource(
     "project-tree",
     "context://{project}/tree",
@@ -2198,6 +2239,42 @@ export function registerResources(server: McpServer, env: Env) {
 
       return {
         contents: [{ uri: uri.href, mimeType: "text/plain", text: tree }],
+      };
+    }
+  );
+
+  // Resource template for individual entry content
+  server.resource(
+    "project-entry",
+    "context://{project}/{path}",
+    "Read a specific context entry by project name and path",
+    async (uri) => {
+      const parts = uri.pathname.split("/");
+      const project = parts[1];
+      const path = parts.slice(2).join("/");
+      const db = createSupabaseClient(env);
+
+      const { data: proj } = await db
+        .from("projects")
+        .select("id")
+        .eq("name", project)
+        .single();
+
+      if (!proj) {
+        return { contents: [{ uri: uri.href, mimeType: "text/plain", text: "Project not found" }] };
+      }
+
+      const entry = await getEntry(db, proj.id, path);
+      if (!entry) {
+        return { contents: [{ uri: uri.href, mimeType: "text/plain", text: "Entry not found" }] };
+      }
+
+      return {
+        contents: [{
+          uri: uri.href,
+          mimeType: entry.content_type === "json" ? "application/json" : "text/markdown",
+          text: entry.content,
+        }],
       };
     }
   );
@@ -2556,21 +2633,22 @@ Replace `src/mcp/tools/google-sync.ts`:
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Env } from "../../lib/env";
+import type { GetMcpContext } from "../agent";
 import { createSupabaseClient } from "../../db/client";
 import { getProjectByName } from "../../db/queries/projects";
 import { syncProjectToGoogle } from "../../sync/to-google";
 import { syncProjectFromGoogle } from "../../sync/from-google";
 
-export function registerGoogleSyncTools(server: McpServer, env: Env) {
+export function registerGoogleSyncTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   server.tool(
     "sync_to_google_docs",
     "Push all project context to the linked Google Drive folder. Requires Google Drive to be configured.",
     {
       project: z.string().describe("Project name"),
     },
-    async ({ project }, extra) => {
+    async ({ project }) => {
       const db = createSupabaseClient(env);
-      const userId = (extra as any).userId;
+      const userId = getContext().userId!;
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -2594,9 +2672,9 @@ export function registerGoogleSyncTools(server: McpServer, env: Env) {
     {
       project: z.string().describe("Project name"),
     },
-    async ({ project }, extra) => {
+    async ({ project }) => {
       const db = createSupabaseClient(env);
-      const userId = (extra as any).userId;
+      const userId = getContext().userId!;
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -2663,9 +2741,14 @@ export { sync };
 
 Add to `src/api/auth.ts`:
 ```typescript
-// Google OAuth connect flow
-auth.get("/google/connect", async (c) => {
+import { authMiddleware } from "../lib/auth";
+
+// Google OAuth connect flow — requires auth so we know which user to link
+auth.get("/google/connect", authMiddleware, async (c) => {
+  const user = c.get("user");
+  // Pass user ID in state so callback can associate tokens with the user
   const redirectUri = new URL("/auth/google/callback", c.req.url).href;
+  const state = btoa(JSON.stringify({ userId: user.id }));
   const params = new URLSearchParams({
     client_id: c.env.GOOGLE_CLIENT_ID,
     redirect_uri: redirectUri,
@@ -2673,14 +2756,18 @@ auth.get("/google/connect", async (c) => {
     scope: "https://www.googleapis.com/auth/drive.file",
     access_type: "offline",
     prompt: "consent",
+    state,
   });
   return c.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
 });
 
 auth.get("/google/callback", async (c) => {
   const code = c.req.query("code");
+  const stateParam = c.req.query("state");
   if (!code) throw new AppError("Missing code parameter", 400, "VALIDATION_ERROR");
+  if (!stateParam) throw new AppError("Missing state parameter", 400, "VALIDATION_ERROR");
 
+  const { userId } = JSON.parse(atob(stateParam));
   const redirectUri = new URL("/auth/google/callback", c.req.url).href;
 
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -2700,10 +2787,23 @@ auth.get("/google/callback", async (c) => {
     throw new AppError("Failed to exchange code for tokens", 400, "OAUTH_ERROR");
   }
 
-  // TODO: associate with the authenticated user
-  // For now, return tokens for manual storage
+  // Save tokens to the user record
+  const db = createSupabaseClient(c.env);
+  const { error } = await db
+    .from("users")
+    .update({
+      google_oauth_tokens: {
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        expires_at: Date.now() + tokens.expires_in * 1000,
+      },
+    })
+    .eq("id", userId);
+
+  if (error) throw error;
+
   return c.json({
-    message: "Google connected. Store these tokens securely.",
+    message: "Google account connected successfully.",
     note: "Use set_preference to link a Google Drive folder to your project.",
   });
 });
