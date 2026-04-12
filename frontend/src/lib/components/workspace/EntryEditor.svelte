@@ -50,14 +50,13 @@ let {
   };
 }} class="glass space-y-4" style="padding: 2rem;">
   {#if isNew}
-    <input type="text" name="path" placeholder="Path (e.g., decisions/chose-svelte.md)"
+    <label for="editor-path" class="sr-only">File path</label>
+    <input id="editor-path" type="text" name="path" placeholder="Path (e.g., decisions/chose-svelte.md)"
       required autofocus
       value={pathPrefix}
-      class="w-full text-sm"
+      class="w-full text-sm editor-input"
       style="border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 16px;
         transition: var(--transition-base); outline: none;"
-      onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-pink)'; e.currentTarget.style.boxShadow = 'inset 0 2px 4px rgba(86, 28, 36, 0.06)'; }}
-      onblur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = ''; }}
     />
   {:else}
     <input type="hidden" name="path" value={entry?.path ?? ""} />
@@ -65,20 +64,18 @@ let {
       Editing: {entry?.path}
     </div>
   {/if}
-  <textarea name="content" placeholder="Content (markdown)"
-    class="w-full text-sm font-mono"
+  <label for="editor-content" class="sr-only">Content (markdown)</label>
+  <textarea id="editor-content" name="content" placeholder="Content (markdown)"
+    class="w-full text-sm font-mono editor-input"
     style="border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 16px;
       min-height: 400px; line-height: 1.6; transition: var(--transition-base); outline: none;"
-    onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-pink)'; e.currentTarget.style.boxShadow = 'inset 0 2px 4px rgba(86, 28, 36, 0.06)'; }}
-    onblur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = ''; }}
   >{entry?.content ?? ""}</textarea>
-  <input type="text" name="tags" placeholder="Tags (comma-separated)"
+  <label for="editor-tags" class="sr-only">Tags (comma-separated)</label>
+  <input id="editor-tags" type="text" name="tags" placeholder="Tags (comma-separated)"
     value={entry?.tags?.join(", ") ?? ""}
-    class="w-full text-sm"
+    class="w-full text-sm editor-input"
     style="border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 16px;
       transition: var(--transition-base); outline: none;"
-    onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-pink)'; e.currentTarget.style.boxShadow = 'inset 0 2px 4px rgba(86, 28, 36, 0.06)'; }}
-    onblur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = ''; }}
   />
   <div class="flex gap-2 items-center">
     <button type="submit" class="btn-primary cursor-pointer">
@@ -90,3 +87,10 @@ let {
     </button>
   </div>
 </form>
+
+<style>
+  .editor-input:focus {
+    border-color: var(--color-pink) !important;
+    box-shadow: inset 0 2px 4px rgba(86, 28, 36, 0.06);
+  }
+</style>

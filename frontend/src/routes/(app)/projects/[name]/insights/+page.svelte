@@ -84,15 +84,15 @@ function handleSubmit() {
   {/if}
 
   {#if form?.error}
-    <div class="error-msg mb-4">{form.error}</div>
+    <div class="error-msg mb-4" role="alert">{form.error}</div>
   {/if}
 
   {#if form?.created}
-    <div class="success-msg mb-4">Insight created.</div>
+    <div class="success-msg mb-4" role="status">Insight created.</div>
   {/if}
 
   {#if form?.deleted}
-    <div class="success-msg mb-4">Insight deleted.</div>
+    <div class="success-msg mb-4" role="status">Insight deleted.</div>
   {/if}
 
   <InsightList insights={data.insights} />

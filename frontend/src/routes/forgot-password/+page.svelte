@@ -31,13 +31,14 @@ let loading = $state(false);
           await update();
         };
       }} class="space-y-4">
-        <input type="email" name="email" placeholder="Email" required
+        <label for="reset-email" class="sr-only">Email</label>
+        <input id="reset-email" type="email" name="email" placeholder="Email" required
           value={form?.email ?? ""}
           class="w-full text-sm"
           style="border-radius: 12px; padding: 12px 16px; transition: all 150ms ease; border: 1px solid var(--color-border); background-color: var(--color-bg); color: var(--color-text);"
         />
         {#if form?.error}
-          <p class="text-sm" style="color: var(--color-danger);">{form.error}</p>
+          <p class="text-sm" role="alert" style="color: var(--color-danger);">{form.error}</p>
         {/if}
         <button type="submit" disabled={loading}
           class="btn-primary w-full cursor-pointer"

@@ -20,16 +20,18 @@ let loading = $state(false);
         await update();
       };
     }} class="space-y-4">
-      <input type="password" name="password" placeholder="New password" required minlength="8"
+      <label for="new-password" class="sr-only">New password</label>
+      <input id="new-password" type="password" name="password" placeholder="New password" required minlength="8"
         class="w-full text-sm"
         style="border-radius: 12px; padding: 12px 16px; transition: all 150ms ease; border: 1px solid var(--color-border); background-color: var(--color-bg); color: var(--color-text);"
       />
-      <input type="password" name="confirm" placeholder="Confirm password" required minlength="8"
+      <label for="confirm-password" class="sr-only">Confirm password</label>
+      <input id="confirm-password" type="password" name="confirm" placeholder="Confirm password" required minlength="8"
         class="w-full text-sm"
         style="border-radius: 12px; padding: 12px 16px; transition: all 150ms ease; border: 1px solid var(--color-border); background-color: var(--color-bg); color: var(--color-text);"
       />
       {#if form?.error}
-        <p class="text-sm" style="color: var(--color-danger);">{form.error}</p>
+        <p class="text-sm" role="alert" style="color: var(--color-danger);">{form.error}</p>
       {/if}
       <button type="submit" disabled={loading}
         class="btn-primary w-full cursor-pointer"
