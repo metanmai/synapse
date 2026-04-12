@@ -22,7 +22,9 @@ async function request<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${env.API_URL}${path}`, { ...options, headers });
+  const url = `${env.API_URL}${path}`;
+  console.log(`[api] ${options.method ?? "GET"} ${url}`);
+  const res = await fetch(url, { ...options, headers });
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
