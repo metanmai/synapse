@@ -224,7 +224,9 @@ context.get("/:project/load", async (c) => {
     }
     case "summary_only": {
       const entries = await getAllEntries(db, proj.id);
-      const summary = entries.map((e) => `- **${e.path}**: ${e.content.slice(0, SUMMARY_PREVIEW_LENGTH)}...`).join("\n");
+      const summary = entries
+        .map((e) => `- **${e.path}**: ${e.content.slice(0, SUMMARY_PREVIEW_LENGTH)}...`)
+        .join("\n");
       return c.json({ mode: "summary_only", summary });
     }
   }
