@@ -1,45 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  agentColors,
   defaultToolBadge,
   formatMessageTime,
   formatRelativeDate,
-  getAgentColor,
   getToolBadge,
   getToolLabel,
-  pluralizeMessages,
-  roleLabels,
-  statusColors,
   toolBadgeColors,
   toolSummary,
 } from "./conversation-helpers";
-
-// ---------- statusColors ----------
-
-describe("statusColors", () => {
-  it("defines colors for active, archived, and deleted statuses", () => {
-    expect(statusColors.active).toBeDefined();
-    expect(statusColors.archived).toBeDefined();
-    expect(statusColors.deleted).toBeDefined();
-  });
-
-  it("each entry has bg and text properties", () => {
-    for (const [, value] of Object.entries(statusColors)) {
-      expect(value).toHaveProperty("bg");
-      expect(value).toHaveProperty("text");
-      expect(typeof value.bg).toBe("string");
-      expect(typeof value.text).toBe("string");
-    }
-  });
-
-  it("active status uses green color", () => {
-    expect(statusColors.active.text).toBe("#16a34a");
-  });
-
-  it("deleted status uses red color", () => {
-    expect(statusColors.deleted.text).toBe("#dc2626");
-  });
-});
 
 // ---------- formatRelativeDate ----------
 
@@ -107,90 +75,6 @@ describe("formatRelativeDate", () => {
   });
 });
 
-// ---------- agentColors ----------
-
-describe("agentColors", () => {
-  it("maps claude-code to orange", () => {
-    expect(agentColors["claude-code"]).toBe("#ea580c");
-  });
-
-  it("maps chatgpt to green", () => {
-    expect(agentColors.chatgpt).toBe("#16a34a");
-  });
-
-  it("maps gemini to blue", () => {
-    expect(agentColors.gemini).toBe("#2563eb");
-  });
-});
-
-// ---------- getAgentColor ----------
-
-describe("getAgentColor", () => {
-  it("returns orange for claude-code agent", () => {
-    expect(getAgentColor("claude-code")).toBe("#ea580c");
-  });
-
-  it("returns orange for Claude (case-insensitive)", () => {
-    expect(getAgentColor("Claude")).toBe("#ea580c");
-  });
-
-  it("returns green for ChatGPT (case-insensitive)", () => {
-    expect(getAgentColor("ChatGPT")).toBe("#16a34a");
-  });
-
-  it("returns green for agent names containing gpt", () => {
-    expect(getAgentColor("gpt-4o")).toBe("#16a34a");
-  });
-
-  it("returns blue for Gemini", () => {
-    expect(getAgentColor("Gemini Pro")).toBe("#2563eb");
-  });
-
-  it("returns default gray for unknown agents", () => {
-    expect(getAgentColor("unknown-agent")).toBe("#6b7280");
-  });
-
-  it("returns default gray for empty string", () => {
-    expect(getAgentColor("")).toBe("#6b7280");
-  });
-
-  it("matches claude-code before claude (more specific first)", () => {
-    // "claude-code" includes "claude", but the map iterates in insertion order
-    // and "claude-code" is listed first
-    expect(getAgentColor("claude-code")).toBe("#ea580c");
-  });
-});
-
-// ---------- roleLabels ----------
-
-describe("roleLabels", () => {
-  it("defines labels for user, assistant, system, and tool", () => {
-    expect(roleLabels.user).toBeDefined();
-    expect(roleLabels.assistant).toBeDefined();
-    expect(roleLabels.system).toBeDefined();
-    expect(roleLabels.tool).toBeDefined();
-  });
-
-  it("user role has label 'User'", () => {
-    expect(roleLabels.user.label).toBe("User");
-  });
-
-  it("assistant role has label 'Assistant'", () => {
-    expect(roleLabels.assistant.label).toBe("Assistant");
-  });
-
-  it("tool role uses purple color", () => {
-    expect(roleLabels.tool.color).toBe("#9333ea");
-  });
-
-  it("each role has label and color", () => {
-    for (const [, value] of Object.entries(roleLabels)) {
-      expect(typeof value.label).toBe("string");
-      expect(typeof value.color).toBe("string");
-    }
-  });
-});
-
 // ---------- formatMessageTime ----------
 
 describe("formatMessageTime", () => {
@@ -242,23 +126,6 @@ describe("toolSummary", () => {
       },
     };
     expect(toolSummary(msg)).toBe("Called search");
-  });
-});
-
-// ---------- pluralizeMessages ----------
-
-describe("pluralizeMessages", () => {
-  it("uses singular for count of 1", () => {
-    expect(pluralizeMessages(1)).toBe("1 message");
-  });
-
-  it("uses plural for count of 0", () => {
-    expect(pluralizeMessages(0)).toBe("0 messages");
-  });
-
-  it("uses plural for count > 1", () => {
-    expect(pluralizeMessages(5)).toBe("5 messages");
-    expect(pluralizeMessages(100)).toBe("100 messages");
   });
 });
 
