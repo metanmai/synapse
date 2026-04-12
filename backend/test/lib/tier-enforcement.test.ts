@@ -15,10 +15,7 @@ import {
 // ---------------------------------------------------------------------------
 // Helper: create a minimal mock Hono Context with tier and env bindings
 // ---------------------------------------------------------------------------
-function createMockContext(
-  tier: "free" | "plus",
-  envOverrides?: Record<string, string>,
-) {
+function createMockContext(tier: "free" | "plus", envOverrides?: Record<string, string>) {
   const vars: Record<string, unknown> = { tier };
   return {
     get: (key: string) => vars[key],
@@ -180,9 +177,7 @@ describe("enforceConnectionLimit", () => {
 
   it("throws when free tier connections reach limit (3)", () => {
     const c = createMockContext("free");
-    expect(() =>
-      enforceConnectionLimit(3, "google_docs", c),
-    ).toThrowError(AppError);
+    expect(() => enforceConnectionLimit(3, "google_docs", c)).toThrowError(AppError);
 
     try {
       enforceConnectionLimit(3, "google_docs", c);
@@ -197,22 +192,14 @@ describe("enforceConnectionLimit", () => {
 
   it("throws when free tier connections exceed limit", () => {
     const c = createMockContext("free");
-    expect(() =>
-      enforceConnectionLimit(10, "google_docs", c),
-    ).toThrowError(AppError);
+    expect(() => enforceConnectionLimit(10, "google_docs", c)).toThrowError(AppError);
   });
 
   it("always passes for plus tier (limit=0 means unlimited)", () => {
     const c = createMockContext("plus");
-    expect(() =>
-      enforceConnectionLimit(0, "google_docs", c),
-    ).not.toThrow();
-    expect(() =>
-      enforceConnectionLimit(50, "google_docs", c),
-    ).not.toThrow();
-    expect(() =>
-      enforceConnectionLimit(999, "google_docs", c),
-    ).not.toThrow();
+    expect(() => enforceConnectionLimit(0, "google_docs", c)).not.toThrow();
+    expect(() => enforceConnectionLimit(50, "google_docs", c)).not.toThrow();
+    expect(() => enforceConnectionLimit(999, "google_docs", c)).not.toThrow();
   });
 });
 
@@ -296,12 +283,8 @@ describe("env var overrides", () => {
 
   it("uses custom TIER_FREE_MAX_CONNECTIONS when set", () => {
     const c = createMockContext("free", { TIER_FREE_MAX_CONNECTIONS: "5" });
-    expect(() =>
-      enforceConnectionLimit(4, "google_docs", c),
-    ).not.toThrow();
-    expect(() =>
-      enforceConnectionLimit(5, "google_docs", c),
-    ).toThrowError(AppError);
+    expect(() => enforceConnectionLimit(4, "google_docs", c)).not.toThrow();
+    expect(() => enforceConnectionLimit(5, "google_docs", c)).toThrowError(AppError);
   });
 
   it("uses custom TIER_FREE_MAX_MEMBERS when set", () => {

@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { ConversationMessage } from "$lib/types";
-import { getAgentColor, roleLabels, formatMessageTime, toolSummary } from "./conversation-helpers";
+import { formatMessageTime, getAgentColor, roleLabels, toolSummary } from "./conversation-helpers";
 
 let { messages, showTools = false } = $props<{
   messages: ConversationMessage[];

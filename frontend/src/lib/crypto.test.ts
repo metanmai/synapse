@@ -1,13 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import {
-  encrypt,
-  decrypt,
-  isEncrypted,
-  hasPassphrase,
-  getPassphrase,
-  setPassphrase,
-  clearPassphrase,
-} from "./crypto";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { clearPassphrase, decrypt, encrypt, getPassphrase, hasPassphrase, isEncrypted, setPassphrase } from "./crypto";
 
 // ---------- sessionStorage mock ----------
 const store: Record<string, string> = {};
