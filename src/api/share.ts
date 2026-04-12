@@ -1,11 +1,12 @@
 import { Hono } from "hono";
-import type { Env } from "../lib/env";
+
 import { authMiddleware } from "../lib/auth";
 import { createSupabaseClient } from "../db/client";
-import { getShareLinkByToken } from "../db/queries/share-links";
-import { addMember, getMemberRole } from "../db/queries/projects";
+import { getShareLinkByToken, addMember, getMemberRole } from "../db/queries";
 import { logActivity } from "../db/activity-logger";
 import { AppError, NotFoundError } from "../lib/errors";
+
+import type { Env } from "../lib/env";
 
 const share = new Hono<{ Bindings: Env }>();
 

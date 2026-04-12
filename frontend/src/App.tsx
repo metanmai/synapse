@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+
 import { useAuth } from "./lib/auth";
-import { AppShell } from "./components/layout/AppShell";
+import { AppShell } from "./components/layout";
 import { LoginPage } from "./pages/LoginPage";
 import { SignupPage } from "./pages/SignupPage";
 import { DashboardPage } from "./pages/DashboardPage";
