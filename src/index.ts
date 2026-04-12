@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "./lib/env";
 import { AppError } from "./lib/errors";
+import { auth } from "./api/auth";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -13,5 +14,6 @@ app.onError((err, c) => {
 });
 
 app.get("/health", (c) => c.json({ status: "ok", service: "mcp-sync" }));
+app.route("/auth", auth);
 
 export default app;
