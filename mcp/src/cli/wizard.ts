@@ -1,5 +1,5 @@
 import * as clack from "@clack/prompts";
-import { cliAuthLogin, cliAuthSignup } from "./api.js";
+import { browserAuth } from "./browser-auth.js";
 import { detectEditors, writeEditorConfigs } from "./editors.js";
 import { createGlyphSpinner } from "./spinner.js";
 import { accent, bold, muted, success } from "./theme.js";
@@ -10,13 +10,12 @@ export async function runWizard(version: string): Promise<void> {
   await showWelcome(version);
 
   // Step 2: Auth method
-  clack.intro(`${accent("◆")} ${bold("Synapse setup")}`);
+  clack.intro(`${accent("\u25C6")} ${bold("Synapse setup")}`);
 
   const authMethod = await clack.select({
     message: "How do you want to connect?",
     options: [
-      { value: "signup" as const, label: "Create account", hint: "email only, 30s" },
-      { value: "login" as const, label: "Sign in", hint: "email + password" },
+      { value: "browser" as const, label: "Sign in with browser", hint: "opens synapsesync.app" },
       { value: "key" as const, label: "Paste an API key", hint: "from the dashboard" },
     ],
   });
@@ -26,60 +25,22 @@ export async function runWizard(version: string): Promise<void> {
     process.exit(0);
   }
 
-  // Step 3 + 4: Credentials + loading
+  // Step 3 + 4: Auth
   let apiKey: string;
 
-  if (authMethod === "signup") {
-    const email = await clack.text({
-      message: "Email",
-      placeholder: "you@example.com",
-      validate: (v) => (v?.trim() ? undefined : "Required"),
-    });
-    if (clack.isCancel(email)) {
-      clack.cancel("Cancelled.");
-      process.exit(0);
-    }
-
+  if (authMethod === "browser") {
     const spin = createGlyphSpinner();
-    spin.start("Creating account\u2026");
-    const r = await cliAuthSignup(email.trim());
-    if (!r.ok) {
-      spin.stop("Signup failed");
-      clack.log.error(r.message);
+    spin.start("Waiting for browser login\u2026");
+
+    try {
+      const result = await browserAuth();
+      spin.stop(`Signed in as ${result.email}`);
+      apiKey = result.api_key;
+    } catch (err) {
+      spin.stop("Login failed");
+      clack.log.error((err as Error).message);
       process.exit(1);
     }
-    spin.stop(`Signed up as ${r.data.email}`);
-    apiKey = r.data.api_key;
-  } else if (authMethod === "login") {
-    const email = await clack.text({
-      message: "Email",
-      placeholder: "you@example.com",
-      validate: (v) => (v?.trim() ? undefined : "Required"),
-    });
-    if (clack.isCancel(email)) {
-      clack.cancel("Cancelled.");
-      process.exit(0);
-    }
-
-    const pw = await clack.password({
-      message: "Password",
-      validate: (v) => (v?.trim() ? undefined : "Required"),
-    });
-    if (clack.isCancel(pw)) {
-      clack.cancel("Cancelled.");
-      process.exit(0);
-    }
-
-    const spin = createGlyphSpinner();
-    spin.start("Signing in\u2026");
-    const r = await cliAuthLogin(email.trim(), pw, "cli");
-    if (!r.ok) {
-      spin.stop("Could not sign in");
-      clack.log.error(r.message);
-      process.exit(1);
-    }
-    spin.stop(`Signed in as ${r.data.email}`);
-    apiKey = r.data.api_key;
   } else {
     clack.log.info("Create a key at synapsesync.app \u2192 Account \u2192 API keys");
     const key = await clack.password({
