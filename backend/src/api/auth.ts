@@ -1,7 +1,15 @@
 import { Hono } from "hono";
 
 import { createSupabaseClient } from "../db/client";
-import { countApiKeys, createApiKey, createUser, deleteApiKey, findUserByEmail, listApiKeys } from "../db/queries";
+import {
+  countApiKeys,
+  createApiKey,
+  createUser,
+  deleteApiKey,
+  deleteUser,
+  findUserByEmail,
+  listApiKeys,
+} from "../db/queries";
 import { authMiddleware, hashApiKey } from "../lib/auth";
 import { AppError, ConflictError } from "../lib/errors";
 import { parseBody, schemas } from "../lib/validate";
@@ -318,5 +326,13 @@ account.delete("/keys/:id", async (c) => {
     throw new AppError("API key not found", 404, "NOT_FOUND");
   }
 
+  return c.json({ ok: true });
+});
+
+// DELETE /api/account — delete the authenticated user and all their data
+account.delete("/", async (c) => {
+  const user = c.get("user");
+  const db = createSupabaseClient(c.env);
+  await deleteUser(db, user.id);
   return c.json({ ok: true });
 });
