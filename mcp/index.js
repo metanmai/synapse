@@ -9,6 +9,7 @@ const API_URL = "https://synapse.tanmai.workers.dev";
 const API_KEY = process.env.SYNAPSE_API_KEY;
 const PASSPHRASE = process.env.SYNAPSE_PASSPHRASE;
 const USER_EMAIL = process.env.SYNAPSE_USER_EMAIL;
+const SOURCE = process.env.SYNAPSE_SOURCE || "claude";
 const DEFAULT_PROJECT_NAME = "My Workspace";
 
 if (!API_KEY) {
@@ -173,7 +174,7 @@ server.tool(
       project,
       path,
       content: encrypted,
-      source: "claude",
+      source: SOURCE,
       tags: tags || [],
     });
     return { content: [{ type: "text", text: `Wrote ${path} (${content.length} chars, encrypted)` }] };
