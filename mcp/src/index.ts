@@ -13,7 +13,6 @@ import { API_URL } from "./cli/config.js";
 import { runStats } from "./cli/stats.js";
 import { accent, bold, muted } from "./cli/theme.js";
 import { runWizard } from "./cli/wizard.js";
-import { runDistill } from "./distill/cli.js";
 
 // --- Interfaces for MCP server response shapes ---
 
@@ -125,7 +124,6 @@ const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
   upgrade: async () => runUpgrade(),
   whoami: async () => runWhoami(),
   capture: async (args) => runCapture(args),
-  distill: async (args) => runDistill(args),
   reset: async () => runReset(),
   uninstall: async () => runUninstall(),
 };
@@ -139,7 +137,7 @@ function printHelp(): void {
   const lines = [
     "",
     `  ${bold("synapsesync-mcp")} ${muted(`v${v}`)}`,
-    `  ${muted("Capture sessions. Distill knowledge. Remember everything.")}`,
+    `  ${muted("Capture sessions. Remember everything.")}`,
     "",
     `  ${bold("Setup")}`,
     c("wizard", "Interactive setup + connect tools"),
@@ -152,10 +150,6 @@ function printHelp(): void {
     c("capture status", "Daemon health + session count"),
     c("capture list", "Browse captured sessions"),
     c("capture hook-install", "Auto-start capture with Claude Code"),
-    "",
-    `  ${bold("Distill")}`,
-    c("distill <id>", "Extract knowledge from a session"),
-    c("distill --latest", "Distill the most recent session"),
     "",
     `  ${bold("Workspace")}`,
     c("tree", "File tree"),
@@ -256,7 +250,6 @@ async function runMenu(): Promise<void> {
       { value: "status", label: "Status", hint: "connection health + config locations" },
       { value: "capture-start", label: "Start capture", hint: "begin recording AI sessions" },
       { value: "capture-status", label: "Capture status", hint: "daemon health + session count" },
-      { value: "distill", label: "Distill latest", hint: "extract knowledge from last session" },
       { value: "tree", label: "Workspace tree", hint: "browse your files" },
       { value: "wizard", label: "Setup wizard", hint: "connect tools + configure" },
       { value: "hook-install", label: "Install hook", hint: "auto-start capture with Claude Code" },
@@ -280,9 +273,6 @@ async function runMenu(): Promise<void> {
       break;
     case "capture-status":
       await runCapture(["status"]);
-      break;
-    case "distill":
-      await runDistill(["--latest"]);
       break;
     case "tree":
       await runTree();
@@ -380,17 +370,6 @@ if (!isMcpServerMode(args)) {
     if (!PASSPHRASE || !USER_EMAIL) return null;
     derivedKey = await deriveKeyNode(PASSPHRASE, USER_EMAIL);
     return derivedKey;
-  }
-
-  async function encryptContent(plaintext: string): Promise<string> {
-    const key = await getEncKey();
-    if (!key) return plaintext;
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-    const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-    const authTag = cipher.getAuthTag();
-    const combined = Buffer.concat([encrypted, authTag]);
-    return `${ENC_PREFIX}${iv.toString("hex")}:${combined.toString("base64")}`;
   }
 
   async function decryptContent(text: string): Promise<string> {
@@ -548,62 +527,6 @@ if (!isMcpServerMode(args)) {
 
       const content = await decryptContent(entry.content);
       return { content: [{ type: "text" as const, text: `${meta}\n---\n${content}` }] };
-    },
-  );
-
-  // --- write: create or update a file ---
-  server.tool(
-    "write",
-    "Write content to a file. Creates the file if it doesn't exist, updates it if it does. IMPORTANT: Always use the correct directory prefix: decisions/ for decisions, notes/ for meeting notes, bugs/ for bug diagnoses, architecture/ for architecture docs, retrospectives/ for retrospectives, projects/<name>/ for project-specific context, settings/ for settings. Never write to the root \u2014 always use a directory.",
-    {
-      path: z
-        .string()
-        .describe(
-          "File path with directory prefix (e.g. 'decisions/chose-redis.md', 'notes/standup-2026-03-22.md', 'bugs/auth-race.md', 'projects/myapp/overview.md'). Directories are created automatically.",
-        ),
-      content: z.string().describe("The full file content to write"),
-      tags: z.array(z.string()).optional().describe("Optional tags for the file"),
-    },
-    { destructiveHint: true },
-    async ({ path, content, tags }) => {
-      const project = await getProject();
-      const encrypted = await encryptContent(content);
-      await api("POST", "/api/context/save", {
-        project,
-        path,
-        content: encrypted,
-        source: SOURCE,
-        tags: tags || [],
-      });
-      return { content: [{ type: "text" as const, text: `Wrote ${path} (${content.length} chars)` }] };
-    },
-  );
-
-  // --- rm: delete a file ---
-  server.tool(
-    "rm",
-    "Delete a file. Like `rm` on a local filesystem. This is permanent and cannot be undone.",
-    { path: z.string().describe("File path to delete") },
-    { destructiveHint: true },
-    async ({ path }) => {
-      const { match, suggestions } = await resolvePath(path);
-      if (!match) {
-        if (suggestions.length > 0) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `File not found: ${path}\n\nDid you mean:\n${suggestions.map((s) => `  - ${s}`).join("\n")}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-        return { content: [{ type: "text" as const, text: `File not found: ${path}` }], isError: true };
-      }
-      const project = await getProject();
-      await api("DELETE", `/api/context/${encodeURIComponent(project)}/${encodeURIComponent(match)}`);
-      return { content: [{ type: "text" as const, text: `Deleted ${match}` }] };
     },
   );
 
@@ -1000,120 +923,6 @@ if (!isMcpServerMode(args)) {
           isError: true,
         };
       }
-    },
-  );
-
-  // --- sync_conversation: push messages to a conversation ---
-  server.tool(
-    "sync_conversation",
-    "Push messages to a conversation. Creates a new conversation if no conversationId is provided, otherwise appends.",
-    {
-      project: z.string().describe("Project name"),
-      conversationId: z
-        .string()
-        .optional()
-        .describe("Existing conversation ID to append to. Omit to create a new conversation."),
-      title: z.string().optional().describe("Conversation title (used when creating a new conversation)"),
-      systemPrompt: z.string().optional().describe("System prompt for the conversation"),
-      workingContext: z
-        .record(z.string(), z.unknown())
-        .optional()
-        .describe("Working context (key-value metadata about the environment, repo, etc.)"),
-      fidelity: z
-        .enum(["summary", "full"])
-        .optional()
-        .describe("Fidelity mode: 'summary' collapses tool calls, 'full' preserves everything. Default: summary"),
-      messages: z
-        .array(
-          z.object({
-            role: z.enum(["user", "assistant", "system", "tool"]).describe("Message role"),
-            content: z.string().describe("Message content"),
-            toolSummary: z.string().optional().describe("One-line summary of a tool call (for fidelity=summary)"),
-            sourceAgent: z.string().optional().describe("Agent that produced this message"),
-            sourceModel: z.string().optional().describe("Model used"),
-          }),
-        )
-        .describe("Messages to sync"),
-    },
-    { destructiveHint: true },
-    async ({ project, conversationId, title, systemPrompt, workingContext, fidelity, messages }) => {
-      const projectId = await resolveProjectId(project, true);
-      if (!projectId) {
-        return { content: [{ type: "text" as const, text: `Project "${project}" not found.` }], isError: true };
-      }
-
-      let convId = conversationId;
-      let action: string;
-
-      if (!convId) {
-        // Create new conversation
-        let created: ConversationSummary;
-        try {
-          created = (await api("POST", "/api/conversations", {
-            project_id: projectId,
-            title: title ?? null,
-            fidelity_mode: fidelity ?? "summary",
-            system_prompt: systemPrompt ?? null,
-            working_context: workingContext ?? null,
-          })) as ConversationSummary;
-        } catch (_e) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: "Failed to create conversation.",
-              },
-            ],
-            isError: true,
-          };
-        }
-        convId = created.id;
-        action = "Created";
-      } else {
-        action = "Updated";
-      }
-
-      // Append messages
-      let appended = 0;
-      if (messages.length > 0) {
-        try {
-          const msgRows = messages.map(
-            (msg: {
-              role: string;
-              content: string;
-              toolSummary?: string;
-              sourceAgent?: string;
-              sourceModel?: string;
-            }) => ({
-              role: msg.role,
-              content: msg.content,
-              tool_interaction: msg.toolSummary ? { name: "tool", summary: msg.toolSummary } : null,
-              source_agent: msg.sourceAgent ?? SOURCE,
-              source_model: msg.sourceModel ?? null,
-            }),
-          );
-          await api("POST", `/api/conversations/${encodeURIComponent(convId)}/messages`, {
-            messages: msgRows,
-          });
-          appended = messages.length;
-        } catch (_e) {
-          return {
-            content: [
-              { type: "text" as const, text: `${action} conversation "${convId}" but failed to append messages.` },
-            ],
-            isError: true,
-          };
-        }
-      }
-
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `${action} conversation "${convId}" in project "${project}". ${appended} message(s) appended.`,
-          },
-        ],
-      };
     },
   );
 

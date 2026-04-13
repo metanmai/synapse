@@ -34,7 +34,6 @@ const REGISTERED_COMMANDS = [
   "upgrade",
   "whoami",
   "capture",
-  "distill",
   "reset",
   "uninstall",
 ];

@@ -1,84 +1,80 @@
 # Synapse
 
-Synapse is a context management tool that stores knowledge as files in a remote workspace. It has a web frontend (SvelteKit), a backend API (Cloudflare Workers), and an MCP server that exposes the workspace as a filesystem.
+Synapse is a context management tool that captures AI coding sessions and surfaces insights across projects. It has a web frontend (SvelteKit), a backend API (Cloudflare Workers), and an MCP server that exposes the workspace for read + `save_insight` writes.
 
-CRITICAL REQUIREMENT: You MUST call `mcp__synapse__search()` or `mcp__synapse__tree()` BEFORE scanning the codebase, reading files, or doing any other work when the user asks about context, decisions, past work, architecture, or how something works. Synapse is the user's cross-session knowledge base. Skipping it means you will miss important context and waste time rediscovering things already documented. This is a BLOCKING step — do not proceed to codebase exploration until Synapse has been checked.
+CRITICAL REQUIREMENT: You MUST call `mcp__synapse__search()` or `mcp__synapse__list_insights()` BEFORE scanning the codebase, reading files, or doing any other work when the user asks about context, decisions, past work, architecture, or how something works. Synapse is the user's cross-session knowledge base. Skipping it means you will miss important context and waste time rediscovering things already documented. This is a BLOCKING step — do not proceed to codebase exploration until Synapse has been checked.
 
 ## MCP Server — Synapse Workspace
 
-You have access to a **Synapse MCP server** that connects to the user's remote workspace. Use it like a filesystem:
+You have access to a **Synapse MCP server** that connects to the user's remote workspace. The server is read-only for the filesystem surface; the only write tool is `save_insight`, which is how agents record new knowledge.
 
 ### Tools
 
 | Tool | Use | Example |
 |------|-----|---------|
-| `mcp__synapse__ls` | List files in a directory | `ls()` or `ls({ path: "decisions" })` |
-| `mcp__synapse__read` | Read a file's content | `read({ path: "decisions/chose-svelte.md" })` |
-| `mcp__synapse__write` | Create or update a file | `write({ path: "notes/meeting.md", content: "..." })` |
-| `mcp__synapse__search` | Semantic search across all files (understands meaning, not just keywords) | `search({ query: "authentication" })` |
+| `mcp__synapse__search` | Semantic search across all content | `search({ query: "authentication" })` |
+| `mcp__synapse__list_insights` | List insights for a project | `list_insights({ project: "synapse" })` |
+| `mcp__synapse__save_insight` | **Save a decision/learning/preference/architecture note/action item** | `save_insight({ project, type: "decision", summary, detail })` |
+| `mcp__synapse__list_conversations` | List captured AI sessions for a project | `list_conversations({ project: "synapse" })` |
+| `mcp__synapse__load_conversation` | Resume a session in a new agent | `load_conversation({ conversationId: "ses_..." })` |
+| `mcp__synapse__ls` | List files in a historical directory | `ls({ path: "decisions" })` |
+| `mcp__synapse__read` | Read a historical file | `read({ path: "decisions/chose-svelte.md" })` |
 | `mcp__synapse__history` | View version history | `history({ path: "decisions/chose-svelte.md" })` |
 | `mcp__synapse__tree` | Show full directory tree | `tree()` |
 
 ### When to use Synapse
 
-- **When the user asks you to save, write, or remember something** — write it to Synapse, not the local filesystem. Synapse IS their knowledge base.
-- **When the user asks about past decisions, notes, or context** — search or read from Synapse first.
-- **When starting work on this project** — run `tree()` to see what context is available.
-- **Organize files logically** — use directory paths like `decisions/`, `notes/`, `context/`, `specs/` etc. Directories are created automatically from the path.
+- **When the user asks you to save, write, or remember something** — call `save_insight` with the appropriate type (`decision`, `learning`, `preference`, `architecture`, or `action_item`). This is the ONE write path.
+- **When the user asks about past decisions, notes, or context** — `list_insights` or `search` first.
+- **When starting work on this project** — `list_insights({ project: "synapse" })` and `search({ query: "<topic>" })` to load what's already known.
 
 ### Important
 
-- Content may be **end-to-end encrypted**. The MCP server handles encryption/decryption transparently if `SYNAPSE_PASSPHRASE` is set.
+- The filesystem-style tools (`ls`, `read`, `tree`, `history`, `search`) browse **historical files** written by earlier versions of Synapse. Use them to discover prior context, but do not expect to write new files — there is no `write` tool.
+- New knowledge flows through two paths:
+  1. **`save_insight`** — agent-initiated, structured knowledge (what this CLAUDE.md expects you to use)
+  2. **Capture daemon** — records AI coding sessions automatically → captured as conversations → compacted into summaries server-side
 - Paths are like filesystem paths: `folder/subfolder/file.md`
-- Files are markdown by default. Write in markdown.
-- Tags are optional but useful: `write({ path: "...", content: "...", tags: ["decision", "architecture"] })`
 
 ## Synapse as Default Context Layer
 
-Synapse REPLACES local filesystem for all context operations. Do NOT write context, notes, decisions, summaries, or memory to local files. Use Synapse for everything.
+Synapse REPLACES local filesystem for all context operations. Do NOT save context, notes, decisions, summaries, or memory to local files. Use `save_insight` for everything worth remembering.
 
 ### Session Start
-- Check if the Synapse MCP tools are available (try `tree()`). If they're not connected:
+- Check if the Synapse MCP tools are available (try `list_insights({ project: "synapse" })`). If they're not connected:
   1. Check if `.mcp.json` exists in the current project directory with a synapse server config.
   2. If not, ask the user for their Synapse API key and create `.mcp.json` with: `{ "mcpServers": { "synapse": { "command": "npx", "args": ["synapsesync-mcp"], "env": { "SYNAPSE_API_KEY": "<key>" } } } }`
   3. Tell the user to restart Claude Code to pick up the MCP server.
-- Once connected, check Synapse for existing context relevant to the current task: `tree()` or `search()`
-- Check Synapse for `settings/claude-settings.json` and `settings/CLAUDE.md`. Compare with local versions:
-  - **If they match** — no action needed.
-  - **If they differ** — first check Synapse for `settings/sync-preferences.json` which stores the user's past decisions about conflicts (e.g., `{ "ignore": ["hook Y", "permission X"], "policy": "keep-local" }`). If the user has already decided to ignore certain differences or set a policy, respect that silently. Otherwise, show what's different and ask how to resolve: keep local, keep Synapse, or merge. Save their decision to `settings/sync-preferences.json` so they're never asked about the same conflict again.
-- If the user is working on a known project, `ls("project-name/")` to load its context.
+- Once connected, check Synapse for existing context relevant to the current task: `list_insights` or `search`
 
-### MANDATORY: Read-Through Pattern (Check Synapse → Fallback → Write Back)
+### MANDATORY: Read-Through Pattern (Check Synapse → Fallback → Save Insight)
 Synapse uses a **read-through caching pattern**. Follow this flow for EVERY task:
 
-1. **READ from Synapse first** — `search({ query: "<topic>" })` or `ls("projects/<project-name>/")`. This is not optional. Do this in parallel with starting other work if possible — don't block the workflow.
+1. **READ from Synapse first** — `search({ query: "<topic>" })` or `list_insights({ project: "<name>" })`. This is not optional. Do this in parallel with starting other work if possible — don't block the workflow.
 2. **Cache HIT** — Synapse has the context → use it, done.
 3. **Cache MISS** — Synapse has no results → fall back to codebase, git history, or other sources. Continue working — don't pause.
-4. **WRITE BACK (non-blocking)** — After finding the answer, write it to Synapse in the background alongside your next response or tool call. Never make the user wait for a write-back.
+4. **SAVE INSIGHT (non-blocking)** — After finding the answer or making a decision, save it as an insight in the background alongside your next response or tool call. Never make the user wait for the save.
 
-Write-back examples (what to save after a cache miss):
-- **Explored a codebase** → `write({ path: "projects/<name>/overview.md", content: "..." })`
-- **Found a decision in git/code** → `write({ path: "decisions/<topic>.md", content: "...", tags: ["decision"] })`
-- **Diagnosed a bug** → `write({ path: "bugs/<bug-name>.md", content: "..." })`
-- **Discovered architecture** → `write({ path: "architecture/<topic>.md", content: "..." })`
-- **Meeting notes** → `write({ path: "notes/standup-2026-03-22.md", content: "..." })`
-- **Subagent returned results** → Write back immediately (subagents can't access Synapse).
-- **User says "remember this"** → Always Synapse, never local files.
+Save-insight examples (what to capture after a cache miss or during work):
+- **Made a design/technical decision** → `save_insight({ project, type: "decision", summary: "Chose X over Y", detail: "..." })`
+- **Discovered how a subsystem works** → `save_insight({ project, type: "architecture", summary: "<system> works by ...", detail: "..." })`
+- **Learned a non-obvious fact** → `save_insight({ project, type: "learning", summary: "...", detail: "..." })`
+- **Noted a user preference** → `save_insight({ project, type: "preference", summary: "...", detail: "..." })`
+- **Identified follow-up work** → `save_insight({ project, type: "action_item", summary: "...", detail: "..." })`
+- **Subagent returned results** → Save any important decisions the subagent made (subagents can't access Synapse).
+- **User says "remember this"** → Always a `save_insight`, never local files.
 
-If context already exists in Synapse but is outdated, **update it** rather than creating a duplicate.
+If an insight already exists but is outdated, there is no update tool — save a new insight that supersedes it. The dashboard will show the most recent.
 
-### What NOT to Write to Synapse
+### What NOT to Save as Insights
 - Source code (that belongs in git)
 - Temporary debugging output
+- Verbatim conversation transcripts (the capture daemon handles that)
 - Anything the user explicitly asks to keep local
-
-### Settings Sync
-- When the user changes Claude settings (permissions, hooks, preferences), save a copy to Synapse: `write({ path: "settings/claude-settings.json", content: <settings> })`
-- This ensures settings sync across devices automatically on next session start.
 
 ### Scope Control
 The user can control scope by saying things like:
 - "Save this locally" — use local filesystem instead
-- "Don't save this" — skip writing
-- "Save this to synapse under projects/acme/" — use the specified path
-- If no scope is specified, default to Synapse with a logical path.
+- "Don't save this" — skip saving
+- "Save this to synapse as a <type>" — use the specified insight type
+- If no scope is specified, default to `save_insight` with an appropriate type.

@@ -1,8 +1,8 @@
 # Synapse
 
-> A shared context layer that gives AI tools persistent memory across sessions.
+> A shared context layer that captures AI coding sessions and surfaces insights across projects.
 
-Synapse stores knowledge as files in a remote workspace. AI tools (Claude, ChatGPT, Cursor) connect via MCP to share context.
+Synapse gives AI tools (Claude, ChatGPT, Cursor) persistent memory across sessions through structured insights and automatic session capture.
 
 ## API
 - Base URL: https://api.synapsesync.app
@@ -13,18 +13,20 @@ Synapse stores knowledge as files in a remote workspace. AI tools (Claude, ChatG
 - POST /auth/login - Authenticate, get API key
 - POST /auth/signup - Create account
 - GET /api/projects - List projects
-- POST /api/context/save - Save context entry
-- GET /api/context/:project/search?q= - Search entries (semantic + full-text + keyword, merged by relevance)
-- GET /api/context/:project/list - List entries
-- GET /api/context/:project/history/:path - Version history
+- POST /api/insights - Save an insight (decision, learning, preference, architecture, action_item)
+- GET /api/insights?project_id= - List insights for a project
+- GET /api/conversations?project_id= - List captured AI sessions
+- GET /api/context/:project/search?q= - Search historical files (semantic + full-text + keyword)
 
 ## MCP Server
 npm package: synapsesync-mcp
 Install: npm install -g synapsesync-mcp && synapsesync-mcp wizard
 
+Agents save new knowledge via `save_insight`. Reads for historical filesystem browsing are available too.
+
 ## Tiers
-- Free: 50 files, 3 connections, 3 version history, 2 team members
-- Plus ($5.99/mo): 500 files, unlimited connections, full history, unlimited members
+- Free: 50 files, 3 connections, 3 version history, 2 team members, insights included
+- Plus ($5.99/mo): 500 files, unlimited connections, full history, unlimited members, AI-generated project context
 
 ## Documentation
 - API docs: https://synapsesync.app/docs.md
