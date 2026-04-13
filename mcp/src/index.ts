@@ -6,6 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import * as clack from "@clack/prompts";
 import { runCapture } from "./capture/cli.js";
 import { runRefresh, runStatus, runTree, runUpgrade, runWhoami } from "./cli/commands.js";
 import { API_URL } from "./cli/config.js";
@@ -134,7 +135,7 @@ function printHelp(): void {
     `  ${muted("Capture sessions. Distill knowledge. Remember everything.")}`,
     "",
     `  ${bold("Setup")}`,
-    c("wizard", "Interactive setup (default)"),
+    c("wizard", "Interactive setup + connect tools"),
     c("status", "Connection health + config locations"),
     c("refresh", "Rotate API key, update all configs"),
     "",
@@ -143,6 +144,7 @@ function printHelp(): void {
     c("capture stop", "Stop the capture daemon"),
     c("capture status", "Daemon health + session count"),
     c("capture list", "Browse captured sessions"),
+    c("capture hook-install", "Auto-start capture with Claude Code"),
     "",
     `  ${bold("Distill")}`,
     c("distill <id>", "Extract knowledge from a session"),
@@ -251,15 +253,68 @@ async function handleCli(raw: string[]): Promise<void> {
     process.exit(0);
   }
 
-  // Everything else interactive runs the wizard
+  // No subcommand in interactive mode → show menu
   if (isInteractiveTerminal()) {
-    await runWizard(readPackageVersion());
+    await runMenu();
     process.exit(0);
   }
 
   // Non-interactive + no MCP mode → show help
   printHelp();
   process.exit(0);
+}
+
+async function runMenu(): Promise<void> {
+  const v = readPackageVersion();
+  clack.intro(`${bold("synapsesync-mcp")} ${muted(`v${v}`)}`);
+
+  const choice = await clack.select({
+    message: "What would you like to do?",
+    options: [
+      { value: "status", label: "Status", hint: "connection health + config locations" },
+      { value: "capture-start", label: "Start capture", hint: "begin recording AI sessions" },
+      { value: "capture-status", label: "Capture status", hint: "daemon health + session count" },
+      { value: "distill", label: "Distill latest", hint: "extract knowledge from last session" },
+      { value: "tree", label: "Workspace tree", hint: "browse your files" },
+      { value: "wizard", label: "Setup wizard", hint: "connect tools + configure" },
+      { value: "hook-install", label: "Install hook", hint: "auto-start capture with Claude Code" },
+      { value: "help", label: "Help", hint: "show all commands" },
+    ],
+  });
+
+  if (clack.isCancel(choice)) {
+    clack.outro(muted("synapsesync.app"));
+    return;
+  }
+
+  console.log("");
+
+  switch (choice) {
+    case "status":
+      await runStatus();
+      break;
+    case "capture-start":
+      await runCapture(["start"]);
+      break;
+    case "capture-status":
+      await runCapture(["status"]);
+      break;
+    case "distill":
+      await runDistill(["--latest"]);
+      break;
+    case "tree":
+      await runTree();
+      break;
+    case "wizard":
+      await runWizard(readPackageVersion());
+      break;
+    case "hook-install":
+      await runCapture(["hook-install"]);
+      break;
+    case "help":
+      printHelp();
+      break;
+  }
 }
 
 // --- Entry point ---
