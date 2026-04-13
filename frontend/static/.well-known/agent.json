@@ -1,0 +1,25 @@
+{
+  "name": "Synapse",
+  "description": "Shared context layer for AI tools — persistent memory across sessions",
+  "url": "https://synapsesync.app",
+  "api": {
+    "base_url": "https://api.synapsesync.app",
+    "auth": {
+      "type": "bearer",
+      "description": "API key from account page or CLI login"
+    },
+    "mcp": {
+      "endpoint": "https://api.synapsesync.app/mcp",
+      "transport": "streamable-http"
+    }
+  },
+  "capabilities": {
+    "read": true,
+    "write": true,
+    "search": true,
+    "versioning": true,
+    "sharing": true,
+    "export": true
+  },
+  "npm_package": "synapsesync-mcp"
+}
