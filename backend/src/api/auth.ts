@@ -1,14 +1,6 @@
 import { Hono } from "hono";
 
-import {
-  countApiKeys,
-  createApiKey,
-  createUser,
-  deleteApiKey,
-  deleteUser,
-  findUserByEmail,
-  listApiKeys,
-} from "../db/queries";
+import { countApiKeys, createApiKey, createUser, deleteApiKey, findUserByEmail, listApiKeys } from "../db/queries";
 import { authMiddleware, hashApiKey } from "../lib/auth";
 import {
   API_KEY_MAX_PER_USER,
@@ -404,6 +396,24 @@ account.post("/reset", async (c) => {
 account.delete("/", async (c) => {
   const user = c.get("user");
   const db = c.get("db");
-  await deleteUser(db, user.id);
+
+  // Look up supabase_auth_id before deletion
+  const { data: userRow } = await db.from("users").select("supabase_auth_id").eq("id", user.id).single();
+  const supabaseAuthId = (userRow as { supabase_auth_id?: string } | null)?.supabase_auth_id;
+
+  const { error: rpcErr } = await db.rpc("delete_user_data", { p_user_id: user.id });
+  if (rpcErr) {
+    return c.json({ error: `Delete failed: ${rpcErr.message}`, code: "DELETE_ERROR" }, 500);
+  }
+
+  // Delete from auth.users (can't be done in SQL function)
+  if (supabaseAuthId) {
+    try {
+      await db.auth.admin.deleteUser(supabaseAuthId);
+    } catch (_) {
+      // best-effort
+    }
+  }
+
   return c.json({ ok: true });
 });
