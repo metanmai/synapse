@@ -7,6 +7,7 @@ let { data, form } = $props();
 let showTools = $state(false);
 let showExportMenu = $state(false);
 let confirmDelete = $state(false);
+let actionLoading = $state("");
 
 const conv = $derived(data.conversation);
 const messages = $derived(data.messages);
@@ -41,9 +42,11 @@ function closeExportMenu() {
   showExportMenu = false;
 }
 
-function handleExportResult() {
+function handleExportResult({ formData }: { formData: FormData }) {
+  actionLoading = `export-${formData.get("format")}`;
   showExportMenu = false;
   return async ({ result }: { result: { type: string; data?: Record<string, unknown> } }) => {
+    actionLoading = "";
     if (result.type === "success" && result.data?.exportData) {
       const blob = new Blob([result.data.exportData as string], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -59,10 +62,14 @@ function handleExportResult() {
   };
 }
 
-function handleActionResult() {
-  return async ({ update }: { update: (opts?: { reset?: boolean }) => Promise<void> }) => {
-    await update();
-    confirmDelete = false;
+function handleActionResult(label: string) {
+  return () => {
+    actionLoading = label;
+    return async ({ update }: { update: (opts?: { reset?: boolean }) => Promise<void> }) => {
+      actionLoading = "";
+      await update();
+      confirmDelete = false;
+    };
   };
 }
 </script>
@@ -114,15 +121,15 @@ function handleActionResult() {
 
         <!-- Archive / Restore -->
         {#if conv.status === "active"}
-          <form method="POST" action="?/archive" use:enhance={handleActionResult}>
-            <button type="submit" class="action-btn" aria-label="Archive conversation">
-              Archive
+          <form method="POST" action="?/archive" use:enhance={handleActionResult("archive")}>
+            <button type="submit" class="action-btn" disabled={!!actionLoading} aria-label="Archive conversation">
+              {actionLoading === "archive" ? "Archiving..." : "Archive"}
             </button>
           </form>
         {:else if conv.status === "archived"}
-          <form method="POST" action="?/restore" use:enhance={handleActionResult}>
-            <button type="submit" class="action-btn action-btn-restore" aria-label="Restore conversation">
-              Restore
+          <form method="POST" action="?/restore" use:enhance={handleActionResult("restore")}>
+            <button type="submit" class="action-btn action-btn-restore" disabled={!!actionLoading} aria-label="Restore conversation">
+              {actionLoading === "restore" ? "Restoring..." : "Restore"}
             </button>
           </form>
         {/if}
