@@ -108,7 +108,7 @@ export const actions: Actions = {
     if (oauthData.url) redirect(303, oauthData.url);
   },
 
-  signup: async ({ request, cookies, url }) => {
+  signup: async ({ request, cookies }) => {
     const data = await request.formData();
     const email = data.get("email") as string;
     const password = data.get("password") as string;
