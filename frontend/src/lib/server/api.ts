@@ -178,5 +178,26 @@ export function createApi(token: string | null) {
         `/api/conversations/${conversationId}/export/${format}`,
         token,
       ),
+
+    // Compaction
+    compactConversation: (conversationId: string) =>
+      request<{
+        compacted_summary: string;
+        compacted_at: string;
+        compaction_model: string;
+        message_count: number;
+      }>(`/api/conversations/${conversationId}/compact`, token, {
+        method: "POST",
+      }),
+    getProjectContext: (projectId: string) =>
+      request<{
+        summary: string | null;
+        conversation_count?: number;
+        model?: string | null;
+        updated_at?: string;
+        source?: string;
+        upgrade_hint?: string;
+        message?: string;
+      }>(`/api/projects/${projectId}/context`, token),
   };
 }
