@@ -15,6 +15,7 @@ const navSections = $derived([
     heading: "Knowledge",
     items: [
       { href: `/projects/${encodeURIComponent(projectName)}/insights`, label: "Insights", icon: "💡" },
+      { href: `/projects/${encodeURIComponent(projectName)}/conversations`, label: "Conversations", icon: "💬" },
     ],
   },
   {
