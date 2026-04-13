@@ -13,7 +13,7 @@ export interface SessionMessage {
 
 export interface CapturedSession {
   id: string;
-  tool: "claude-code" | "cursor" | "codex" | "gemini";
+  tool: "claude-code" | "cursor" | "codex" | "gemini" | "copilot-cli" | "cline" | "roo-code";
   projectPath: string;
   startedAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
@@ -36,7 +36,7 @@ export function sessionIdFromNative(nativeId: string): string {
   return `ses_${stripped}`;
 }
 
-const VALID_TOOLS = new Set(["claude-code", "cursor", "codex", "gemini"]);
+const VALID_TOOLS = new Set(["claude-code", "cursor", "codex", "gemini", "copilot-cli", "cline", "roo-code"]);
 const VALID_ROLES = new Set(["user", "assistant"]);
 
 export function validateMessage(msg: unknown): boolean {
