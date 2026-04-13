@@ -9,6 +9,7 @@ import { conversations } from "./api/conversations";
 import { insights } from "./api/insights";
 import { projects } from "./api/projects";
 import { projectsResolve } from "./api/projects-resolve";
+import { sessionContext } from "./api/session-context";
 import { share } from "./api/share";
 import { sync } from "./api/sync";
 import { runDailyAggregation } from "./cron/aggregate";
@@ -77,6 +78,7 @@ app.route("/api/billing", billing);
 app.route("/api/insights", insights);
 app.route("/api/conversations", conversations);
 app.route("/api", compaction);
+app.route("/api", sessionContext);
 
 // Mount MCP server (Streamable HTTP transport)
 app.mount("/mcp", SynapseAgent.serve("/mcp").fetch);
