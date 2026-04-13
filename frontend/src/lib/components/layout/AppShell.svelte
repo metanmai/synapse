@@ -16,7 +16,7 @@ let { user, children } = $props<{
   <header class="flex items-center justify-between"
     style="background: rgba(86, 28, 36, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 4px 24px rgba(86, 28, 36, 0.15); padding: 1rem 1.5rem; position: sticky; top: 0; z-index: 50;">
     <a href="/dashboard" class="flex items-center gap-2" style="color: white; font-size: 18px; font-weight: 800; text-decoration: none;">
-      <img src="/logo.svg" alt="" class="w-7 h-7" />
+      <img src="/logo.svg" alt="Synapse logo" class="w-7 h-7" />
       synapse
     </a>
     <div class="flex items-center gap-2 sm:gap-3">
