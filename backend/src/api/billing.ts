@@ -210,11 +210,11 @@ billing.post("/portal", async (c) => {
     throw new AppError("No billing account found. Subscribe to Plus first.", 400, "VALIDATION_ERROR");
   }
 
-  const result = await creemRequest<{ customer_portal_url: string }>(c.env, "POST", "/customers/billing", {
+  const result = await creemRequest<{ customer_portal_link: string }>(c.env, "POST", "/customers/billing", {
     customer_id: sub.provider_customer_id,
   });
 
-  return c.json({ url: result.customer_portal_url });
+  return c.json({ url: result.customer_portal_link });
 });
 
 // GET /api/billing/status
