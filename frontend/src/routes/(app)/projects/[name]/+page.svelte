@@ -11,11 +11,9 @@
   let { data, form } = $props();
   let needsPassphrase = $state(false);
 
-  let mode = $state<"view" | "edit" | "new" | "search" | "activity" | "share" | "empty">("empty");
+  let mode = $state<"view" | "edit" | "new" | "activity" | "share" | "empty">("empty");
   let selectedPath = $state<string | null>(null);
   let entry = $state<Entry | null>(null);
-  let searchQuery = $state("");
-  let searchResults = $state<Entry[]>([]);
   let loading = $state(false);
 
   // Context menu state
@@ -80,21 +78,6 @@
     loading = false;
   }
 
-  async function doSearch() {
-    if (searchQuery.length < 2) return;
-    loading = true;
-    mode = "search";
-    try {
-      const res = await fetch(`/projects/${encodeURIComponent(data.project.name)}/api/search?q=${encodeURIComponent(searchQuery)}`);
-      if (res.ok) {
-        searchResults = await res.json();
-      }
-    } catch {
-      searchResults = [];
-    }
-    loading = false;
-  }
-
   function startNew() {
     mode = "new";
     entry = null;
@@ -103,11 +86,6 @@
 
   function startEdit() {
     mode = "edit";
-  }
-
-  function startSearch() {
-    mode = "search";
-    searchResults = [];
   }
 
   function handleAction(action: "activity" | "share" | "delete", path: string, isFolder: boolean) {
@@ -145,12 +123,8 @@
     <div class="flex items-center justify-between mb-2 px-1">
       <span class="font-medium uppercase tracking-wide"
         style="color: var(--color-text-muted); font-size: 10px;">Files</span>
-      <div class="flex gap-2">
-        <button onclick={() => startSearch()}
-          class="cursor-pointer" style="color: var(--color-text-muted); font-size: 10px;">Search</button>
-        <button onclick={() => startNew()}
-          class="cursor-pointer" style="color: var(--color-link); font-size: 10px;">+ New</button>
-      </div>
+      <button onclick={() => startNew()}
+        class="cursor-pointer" style="color: var(--color-link); font-size: 10px;">+ New</button>
     </div>
     <FolderTree entries={data.entries} {selectedPath}
       projectName={data.project.name} onSelect={selectEntry} onAction={handleAction} />
@@ -184,34 +158,6 @@
         shareLinks={data.shareLinks}
         onClose={closePanel}
       />
-    {:else if mode === "search"}
-      <div class="space-y-3">
-        <form onsubmit={(e) => { e.preventDefault(); doSearch(); }} class="flex gap-2">
-          <input type="text" placeholder="Search context..." autofocus
-            bind:value={searchQuery}
-            class="flex-1 rounded-lg px-3 py-2.5 text-sm"
-            style="border: 1px solid var(--color-border);"
-          />
-          <button type="submit"
-            class="rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
-            style="background-color: var(--color-accent); color: white;">
-            Search
-          </button>
-        </form>
-        {#each searchResults as result}
-          <button onclick={() => selectEntry(result.path)}
-            class="block w-full text-left rounded-xl p-3 text-sm cursor-pointer"
-            style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border);">
-            <div class="font-medium">{result.path}</div>
-            <div class="text-xs mt-1 line-clamp-2" style="color: var(--color-text-muted);">
-              {result.content.slice(0, 150)}
-            </div>
-          </button>
-        {/each}
-        {#if searchResults.length === 0 && searchQuery.length > 1}
-          <p class="text-sm" style="color: var(--color-text-muted);">No results found</p>
-        {/if}
-      </div>
     {:else if mode === "new"}
       <EntryEditor projectName={data.project.name} isNew />
     {:else if mode === "edit" && entry}
