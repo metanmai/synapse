@@ -1,9 +1,9 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+import { logActivity } from "../../db/activity-logger";
 import { createSupabaseClient } from "../../db/client";
 import { getProjectByName, upsertEntry } from "../../db/queries";
-import { logActivity } from "../../db/activity-logger";
 
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
@@ -45,7 +45,7 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
       return {
         content: [{ type: "text", text: `${action} context at "${path}" in project "${project}".` }],
       };
-    }
+    },
   );
 
   server.tool(
@@ -65,7 +65,10 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
 
       const date = new Date().toISOString().split("T")[0];
-      const slug = summary.slice(0, 40).replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+      const slug = summary
+        .slice(0, 40)
+        .replace(/[^a-z0-9]+/gi, "-")
+        .toLowerCase();
       const path = `context/session-summaries/${date}-${slug}.md`;
 
       // Build summary content
@@ -93,7 +96,10 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
       // Save individual decisions as separate entries
       if (decisions?.length) {
         for (const decision of decisions) {
-          const decisionSlug = decision.slice(0, 40).replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+          const decisionSlug = decision
+            .slice(0, 40)
+            .replace(/[^a-z0-9]+/gi, "-")
+            .toLowerCase();
           await upsertEntry(db, {
             project_id: proj.id,
             path: `decisions/${date}-${decisionSlug}.md`,
@@ -106,9 +112,14 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
       }
 
       return {
-        content: [{ type: "text", text: `Session summary saved to "${path}". ${decisions?.length ?? 0} decisions also recorded.` }],
+        content: [
+          {
+            type: "text",
+            text: `Session summary saved to "${path}". ${decisions?.length ?? 0} decisions also recorded.`,
+          },
+        ],
       };
-    }
+    },
   );
 
   server.tool(
@@ -146,6 +157,6 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
       return {
         content: [{ type: "text", text: `File added at "${path}" in project "${project}".` }],
       };
-    }
+    },
   );
 }

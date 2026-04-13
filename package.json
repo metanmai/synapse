@@ -1,12 +1,7 @@
 {
   "name": "synapse",
   "private": true,
-  "workspaces": [
-    "packages/*",
-    "backend",
-    "frontend",
-    "mcp"
-  ],
+  "workspaces": ["packages/*", "backend", "frontend", "mcp"],
   "scripts": {
     "dev:backend": "npm run dev -w backend",
     "dev:frontend": "npm run dev -w frontend",

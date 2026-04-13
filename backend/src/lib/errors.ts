@@ -1,8 +1,8 @@
 export class AppError extends Error {
   constructor(
     message: string,
-    public status: number = 500,
-    public code: string = "INTERNAL_ERROR"
+    public status = 500,
+    public code = "INTERNAL_ERROR",
   ) {
     super(message);
   }

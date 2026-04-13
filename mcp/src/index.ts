@@ -1,7 +1,7 @@
+import crypto from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import crypto from "crypto";
 
 const API_URL = process.env.SYNAPSE_API_URL || "https://synapse.tanmai.workers.dev";
 
@@ -72,25 +72,31 @@ if (args[0] === "login") {
       });
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as ErrorResponse;
+        const body = (await res.json().catch(() => ({}))) as ErrorResponse;
         console.error(`Login failed: ${body.error || res.statusText}`);
         process.exit(1);
       }
 
-      const data = await res.json() as LoginResponse;
+      const data = (await res.json()) as LoginResponse;
       console.log(`\nLogged in as ${data.email}`);
       console.log(`API Key: ${data.api_key}`);
       console.log(`Label: ${data.label}`);
-      console.log(`\nAdd this to your .mcp.json:`);
-      console.log(JSON.stringify({
-        mcpServers: {
-          synapse: {
-            command: "npx",
-            args: ["synapsesync-mcp"],
-            env: { SYNAPSE_API_KEY: data.api_key }
-          }
-        }
-      }, null, 2));
+      console.log("\nAdd this to your .mcp.json:");
+      console.log(
+        JSON.stringify(
+          {
+            mcpServers: {
+              synapse: {
+                command: "npx",
+                args: ["synapsesync-mcp"],
+                env: { SYNAPSE_API_KEY: data.api_key },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
       console.log(`\nOr run: claude mcp add synapse npx synapsesync-mcp --env SYNAPSE_API_KEY=${data.api_key}`);
     } catch (err) {
       console.error(`Login failed: ${(err as Error).message}`);
@@ -117,24 +123,30 @@ if (args[0] === "login") {
       });
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as ErrorResponse;
+        const body = (await res.json().catch(() => ({}))) as ErrorResponse;
         console.error(`Signup failed: ${body.error || res.statusText}`);
         process.exit(1);
       }
 
-      const data = await res.json() as SignupResponse;
+      const data = (await res.json()) as SignupResponse;
       console.log(`\nAccount created for ${data.email}`);
       console.log(`API Key: ${data.api_key}`);
-      console.log(`\nAdd this to your .mcp.json:`);
-      console.log(JSON.stringify({
-        mcpServers: {
-          synapse: {
-            command: "npx",
-            args: ["synapsesync-mcp"],
-            env: { SYNAPSE_API_KEY: data.api_key }
-          }
-        }
-      }, null, 2));
+      console.log("\nAdd this to your .mcp.json:");
+      console.log(
+        JSON.stringify(
+          {
+            mcpServers: {
+              synapse: {
+                command: "npx",
+                args: ["synapsesync-mcp"],
+                env: { SYNAPSE_API_KEY: data.api_key },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
     } catch (err) {
       console.error(`Signup failed: ${(err as Error).message}`);
       process.exit(1);
@@ -152,7 +164,9 @@ if (args[0] === "login") {
   const DEFAULT_PROJECT_NAME = process.env.SYNAPSE_PROJECT || "My Workspace";
 
   if (!API_KEY) {
-    console.error("SYNAPSE_API_KEY is required. Run 'npx synapsesync-mcp login --email <email> --password <password>' to get one.");
+    console.error(
+      "SYNAPSE_API_KEY is required. Run 'npx synapsesync-mcp login --email <email> --password <password>' to get one.",
+    );
     process.exit(1);
   }
 
@@ -181,14 +195,14 @@ if (args[0] === "login") {
     if (PROJECT) return PROJECT;
 
     // List existing projects
-    const projects = await api("GET", "/api/projects") as ProjectResponse[];
+    const projects = (await api("GET", "/api/projects")) as ProjectResponse[];
     if (projects.length > 0) {
       PROJECT = projects[0].name;
       return PROJECT;
     }
 
     // No projects — create one
-    const created = await api("POST", "/api/projects", { name: DEFAULT_PROJECT_NAME }) as ProjectResponse;
+    const created = (await api("POST", "/api/projects", { name: DEFAULT_PROJECT_NAME })) as ProjectResponse;
     PROJECT = created.name;
     return PROJECT;
   }
@@ -257,7 +271,10 @@ if (args[0] === "login") {
       const folder = path || "";
       const qs = folder ? `?folder=${encodeURIComponent(folder)}` : "";
       const project = await getProject();
-      const entries = await api("GET", `/api/context/${encodeURIComponent(project)}/list${qs}`) as EntryListResponse[];
+      const entries = (await api(
+        "GET",
+        `/api/context/${encodeURIComponent(project)}/list${qs}`,
+      )) as EntryListResponse[];
 
       if (entries.length === 0) {
         return { content: [{ type: "text" as const, text: folder ? `${folder}/ is empty` : "(empty)" }] };
@@ -272,7 +289,7 @@ if (args[0] === "login") {
 
       const header = folder || ".";
       return { content: [{ type: "text" as const, text: `${header}\n${lines.join("\n")}` }] };
-    }
+    },
   );
 
   // --- read: read a file ---
@@ -282,7 +299,10 @@ if (args[0] === "login") {
     { path: z.string().describe("File path to read (e.g. 'notes/meeting.md')") },
     async ({ path }) => {
       const project = await getProject();
-      const entry = await api("GET", `/api/context/${encodeURIComponent(project)}/${encodeURIComponent(path)}`) as EntryResponse;
+      const entry = (await api(
+        "GET",
+        `/api/context/${encodeURIComponent(project)}/${encodeURIComponent(path)}`,
+      )) as EntryResponse;
       const meta = [
         `path: ${entry.path}`,
         `updated: ${new Date(entry.updated_at).toLocaleString()}`,
@@ -294,7 +314,7 @@ if (args[0] === "login") {
 
       const content = await decryptContent(entry.content);
       return { content: [{ type: "text" as const, text: `${meta}\n---\n${content}` }] };
-    }
+    },
   );
 
   // --- write: create or update a file ---
@@ -302,7 +322,11 @@ if (args[0] === "login") {
     "write",
     "Write content to a file. Creates the file if it doesn't exist, updates it if it does. IMPORTANT: Always use the correct directory prefix: decisions/ for decisions, notes/ for meeting notes, bugs/ for bug diagnoses, architecture/ for architecture docs, retrospectives/ for retrospectives, projects/<name>/ for project-specific context, settings/ for settings. Never write to the root — always use a directory.",
     {
-      path: z.string().describe("File path with directory prefix (e.g. 'decisions/chose-redis.md', 'notes/standup-2026-03-22.md', 'bugs/auth-race.md', 'projects/myapp/overview.md'). Directories are created automatically."),
+      path: z
+        .string()
+        .describe(
+          "File path with directory prefix (e.g. 'decisions/chose-redis.md', 'notes/standup-2026-03-22.md', 'bugs/auth-race.md', 'projects/myapp/overview.md'). Directories are created automatically.",
+        ),
       content: z.string().describe("The full file content to write"),
       tags: z.array(z.string()).optional().describe("Optional tags for the file"),
     },
@@ -317,7 +341,7 @@ if (args[0] === "login") {
         tags: tags || [],
       });
       return { content: [{ type: "text" as const, text: `Wrote ${path} (${content.length} chars)` }] };
-    }
+    },
   );
 
   // --- rm: delete a file ---
@@ -329,7 +353,7 @@ if (args[0] === "login") {
       const project = await getProject();
       await api("DELETE", `/api/context/${encodeURIComponent(project)}/${encodeURIComponent(path)}`);
       return { content: [{ type: "text" as const, text: `Deleted ${path}` }] };
-    }
+    },
   );
 
   // --- search: search file contents ---
@@ -348,11 +372,11 @@ if (args[0] === "login") {
 
       let results: EntryResponse[];
       try {
-        results = await api(
+        results = (await api(
           "GET",
-          `/api/context/${encodeURIComponent(await getProject())}/search?${params}`
-        ) as EntryResponse[];
-      } catch (e) {
+          `/api/context/${encodeURIComponent(await getProject())}/search?${params}`,
+        )) as EntryResponse[];
+      } catch (_e) {
         // Gracefully handle errors (e.g., project not found) instead of throwing
         return { content: [{ type: "text" as const, text: `No results for "${query}"` }] };
       }
@@ -362,20 +386,24 @@ if (args[0] === "login") {
       }
 
       const decrypted = await Promise.all(
-        results.map(async (e) => ({ ...e, content: await decryptContent(e.content) }))
+        results.map(async (e) => ({ ...e, content: await decryptContent(e.content) })),
       );
       const text = decrypted
         .map((e, i) => {
-          const dir = e.path.includes("/") ? e.path.split("/").slice(0, -1).join("/") + "/" : "(root)";
-          const tags = e.tags && e.tags.length ? `  tags: ${e.tags.join(", ")}` : "";
+          const dir = e.path.includes("/") ? `${e.path.split("/").slice(0, -1).join("/")}/` : "(root)";
+          const tags = e.tags?.length ? `  tags: ${e.tags.join(", ")}` : "";
           const updated = new Date(e.updated_at).toLocaleDateString();
           const preview = e.content.slice(0, 300).replace(/\n/g, " ");
           return `[${i + 1}] ${e.path}\n  dir: ${dir} | updated: ${updated}${tags}\n  ${preview}${e.content.length > 300 ? "..." : ""}`;
         })
         .join("\n\n");
 
-      return { content: [{ type: "text" as const, text: `${results.length} result${results.length === 1 ? "" : "s"}:\n\n${text}` }] };
-    }
+      return {
+        content: [
+          { type: "text" as const, text: `${results.length} result${results.length === 1 ? "" : "s"}:\n\n${text}` },
+        ],
+      };
+    },
   );
 
   // --- history: view file version history ---
@@ -384,17 +412,17 @@ if (args[0] === "login") {
     "View version history for a file. Shows past versions with timestamps and who made each change.",
     { path: z.string().describe("File path to get history for") },
     async ({ path }) => {
-      const versions = await api(
+      const versions = (await api(
         "GET",
-        `/api/context/${encodeURIComponent(await getProject())}/history/${encodeURIComponent(path)}`
-      ) as HistoryResponse[];
+        `/api/context/${encodeURIComponent(await getProject())}/history/${encodeURIComponent(path)}`,
+      )) as HistoryResponse[];
 
       if (versions.length === 0) {
         return { content: [{ type: "text" as const, text: `No history for ${path}` }] };
       }
 
       const decryptedVersions = await Promise.all(
-        versions.map(async (v) => ({ ...v, content: await decryptContent(v.content) }))
+        versions.map(async (v) => ({ ...v, content: await decryptContent(v.content) })),
       );
       const text = decryptedVersions
         .map((v, i) => {
@@ -405,36 +433,31 @@ if (args[0] === "login") {
         .join("\n\n");
 
       return { content: [{ type: "text" as const, text: `${versions.length} versions of ${path}:\n\n${text}` }] };
-    }
+    },
   );
 
   // --- tree: show full directory tree ---
-  server.tool(
-    "tree",
-    "Show the full directory tree. Like the `tree` command on a local filesystem.",
-    {},
-    async () => {
-      const project = await getProject();
-      const entries = await api("GET", `/api/context/${encodeURIComponent(project)}/list`) as EntryListResponse[];
+  server.tool("tree", "Show the full directory tree. Like the `tree` command on a local filesystem.", {}, async () => {
+    const project = await getProject();
+    const entries = (await api("GET", `/api/context/${encodeURIComponent(project)}/list`)) as EntryListResponse[];
 
-      if (entries.length === 0) {
-        return { content: [{ type: "text" as const, text: "(empty workspace)" }] };
-      }
-
-      // Build tree structure
-      const paths = entries.map((e) => e.path).sort();
-      const lines = ["."];
-
-      for (const p of paths) {
-        const depth = p.split("/").length - 1;
-        const indent = "  ".repeat(depth);
-        const name = p.split("/").pop();
-        lines.push(`${indent}${name}`);
-      }
-
-      return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+    if (entries.length === 0) {
+      return { content: [{ type: "text" as const, text: "(empty workspace)" }] };
     }
-  );
+
+    // Build tree structure
+    const paths = entries.map((e) => e.path).sort();
+    const lines = ["."];
+
+    for (const p of paths) {
+      const depth = p.split("/").length - 1;
+      const indent = "  ".repeat(depth);
+      const name = p.split("/").pop();
+      lines.push(`${indent}${name}`);
+    }
+
+    return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+  });
 
   async function main(): Promise<void> {
     const transport = new StdioServerTransport();

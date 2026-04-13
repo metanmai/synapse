@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
+import { enhance } from "$app/forms";
 </script>
 
 <div class="p-4 rounded-xl"

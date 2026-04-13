@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
-  import type { ShareLink } from "$lib/types";
+import { enhance } from "$app/forms";
+import type { ShareLink } from "$lib/types";
 
-  let { links, projectId } = $props<{ links: ShareLink[]; projectId: string }>();
-  let copied = $state<string | null>(null);
+let { links, projectId } = $props<{ links: ShareLink[]; projectId: string }>();
+let copied = $state<string | null>(null);
 
-  function copyLink(token: string) {
-    navigator.clipboard.writeText(`${window.location.origin}/share/${token}`);
-    copied = token;
-    setTimeout(() => (copied = null), 2000);
-  }
+function copyLink(token: string) {
+  navigator.clipboard.writeText(`${window.location.origin}/share/${token}`);
+  copied = token;
+  setTimeout(() => (copied = null), 2000);
+}
 </script>
 
 <div>

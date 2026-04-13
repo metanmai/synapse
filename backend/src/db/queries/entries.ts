@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Entry, EntryHistory } from "../types";
 import { singleOrNull } from "../query-helpers";
+import type { Entry, EntryHistory } from "../types";
 
 export async function upsertEntry(
   db: SupabaseClient,
@@ -12,7 +12,7 @@ export async function upsertEntry(
     author_id?: string | null;
     source?: string;
     tags?: string[];
-  }
+  },
 ): Promise<Entry> {
   // Check if entry exists at this path
   const { data: existing } = await db
@@ -65,25 +65,16 @@ export async function upsertEntry(
   return data as Entry;
 }
 
-export async function getEntry(
-  db: SupabaseClient,
-  projectId: string,
-  path: string
-): Promise<Entry | null> {
+export async function getEntry(db: SupabaseClient, projectId: string, path: string): Promise<Entry | null> {
   return singleOrNull<Entry>(
-    await db
-      .from("entries")
-      .select("*")
-      .eq("project_id", projectId)
-      .eq("path", path)
-      .single()
+    await db.from("entries").select("*").eq("project_id", projectId).eq("path", path).single(),
   );
 }
 
 export async function listEntries(
   db: SupabaseClient,
   projectId: string,
-  folder?: string
+  folder?: string,
 ): Promise<Pick<Entry, "path" | "content_type" | "tags" | "updated_at">[]> {
   let query = db
     .from("entries")
@@ -104,7 +95,7 @@ export async function searchEntries(
   db: SupabaseClient,
   projectId: string,
   query: string,
-  options?: { tags?: string[]; folder?: string }
+  options?: { tags?: string[]; folder?: string },
 ): Promise<Entry[]> {
   // Try Postgres full-text search first
   let dbQuery = db
@@ -150,11 +141,7 @@ export async function searchEntries(
   return (fallbackData ?? []) as Entry[];
 }
 
-export async function getRecentEntries(
-  db: SupabaseClient,
-  projectId: string,
-  limit: number = 20
-): Promise<Entry[]> {
+export async function getRecentEntries(db: SupabaseClient, projectId: string, limit = 20): Promise<Entry[]> {
   const { data, error } = await db
     .from("entries")
     .select("*")
@@ -165,10 +152,7 @@ export async function getRecentEntries(
   return (data ?? []) as Entry[];
 }
 
-export async function getAllEntries(
-  db: SupabaseClient,
-  projectId: string
-): Promise<Entry[]> {
+export async function getAllEntries(db: SupabaseClient, projectId: string): Promise<Entry[]> {
   const { data, error } = await db
     .from("entries")
     .select("*")
@@ -178,10 +162,7 @@ export async function getAllEntries(
   return (data ?? []) as Entry[];
 }
 
-export async function countEntries(
-  db: SupabaseClient,
-  projectId: string
-): Promise<number> {
+export async function countEntries(db: SupabaseClient, projectId: string): Promise<number> {
   const { count, error } = await db
     .from("entries")
     .select("*", { count: "exact", head: true })
@@ -190,10 +171,7 @@ export async function countEntries(
   return count ?? 0;
 }
 
-export async function countUniqueConnections(
-  db: SupabaseClient,
-  projectId: string
-): Promise<number> {
+export async function countUniqueConnections(db: SupabaseClient, projectId: string): Promise<number> {
   // Count unique sources that have written to this project
   const { data, error } = await db
     .from("activity_log")
@@ -205,31 +183,14 @@ export async function countUniqueConnections(
   return uniqueSources.size;
 }
 
-export async function deleteEntry(
-  db: SupabaseClient,
-  projectId: string,
-  path: string
-): Promise<void> {
-  const { error } = await db
-    .from("entries")
-    .delete()
-    .eq("project_id", projectId)
-    .eq("path", path);
+export async function deleteEntry(db: SupabaseClient, projectId: string, path: string): Promise<void> {
+  const { error } = await db.from("entries").delete().eq("project_id", projectId).eq("path", path);
   if (error) throw error;
 }
 
-export async function getEntryHistory(
-  db: SupabaseClient,
-  projectId: string,
-  path: string
-): Promise<EntryHistory[]> {
+export async function getEntryHistory(db: SupabaseClient, projectId: string, path: string): Promise<EntryHistory[]> {
   // First get the entry ID
-  const { data: entry } = await db
-    .from("entries")
-    .select("id")
-    .eq("project_id", projectId)
-    .eq("path", path)
-    .single();
+  const { data: entry } = await db.from("entries").select("id").eq("project_id", projectId).eq("path", path).single();
 
   if (!entry) return [];
 
@@ -246,7 +207,7 @@ export async function restoreEntry(
   db: SupabaseClient,
   projectId: string,
   path: string,
-  historyId: string
+  historyId: string,
 ): Promise<Entry | null> {
   // Get the history record
   const { data: historyRecord, error: histError } = await db
@@ -258,12 +219,7 @@ export async function restoreEntry(
   if (!historyRecord) return null;
 
   // Upsert restores the content (upsertEntry handles versioning)
-  const { data: existing } = await db
-    .from("entries")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("path", path)
-    .single();
+  const { data: existing } = await db.from("entries").select("*").eq("project_id", projectId).eq("path", path).single();
 
   if (!existing) return null;
 

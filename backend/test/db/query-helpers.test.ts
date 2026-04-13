@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { singleOrNull } from "../../src/db/query-helpers";
 
 describe("singleOrNull", () => {
@@ -28,11 +28,17 @@ describe("singleOrNull", () => {
     expect(() =>
       singleOrNull({
         data: null,
-        error: { name: "PostgrestError", code: "42P01", message: 'relation "users" does not exist', details: "", hint: "" },
+        error: {
+          name: "PostgrestError",
+          code: "42P01",
+          message: 'relation "users" does not exist',
+          details: "",
+          hint: "",
+        },
         count: null,
         status: 400,
         statusText: "Bad Request",
-      })
+      }),
     ).toThrow('relation "users" does not exist');
   });
 
@@ -40,11 +46,17 @@ describe("singleOrNull", () => {
     expect(() =>
       singleOrNull({
         data: null,
-        error: { name: "PostgrestError", code: "42501", message: "permission denied for table users", details: "", hint: "" },
+        error: {
+          name: "PostgrestError",
+          code: "42501",
+          message: "permission denied for table users",
+          details: "",
+          hint: "",
+        },
         count: null,
         status: 403,
         statusText: "Forbidden",
-      })
+      }),
     ).toThrow("permission denied for table users");
   });
 
@@ -56,7 +68,7 @@ describe("singleOrNull", () => {
         count: null,
         status: 500,
         statusText: "Internal Server Error",
-      })
+      }),
     ).toThrow("could not connect to server");
   });
 });
