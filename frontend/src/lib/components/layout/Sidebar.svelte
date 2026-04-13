@@ -19,7 +19,7 @@
     <a href={link.href}
       class="block px-3 py-2 rounded-lg text-sm"
       style={isActive
-        ? `background-color: var(--color-bg-muted); color: var(--color-link); font-weight: 500;`
+        ? `background-color: var(--color-pink-dark); color: white; font-weight: 500;`
         : `color: var(--color-text); `}
     >
       {link.label}

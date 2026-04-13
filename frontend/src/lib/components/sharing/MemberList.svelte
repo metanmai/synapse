@@ -12,7 +12,7 @@
       <div>
         <span class="text-sm">{member.email ?? member.user_id}</span>
         <span class="ml-2 text-xs rounded-full px-2 py-0.5"
-          style="background-color: var(--color-bg-muted);">
+          style="background-color: var(--color-accent); color: white;">
           {member.role}
         </span>
       </div>
