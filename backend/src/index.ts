@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import type { Env } from "./lib/env";
 import { envList } from "./lib/env";
 import { AppError } from "./lib/errors";
+import { rateLimit } from "./lib/rate-limit";
 import { auth, account } from "./api/auth";
 import { context } from "./api/context";
 import { projects } from "./api/projects";
@@ -20,10 +21,13 @@ app.use("*", (c, next) => {
   return cors({
     origin: origins,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Content-Type", "Authorization", "Idempotency-Key"],
     credentials: true,
   })(c, next);
 });
+
+// Rate limiting — 120 requests per minute per key/IP
+app.use("*", rateLimit(120, 60000));
 
 app.onError((err, c) => {
   if (err instanceof AppError) {
