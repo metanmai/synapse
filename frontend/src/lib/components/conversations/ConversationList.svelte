@@ -30,11 +30,8 @@ const encodedProject = $derived(encodeURIComponent(projectName));
       <p class="empty-title">No conversations yet</p>
       <p class="empty-desc">
         Sync your agent conversations to keep a searchable history across tools.
-        Import a Claude Code or ChatGPT export to get started.
+        Use the capture daemon or MCP tools to get started.
       </p>
-      <a href="/projects/{encodedProject}/conversations/import" class="import-link">
-        Import Conversations
-      </a>
     {/if}
   </div>
 {:else}
@@ -189,19 +186,4 @@ const encodedProject = $derived(encodeURIComponent(projectName));
     line-height: 1.6;
   }
 
-  .import-link {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: white;
-    padding: 8px 20px;
-    border-radius: 8px;
-    background: var(--color-accent);
-    text-decoration: none;
-    display: inline-block;
-    transition: var(--transition-base);
-  }
-
-  .import-link:hover {
-    background: var(--color-accent-hover);
-  }
 </style>
