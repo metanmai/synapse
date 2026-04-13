@@ -40,6 +40,15 @@ describe("project-map", () => {
     expect(readProjectMap()["/tmp/foo"].project_id).toBe("p2");
   });
 
+  it("preserves sibling entries when upserting", () => {
+    upsertProjectMapping("/tmp/foo", { project_id: "p1", project_name: "foo" });
+    upsertProjectMapping("/tmp/bar", { project_id: "p2", project_name: "bar" });
+    const map = readProjectMap();
+    expect(Object.keys(map)).toHaveLength(2);
+    expect(map["/tmp/foo"].project_id).toBe("p1");
+    expect(map["/tmp/bar"].project_id).toBe("p2");
+  });
+
   it("readProjectMap recovers from malformed JSON", () => {
     const p = getProjectMapPath();
     fs.mkdirSync(path.dirname(p), { recursive: true });
