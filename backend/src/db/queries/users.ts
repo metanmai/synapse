@@ -50,7 +50,7 @@ export async function deleteUser(db: SupabaseClient, userId: string): Promise<vo
     await db.from("activity_log").delete().eq("project_id", pid);
     await db.from("share_links").delete().eq("project_id", pid);
     await db.from("project_members").delete().eq("project_id", pid);
-    await db.from("user_project_preferences").delete().eq("project_id", pid);
+    await db.from("user_preferences").delete().eq("project_id", pid);
   }
 
   // Delete owned projects, keys, subscriptions, and the user row
