@@ -1,11 +1,10 @@
--- Add Stripe customer ID to users
-alter table users add column stripe_customer_id text unique;
-
--- Subscriptions table (synced from Stripe via webhooks)
+-- Subscriptions table (provider-agnostic, synced via webhooks)
 create table subscriptions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
-  stripe_subscription_id text unique not null,
+  provider text not null default 'creem',
+  provider_subscription_id text unique not null,
+  provider_customer_id text,
   status text not null default 'inactive'
     check (status in ('active', 'canceled', 'past_due', 'inactive')),
   current_period_end timestamptz,
@@ -15,7 +14,7 @@ create table subscriptions (
 );
 
 create index idx_subscriptions_user_id on subscriptions(user_id);
-create index idx_subscriptions_stripe_sub_id on subscriptions(stripe_subscription_id);
+create index idx_subscriptions_provider_sub_id on subscriptions(provider_subscription_id);
 
 -- RLS (defense-in-depth; Worker uses service key which bypasses RLS)
 alter table subscriptions enable row level security;
