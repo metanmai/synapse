@@ -4,13 +4,67 @@ const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { z } = require("zod");
 
+const crypto = require("crypto");
+
 const API_URL = process.env.SYNAPSE_API_URL || "http://localhost:8787";
 const API_KEY = process.env.SYNAPSE_API_KEY;
 const PROJECT = process.env.SYNAPSE_PROJECT || "My Workspace";
+const PASSPHRASE = process.env.SYNAPSE_PASSPHRASE;
+const USER_EMAIL = process.env.SYNAPSE_USER_EMAIL;
 
 if (!API_KEY) {
   console.error("SYNAPSE_API_KEY is required");
   process.exit(1);
+}
+
+// --- E2E Encryption (matches frontend crypto.ts) ---
+const ENC_PREFIX = "enc:v1:";
+const PBKDF2_ITERATIONS = 100_000;
+
+let derivedKey = null;
+
+async function deriveKeyNode(passphrase, salt) {
+  return new Promise((resolve, reject) => {
+    crypto.pbkdf2(passphrase, salt, PBKDF2_ITERATIONS, 32, "sha256", (err, key) => {
+      if (err) reject(err);
+      else resolve(key);
+    });
+  });
+}
+
+async function getEncKey() {
+  if (derivedKey) return derivedKey;
+  if (!PASSPHRASE || !USER_EMAIL) return null;
+  derivedKey = await deriveKeyNode(PASSPHRASE, USER_EMAIL);
+  return derivedKey;
+}
+
+async function encryptContent(plaintext) {
+  const key = await getEncKey();
+  if (!key) return plaintext;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  const combined = Buffer.concat([encrypted, authTag]);
+  return `${ENC_PREFIX}${iv.toString("hex")}:${combined.toString("base64")}`;
+}
+
+async function decryptContent(text) {
+  if (!text.startsWith(ENC_PREFIX)) return text;
+  const key = await getEncKey();
+  if (!key) return text;
+  const payload = text.slice(ENC_PREFIX.length);
+  const colonIdx = payload.indexOf(":");
+  const ivHex = payload.slice(0, colonIdx);
+  const ctBase64 = payload.slice(colonIdx + 1);
+  const iv = Buffer.from(ivHex, "hex");
+  const combined = Buffer.from(ctBase64, "base64");
+  const authTag = combined.slice(-16);
+  const ciphertext = combined.slice(0, -16);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(authTag);
+  return decipher.update(ciphertext) + decipher.final("utf8");
 }
 
 const headers = {
@@ -78,7 +132,8 @@ server.tool(
       .filter(Boolean)
       .join(" | ");
 
-    return { content: [{ type: "text", text: `${meta}\n---\n${entry.content}` }] };
+    const content = await decryptContent(entry.content);
+    return { content: [{ type: "text", text: `${meta}\n---\n${content}` }] };
   }
 );
 
@@ -92,13 +147,14 @@ server.tool(
     tags: z.array(z.string()).optional().describe("Optional tags for the file"),
   },
   async ({ path, content, tags }) => {
+    const encrypted = await encryptContent(content);
     await api("POST", "/api/context/save", {
       project: PROJECT,
       path,
-      content,
+      content: encrypted,
       tags: tags || [],
     });
-    return { content: [{ type: "text", text: `Wrote ${path} (${content.length} chars)` }] };
+    return { content: [{ type: "text", text: `Wrote ${path} (${content.length} chars, encrypted)` }] };
   }
 );
 
@@ -125,7 +181,10 @@ server.tool(
       return { content: [{ type: "text", text: `No results for "${query}"` }] };
     }
 
-    const text = results
+    const decrypted = await Promise.all(
+      results.map(async (e) => ({ ...e, content: await decryptContent(e.content) }))
+    );
+    const text = decrypted
       .map((e) => {
         const preview = e.content.slice(0, 200).replace(/\n/g, " ");
         return `${e.path}\n  ${preview}${e.content.length > 200 ? "..." : ""}`;
@@ -151,7 +210,10 @@ server.tool(
       return { content: [{ type: "text", text: `No history for ${path}` }] };
     }
 
-    const text = versions
+    const decryptedVersions = await Promise.all(
+      versions.map(async (v) => ({ ...v, content: await decryptContent(v.content) }))
+    );
+    const text = decryptedVersions
       .map((v, i) => {
         const date = new Date(v.changed_at).toLocaleString();
         const preview = v.content.slice(0, 100).replace(/\n/g, " ");
