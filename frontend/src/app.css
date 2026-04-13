@@ -3,13 +3,13 @@
 :root {
   --color-bg: #f5faff;
   --color-bg-raised: #ffffff;
-  --color-bg-muted: #dfeeff;
+  --color-bg-muted: #fffde8;
   --color-border: #B0DAFF;
   --color-text: #146C94;
   --color-text-muted: #3d8fb0;
-  --color-accent: #19A7CE;
-  --color-accent-hover: #146C94;
-  --color-highlight: #FEFF86;
+  --color-accent: #FEFF86;
+  --color-accent-hover: #eef075;
+  --color-link: #19A7CE;
   --color-success: #4ade80;
   --color-danger: #ef4444;
 }
