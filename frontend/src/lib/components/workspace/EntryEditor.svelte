@@ -8,10 +8,12 @@ let {
   entry,
   projectName,
   isNew = false,
+  onCancel,
 } = $props<{
   entry?: Entry | null;
   projectName: string;
   isNew?: boolean;
+  onCancel?: () => void;
 }>();
 </script>
 
@@ -79,9 +81,9 @@ let {
     <button type="submit" class="btn-primary cursor-pointer">
       Save
     </button>
-    <a href="/projects/{encodeURIComponent(projectName)}{entry ? `?path=${encodeURIComponent(entry.path)}` : ''}"
-      class="btn-secondary cursor-pointer">
+    <button type="button" class="btn-secondary cursor-pointer"
+      onclick={() => onCancel?.()}>
       Cancel
-    </a>
+    </button>
   </div>
 </form>
