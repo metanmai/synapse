@@ -397,11 +397,10 @@ describe("projects queries", () => {
       const result = await addMember(db as unknown as SupabaseClient, "proj1", "u2", "editor");
 
       expect(db.from).toHaveBeenCalledWith("project_members");
-      expect(db.chainable.insert).toHaveBeenCalledWith({
-        project_id: "proj1",
-        user_id: "u2",
-        role: "editor",
-      });
+      expect(db.chainable.upsert).toHaveBeenCalledWith(
+        { project_id: "proj1", user_id: "u2", role: "editor" },
+        { onConflict: "project_id,user_id" },
+      );
       expect(db.chainable.select).toHaveBeenCalled();
       expect(db.chainable.single).toHaveBeenCalled();
       expect(result).toEqual(member);
