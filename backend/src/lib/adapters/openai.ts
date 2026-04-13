@@ -1,4 +1,4 @@
-import type { CanonicalMessage, FidelityMode, AgentAdapter } from "./types";
+import type { AgentAdapter, CanonicalMessage, FidelityMode } from "./types";
 
 // --- OpenAI API message format types ---
 
@@ -114,11 +114,7 @@ export const openaiAdapter: AgentAdapter = {
 
       // Map role
       const canonicalRole: CanonicalMessage["role"] =
-        role === "system"
-          ? "system"
-          : role === "user"
-            ? "user"
-            : "assistant";
+        role === "system" ? "system" : role === "user" ? "user" : "assistant";
 
       messages.push({
         id: generateId(),
@@ -132,10 +128,7 @@ export const openaiAdapter: AgentAdapter = {
     return messages;
   },
 
-  fromCanonical(
-    messages: CanonicalMessage[],
-    fidelity: FidelityMode
-  ): OpenAIMessage[] {
+  fromCanonical(messages: CanonicalMessage[], fidelity: FidelityMode): OpenAIMessage[] {
     const result: OpenAIMessage[] = [];
 
     for (const msg of messages) {
@@ -144,9 +137,7 @@ export const openaiAdapter: AgentAdapter = {
           // In summary mode, tool results become user-visible text
           result.push({
             role: "user",
-            content: msg.toolInteraction
-              ? `[Tool Result: ${msg.toolInteraction.summary}]`
-              : msg.content,
+            content: msg.toolInteraction ? `[Tool Result: ${msg.toolInteraction.summary}]` : msg.content,
           });
         } else {
           // Full fidelity — preserve as tool role message
@@ -167,8 +158,7 @@ export const openaiAdapter: AgentAdapter = {
         continue;
       }
 
-      const openaiRole: "user" | "assistant" =
-        msg.role === "user" ? "user" : "assistant";
+      const openaiRole: "user" | "assistant" = msg.role === "user" ? "user" : "assistant";
 
       if (msg.toolInteraction && fidelity === "full") {
         // Full fidelity — reconstruct tool_calls

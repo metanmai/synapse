@@ -2,14 +2,7 @@ import { Hono } from "hono";
 
 import { logActivity } from "../db/activity-logger";
 import { createSupabaseClient } from "../db/client";
-import {
-  createInsight,
-  deleteInsight,
-  getInsight,
-  getMemberRole,
-  listInsights,
-  updateInsight,
-} from "../db/queries";
+import { createInsight, deleteInsight, getInsight, getMemberRole, listInsights, updateInsight } from "../db/queries";
 import { authMiddleware } from "../lib/auth";
 import { ForbiddenError, NotFoundError } from "../lib/errors";
 import { idempotency } from "../lib/idempotency";
@@ -36,8 +29,10 @@ insights.get("/", async (c) => {
     | "architecture"
     | "action_item"
     | undefined;
-  const limit = c.req.query("limit") ? Number.parseInt(c.req.query("limit")!) : undefined;
-  const offset = c.req.query("offset") ? Number.parseInt(c.req.query("offset")!) : undefined;
+  const limitStr = c.req.query("limit");
+  const offsetStr = c.req.query("offset");
+  const limit = limitStr ? Number.parseInt(limitStr) : undefined;
+  const offset = offsetStr ? Number.parseInt(offsetStr) : undefined;
 
   const db = createSupabaseClient(c.env);
 
