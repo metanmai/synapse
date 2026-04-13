@@ -132,7 +132,7 @@ billing.post("/checkout", async (c) => {
   const user = c.get("user");
   const stripe = createStripeClient(c.env);
   const db = createSupabaseClient(c.env);
-  const appUrl = envOr(c.env, "APP_URL", "https://app.synapse.dev");
+  const appUrl = envOr(c.env, "APP_URL", "https://synapsesync.app");
 
   // Guard against duplicate subscriptions
   const existingSub = await getActiveSubscription(db, user.id);
@@ -171,7 +171,7 @@ billing.post("/checkout", async (c) => {
 billing.post("/portal", async (c) => {
   const user = c.get("user");
   const stripe = createStripeClient(c.env);
-  const appUrl = envOr(c.env, "APP_URL", "https://app.synapse.dev");
+  const appUrl = envOr(c.env, "APP_URL", "https://synapsesync.app");
 
   if (!user.stripe_customer_id) {
     throw new AppError("No billing account found. Subscribe to Pro first.", 400, "VALIDATION_ERROR");
