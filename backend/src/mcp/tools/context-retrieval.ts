@@ -15,6 +15,7 @@ import {
 import { embedTexts, embeddingConfigFromEnv } from "../../lib/embeddings";
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
+import { requireMcpUserId } from "../mcp-context";
 
 export function registerContextRetrievalTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   server.tool(
@@ -26,7 +27,7 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
     },
     async ({ project, path }) => {
       const db = createSupabaseClient(env);
-      const userId = getContext().userId!;
+      const userId = requireMcpUserId(getContext);
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -51,7 +52,7 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
     },
     async ({ project, query, tags, folder }) => {
       const db = createSupabaseClient(env);
-      const userId = getContext().userId!;
+      const userId = requireMcpUserId(getContext);
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -89,7 +90,7 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
     },
     async ({ project, folder }) => {
       const db = createSupabaseClient(env);
-      const userId = getContext().userId!;
+      const userId = requireMcpUserId(getContext);
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
@@ -118,7 +119,7 @@ export function registerContextRetrievalTools(server: McpServer, env: Env, getCo
     },
     async ({ project }) => {
       const db = createSupabaseClient(env);
-      const userId = getContext().userId!;
+      const userId = requireMcpUserId(getContext);
 
       const proj = await getProjectByName(db, project, userId);
       if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
