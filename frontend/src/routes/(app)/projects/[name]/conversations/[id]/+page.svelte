@@ -18,6 +18,7 @@ let context = $state<Record<string, unknown>[]>([]);
 let media = $state<ConversationMediaRecord[]>([]);
 
 let viewMode = $state<"compact" | "full">("full");
+let compacting = $state(false);
 let showExportMenu = $state(false);
 let confirmDelete = $state(false);
 let actionLoading = $state("");
@@ -312,11 +313,38 @@ function handleActionResult(label: string) {
     <!-- Transcript container -->
     <div class="transcript-container glass">
       {#if viewMode === "compact"}
-        <!-- Compact view placeholder -->
-        <div class="compact-placeholder">
-          <p>Compact summaries will appear here once compaction is enabled.</p>
-          <p class="compact-hint">Switch to Full transcript to view the conversation.</p>
-        </div>
+        {#if conv?.compacted_summary}
+          <div class="compact-summary">
+            <pre class="compact-content">{conv.compacted_summary}</pre>
+            <div class="compact-meta">
+              Compacted {conv.compacted_at ? formatDate(conv.compacted_at) : ""}
+              {#if conv.compaction_model}
+                &middot; {conv.compaction_model}
+              {/if}
+            </div>
+          </div>
+        {:else if data.tier === "plus"}
+          <div class="compact-placeholder">
+            <p>No compacted summary yet.</p>
+            <form method="POST" action="?/compact" use:enhance={() => {
+              compacting = true;
+              return async ({ update }) => {
+                compacting = false;
+                await update();
+                await loadConversation();
+              };
+            }}>
+              <button type="submit" class="compact-btn" disabled={compacting}>
+                {compacting ? "Compacting..." : "Compact now"}
+              </button>
+            </form>
+          </div>
+        {:else}
+          <div class="compact-placeholder">
+            <p>Compact summaries are available on the Plus plan.</p>
+            <a href="/settings" class="upgrade-link">Upgrade to Plus</a>
+          </div>
+        {/if}
       {:else}
         <!-- Full transcript: chat-style messages -->
         {#if messages.length === 0}
@@ -609,6 +637,57 @@ function handleActionResult(label: string) {
     font-size: 0.75rem;
     margin-top: 0.5rem;
     opacity: 0.7;
+  }
+
+  .compact-summary {
+    padding: 1rem;
+  }
+
+  .compact-content {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--color-text);
+    margin: 0;
+  }
+
+  .compact-meta {
+    margin-top: 0.75rem;
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .compact-btn {
+    margin-top: 0.75rem;
+    background: rgba(86, 28, 36, 0.06);
+    color: var(--color-pink-dark);
+    border: 1px solid var(--color-pink);
+    border-radius: 9999px;
+    padding: 0.4rem 1rem;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 150ms ease, transform 150ms ease;
+  }
+
+  .compact-btn:hover:not(:disabled) {
+    background: rgba(86, 28, 36, 0.1);
+    transform: translateY(-1px);
+  }
+
+  .compact-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .upgrade-link {
+    display: inline-block;
+    margin-top: 0.5rem;
+    color: var(--color-pink-dark);
+    text-decoration: underline;
+    font-size: 13px;
   }
 
   /* ---------- Chat thread ---------- */
