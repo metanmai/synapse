@@ -19,7 +19,7 @@ describe("parseResponse", () => {
   });
 
   it("strips markdown code fencing if present", () => {
-    const raw = "```json\n" + JSON.stringify([{ path: "decisions/x.md", content: "# X", tags: [] }]) + "\n```";
+    const raw = `\`\`\`json\n${JSON.stringify([{ path: "decisions/x.md", content: "# X", tags: [] }])}\n\`\`\``;
     const result = parseResponse(raw);
     expect(result).toHaveLength(1);
   });
