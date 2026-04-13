@@ -1,12 +1,5 @@
 // Re-export shared types used directly by the frontend
-export type {
-  User,
-  Entry,
-  EntryListItem,
-  EntryHistory,
-  ShareLink,
-  ActivityLogEntry,
-} from "@synapse/shared";
+export type { User, ActivityLogEntry } from "@synapse/shared";
 
 // --- Frontend-specific types ---
 // These extend the shared base with optional fields populated by API joins.

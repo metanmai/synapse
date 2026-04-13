@@ -111,11 +111,3 @@ export interface ConversationContext {
   encrypted: boolean;
   created_at: string;
 }
-
-export interface ConversationLimits {
-  tier: string;
-  max_conversations: number | null;
-  max_messages: number | null;
-  max_media_bytes: number | null;
-  sync_enabled: boolean;
-}
