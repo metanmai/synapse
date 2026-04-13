@@ -335,6 +335,67 @@ export function detectEditors(scope: SetupScope): EditorInfo[] {
   ];
 }
 
+/** Check if Synapse is already configured in any local or global config. */
+export function detectExistingSetup(): { configured: boolean; locations: string[] } {
+  const home = os.homedir();
+  const cwd = process.cwd();
+  const locations: string[] = [];
+
+  // Local
+  const localMcp = path.join(cwd, ".mcp.json");
+  if (fs.existsSync(localMcp)) {
+    try {
+      const content = fs.readFileSync(localMcp, "utf-8");
+      if (content.includes("synapsesync-mcp")) locations.push(".mcp.json");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const cursorLocal = path.join(cwd, ".cursor", "mcp.json");
+  if (fs.existsSync(cursorLocal)) {
+    try {
+      const content = fs.readFileSync(cursorLocal, "utf-8");
+      if (content.includes("synapsesync-mcp")) locations.push(".cursor/mcp.json");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Global
+  const cursorGlobal = path.join(home, ".cursor", "mcp.json");
+  if (fs.existsSync(cursorGlobal)) {
+    try {
+      const content = fs.readFileSync(cursorGlobal, "utf-8");
+      if (content.includes("synapsesync-mcp")) locations.push("~/.cursor/mcp.json");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const claudeMd = path.join(home, ".claude", "CLAUDE.md");
+  if (fs.existsSync(claudeMd)) {
+    try {
+      const content = fs.readFileSync(claudeMd, "utf-8");
+      if (content.includes("Synapse")) locations.push("~/.claude/CLAUDE.md");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const windsurfMcp = path.join(home, ".codeium", "windsurf", "mcp_config.json");
+  if (fs.existsSync(windsurfMcp)) {
+    try {
+      const content = fs.readFileSync(windsurfMcp, "utf-8");
+      if (content.includes("synapsesync-mcp")) locations.push("~/.codeium/windsurf/mcp_config.json");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return { configured: locations.length > 0, locations };
+}
+
 /** Write configs for selected editors. Continues on per-editor failure. */
 export function writeEditorConfigs(editors: EditorInfo[], apiKey: string): WriteResult {
   const written: string[] = [];
