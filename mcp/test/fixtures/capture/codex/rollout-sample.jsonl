@@ -1,0 +1,5 @@
+{"type":"metadata","timestamp":"2026-04-02T10:00:00Z","session_id":"ses_codex_001","model":"o4-mini","cwd":"/Users/test/myproject"}
+{"type":"message","timestamp":"2026-04-02T10:00:01Z","role":"user","content":"add rate limiting to the API","session_id":"ses_codex_001"}
+{"type":"message","timestamp":"2026-04-02T10:00:05Z","role":"assistant","content":"I'll add rate limiting using a token bucket algorithm. Let me first check the existing middleware.","session_id":"ses_codex_001","tokens":{"input":150,"output":45}}
+{"type":"tool_call","timestamp":"2026-04-02T10:00:06Z","role":"assistant","name":"shell","input":"cat src/middleware/index.ts","output":"export const cors = ...","session_id":"ses_codex_001"}
+{"type":"message","timestamp":"2026-04-02T10:00:15Z","role":"assistant","content":"I've added rate limiting middleware using a sliding window approach. The limits are 100 requests per minute per API key.","session_id":"ses_codex_001","tokens":{"input":500,"output":120}}
