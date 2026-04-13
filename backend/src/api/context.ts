@@ -2,9 +2,10 @@ import { Hono } from "hono";
 
 import { authMiddleware } from "../lib/auth";
 import { createSupabaseClient } from "../db/client";
-import { getProjectByName, upsertEntry, getEntry, listEntries, searchEntries, getRecentEntries, getAllEntries, getEntryHistory, restoreEntry, getPreferences, deleteEntry } from "../db/queries";
+import { getProjectByName, upsertEntry, getEntry, listEntries, searchEntries, getRecentEntries, getAllEntries, getEntryHistory, restoreEntry, getPreferences, deleteEntry, countEntries, countUniqueConnections } from "../db/queries";
 import { logActivity } from "../db/activity-logger";
 import { NotFoundError, AppError } from "../lib/errors";
+import { enforceFileLimit, enforceConnectionLimit, requirePro } from "../lib/tier";
 
 import type { Env } from "../lib/env";
 
@@ -25,6 +26,18 @@ context.post("/save", async (c) => {
   const db = createSupabaseClient(c.env);
   const proj = await getProjectByName(db, project, user.id);
   if (!proj) throw new NotFoundError(`Project "${project}" not found`);
+
+  // Check if this is a new entry (not an update)
+  const existing = await getEntry(db, proj.id, path);
+  if (!existing) {
+    // New file — enforce file limit
+    const fileCount = await countEntries(db, proj.id);
+    enforceFileLimit(fileCount, c);
+
+    // New source — enforce connection limit
+    const connectionCount = await countUniqueConnections(db, proj.id);
+    enforceConnectionLimit(connectionCount, entrySource, c);
+  }
 
   const entry = await upsertEntry(db, {
     project_id: proj.id, path, content, tags, author_id: user.id, source: entrySource,
@@ -167,6 +180,7 @@ context.get("/:project/load", async (c) => {
 
 // GET /api/context/:project/history/:path{.+}
 context.get("/:project/history/:path{.+}", async (c) => {
+  requirePro(c, "Version history");
   const user = c.get("user");
   const projectName = c.req.param("project");
   const path = c.req.param("path") ?? "";
@@ -181,6 +195,7 @@ context.get("/:project/history/:path{.+}", async (c) => {
 
 // POST /api/context/:project/restore — body: { path, historyId }
 context.post("/:project/restore", async (c) => {
+  requirePro(c, "Version restore");
   const user = c.get("user");
   const projectName = c.req.param("project");
   const { path, historyId } = await c.req.json();
