@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -199,14 +199,18 @@ You have access to a Synapse MCP server — a remote workspace for storing and r
 
     function setupGeneric() {
       const mcpConfig = path.join(cwd, ".mcp.json");
-      const config = { mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } } } };
+      const config = {
+        mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } } },
+      };
 
       let existing: Record<string, unknown> = {};
       if (fs.existsSync(mcpConfig)) {
-        try { existing = JSON.parse(fs.readFileSync(mcpConfig, "utf-8")); } catch {}
+        try {
+          existing = JSON.parse(fs.readFileSync(mcpConfig, "utf-8"));
+        } catch {}
       }
-      existing.mcpServers = { ...(existing.mcpServers as Record<string, unknown> || {}), ...config.mcpServers };
-      fs.writeFileSync(mcpConfig, JSON.stringify(existing, null, 2) + "\n");
+      existing.mcpServers = { ...((existing.mcpServers as Record<string, unknown>) || {}), ...config.mcpServers };
+      fs.writeFileSync(mcpConfig, `${JSON.stringify(existing, null, 2)}\n`);
 
       const gitignore = path.join(cwd, ".gitignore");
       if (fs.existsSync(gitignore)) {
@@ -222,13 +226,17 @@ You have access to a Synapse MCP server — a remote workspace for storing and r
       const configDir = path.join(cwd, ".cursor");
       fs.mkdirSync(configDir, { recursive: true });
       const mcpConfig = path.join(configDir, "mcp.json");
-      const config = { mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } } } };
+      const config = {
+        mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } } },
+      };
       let existing: Record<string, unknown> = {};
       if (fs.existsSync(mcpConfig)) {
-        try { existing = JSON.parse(fs.readFileSync(mcpConfig, "utf-8")); } catch {}
+        try {
+          existing = JSON.parse(fs.readFileSync(mcpConfig, "utf-8"));
+        } catch {}
       }
-      existing.mcpServers = { ...(existing.mcpServers as Record<string, unknown> || {}), ...config.mcpServers };
-      fs.writeFileSync(mcpConfig, JSON.stringify(existing, null, 2) + "\n");
+      existing.mcpServers = { ...((existing.mcpServers as Record<string, unknown>) || {}), ...config.mcpServers };
+      fs.writeFileSync(mcpConfig, `${JSON.stringify(existing, null, 2)}\n`);
       console.log("  ✓ .cursor/mcp.json");
 
       const rulesFile = path.join(cwd, ".cursorrules");
@@ -237,7 +245,7 @@ You have access to a Synapse MCP server — a remote workspace for storing and r
         rulesContent = fs.readFileSync(rulesFile, "utf-8");
       }
       if (!rulesContent.includes("Synapse")) {
-        fs.appendFileSync(rulesFile, "\n" + SYNAPSE_INSTRUCTIONS);
+        fs.appendFileSync(rulesFile, `\n${SYNAPSE_INSTRUCTIONS}`);
         console.log("  ✓ .cursorrules");
       } else {
         console.log("  ○ .cursorrules (already has Synapse)");
@@ -248,13 +256,17 @@ You have access to a Synapse MCP server — a remote workspace for storing and r
       const configDir = path.join(home, ".codeium", "windsurf");
       fs.mkdirSync(configDir, { recursive: true });
       const mcpConfig = path.join(configDir, "mcp_config.json");
-      const config = { mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } } } };
+      const config = {
+        mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } } },
+      };
       let existing: Record<string, unknown> = {};
       if (fs.existsSync(mcpConfig)) {
-        try { existing = JSON.parse(fs.readFileSync(mcpConfig, "utf-8")); } catch {}
+        try {
+          existing = JSON.parse(fs.readFileSync(mcpConfig, "utf-8"));
+        } catch {}
       }
-      existing.mcpServers = { ...(existing.mcpServers as Record<string, unknown> || {}), ...config.mcpServers };
-      fs.writeFileSync(mcpConfig, JSON.stringify(existing, null, 2) + "\n");
+      existing.mcpServers = { ...((existing.mcpServers as Record<string, unknown>) || {}), ...config.mcpServers };
+      fs.writeFileSync(mcpConfig, `${JSON.stringify(existing, null, 2)}\n`);
       console.log("  ✓ ~/.codeium/windsurf/mcp_config.json");
 
       const rulesFile = path.join(cwd, ".windsurfrules");
@@ -263,7 +275,7 @@ You have access to a Synapse MCP server — a remote workspace for storing and r
         rulesContent = fs.readFileSync(rulesFile, "utf-8");
       }
       if (!rulesContent.includes("Synapse")) {
-        fs.appendFileSync(rulesFile, "\n" + SYNAPSE_INSTRUCTIONS);
+        fs.appendFileSync(rulesFile, `\n${SYNAPSE_INSTRUCTIONS}`);
         console.log("  ✓ .windsurfrules");
       } else {
         console.log("  ○ .windsurfrules (already has Synapse)");
@@ -274,13 +286,19 @@ You have access to a Synapse MCP server — a remote workspace for storing and r
       const settingsFile = path.join(cwd, ".vscode", "settings.json");
       let settings: Record<string, unknown> = {};
       if (fs.existsSync(settingsFile)) {
-        try { settings = JSON.parse(fs.readFileSync(settingsFile, "utf-8")); } catch {}
+        try {
+          settings = JSON.parse(fs.readFileSync(settingsFile, "utf-8"));
+        } catch {}
       }
       if (!settings.mcp) settings.mcp = {};
       const mcp = settings.mcp as Record<string, unknown>;
       if (!mcp.servers) mcp.servers = {};
-      (mcp.servers as Record<string, unknown>).synapse = { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } };
-      fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + "\n");
+      (mcp.servers as Record<string, unknown>).synapse = {
+        command: "npx",
+        args: ["synapsesync-mcp"],
+        env: { SYNAPSE_API_KEY: apiKey },
+      };
+      fs.writeFileSync(settingsFile, `${JSON.stringify(settings, null, 2)}\n`);
       console.log("  ✓ .vscode/settings.json");
 
       const ghDir = path.join(cwd, ".github");
@@ -291,7 +309,7 @@ You have access to a Synapse MCP server — a remote workspace for storing and r
         instrContent = fs.readFileSync(instrFile, "utf-8");
       }
       if (!instrContent.includes("Synapse")) {
-        fs.appendFileSync(instrFile, "\n" + SYNAPSE_INSTRUCTIONS);
+        fs.appendFileSync(instrFile, `\n${SYNAPSE_INSTRUCTIONS}`);
         console.log("  ✓ .github/copilot-instructions.md");
       } else {
         console.log("  ○ .github/copilot-instructions.md (already has Synapse)");
@@ -305,7 +323,7 @@ You have access to a Synapse MCP server — a remote workspace for storing and r
         claudeContent = fs.readFileSync(claudeMd, "utf-8");
       }
       if (!claudeContent.includes("Synapse")) {
-        fs.appendFileSync(claudeMd, "\n" + SYNAPSE_INSTRUCTIONS);
+        fs.appendFileSync(claudeMd, `\n${SYNAPSE_INSTRUCTIONS}`);
         console.log("  ✓ ~/.claude/CLAUDE.md");
       } else {
         console.log("  ○ ~/.claude/CLAUDE.md (already has Synapse)");
@@ -317,9 +335,11 @@ You have access to a Synapse MCP server — a remote workspace for storing and r
       const commands: Record<string, string> = {
         "search.md": `Search the Synapse workspace. The search query is: $ARGUMENTS\n\nUses semantic search — understands meaning, not just keywords.\n\nRun \`mcp__synapse__search({ query: "$ARGUMENTS" })\` and display results. If not connected, say "Not connected."\n`,
         "tree.md": `Show the full Synapse workspace file tree.\n\nRun \`mcp__synapse__tree()\` and display the tree. If not connected, say "Not connected."\n`,
-        "sync.md": `Sync project context to Synapse.\n\n1. Run \`mcp__synapse__tree()\` to check connection\n2. Summarize recent git changes\n3. Write project overview and recent changes to Synapse\n`,
+        "sync.md":
+          "Sync project context to Synapse.\n\n1. Run `mcp__synapse__tree()` to check connection\n2. Summarize recent git changes\n3. Write project overview and recent changes to Synapse\n",
         "whoami.md": `Show current Synapse account info.\n\n1. Run \`mcp__synapse__ls()\` to verify connection\n2. Run \`mcp__synapse__tree()\` to count files\n3. Show: "Connected. Files: [count]."\n`,
-        "clean.md": `Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Run \`mcp__synapse__tree()\`\n2. Identify duplicates, test files, empty entries\n3. Confirm with user before deleting\n4. Delete confirmed entries with \`mcp__synapse__rm()\`\n`,
+        "clean.md":
+          "Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Run `mcp__synapse__tree()`\n2. Identify duplicates, test files, empty entries\n3. Confirm with user before deleting\n4. Delete confirmed entries with `mcp__synapse__rm()`\n",
       };
 
       for (const [filename, content] of Object.entries(commands)) {
