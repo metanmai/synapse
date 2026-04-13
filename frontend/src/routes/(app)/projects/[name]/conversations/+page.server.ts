@@ -7,22 +7,6 @@ export const load: PageServerLoad = async ({ parent, locals, url }) => {
   const { project } = await parent();
   const api = createApi(locals.token);
 
-  const billing = await api.getBillingStatus().catch(() => ({
-    tier: "free" as const,
-    subscription: null,
-  }));
-
-  if (billing.tier === "free") {
-    return {
-      conversations: [],
-      total: 0,
-      tier: "free" as const,
-      page: 1,
-      totalPages: 1,
-      statusFilter: "all",
-    };
-  }
-
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
   const statusFilter = url.searchParams.get("status") || "all";
   const offset = (page - 1) * PAGE_SIZE;
@@ -38,7 +22,6 @@ export const load: PageServerLoad = async ({ parent, locals, url }) => {
   return {
     conversations,
     total,
-    tier: "plus" as const,
     page,
     totalPages,
     statusFilter,
