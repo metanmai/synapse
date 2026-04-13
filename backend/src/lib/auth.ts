@@ -1,7 +1,7 @@
 import { Context, Next } from "hono";
 
 import { createSupabaseClient } from "../db/client";
-import { findUserByApiKeyHash, findUserBySupabaseAuthId } from "../db/queries";
+import { findUserByApiKeyHash, findUserBySupabaseAuthId, getActiveSubscription } from "../db/queries";
 import { UnauthorizedError } from "./errors";
 
 import type { Env } from "./env";
@@ -10,6 +10,7 @@ import type { User } from "../db/types";
 declare module "hono" {
   interface ContextVariableMap {
     user: User;
+    tier: import("../db/types").Tier;
   }
 }
 
@@ -73,5 +74,11 @@ export async function authMiddleware(
   }
 
   c.set("user", user);
+
+  // Resolve tier from subscription status
+  const sub = await getActiveSubscription(db, user.id);
+  const tier = (sub?.status === "active" || sub?.status === "past_due") ? "pro" : "free";
+  c.set("tier", tier);
+
   await next();
 }
