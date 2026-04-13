@@ -20,5 +20,5 @@ export const load: LayoutServerLoad = async ({ params, locals, depends }) => {
     api.getActivity(project.id, 50, 0).catch(() => []),
   ]);
 
-  return { project, projects, entries, shareLinks, activity };
+  return { project, entries, shareLinks, activity };
 };
