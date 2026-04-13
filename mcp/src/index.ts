@@ -842,9 +842,7 @@ if (!isMcpServerMode(args)) {
     "Save a key insight about the project — a decision, learning, preference, architecture note, or action item. Call this whenever something worth remembering comes up during a session.",
     {
       project: z.string().describe("Project name"),
-      type: z
-        .enum(["decision", "learning", "preference", "architecture", "action_item"])
-        .describe("Type of insight"),
+      type: z.enum(["decision", "learning", "preference", "architecture", "action_item"]).describe("Type of insight"),
       summary: z.string().describe("Short summary of the insight"),
       detail: z.string().optional().describe("Optional longer explanation or context"),
     },
@@ -868,7 +866,7 @@ if (!isMcpServerMode(args)) {
         };
       } catch (_e) {
         return {
-          content: [{ type: "text" as const, text: `Failed to save insight.` }],
+          content: [{ type: "text" as const, text: "Failed to save insight." }],
           isError: true,
         };
       }
@@ -909,7 +907,8 @@ if (!isMcpServerMode(args)) {
         }
 
         const lines = insights.map(
-          (i) => `- [${i.type}] ${i.summary}${i.detail ? ` — ${i.detail}` : ""} (${new Date(i.updated_at).toLocaleDateString()})`,
+          (i) =>
+            `- [${i.type}] ${i.summary}${i.detail ? ` — ${i.detail}` : ""} (${new Date(i.updated_at).toLocaleDateString()})`,
         );
         const header = type
           ? `${total} ${type} insight(s) in "${project}" (showing ${insights.length}):`
@@ -918,7 +917,7 @@ if (!isMcpServerMode(args)) {
         return { content: [{ type: "text" as const, text: `${header}\n${lines.join("\n")}` }] };
       } catch (_e) {
         return {
-          content: [{ type: "text" as const, text: `Failed to list insights.` }],
+          content: [{ type: "text" as const, text: "Failed to list insights." }],
           isError: true,
         };
       }
