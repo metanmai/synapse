@@ -140,8 +140,7 @@ billing.post("/checkout", async (c) => {
   const result = await creemRequest<{ checkout_url: string }>(c.env, "POST", "/checkouts", {
     product_id: c.env.CREEM_PRO_PRODUCT_ID,
     success_url: `${appUrl}/account?upgraded=true`,
-    request_url: `${appUrl}/account`,
-    customer_email: user.email,
+    customer: { email: user.email },
     metadata: { synapse_user_id: user.id },
   });
 
