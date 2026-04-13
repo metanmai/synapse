@@ -5,22 +5,23 @@ let { projectName } = $props<{ projectName: string }>();
 
 const navSections = $derived([
   {
-    heading: "Project",
-    items: [
-      { href: `/projects/${encodeURIComponent(projectName)}`, label: "Workspace", icon: "📁", exact: true },
-      { href: `/projects/${encodeURIComponent(projectName)}/settings`, label: "Settings", icon: "⚙️" },
-    ],
+    heading: "Feed",
+    items: [{ href: `/projects/${encodeURIComponent(projectName)}/activity`, label: "Activity", icon: "📋" }],
+  },
+  {
+    heading: "Sessions",
+    items: [{ href: `/projects/${encodeURIComponent(projectName)}/conversations`, label: "Sessions", icon: "💬" }],
   },
   {
     heading: "Knowledge",
     items: [
       { href: `/projects/${encodeURIComponent(projectName)}/insights`, label: "Insights", icon: "💡" },
-      { href: `/projects/${encodeURIComponent(projectName)}/conversations`, label: "Conversations", icon: "💬" },
+      { href: `/projects/${encodeURIComponent(projectName)}`, label: "Workspace", icon: "📁", exact: true },
     ],
   },
   {
-    heading: "Activity",
-    items: [{ href: `/projects/${encodeURIComponent(projectName)}/activity`, label: "Recent", icon: "📋" }],
+    heading: "Project",
+    items: [{ href: `/projects/${encodeURIComponent(projectName)}/settings`, label: "Settings", icon: "⚙️" }],
   },
 ]);
 </script>
