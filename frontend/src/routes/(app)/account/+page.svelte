@@ -1,9 +1,13 @@
-<script>
+<script lang="ts">
 import ApiKeysCard from "$lib/components/account/ApiKeysCard.svelte";
 import BillingCard from "$lib/components/account/BillingCard.svelte";
 import ConnectedAccounts from "$lib/components/account/ConnectedAccounts.svelte";
+import DangerZone from "$lib/components/account/DangerZone.svelte";
 
 let { data, form } = $props();
+
+// Action results are a discriminated union — cast to access fields from different actions safely
+const f = $derived(form as Record<string, unknown> | null);
 </script>
 
 <div class="max-w-2xl mx-auto p-10">
@@ -15,5 +19,11 @@ let { data, form } = $props();
     <BillingCard billing={data.billing} />
     <ApiKeysCard keys={data.keys} newKey={form?.newKey} keyError={form?.keyError} />
     <ConnectedAccounts providers={data.user.providers} />
+    <DangerZone
+      email={data.user.email}
+      resetSuccess={f?.resetSuccess as boolean | undefined}
+      resetError={f?.resetError as string | undefined}
+      deleteError={f?.deleteError as string | undefined}
+    />
   </div>
 </div>
