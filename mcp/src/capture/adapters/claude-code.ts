@@ -1,7 +1,8 @@
-import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { safeReadFile } from "../safe-read.js";
 import type { CapturedSession, SessionMessage, ToolAdapter } from "../types.js";
+import { sessionIdFromNative } from "../types.js";
 
 interface ContentBlock {
   type: string;
@@ -52,9 +53,10 @@ export class ClaudeCodeAdapter implements ToolAdapter {
 
   parse(filePath: string): CapturedSession | null {
     if (!filePath.endsWith(".jsonl")) return null;
-    if (!fs.existsSync(filePath)) return null;
 
-    const raw = fs.readFileSync(filePath, "utf-8");
+    const raw = safeReadFile(filePath);
+    if (!raw) return null;
+
     const lines = raw.split("\n").filter((l) => l.trim().length > 0);
 
     let sessionId: string | null = null;
@@ -62,12 +64,15 @@ export class ClaudeCodeAdapter implements ToolAdapter {
     let startedAt: string | null = null;
     let updatedAt: string | null = null;
     const messages: SessionMessage[] = [];
+    const parseErrors: string[] = [];
 
-    for (const line of lines) {
+    for (const [index, line] of lines.entries()) {
       let parsed: ClaudeCodeLine;
       try {
         parsed = JSON.parse(line) as ClaudeCodeLine;
-      } catch {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        parseErrors.push(`Line ${index + 1}: ${msg}`);
         continue;
       }
 
@@ -102,12 +107,13 @@ export class ClaudeCodeAdapter implements ToolAdapter {
     if (!sessionId || messages.length === 0) return null;
 
     return {
-      id: sessionId,
+      id: sessionIdFromNative(sessionId),
       tool: "claude-code",
       projectPath: projectPath ?? "unknown",
       startedAt: startedAt ?? new Date().toISOString(),
       updatedAt: updatedAt ?? new Date().toISOString(),
       messages,
+      ...(parseErrors.length > 0 ? { parseErrors } : {}),
     };
   }
 }

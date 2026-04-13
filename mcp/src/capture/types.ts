@@ -18,12 +18,22 @@ export interface CapturedSession {
   startedAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
   messages: SessionMessage[];
+  parseErrors?: string[];
 }
 
 export interface ToolAdapter {
   tool: string;
   watchPaths(): string[];
   parse(filePath: string): CapturedSession | null;
+}
+
+/**
+ * Deterministic session ID from a native tool session identifier.
+ * Strips dashes and takes the first 16 characters, prefixed with "ses_".
+ */
+export function sessionIdFromNative(nativeId: string): string {
+  const stripped = nativeId.replace(/-/g, "").slice(0, 16);
+  return `ses_${stripped}`;
 }
 
 const VALID_TOOLS = new Set(["claude-code", "cursor", "codex", "gemini"]);
