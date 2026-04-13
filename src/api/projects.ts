@@ -28,6 +28,13 @@ projects.post("/", async (c) => {
 
   const db = createSupabaseClient(c.env);
   const project = await createProject(db, name, user.id);
+  await logActivity(db, {
+    project_id: project.id,
+    user_id: user.id,
+    action: "project_created",
+    source: "human",
+    metadata: { name: project.name },
+  });
   return c.json(project, 201);
 });
 
@@ -55,6 +62,14 @@ projects.post("/:id/members", async (c) => {
   if (!invitee) throw new NotFoundError(`No user found with email ${email}`);
 
   const member = await addMember(db, projectId, invitee.id, role);
+  await logActivity(db, {
+    project_id: projectId,
+    user_id: user.id,
+    action: "member_added",
+    target_email: email,
+    source: "human",
+    metadata: { role },
+  });
   return c.json(member, 201);
 });
 
@@ -72,6 +87,13 @@ projects.delete("/:id/members/:email", async (c) => {
   if (!target) throw new NotFoundError(`No user found with email ${email}`);
 
   await removeMember(db, projectId, target.id);
+  await logActivity(db, {
+    project_id: projectId,
+    user_id: user.id,
+    action: "member_removed",
+    target_email: email,
+    source: "human",
+  });
   return c.json({ ok: true });
 });
 

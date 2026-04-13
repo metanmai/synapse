@@ -12,7 +12,7 @@ export async function logActivity(
     metadata?: Record<string, unknown>;
   }
 ): Promise<void> {
-  await db.from("activity_log").insert({
+  const { error } = await db.from("activity_log").insert({
     project_id: params.project_id,
     user_id: params.user_id ?? null,
     action: params.action,
@@ -21,4 +21,7 @@ export async function logActivity(
     source: params.source ?? "human",
     metadata: params.metadata ?? null,
   });
+  if (error) {
+    console.error("Failed to log activity:", error);
+  }
 }
