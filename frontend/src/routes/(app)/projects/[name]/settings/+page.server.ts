@@ -26,6 +26,16 @@ export const actions: Actions = {
     return { invited: true };
   },
 
+  updateRole: async ({ request, locals }) => {
+    const data = await request.formData();
+    const projectId = data.get("projectId") as string;
+    const email = data.get("email") as string;
+    const role = data.get("role") as string;
+
+    const api = createApi(locals.token);
+    await api.updateMemberRole(projectId, email, role);
+  },
+
   removeMember: async ({ request, locals }) => {
     const data = await request.formData();
     const projectId = data.get("projectId") as string;
@@ -33,23 +43,5 @@ export const actions: Actions = {
 
     const api = createApi(locals.token);
     await api.removeMember(projectId, email);
-  },
-
-  createLink: async ({ request, locals }) => {
-    const data = await request.formData();
-    const projectId = data.get("projectId") as string;
-    const role = data.get("role") as string;
-
-    const api = createApi(locals.token);
-    await api.createShareLink(projectId, role);
-  },
-
-  revokeLink: async ({ request, locals }) => {
-    const data = await request.formData();
-    const projectId = data.get("projectId") as string;
-    const token = data.get("token") as string;
-
-    const api = createApi(locals.token);
-    await api.deleteShareLink(projectId, token);
   },
 };
