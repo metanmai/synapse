@@ -127,9 +127,7 @@ describe("Cross-agent conversation sync", () => {
         },
         {
           role: "user",
-          content: [
-            { type: "tool_result", tool_use_id: "toolu_1", content: '{"port": 3000}' },
-          ],
+          content: [{ type: "tool_result", tool_use_id: "toolu_1", content: '{"port": 3000}' }],
         },
         {
           role: "assistant",
@@ -323,11 +321,9 @@ describe("Cross-agent conversation sync", () => {
           content: Array<Record<string, unknown>>;
         }>;
 
-        const toolUseMsg = result.find(
-          (m) => Array.isArray(m.content) && m.content.some((b) => b.type === "tool_use"),
-        );
+        const toolUseMsg = result.find((m) => Array.isArray(m.content) && m.content.some((b) => b.type === "tool_use"));
         expect(toolUseMsg).toBeDefined();
-        const toolBlock = toolUseMsg!.content.find((b) => b.type === "tool_use");
+        const toolBlock = toolUseMsg?.content.find((b) => b.type === "tool_use");
         expect(toolBlock?.name).toBe("Grep");
         expect(toolBlock?.input).toEqual({ pattern: "throw.*Error", path: "/src" });
       });
@@ -341,8 +337,8 @@ describe("Cross-agent conversation sync", () => {
 
         const toolCallMsg = result.find((m) => m.tool_calls && m.tool_calls.length > 0);
         expect(toolCallMsg).toBeDefined();
-        expect(toolCallMsg!.tool_calls![0].function.name).toBe("Grep");
-        const args = JSON.parse(toolCallMsg!.tool_calls![0].function.arguments);
+        expect(toolCallMsg?.tool_calls?.[0].function.name).toBe("Grep");
+        const args = JSON.parse(toolCallMsg?.tool_calls?.[0].function.arguments);
         expect(args).toEqual({ pattern: "throw.*Error", path: "/src" });
       });
 
@@ -355,7 +351,7 @@ describe("Cross-agent conversation sync", () => {
 
         const toolResult = result.find((m) => m.role === "tool");
         expect(toolResult).toBeDefined();
-        expect(toolResult!.content).toContain("auth.ts");
+        expect(toolResult?.content).toContain("auth.ts");
       });
     });
 
@@ -408,7 +404,7 @@ describe("Cross-agent conversation sync", () => {
           (m) => typeof m.content === "string" && m.content.includes("[Tool Result:"),
         );
         expect(toolResultAnnotation).toBeDefined();
-        expect(toolResultAnnotation!.role).toBe("user");
+        expect(toolResultAnnotation?.role).toBe("user");
       });
     });
   });
@@ -439,9 +435,7 @@ describe("Cross-agent conversation sync", () => {
         {
           role: "assistant",
           content: null,
-          tool_calls: [
-            { id: "call_1", type: "function", function: { name: "test", arguments: "{}" } },
-          ],
+          tool_calls: [{ id: "call_1", type: "function", function: { name: "test", arguments: "{}" } }],
         },
       ];
       expect(detectAdapter(openaiToolCall)).toBe("openai");
@@ -521,8 +515,8 @@ describe("Cross-agent conversation sync", () => {
       const rawResult = rawAdapter.fromCanonical([withMedia], "full") as CanonicalMessage[];
       expect(rawResult).toHaveLength(1);
       expect(rawResult[0].media).toBeDefined();
-      expect(rawResult[0].media![0].filename).toBe("screenshot.png");
-      expect(rawResult[0].media![0].type).toBe("image");
+      expect(rawResult[0].media?.[0].filename).toBe("screenshot.png");
+      expect(rawResult[0].media?.[0].type).toBe("image");
     });
 
     it("very long content strings are preserved through roundtrip", () => {
@@ -539,7 +533,8 @@ describe("Cross-agent conversation sync", () => {
     });
 
     it("unicode and emoji in content are preserved through roundtrip", () => {
-      const unicodeContent = "Hello \u{1F44B} \u4F60\u597D \u041F\u0440\u0438\u0432\u0435\u0442 \uD55C\uAD6D\uC5B4 \u2603\uFE0F\u2744\uFE0F\u2728";
+      const unicodeContent =
+        "Hello \u{1F44B} \u4F60\u597D \u041F\u0440\u0438\u0432\u0435\u0442 \uD55C\uAD6D\uC5B4 \u2603\uFE0F\u2744\uFE0F\u2728";
       const openaiRaw = [{ role: "user", content: unicodeContent }];
 
       const canonical = openaiAdapter.toCanonical(openaiRaw);
@@ -577,7 +572,7 @@ describe("Cross-agent conversation sync", () => {
 
       expect(openaiResult).toHaveLength(1);
       expect(openaiResult[0].tool_calls).toBeDefined();
-      expect(openaiResult[0].tool_calls![0].function.name).toBe("long_running_task");
+      expect(openaiResult[0].tool_calls?.[0].function.name).toBe("long_running_task");
 
       const anthropicResult = anthropicAdapter.fromCanonical([pendingTool], "full") as Array<{
         role: string;
@@ -587,7 +582,7 @@ describe("Cross-agent conversation sync", () => {
       expect(anthropicResult).toHaveLength(1);
       const toolBlock = anthropicResult[0].content.find((b) => b.type === "tool_use");
       expect(toolBlock).toBeDefined();
-      expect(toolBlock!.name).toBe("long_running_task");
+      expect(toolBlock?.name).toBe("long_running_task");
     });
 
     it("mixed agent sources in canonical messages", () => {
@@ -658,7 +653,7 @@ describe("Cross-agent conversation sync", () => {
       const openaiResult = openaiAdapter.fromCanonical([noInput], "full") as Array<{
         tool_calls?: Array<{ function: { arguments: string } }>;
       }>;
-      expect(openaiResult[0].tool_calls![0].function.arguments).toBe("{}");
+      expect(openaiResult[0].tool_calls?.[0].function.arguments).toBe("{}");
     });
   });
 
@@ -804,7 +799,7 @@ describe("Cross-agent resume simulation", () => {
     // Verify tool call preserved
     const toolCallMsg = openaiMessages.find((m) => m.tool_calls && m.tool_calls.length > 0);
     expect(toolCallMsg).toBeDefined();
-    expect(toolCallMsg!.tool_calls![0].function.name).toBe("Read");
+    expect(toolCallMsg?.tool_calls?.[0].function.name).toBe("Read");
   });
 
   it("Agent B (ChatGPT) messages survive roundtrip to Agent A (Claude) format", () => {
@@ -1031,13 +1026,13 @@ describe("Cross-agent resume simulation", () => {
     // The tool interaction should be captured in canonical
     const toolMsg = canonical.find((m) => m.toolInteraction?.name === "Grep");
     expect(toolMsg).toBeDefined();
-    expect(toolMsg!.toolInteraction!.input).toEqual({ pattern: "auth.*bug", path: "/src" });
+    expect(toolMsg?.toolInteraction?.input).toEqual({ pattern: "auth.*bug", path: "/src" });
 
     // Export to raw format preserves tool interaction exactly
     const rawExport = rawAdapter.fromCanonical(canonical, "full") as CanonicalMessage[];
     const rawToolMsg = rawExport.find((m) => m.toolInteraction?.name === "Grep");
     expect(rawToolMsg).toBeDefined();
-    expect(rawToolMsg!.toolInteraction!.input).toEqual({ pattern: "auth.*bug", path: "/src" });
+    expect(rawToolMsg?.toolInteraction?.input).toEqual({ pattern: "auth.*bug", path: "/src" });
   });
 
   it("export to raw format preserves all canonical fields", () => {
@@ -1112,11 +1107,9 @@ describe("Fidelity mode roundtrip", () => {
       content: Array<Record<string, unknown>>;
     }>;
 
-    const toolUseMsg = result.find(
-      (m) => Array.isArray(m.content) && m.content.some((b) => b.type === "tool_use"),
-    );
+    const toolUseMsg = result.find((m) => Array.isArray(m.content) && m.content.some((b) => b.type === "tool_use"));
     expect(toolUseMsg).toBeDefined();
-    const toolBlock = toolUseMsg!.content.find((b) => b.type === "tool_use");
+    const toolBlock = toolUseMsg?.content.find((b) => b.type === "tool_use");
     expect(toolBlock).toBeDefined();
     expect(toolBlock?.name).toBe("Grep");
     expect(toolBlock?.input).toEqual({ pattern: "auth.*bug", path: "/src" });
@@ -1131,8 +1124,8 @@ describe("Fidelity mode roundtrip", () => {
 
     const toolCallMsg = result.find((m) => m.tool_calls && m.tool_calls.length > 0);
     expect(toolCallMsg).toBeDefined();
-    expect(toolCallMsg!.tool_calls![0].function.name).toBe("Grep");
-    const args = JSON.parse(toolCallMsg!.tool_calls![0].function.arguments);
+    expect(toolCallMsg?.tool_calls?.[0].function.name).toBe("Grep");
+    const args = JSON.parse(toolCallMsg?.tool_calls?.[0].function.arguments);
     expect(args).toEqual({ pattern: "auth.*bug", path: "/src" });
   });
 
@@ -1145,7 +1138,7 @@ describe("Fidelity mode roundtrip", () => {
 
     const toolResult = result.find((m) => m.role === "tool");
     expect(toolResult).toBeDefined();
-    expect(toolResult!.content).toContain("auth.ts");
+    expect(toolResult?.content).toContain("auth.ts");
   });
 
   it("summary fidelity: Anthropic export has only text blocks, no tool_use", () => {
@@ -1181,9 +1174,7 @@ describe("Fidelity mode roundtrip", () => {
     }
 
     // Tool interaction becomes text annotation
-    const toolAnnotation = result.find(
-      (m) => typeof m.content === "string" && m.content.includes("[Tool:"),
-    );
+    const toolAnnotation = result.find((m) => typeof m.content === "string" && m.content.includes("[Tool:"));
     expect(toolAnnotation).toBeDefined();
   });
 
@@ -1198,7 +1189,7 @@ describe("Fidelity mode roundtrip", () => {
       (m) => typeof m.content === "string" && m.content.includes("[Tool Result:"),
     );
     expect(toolResultAnnotation).toBeDefined();
-    expect(toolResultAnnotation!.role).toBe("user");
+    expect(toolResultAnnotation?.role).toBe("user");
   });
 
   it("switching fidelity changes export format of same canonical data", () => {
@@ -1214,9 +1205,7 @@ describe("Fidelity mode roundtrip", () => {
       tool_calls?: unknown[];
       content: string;
     }>;
-    const hasToolCallsSummary = summaryOpenai.some(
-      (m) => m.tool_calls && (m.tool_calls as unknown[]).length > 0,
-    );
+    const hasToolCallsSummary = summaryOpenai.some((m) => m.tool_calls && (m.tool_calls as unknown[]).length > 0);
     expect(hasToolCallsSummary).toBe(false);
 
     // But summary still has the tool info as text
@@ -1242,15 +1231,11 @@ describe("Format import/export roundtrip", () => {
       },
       {
         role: "user",
-        content: [
-          { type: "tool_result", tool_use_id: "toolu_abc123", content: "index.ts\napp.ts\nutils.ts" },
-        ],
+        content: [{ type: "tool_result", tool_use_id: "toolu_abc123", content: "index.ts\napp.ts\nutils.ts" }],
       },
       {
         role: "assistant",
-        content: [
-          { type: "text", text: "The src directory contains: index.ts, app.ts, and utils.ts." },
-        ],
+        content: [{ type: "text", text: "The src directory contains: index.ts, app.ts, and utils.ts." }],
       },
     ];
 
@@ -1269,7 +1254,7 @@ describe("Format import/export roundtrip", () => {
     // Tool result captured
     const toolResult = canonical.find((m) => m.role === "tool");
     expect(toolResult).toBeTruthy();
-    expect(toolResult!.content).toContain("index.ts");
+    expect(toolResult?.content).toContain("index.ts");
 
     // Export to OpenAI
     const openaiExport = openaiAdapter.fromCanonical(canonical, "full") as Array<{
@@ -1279,9 +1264,7 @@ describe("Format import/export roundtrip", () => {
     expect(openaiExport.length).toBeGreaterThanOrEqual(1);
 
     // User message present in OpenAI format with string content
-    const userMsg = openaiExport.find(
-      (m) => m.role === "user" && typeof m.content === "string",
-    );
+    const userMsg = openaiExport.find((m) => m.role === "user" && typeof m.content === "string");
     expect(userMsg).toBeTruthy();
   });
 
@@ -1325,9 +1308,7 @@ describe("Format import/export roundtrip", () => {
 
     // Tool use block present
     const hasToolUse = anthropicExport.some(
-      (m) =>
-        Array.isArray(m.content) &&
-        m.content.some((b) => b.type === "tool_use"),
+      (m) => Array.isArray(m.content) && m.content.some((b) => b.type === "tool_use"),
     );
     expect(hasToolUse).toBe(true);
   });
