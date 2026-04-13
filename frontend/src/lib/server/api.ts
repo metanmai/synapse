@@ -170,6 +170,11 @@ export function createApi(token: string | null) {
       request<{ url: string }>("/api/billing/portal", token, {
         method: "POST",
       }),
+    verifyCheckout: (checkoutId: string) =>
+      request<{ status: string }>("/api/billing/verify", token, {
+        method: "POST",
+        body: JSON.stringify({ checkout_id: checkoutId }),
+      }),
 
     // Import/Export
     importProject: async (projectId: string, file: File) => {
