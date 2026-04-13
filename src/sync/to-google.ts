@@ -79,7 +79,7 @@ async function upsertGoogleDoc(
     mimeType: entry.content_type === "json" ? "application/json" : "text/plain",
   };
 
-  const boundary = "mcp_sync_boundary";
+  const boundary = "synapse_boundary";
   const body = `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: text/plain\r\n\r\n${entry.content}\r\n--${boundary}--`;
 
   const res = await fetch(
