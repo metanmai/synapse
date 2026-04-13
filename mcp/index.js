@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const API_URL = process.env.SYNAPSE_API_URL || "https://api.synapsesync.app";
+const API_URL = process.env.SYNAPSE_API_URL || "https://synapse.tanmai.workers.dev";
 
 // --- CLI commands (run before MCP server starts, no SDK needed) ---
 const args = process.argv.slice(2);
@@ -265,9 +265,9 @@ server.tool(
 // --- write: create or update a file ---
 server.tool(
   "write",
-  "Write content to a file. Creates the file if it doesn't exist, updates it if it does. Like writing to a local file. Directories are created implicitly from the path.",
+  "Write content to a file. Creates the file if it doesn't exist, updates it if it does. IMPORTANT: Always use the correct directory prefix: decisions/ for decisions, notes/ for meeting notes, bugs/ for bug diagnoses, architecture/ for architecture docs, retrospectives/ for retrospectives, projects/<name>/ for project-specific context, settings/ for settings. Never write to the root — always use a directory.",
   {
-    path: z.string().describe("File path to write (e.g. 'notes/meeting.md'). Directories in the path are created automatically."),
+    path: z.string().describe("File path with directory prefix (e.g. 'decisions/chose-redis.md', 'notes/standup-2026-03-22.md', 'bugs/auth-race.md', 'projects/myapp/overview.md'). Directories are created automatically."),
     content: z.string().describe("The full file content to write"),
     tags: z.array(z.string()).optional().describe("Optional tags for the file"),
   },
@@ -311,10 +311,16 @@ server.tool(
     if (folder) params.set("folder", folder);
     if (tags) params.set("tags", tags);
 
-    const results = await api(
-      "GET",
-      `/api/context/${encodeURIComponent(await getProject())}/search?${params}`
-    );
+    let results;
+    try {
+      results = await api(
+        "GET",
+        `/api/context/${encodeURIComponent(await getProject())}/search?${params}`
+      );
+    } catch (e) {
+      // Gracefully handle errors (e.g., project not found) instead of throwing
+      return { content: [{ type: "text", text: `No results for "${query}"` }] };
+    }
 
     if (results.length === 0) {
       return { content: [{ type: "text", text: `No results for "${query}"` }] };
@@ -324,13 +330,16 @@ server.tool(
       results.map(async (e) => ({ ...e, content: await decryptContent(e.content) }))
     );
     const text = decrypted
-      .map((e) => {
-        const preview = e.content.slice(0, 200).replace(/\n/g, " ");
-        return `${e.path}\n  ${preview}${e.content.length > 200 ? "..." : ""}`;
+      .map((e, i) => {
+        const dir = e.path.includes("/") ? e.path.split("/").slice(0, -1).join("/") + "/" : "(root)";
+        const tags = e.tags && e.tags.length ? `  tags: ${e.tags.join(", ")}` : "";
+        const updated = new Date(e.updated_at).toLocaleDateString();
+        const preview = e.content.slice(0, 300).replace(/\n/g, " ");
+        return `[${i + 1}] ${e.path}\n  dir: ${dir} | updated: ${updated}${tags}\n  ${preview}${e.content.length > 300 ? "..." : ""}`;
       })
       .join("\n\n");
 
-    return { content: [{ type: "text", text: `${results.length} results:\n\n${text}` }] };
+    return { content: [{ type: "text", text: `${results.length} result${results.length === 1 ? "" : "s"}:\n\n${text}` }] };
   }
 );
 
