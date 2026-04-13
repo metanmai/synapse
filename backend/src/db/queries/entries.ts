@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { singleOrNull } from "../query-helpers";
+import { buildIlikeWords, mergeSearchResults, type ScoredEntry } from "../search-helpers";
 import type { Entry, EntryHistory } from "../types";
+
+const ENTRY_COLUMNS = "id, project_id, path, content, content_type, author_id, source, tags, google_doc_id, created_at, updated_at";
 
 export async function upsertEntry(
   db: SupabaseClient,
@@ -17,7 +20,7 @@ export async function upsertEntry(
   // Check if entry exists at this path
   const { data: existing } = await db
     .from("entries")
-    .select("*")
+    .select(ENTRY_COLUMNS)
     .eq("project_id", params.project_id)
     .eq("path", params.path)
     .single();
@@ -41,7 +44,7 @@ export async function upsertEntry(
         tags: params.tags ?? existing.tags,
       })
       .eq("id", existing.id)
-      .select()
+      .select(ENTRY_COLUMNS)
       .single();
     if (error) throw error;
     return data as Entry;
@@ -59,7 +62,7 @@ export async function upsertEntry(
       source: params.source ?? "claude",
       tags: params.tags ?? [],
     })
-    .select()
+    .select(ENTRY_COLUMNS)
     .single();
   if (error) throw error;
   return data as Entry;
@@ -67,7 +70,7 @@ export async function upsertEntry(
 
 export async function getEntry(db: SupabaseClient, projectId: string, path: string): Promise<Entry | null> {
   return singleOrNull<Entry>(
-    await db.from("entries").select("*").eq("project_id", projectId).eq("path", path).single(),
+    await db.from("entries").select(ENTRY_COLUMNS).eq("project_id", projectId).eq("path", path).single(),
   );
 }
 
@@ -96,55 +99,100 @@ export async function searchEntries(
   projectId: string,
   query: string,
   options?: { tags?: string[]; folder?: string },
+  queryEmbedding?: number[] | null,
 ): Promise<Entry[]> {
-  // Try Postgres full-text search first
-  let dbQuery = db
+  // --- Tier 1: Semantic search (if we have an embedding) ---
+  const semanticPromise: Promise<ScoredEntry[]> = queryEmbedding
+    ? Promise.resolve(
+        db
+          .rpc("match_entries", {
+            query_embedding: JSON.stringify(queryEmbedding),
+            match_project_id: projectId,
+            match_threshold: 0.3,
+            match_count: 10,
+          })
+          .then(({ data, error }) => {
+            if (error) {
+              console.error("[search] semantic error:", error.message);
+              return [];
+            }
+            return (data ?? []).map((row: Entry & { similarity: number }) => {
+              const { similarity, ...entry } = row;
+              return { entry: entry as Entry, score: similarity };
+            });
+          }),
+      )
+    : Promise.resolve([]);
+
+  // --- Tier 2: Full-text search ---
+  let ftQuery = db
     .from("entries")
-    .select("*")
+    .select(ENTRY_COLUMNS)
     .eq("project_id", projectId)
     .textSearch("search_vector", query, { type: "websearch" });
 
-  if (options?.folder) {
-    dbQuery = dbQuery.like("path", `${options.folder}/%`);
-  }
+  if (options?.folder) ftQuery = ftQuery.like("path", `${options.folder}/%`);
+  if (options?.tags?.length) ftQuery = ftQuery.overlaps("tags", options.tags);
 
-  if (options?.tags?.length) {
-    dbQuery = dbQuery.overlaps("tags", options.tags);
-  }
+  const fulltextPromise: Promise<ScoredEntry[]> = Promise.resolve(
+    ftQuery.then(({ data, error }) => {
+      if (error) {
+        console.error("[search] fulltext error:", error.message);
+        return [];
+      }
+      // TODO: Use ts_rank for proper intra-tier ordering (requires RPC function).
+      // For v1, all full-text results get a fixed score of 0.5 (below semantic, above ILIKE).
+      return (data ?? []).map((e: Entry) => ({ entry: e, score: 0.5 }));
+    }),
+  );
 
-  const { data, error } = await dbQuery;
-  if (error) throw error;
+  // --- Tier 3: ILIKE word search ---
+  const words = buildIlikeWords(query);
+  const ilikePromise: Promise<ScoredEntry[]> =
+    words.length > 0
+      ? (() => {
+          const orClauses = words
+            .map((w) => {
+              const p = `%${w}%`;
+              return `path.ilike.${p},content.ilike.${p}`;
+            })
+            .join(",");
 
-  // If full-text search found results, return them
-  if (data && data.length > 0) {
-    return data as Entry[];
-  }
+          let iq = db
+            .from("entries")
+            .select(ENTRY_COLUMNS)
+            .eq("project_id", projectId)
+            .or(orClauses);
 
-  // Fallback: ILIKE search on path and content for partial/fuzzy matching
-  const pattern = `%${query}%`;
-  let fallbackQuery = db
-    .from("entries")
-    .select("*")
-    .eq("project_id", projectId)
-    .or(`path.ilike.${pattern},content.ilike.${pattern}`);
+          if (options?.folder) iq = iq.like("path", `${options.folder}/%`);
+          if (options?.tags?.length) iq = iq.overlaps("tags", options.tags);
 
-  if (options?.folder) {
-    fallbackQuery = fallbackQuery.like("path", `${options.folder}/%`);
-  }
+          return Promise.resolve(
+            iq.then(({ data, error }) => {
+              if (error) {
+                console.error("[search] ilike error:", error.message);
+                return [];
+              }
+              return (data ?? []).map((e: Entry) => ({ entry: e, score: 0.1 }));
+            }),
+          );
+        })()
+      : Promise.resolve([]);
 
-  if (options?.tags?.length) {
-    fallbackQuery = fallbackQuery.overlaps("tags", options.tags);
-  }
+  // Run all three tiers in parallel
+  const [semantic, fulltext, ilike] = await Promise.all([
+    semanticPromise,
+    fulltextPromise,
+    ilikePromise,
+  ]);
 
-  const { data: fallbackData, error: fallbackError } = await fallbackQuery;
-  if (fallbackError) throw fallbackError;
-  return (fallbackData ?? []) as Entry[];
+  return mergeSearchResults(semantic, fulltext, ilike);
 }
 
 export async function getRecentEntries(db: SupabaseClient, projectId: string, limit = 20): Promise<Entry[]> {
   const { data, error } = await db
     .from("entries")
-    .select("*")
+    .select(ENTRY_COLUMNS)
     .eq("project_id", projectId)
     .order("updated_at", { ascending: false })
     .limit(limit);
@@ -155,7 +203,7 @@ export async function getRecentEntries(db: SupabaseClient, projectId: string, li
 export async function getAllEntries(db: SupabaseClient, projectId: string): Promise<Entry[]> {
   const { data, error } = await db
     .from("entries")
-    .select("*")
+    .select(ENTRY_COLUMNS)
     .eq("project_id", projectId)
     .order("path", { ascending: true });
   if (error) throw error;
@@ -219,7 +267,7 @@ export async function restoreEntry(
   if (!historyRecord) return null;
 
   // Upsert restores the content (upsertEntry handles versioning)
-  const { data: existing } = await db.from("entries").select("*").eq("project_id", projectId).eq("path", path).single();
+  const { data: existing } = await db.from("entries").select(ENTRY_COLUMNS).eq("project_id", projectId).eq("path", path).single();
 
   if (!existing) return null;
 
@@ -235,7 +283,7 @@ export async function restoreEntry(
     .from("entries")
     .update({ content: historyRecord.content, source: "human" })
     .eq("id", existing.id)
-    .select()
+    .select(ENTRY_COLUMNS)
     .single();
   if (error) throw error;
   return data as Entry;
