@@ -12,8 +12,7 @@ Authorization: Bearer <api_key>
 
 Get an API key:
 - Via web: Sign up at synapsesync.app, go to Account -> API Keys
-- Via CLI (interactive): `npx synapsesync-mcp --help` then `login`, `signup`, `init`, or `wizard` from your project directory
-- Via CLI (non-interactive): `npx synapsesync-mcp login --email <email> --password <password>` (prints JSON; run `init --key` to write config)
+- Via CLI: `npm install -g synapsesync-mcp`, then `synapsesync-mcp wizard` from your project directory (interactive sign-up / sign-in / API key)
 
 ## Auth
 
@@ -261,7 +260,8 @@ Body: `{ "key": "context_loading", "value": "smart" }`
 Connect AI tools via the Model Context Protocol:
 
 ```bash
-npx synapsesync-mcp login --email <email> --password <password>
+npm install -g synapsesync-mcp
+synapsesync-mcp wizard
 ```
 
 MCP endpoint: `https://api.synapsesync.app/mcp`
