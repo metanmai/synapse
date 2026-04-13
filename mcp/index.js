@@ -5,6 +5,9 @@ const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio
 const { z } = require("zod");
 
 const crypto = require("crypto");
+const { execSync } = require("child_process");
+const pathModule = require("path");
+
 const API_URL = "https://synapse.tanmai.workers.dev";
 const API_KEY = process.env.SYNAPSE_API_KEY;
 const PASSPHRASE = process.env.SYNAPSE_PASSPHRASE;
@@ -15,6 +18,76 @@ const DEFAULT_PROJECT_NAME = "My Workspace";
 if (!API_KEY) {
   console.error("SYNAPSE_API_KEY is required");
   process.exit(1);
+}
+
+// --- Git remote detection for canonical path mapping ---
+// Maps local paths to canonical remote-based paths so the same repo
+// on different machines resolves to the same Synapse path.
+// e.g. /Users/tanmai/Documents/csk-auth-service/overview.md
+//   -> github.com/tanmain/csk-auth-service/overview.md
+
+let gitRoot = null;
+let gitRemotePrefix = null;
+
+function detectGit() {
+  if (gitRemotePrefix !== null) return; // already detected (or failed)
+  try {
+    gitRoot = execSync("git rev-parse --show-toplevel", { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+    const remoteUrl = execSync("git remote get-url origin", { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+    gitRemotePrefix = normalizeRemoteUrl(remoteUrl);
+    console.error(`[synapse-mcp] Git detected: ${gitRemotePrefix} (root: ${gitRoot})`);
+  } catch {
+    gitRoot = null;
+    gitRemotePrefix = null;
+    console.error("[synapse-mcp] Not a git repo or no remote — using paths as-is");
+  }
+}
+
+function normalizeRemoteUrl(url) {
+  // https://github.com/tanmain/repo.git -> github.com/tanmain/repo
+  // git@github.com:tanmain/repo.git    -> github.com/tanmain/repo
+  // git@bitbucket.org:team/repo.git    -> bitbucket.org/team/repo
+  let normalized = url
+    .replace(/^https?:\/\//, "")
+    .replace(/^git@/, "")
+    .replace(":", "/")
+    .replace(/\.git$/, "")
+    .replace(/\/$/, "");
+  return normalized;
+}
+
+function toSynapsePath(localPath) {
+  detectGit();
+  if (!gitRemotePrefix || !gitRoot) return localPath;
+
+  // If the path is absolute and inside the git root, make it relative
+  const absPath = pathModule.isAbsolute(localPath) ? localPath : pathModule.resolve(localPath);
+  if (absPath.startsWith(gitRoot)) {
+    const relative = absPath.slice(gitRoot.length).replace(/^\//, "");
+    return relative ? `${gitRemotePrefix}/${relative}` : gitRemotePrefix;
+  }
+
+  // If it's already a relative path, prefix with remote
+  if (!pathModule.isAbsolute(localPath)) {
+    return `${gitRemotePrefix}/${localPath}`;
+  }
+
+  // Path is outside the git repo — use as-is
+  return localPath;
+}
+
+function fromSynapsePath(synapsePath) {
+  detectGit();
+  if (!gitRemotePrefix || !gitRoot) return synapsePath;
+
+  // Strip the remote prefix to get a relative path
+  if (synapsePath.startsWith(gitRemotePrefix + "/")) {
+    return synapsePath.slice(gitRemotePrefix.length + 1);
+  }
+  if (synapsePath === gitRemotePrefix) {
+    return "";
+  }
+  return synapsePath;
 }
 
 // Auto-detect or create the user's project
@@ -113,25 +186,26 @@ const server = new McpServer({
 server.tool(
   "ls",
   "List files and folders. Like `ls` on a local filesystem. Returns directory contents with types and modification dates.",
-  { path: z.string().optional().describe("Directory path to list. Omit for root.") },
+  { path: z.string().optional().describe("Directory path to list. Omit for root, or use a relative path.") },
   async ({ path }) => {
-    const folder = path || "";
+    const folder = path ? toSynapsePath(path) : "";
     const qs = folder ? `?folder=${encodeURIComponent(folder)}` : "";
     const project = await getProject();
     const entries = await api("GET", `/api/context/${encodeURIComponent(project)}/list${qs}`);
 
     if (entries.length === 0) {
-      return { content: [{ type: "text", text: folder ? `${folder}/ is empty` : "(empty)" }] };
+      return { content: [{ type: "text", text: folder ? `${path || folder}/ is empty` : "(empty)" }] };
     }
 
     const lines = entries.map((e) => {
-      const name = e.path.split("/").pop();
+      const displayPath = fromSynapsePath(e.path);
+      const name = displayPath.split("/").pop();
       const date = new Date(e.updated_at).toLocaleDateString();
       const tags = e.tags.length ? ` [${e.tags.join(", ")}]` : "";
       return `  ${name}  (${date})${tags}`;
     });
 
-    const header = folder ? `${folder}/` : ".";
+    const header = path || folder || ".";
     return { content: [{ type: "text", text: `${header}\n${lines.join("\n")}` }] };
   }
 );
@@ -140,12 +214,14 @@ server.tool(
 server.tool(
   "read",
   "Read a file's content. Like `cat` on a local filesystem. Returns the full markdown/text content of the file at the given path.",
-  { path: z.string().describe("File path to read (e.g. 'decisions/chose-svelte.md')") },
+  { path: z.string().describe("File path to read, relative to repo root (e.g. 'overview.md')") },
   async ({ path }) => {
+    const synapsePath = toSynapsePath(path);
     const project = await getProject();
-    const entry = await api("GET", `/api/context/${encodeURIComponent(project)}/${encodeURIComponent(path)}`);
+    const entry = await api("GET", `/api/context/${encodeURIComponent(project)}/${encodeURIComponent(synapsePath)}`);
+    const displayPath = fromSynapsePath(entry.path);
     const meta = [
-      `path: ${entry.path}`,
+      `path: ${displayPath}`,
       `updated: ${new Date(entry.updated_at).toLocaleString()}`,
       `source: ${entry.source}`,
       entry.tags.length ? `tags: ${entry.tags.join(", ")}` : null,
@@ -168,16 +244,17 @@ server.tool(
     tags: z.array(z.string()).optional().describe("Optional tags for the file"),
   },
   async ({ path, content, tags }) => {
+    const synapsePath = toSynapsePath(path);
     const project = await getProject();
     const encrypted = await encryptContent(content);
     await api("POST", "/api/context/save", {
       project,
-      path,
+      path: synapsePath,
       content: encrypted,
       source: SOURCE,
       tags: tags || [],
     });
-    return { content: [{ type: "text", text: `Wrote ${path} (${content.length} chars, encrypted)` }] };
+    return { content: [{ type: "text", text: `Wrote ${path} (${content.length} chars)` }] };
   }
 );
 
@@ -192,7 +269,7 @@ server.tool(
   },
   async ({ query, folder, tags }) => {
     const params = new URLSearchParams({ q: query });
-    if (folder) params.set("folder", folder);
+    if (folder) params.set("folder", toSynapsePath(folder));
     if (tags) params.set("tags", tags);
 
     const results = await api(
@@ -209,8 +286,9 @@ server.tool(
     );
     const text = decrypted
       .map((e) => {
+        const displayPath = fromSynapsePath(e.path);
         const preview = e.content.slice(0, 200).replace(/\n/g, " ");
-        return `${e.path}\n  ${preview}${e.content.length > 200 ? "..." : ""}`;
+        return `${displayPath}\n  ${preview}${e.content.length > 200 ? "..." : ""}`;
       })
       .join("\n\n");
 
@@ -224,9 +302,10 @@ server.tool(
   "View version history for a file. Shows past versions with timestamps and who made each change.",
   { path: z.string().describe("File path to get history for") },
   async ({ path }) => {
+    const synapsePath = toSynapsePath(path);
     const versions = await api(
       "GET",
-      `/api/context/${encodeURIComponent(await getProject())}/history/${encodeURIComponent(path)}`
+      `/api/context/${encodeURIComponent(await getProject())}/history/${encodeURIComponent(synapsePath)}`
     );
 
     if (versions.length === 0) {
@@ -261,8 +340,8 @@ server.tool(
       return { content: [{ type: "text", text: "(empty workspace)" }] };
     }
 
-    // Build tree structure
-    const paths = entries.map((e) => e.path).sort();
+    // Build tree structure using display paths
+    const paths = entries.map((e) => fromSynapsePath(e.path)).sort();
     const lines = ["."];
 
     for (const p of paths) {
