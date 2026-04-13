@@ -30,3 +30,35 @@ You have access to a **Synapse MCP server** that connects to the user's remote w
 - Paths are like filesystem paths: `folder/subfolder/file.md`
 - Files are markdown by default. Write in markdown.
 - Tags are optional but useful: `write({ path: "...", content: "...", tags: ["decision", "architecture"] })`
+
+## Synapse as Default Context Layer
+
+Synapse REPLACES local filesystem for all context operations. Do NOT write context, notes, decisions, summaries, or memory to local files. Use Synapse for everything.
+
+### Session Start
+- Run `tree()` or `search()` to check for existing context relevant to the current task.
+- If the user is working on a known project, `ls("project-name/")` to load its context.
+
+### During Work
+- **Decisions made** — Immediately write to Synapse: `write({ path: "decisions/chose-redis-over-memcached.md", content: "...", tags: ["decision", "infrastructure"] })`
+- **Bugs encountered** — Save the diagnosis: `write({ path: "bugs/auth-token-expiry-race.md", content: "..." })`
+- **Architecture discussed** — Capture it: `write({ path: "architecture/api-gateway-design.md", content: "..." })`
+- **Meeting notes** — `write({ path: "notes/standup-2026-03-22.md", content: "..." })`
+- **User says "remember this"** — Always Synapse, never local files.
+
+### Before Asking the User
+- If you need context about a past decision, search Synapse first: `search({ query: "why did we choose X" })`
+- If you're unsure about project conventions, check: `search({ query: "conventions" })` or `ls("standards/")`
+- Don't ask the user something that might already be in Synapse.
+
+### What NOT to Write to Synapse
+- Source code (that belongs in git)
+- Temporary debugging output
+- Anything the user explicitly asks to keep local
+
+### Scope Control
+The user can control scope by saying things like:
+- "Save this locally" — use local filesystem instead
+- "Don't save this" — skip writing
+- "Save this to synapse under projects/acme/" — use the specified path
+- If no scope is specified, default to Synapse with a logical path.
