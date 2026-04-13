@@ -1,8 +1,7 @@
 import { useParams } from "react-router-dom";
-import { Sidebar } from "../components/layout/Sidebar";
-import { MemberList } from "../components/sharing/MemberList";
-import { ShareLinkManager } from "../components/sharing/ShareLinkManager";
-import { InviteDialog } from "../components/sharing/InviteDialog";
+
+import { Sidebar } from "../components/layout";
+import { MemberList, ShareLinkManager, InviteDialog } from "../components/sharing";
 import { useProjects } from "../hooks/useProjects";
 
 export function ProjectSettings() {

@@ -1,12 +1,12 @@
 import { Hono } from "hono";
-import type { Env } from "../lib/env";
+
 import { authMiddleware } from "../lib/auth";
 import { createSupabaseClient } from "../db/client";
-import { getProjectByName } from "../db/queries/projects";
-import { upsertEntry, getEntry, listEntries, searchEntries, getRecentEntries, getAllEntries, getEntryHistory, restoreEntry } from "../db/queries/entries";
-import { getPreferences } from "../db/queries/preferences";
+import { getProjectByName, upsertEntry, getEntry, listEntries, searchEntries, getRecentEntries, getAllEntries, getEntryHistory, restoreEntry, getPreferences } from "../db/queries";
 import { logActivity } from "../db/activity-logger";
 import { NotFoundError, AppError } from "../lib/errors";
+
+import type { Env } from "../lib/env";
 
 const context = new Hono<{ Bindings: Env }>();
 context.use("*", authMiddleware);
