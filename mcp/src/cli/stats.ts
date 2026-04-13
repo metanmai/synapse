@@ -1,10 +1,9 @@
 import * as clack from "@clack/prompts";
 import { validateApiKey } from "./api.js";
+import { API_URL, pad } from "./config.js";
 import { detectExistingSetup } from "./editors.js";
 import { createGlyphSpinner } from "./spinner.js";
 import { accent, bold, muted, success, error as themeError } from "./theme.js";
-
-const API_URL = "https://api.synapsesync.app";
 
 interface ProjectResponse {
   id: string;
@@ -32,10 +31,6 @@ async function apiFetch<T>(apiKey: string, path: string): Promise<T> {
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   return res.json() as Promise<T>;
-}
-
-function pad(label: string, width: number): string {
-  return label + " ".repeat(Math.max(0, width - label.length));
 }
 
 function pct(count: number, total: number): string {
