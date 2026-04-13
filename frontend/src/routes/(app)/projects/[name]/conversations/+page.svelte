@@ -1,11 +1,18 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
+import { navigating } from "$app/stores";
 import ConversationList from "$lib/components/conversations/ConversationList.svelte";
 
 let { data } = $props();
 
 const encodedProject = $derived(encodeURIComponent(data.project.name));
 let filtering = $state(false);
+
+const loadingConversationId = $derived.by(() => {
+  if (!$navigating?.to?.url) return null;
+  const match = $navigating.to.url.pathname.match(/\/conversations\/([^/]+)$/);
+  return match ? match[1] : null;
+});
 
 async function handleStatusChange(e: Event) {
   const value = (e.target as HTMLSelectElement).value;
@@ -81,6 +88,7 @@ const emptyLabel = $derived(data.statusFilter === "all" ? null : data.statusFilt
         conversations={data.conversations}
         projectName={data.project.name}
         {emptyLabel}
+        {loadingConversationId}
       />
     {/if}
 
