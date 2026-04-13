@@ -268,6 +268,32 @@ describe("CloudSyncer", () => {
       expect(result).toBe(false);
     });
 
+    it("includes cwd in working_context matching session projectPath", async () => {
+      fetchSpy
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify([{ id: "proj_1", name: "P" }]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ id: "conv_1" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+        .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+      const syncer = new CloudSyncer();
+      const session = makeSession({ projectPath: "/home/user/my-project" });
+      await syncer.sync(session);
+
+      const createCall = fetchSpy.mock.calls[1];
+      const createBody = JSON.parse(createCall[1]?.body as string);
+      expect(createBody.working_context.cwd).toBe("/home/user/my-project");
+      expect(createBody.working_context.projectPath).toBe("/home/user/my-project");
+    });
+
     it("maps tool calls to tool_interaction", async () => {
       fetchSpy
         .mockResolvedValueOnce(
