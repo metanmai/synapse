@@ -20,7 +20,7 @@ export function SearchPanel({ project, onSelect }: Props) {
         className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
         autoFocus
       />
-      {results?.map((entry: any) => (
+      {results?.map((entry) => (
         <button
           key={entry.id}
           onClick={() => onSelect(entry.path)}

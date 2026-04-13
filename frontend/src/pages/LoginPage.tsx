@@ -22,8 +22,8 @@ export function LoginPage() {
         await signInWithEmail(email, password);
         navigate("/");
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 

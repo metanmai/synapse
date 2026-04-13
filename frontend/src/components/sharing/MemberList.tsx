@@ -1,8 +1,9 @@
 import { useRemoveMember } from "../../hooks/useMembers";
+import type { ProjectMember } from "../../types";
 
 interface Props {
   projectId: string;
-  members: Array<{ user_id: string; role: string; email?: string }>;
+  members: ProjectMember[];
 }
 
 export function MemberList({ projectId, members }: Props) {
