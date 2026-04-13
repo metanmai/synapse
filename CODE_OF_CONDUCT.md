@@ -38,8 +38,8 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the **project maintainers**:
 
-- Prefer a **[private security advisory](https://github.com/tanmain/synapse/security/advisories/new)** if the report is sensitive, **or**
-- Open a regular issue or contact the maintainers via GitHub **[@tanmain](https://github.com/tanmain)** / repository ownership contacts.
+- Prefer a **[private security advisory](https://github.com/metanmai/synapse/security/advisories/new)** if the report is sensitive, **or**
+- Open a regular issue or contact the maintainers via GitHub **[@metanmai](https://github.com/metanmai)** / repository ownership contacts.
 
 All complaints will be reviewed and investigated promptly and fairly.
 
