@@ -9,7 +9,7 @@ import { z } from "zod";
 import * as clack from "@clack/prompts";
 import { runCapture } from "./capture/cli.js";
 import { runBrief } from "./cli/brief.js";
-import { runRefresh, runReset, runStatus, runTree, runUninstall, runUpgrade, runWhoami } from "./cli/commands.js";
+import { runHook, runRefresh, runReset, runStatus, runTree, runUninstall, runUpgrade, runWhoami } from "./cli/commands.js";
 import { API_URL } from "./cli/config.js";
 import { runInit } from "./cli/init.js";
 import { runStats } from "./cli/stats.js";
@@ -127,6 +127,7 @@ const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
   upgrade: async () => runUpgrade(),
   whoami: async () => runWhoami(),
   capture: async (args) => runCapture(args),
+  hook: async (args) => runHook(args),
   reset: async () => runReset(),
   uninstall: async () => runUninstall(),
   init: async (args) => {
