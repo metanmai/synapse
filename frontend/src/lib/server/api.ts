@@ -125,10 +125,29 @@ export function createApi(token: string | null) {
         token,
       ),
 
-    // Account
-    regenerateApiKey: () =>
-      request<{ api_key: string }>("/api/account/regenerate-key", token, {
+    // Account — API Keys
+    listApiKeys: () =>
+      request<{
+        id: string;
+        label: string;
+        expires_at: string | null;
+        last_used_at: string | null;
+        created_at: string;
+      }[]>("/api/account/keys", token),
+    createApiKey: (label: string, expiresAt?: string | null) =>
+      request<{
+        id: string;
+        label: string;
+        api_key: string;
+        expires_at: string | null;
+        created_at: string;
+      }>("/api/account/keys", token, {
         method: "POST",
+        body: JSON.stringify({ label, expires_at: expiresAt }),
+      }),
+    revokeApiKey: (keyId: string) =>
+      request<{ ok: true }>(`/api/account/keys/${keyId}`, token, {
+        method: "DELETE",
       }),
 
     // Preferences
