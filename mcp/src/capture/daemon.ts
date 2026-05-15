@@ -9,7 +9,7 @@ import { flushNowSignalPath, healthcheckPath, projectDir } from "./handoff-paths
 import { runFlushCycle, runPullCycle } from "./handoff-sync.js";
 import { synthesizeHeuristicNextStep } from "./heuristic-synth.js";
 
-export interface DaemonStatus {
+interface DaemonStatus {
   running: boolean;
   pid: number | null;
 }
@@ -74,7 +74,7 @@ export interface HandoffLoopArgs {
   healthcheck_ms?: number;
 }
 
-export interface FireArgs {
+interface FireArgs {
   project_id: string;
   idle_threshold_ms: number;
   spawnFn?: typeof spawnInferNextStep;
