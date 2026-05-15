@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { admin } from "./api/admin";
 import { account, auth } from "./api/auth";
 import { billing } from "./api/billing";
 import { context } from "./api/context";
@@ -66,6 +67,7 @@ app.route("/api/projects", projects);
 app.route("/api/sync", sync);
 app.route("/api/share", share);
 app.route("/api/account", account);
+app.route("/api/admin", admin);
 app.route("/api/billing", billing);
 app.route("/api/insights", insights);
 app.route("/api/conversations", conversations);
