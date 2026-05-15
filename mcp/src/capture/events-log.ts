@@ -19,7 +19,7 @@ function ulid(): string {
   return timeStr + randStr;
 }
 
-export function eventsPath(projectDir: string): string {
+function eventsPath(projectDir: string): string {
   return path.join(projectDir, "events.jsonl");
 }
 
