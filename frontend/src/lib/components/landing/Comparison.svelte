@@ -3,20 +3,20 @@ import ScrollReveal from "./ScrollReveal.svelte";
 
 const rows = [
   {
-    without: "Every session starts fresh",
-    with: "Context persists across sessions",
+    without: "Re-explain your project every morning",
+    with: "Your AI already knows what you decided yesterday",
   },
   {
-    without: "Switch tools, lose context",
-    with: "All tools share one brain",
+    without: "Knowledge trapped in closed chat tabs",
+    with: "Sessions captured and distilled automatically",
   },
   {
-    without: "Manual notes and docs",
-    with: "Automatic context capture",
+    without: "Claude doesn't know what Cursor knows",
+    with: "All tools share the same knowledge base",
   },
   {
-    without: "No version history",
-    with: "Full history with restore",
+    without: "Teammates re-discover the same things",
+    with: "Team sessions build shared understanding",
   },
 ];
 </script>
