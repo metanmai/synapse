@@ -18,7 +18,7 @@ export async function runDistill(args: string[]): Promise<void> {
         `  ${accent("--latest")}       Distill the most recent captured session`,
       ].join("\n"),
     );
-    clack.outro(muted("npx synapsesync-mcp distill <command>"));
+    clack.outro(muted("synapsesync-mcp distill <command>"));
     return;
   }
 
@@ -30,7 +30,7 @@ export async function runDistill(args: string[]): Promise<void> {
     const sessions = store.list();
     if (sessions.length === 0) {
       clack.log.warn("No captured sessions found.");
-      clack.log.message(muted(`  Run ${accent("npx synapsesync-mcp capture start")} first.`));
+      clack.log.message(muted(`  Run ${accent("synapsesync-mcp capture start")} first.`));
       clack.outro(muted("synapsesync.app"));
       return;
     }
@@ -39,7 +39,7 @@ export async function runDistill(args: string[]): Promise<void> {
     session = store.load(sessionId);
     if (!session) {
       clack.log.error(`Session not found: ${accent(sessionId)}`);
-      clack.log.message(muted(`  Run ${accent("npx synapsesync-mcp capture list")} to see available sessions.`));
+      clack.log.message(muted(`  Run ${accent("synapsesync-mcp capture list")} to see available sessions.`));
       clack.outro(muted("synapsesync.app"));
       return;
     }

@@ -232,7 +232,7 @@ async function runFixIssues(locations: ConfigLocation[], validKey: string): Prom
   }
 
   clack.outro(
-    `Restart your editor to connect. ${muted("Run 'npx synapsesync-mcp capture start' to begin capturing sessions.")}`,
+    `Restart your editor to connect. ${muted("Run 'synapsesync-mcp capture start' to begin capturing sessions.")}`,
   );
 }
 
@@ -351,7 +351,7 @@ async function runEditorSetup(apiKey: string): Promise<void> {
       }
     } catch {
       captureSpin.stop("Could not start capture daemon");
-      clack.log.info(`Start it manually: ${muted("npx synapsesync-mcp capture start")}`);
+      clack.log.info(`Start it manually: ${muted("synapsesync-mcp capture start")}`);
     }
   }
 
