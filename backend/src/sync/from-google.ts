@@ -1,7 +1,7 @@
-import type { Env } from "../lib/env";
 import { createSupabaseClient } from "../db/client";
-import type { GoogleOAuthTokens } from "../db/types";
 import { upsertEntry } from "../db/queries/entries";
+import type { GoogleOAuthTokens } from "../db/types";
+import type { Env } from "../lib/env";
 import { getAccessToken } from "./google-auth";
 
 interface GoogleDriveFile {
@@ -18,7 +18,7 @@ interface GoogleDriveListResponse {
 async function listDriveFiles(
   accessToken: string,
   folderId: string,
-  modifiedAfter?: string
+  modifiedAfter?: string,
 ): Promise<GoogleDriveFile[]> {
   let query = `'${folderId}' in parents and trashed=false`;
   if (modifiedAfter) {
@@ -27,17 +27,16 @@ async function listDriveFiles(
 
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,modifiedTime)`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
+    { headers: { Authorization: `Bearer ${accessToken}` } },
   );
-  const data = await res.json() as GoogleDriveListResponse;
+  const data = (await res.json()) as GoogleDriveListResponse;
   return data.files ?? [];
 }
 
 async function getFileContent(accessToken: string, fileId: string): Promise<string> {
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
   return res.text();
 }
 
@@ -45,7 +44,7 @@ async function walkDriveFolder(
   accessToken: string,
   folderId: string,
   basePath: string,
-  modifiedAfter?: string
+  modifiedAfter?: string,
 ): Promise<{ path: string; content: string; googleDocId: string }[]> {
   const files = await listDriveFiles(accessToken, folderId, modifiedAfter);
   const results: { path: string; content: string; googleDocId: string }[] = [];
@@ -78,7 +77,8 @@ export async function syncProjectFromGoogle(env: Env, projectId: string): Promis
     throw new Error("Project has no linked Google Drive folder");
   }
 
-  const tokens = (project as unknown as { users?: { google_oauth_tokens?: GoogleOAuthTokens } }).users?.google_oauth_tokens ?? null;
+  const tokens =
+    (project as unknown as { users?: { google_oauth_tokens?: GoogleOAuthTokens } }).users?.google_oauth_tokens ?? null;
   if (!tokens) throw new Error("Project owner has not connected Google");
 
   const accessToken = await getAccessToken(env, tokens);
@@ -89,12 +89,7 @@ export async function syncProjectFromGoogle(env: Env, projectId: string): Promis
   // Look for files modified in the last 10 minutes (overlaps with 5-min cron for safety)
   const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
-  const files = await walkDriveFolder(
-    accessToken,
-    project.google_drive_folder_id,
-    "",
-    tenMinutesAgo
-  );
+  const files = await walkDriveFolder(accessToken, project.google_drive_folder_id, "", tenMinutesAgo);
 
   let synced = 0;
   for (const file of files) {
@@ -122,10 +117,7 @@ export async function runScheduledGoogleSync(env: Env): Promise<void> {
   const db = createSupabaseClient(env);
 
   // Find all projects with Google Drive linked
-  const { data: projects } = await db
-    .from("projects")
-    .select("id")
-    .not("google_drive_folder_id", "is", null);
+  const { data: projects } = await db.from("projects").select("id").not("google_drive_folder_id", "is", null);
 
   for (const project of projects ?? []) {
     try {

@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+import { onMount } from "svelte";
 
-  let scrollY = $state(0);
+let scrollY = $state(0);
 
-  onMount(() => {
-    const handleScroll = () => {
-      scrollY = window.scrollY;
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  });
+onMount(() => {
+  const handleScroll = () => {
+    scrollY = window.scrollY;
+  };
+  window.addEventListener("scroll", handleScroll, { passive: true });
+  return () => window.removeEventListener("scroll", handleScroll);
+});
 </script>
 
 <section class="hero">

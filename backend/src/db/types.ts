@@ -65,14 +65,14 @@ export interface ApiKey {
 export function getTierLimitsFromEnv(env?: Record<string, string>) {
   return {
     free: {
-      maxFiles: parseInt(env?.TIER_FREE_MAX_FILES ?? "50"),
-      maxConnections: parseInt(env?.TIER_FREE_MAX_CONNECTIONS ?? "3"),
-      maxHistoryVersions: parseInt(env?.TIER_FREE_MAX_HISTORY ?? "3"),
-      maxMembers: parseInt(env?.TIER_FREE_MAX_MEMBERS ?? "2"),
+      maxFiles: Number.parseInt(env?.TIER_FREE_MAX_FILES ?? "50"),
+      maxConnections: Number.parseInt(env?.TIER_FREE_MAX_CONNECTIONS ?? "3"),
+      maxHistoryVersions: Number.parseInt(env?.TIER_FREE_MAX_HISTORY ?? "3"),
+      maxMembers: Number.parseInt(env?.TIER_FREE_MAX_MEMBERS ?? "2"),
     },
     pro: {
-      maxFiles: parseInt(env?.TIER_PRO_MAX_FILES ?? "500"),
-      maxConnections: parseInt(env?.TIER_PRO_MAX_CONNECTIONS ?? "0"),
+      maxFiles: Number.parseInt(env?.TIER_PRO_MAX_FILES ?? "500"),
+      maxConnections: Number.parseInt(env?.TIER_PRO_MAX_CONNECTIONS ?? "0"),
       maxHistoryVersions: -1,
       maxMembers: 0,
     },

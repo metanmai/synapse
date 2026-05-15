@@ -1,6 +1,6 @@
-import { unzipSync, strFromU8 } from "fflate";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { upsertEntry, getEntry } from "../db/queries";
+import { strFromU8, unzipSync } from "fflate";
+import { getEntry, upsertEntry } from "../db/queries";
 
 interface ParsedEntry {
   path: string;
@@ -30,7 +30,11 @@ function parseFrontmatter(raw: string): { frontmatter: Record<string, unknown>; 
 
     // Parse array: [tag1, tag2]
     if (typeof value === "string" && value.startsWith("[") && value.endsWith("]")) {
-      value = value.slice(1, -1).split(",").map((s: string) => s.trim()).filter(Boolean);
+      value = value
+        .slice(1, -1)
+        .split(",")
+        .map((s: string) => s.trim())
+        .filter(Boolean);
     }
 
     fm[key] = value;
@@ -88,7 +92,7 @@ export async function importEntries(
   db: SupabaseClient,
   projectId: string,
   entries: ParsedEntry[],
-  authorId: string
+  authorId: string,
 ): Promise<ImportResult> {
   let imported = 0;
   let updated = 0;

@@ -6,12 +6,12 @@ import { findUserByApiKeyHash } from "../db/queries";
 import { hashApiKey } from "../lib/auth";
 
 import type { Env } from "../lib/env";
-import { registerProjectManagementTools } from "./tools/project-management";
+import { registerPrompts } from "./prompts";
+import { registerResources } from "./resources";
 import { registerContextCaptureTools } from "./tools/context-capture";
 import { registerContextRetrievalTools } from "./tools/context-retrieval";
 import { registerGoogleSyncTools } from "./tools/google-sync";
-import { registerPrompts } from "./prompts";
-import { registerResources } from "./resources";
+import { registerProjectManagementTools } from "./tools/project-management";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyMcpAgent = any;
@@ -31,8 +31,7 @@ export class SynapseAgent extends (McpAgent as AnyMcpAgent) {
     // Extract the Bearer token and resolve the user.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const self = this as any;
-    const authHeader = self.request?.headers?.get("Authorization") ??
-      self.ctx?.request?.headers?.get("Authorization");
+    const authHeader = self.request?.headers?.get("Authorization") ?? self.ctx?.request?.headers?.get("Authorization");
     if (authHeader?.startsWith("Bearer ")) {
       const apiKey = authHeader.slice(7);
       const apiKeyHash = await hashApiKey(apiKey);
