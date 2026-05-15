@@ -8,28 +8,52 @@ interface InitArgs {
   skip_service?: boolean;
 }
 
-const HOOK_BIN = "synapse";
-
 interface HookBlock {
   matcher?: string;
   hooks: Array<{ type: "command"; command: string }>;
 }
 
-const HOOK_DEFS: Record<string, { command: string; matcher?: string }> = {
-  SessionStart: { command: `${HOOK_BIN} hook session-start` },
-  UserPromptSubmit: { command: `${HOOK_BIN} hook user-prompt-submit` },
-  PostToolUse: {
-    command: `${HOOK_BIN} hook post-tool-use`,
-    matcher: "Bash|Edit|Write|MultiEdit|TaskCreate|TaskUpdate|Agent",
-  },
-  PreCompact: { command: `${HOOK_BIN} hook pre-compact` },
-  SessionEnd: { command: `${HOOK_BIN} hook session-end` },
-  SubagentStop: { command: `${HOOK_BIN} hook subagent-stop` },
-};
+// Absolute paths to the running node + CLI entry. Used so installed hooks and
+// slash commands keep working even when `synapse` is not on PATH (the default,
+// since the package is not installed globally by `synapse init`).
+function resolveBin(): string {
+  const nodePath = process.execPath;
+  let cliPath = process.argv[1] ?? "";
+  try {
+    cliPath = fs.realpathSync(cliPath);
+  } catch {
+    // argv[1] not a real file (test runner, ts-node, etc) — fall through with raw value
+  }
+  return `"${nodePath}" "${cliPath}"`;
+}
+
+const HOOK_SUBCOMMANDS = [
+  "session-start",
+  "user-prompt-submit",
+  "post-tool-use",
+  "pre-compact",
+  "session-end",
+  "subagent-stop",
+] as const;
+
+function hookDefs(bin: string): Record<string, { command: string; matcher?: string }> {
+  return {
+    SessionStart: { command: `${bin} hook session-start` },
+    UserPromptSubmit: { command: `${bin} hook user-prompt-submit` },
+    PostToolUse: {
+      command: `${bin} hook post-tool-use`,
+      matcher: "Bash|Edit|Write|MultiEdit|TaskCreate|TaskUpdate|Agent",
+    },
+    PreCompact: { command: `${bin} hook pre-compact` },
+    SessionEnd: { command: `${bin} hook session-end` },
+    SubagentStop: { command: `${bin} hook subagent-stop` },
+  };
+}
 
 export async function runInit(a: InitArgs): Promise<void> {
-  installHooks();
-  installSlashCommands();
+  const bin = resolveBin();
+  installHooks(bin);
+  installSlashCommands(bin);
   writeConfig(a.api_key);
   if (!a.skip_service) {
     const svc = writeServiceFile();
@@ -37,62 +61,65 @@ export async function runInit(a: InitArgs): Promise<void> {
   }
 }
 
-const SLASH_COMMANDS: Record<string, string> = {
-  "handoff.md": `---
+function slashCommands(bin: string): Record<string, string> {
+  return {
+    "handoff.md": `---
 name: synapse-handoff
 description: Record an explicit next-step handoff for whoever picks up this work next.
 ---
 
-Run \`synapse handoff "$ARGUMENTS"\` via the Bash tool. After it completes, briefly confirm what you recorded.
+Run \`${bin} handoff "$ARGUMENTS"\` via the Bash tool. After it completes, briefly confirm what you recorded.
 `,
-  "focus.md": `---
+    "focus.md": `---
 name: synapse-focus
 description: Set the current focus for this work session.
 ---
 
-Run \`synapse set-focus "$ARGUMENTS"\` via the Bash tool. Confirm what was set.
+Run \`${bin} set-focus "$ARGUMENTS"\` via the Bash tool. Confirm what was set.
 `,
-  "issue.md": `---
+    "issue.md": `---
 name: synapse-issue
 description: Create, resolve, or supersede an issue. Args: create|resolve|supersede [kind] <title|id> [extra]
 ---
 
 Parse \`$ARGUMENTS\` to determine the action:
-- "create <kind?> <title>" — run \`synapse issue create --kind <decision|question> --title "<title>"\`. If kind is missing, ask the user which kind it should be.
-- "resolve <id> <resolution>" — run \`synapse issue resolve <id> "<resolution>"\`.
-- "supersede <id> --by <new_id>" — run \`synapse issue supersede <id> --by <new_id>\`.
+- "create <kind?> <title>" — run \`${bin} issue create --kind <decision|question> --title "<title>"\`. If kind is missing, ask the user which kind it should be.
+- "resolve <id> <resolution>" — run \`${bin} issue resolve <id> "<resolution>"\`.
+- "supersede <id> --by <new_id>" — run \`${bin} issue supersede <id> --by <new_id>\`.
 
 Confirm the action taken.
 `,
-  "status.md": `---
+    "status.md": `---
 name: synapse-status
 description: One-line health check of the Synapse daemon.
 ---
 
-Run \`synapse status\` via the Bash tool and report the output.
+Run \`${bin} status\` via the Bash tool and report the output.
 `,
-  "doctor.md": `---
+    "doctor.md": `---
 name: synapse-doctor
 description: Detailed Synapse daemon diagnostics.
 ---
 
-Run \`synapse doctor\` via the Bash tool and report the output.
+Run \`${bin} doctor\` via the Bash tool and report the output.
 `,
-  "invite.md": `---
+    "invite.md": `---
 name: synapse-invite
 description: Invite a teammate to this project. Args: <email>
 ---
 
-Run \`synapse invite "$ARGUMENTS"\` via the Bash tool. Report the join URL.
+Run \`${bin} invite "$ARGUMENTS"\` via the Bash tool. Report the join URL.
 `,
-};
+  };
+}
 
-function installSlashCommands(): void {
+function installSlashCommands(bin: string): void {
   const dir = path.join(os.homedir(), ".claude/commands/synapse");
   fs.mkdirSync(dir, { recursive: true });
-  for (const [filename, content] of Object.entries(SLASH_COMMANDS)) {
-    const p = path.join(dir, filename);
-    if (!fs.existsSync(p)) fs.writeFileSync(p, content);
+  for (const [filename, content] of Object.entries(slashCommands(bin))) {
+    // Always rewrite — slash commands are tightly coupled to the CLI argv and
+    // contain absolute bin paths that may have shifted since the last install.
+    fs.writeFileSync(path.join(dir, filename), content);
   }
 }
 
@@ -100,17 +127,24 @@ interface Settings {
   hooks?: Record<string, HookBlock[]>;
 }
 
-function installHooks(): void {
+function installHooks(bin: string): void {
   const settingsPath = path.join(os.homedir(), ".claude/settings.json");
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
   const settings: Settings = fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath, "utf-8")) : {};
   settings.hooks ??= {};
 
-  for (const [event, def] of Object.entries(HOOK_DEFS)) {
+  // Migrate: drop any pre-existing synapse hook entries (any bin form) so we
+  // never end up with both a stale `synapse hook ...` entry and the new
+  // absolute-path one firing in parallel.
+  for (const [event, blocks] of Object.entries(settings.hooks)) {
+    settings.hooks[event] = (blocks ?? []).filter((block) => {
+      const cmd = block.hooks?.[0]?.command ?? "";
+      return !HOOK_SUBCOMMANDS.some((sub) => cmd.endsWith(` hook ${sub}`));
+    });
+  }
+
+  for (const [event, def] of Object.entries(hookDefs(bin))) {
     settings.hooks[event] ??= [];
-    const subcommand = def.command.split(" ").slice(-1)[0];
-    const already = JSON.stringify(settings.hooks[event]).includes(`${HOOK_BIN} hook ${subcommand}`);
-    if (already) continue;
     const block: HookBlock = { hooks: [{ type: "command", command: def.command }] };
     if (def.matcher) block.matcher = def.matcher;
     settings.hooks[event].push(block);
