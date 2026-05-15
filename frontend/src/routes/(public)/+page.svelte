@@ -6,6 +6,7 @@
   import Stats from "$lib/components/landing/Stats.svelte";
   import HowItWorks from "$lib/components/landing/HowItWorks.svelte";
   import FeatureCards from "$lib/components/landing/FeatureCards.svelte";
+  import SetupGuide from "$lib/components/landing/SetupGuide.svelte";
   import Comparison from "$lib/components/landing/Comparison.svelte";
   import BuiltForBuilders from "$lib/components/landing/BuiltForBuilders.svelte";
   import Faq from "$lib/components/landing/Faq.svelte";
@@ -19,6 +20,7 @@
 <ProblemSection />
 <Stats />
 <HowItWorks />
+<SetupGuide />
 <FeatureCards />
 <Comparison />
 <BuiltForBuilders />
