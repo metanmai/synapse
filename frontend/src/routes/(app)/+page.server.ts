@@ -7,8 +7,9 @@ export const load: PageServerLoad = async ({ locals }) => {
   try {
     const projects = await api.listProjects();
     return { projects, error: null };
-  } catch {
-    return { projects: [], error: "Unable to connect to the API. Is the backend running?" };
+  } catch (err) {
+    console.error("[dashboard] API error:", err);
+    return { projects: [], error: `API error: ${err instanceof Error ? err.message : String(err)}` };
   }
 };
 
