@@ -10,7 +10,7 @@ This guide is for running **your own** Worker, database, and (optionally) embedd
 | **Cloudflare Worker** (`backend/`) | REST API, MCP transport, scheduled jobs, Durable Objects for agent/MCP |
 | **SvelteKit** (`frontend/`) | Web UI — can point at your Worker |
 | **Embedding service** (optional) | HTTP service for `nomic-embed-text-v1.5` vectors; semantic search degrades without it |
-| **MCP** (`mcp/`) | Published as `synapsesync-mcp` or run locally after `npm run build` |
+| **MCP** (`mcp/`) | Published as `synapsesync` or run locally after `npm run build` |
 
 ## 1. Supabase
 
@@ -98,7 +98,7 @@ Without embeddings: full-text / keyword paths still work depending on your schem
 
 ## 5. MCP package
 
-- **Published**: install `synapsesync-mcp` and set `SYNAPSE_API_KEY` (API host is fixed in the package; fork and change `API_URL` in `mcp/src/index.ts` if you use your own Worker).
+- **Published**: install `synapsesync` and set `SYNAPSE_API_KEY` (API host is fixed in the package; fork and change `API_URL` in `mcp/src/index.ts` if you use your own Worker).
 - **Local**: from repo root run `npm install`, then `cd mcp && npm run build`, and point MCP `command` at `node` with `args` at `path/to/mcp/dist/index.js`, or use `npx` after `npm link`.
 
 ## 6. Verification checklist

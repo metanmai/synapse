@@ -12,7 +12,7 @@
     <p>By using Synapse ("the Service"), you agree to these terms. If you do not agree, do not use the Service.</p>
 
     <h2>The Service</h2>
-    <p>Synapse is a context management tool that lets you store, organize, and sync knowledge across AI tools and devices. It includes a web application, a backend API, and an MCP server package (<code>synapsesync-mcp</code>).</p>
+    <p>Synapse is a context management tool that lets you store, organize, and sync knowledge across AI tools and devices. It includes a web application, a backend API, and an MCP server package (<code>synapsesync</code>).</p>
 
     <h2>Accounts</h2>
     <ul>
