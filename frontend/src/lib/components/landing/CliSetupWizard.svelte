@@ -1,7 +1,7 @@
 <script>
 import ScrollReveal from "./ScrollReveal.svelte";
 
-const COMMAND = "npm install -g synapsesync-mcp && synapsesync-mcp wizard";
+const COMMAND = "npm install -g synapsesync && synapsesync wizard";
 
 let copied = $state(false);
 
@@ -17,8 +17,8 @@ async function copyCommand() {
     <ScrollReveal>
       <h2 id="wizard-heading" class="wizard-headline">Guided setup (terminal)</h2>
       <p class="wizard-sub">
-        Install once with <code class="inline-code">npm install -g synapsesync-mcp</code>, then run
-        <code class="inline-code">synapsesync-mcp wizard</code> — keyboard-friendly prompts
+        Install once with <code class="inline-code">npm install -g synapsesync</code>, then run
+        <code class="inline-code">synapsesync wizard</code> — keyboard-friendly prompts
         then write MCP config for editors you already use.
       </p>
     </ScrollReveal>
@@ -37,7 +37,7 @@ async function copyCommand() {
         </p>
         <ol class="wizard-steps">
           <li>Copy the command and run it in Terminal, iTerm, etc. (from your project folder).</li>
-          <li>Use <code class="inline-code">synapsesync-mcp --help</code> to see all commands.</li>
+          <li>Use <code class="inline-code">synapsesync --help</code> to see all commands.</li>
           <li>The wizard will walk you through sign-up, sign-in, and API key setup.</li>
           <li>When it finishes, restart Cursor, Claude Code, or your other MCP host.</li>
         </ol>

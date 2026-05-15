@@ -69,7 +69,7 @@ function printHelp(): void {
 
   const lines = [
     "",
-    `  ${bold("synapsesync-mcp")} ${muted(`v${v}`)}`,
+    `  ${bold("synapsesync")} ${muted(`v${v}`)}`,
     `  ${muted("Capture sessions. Remember everything.")}`,
     "",
     `  ${bold("Setup")}`,
@@ -177,7 +177,7 @@ async function handleCli(raw: string[]): Promise<void> {
 
 async function runMenu(): Promise<void> {
   const v = readPackageVersion();
-  clack.intro(`${bold("synapsesync-mcp")} ${muted(`v${v}`)}`);
+  clack.intro(`${bold("synapsesync")} ${muted(`v${v}`)}`);
 
   const choice = await clack.select({
     message: "What would you like to do?",
@@ -235,9 +235,7 @@ if (!isMcpServerMode(args)) {
   const SOURCE = process.env.SYNAPSE_SOURCE || "claude";
 
   if (!API_KEY) {
-    console.error(
-      "SYNAPSE_API_KEY is required. Install: npm install -g synapsesync-mcp, then run: synapsesync-mcp wizard",
-    );
+    console.error("SYNAPSE_API_KEY is required. Install: npm install -g synapsesync, then run: synapsesync wizard");
     process.exit(1);
   }
 

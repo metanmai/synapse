@@ -51,7 +51,7 @@ describe("CloudSyncer", () => {
         mcpServers: {
           synapse: {
             command: "npx",
-            args: ["synapsesync-mcp"],
+            args: ["synapsesync"],
             env: { SYNAPSE_API_KEY: "mcp-key-456" },
           },
         },

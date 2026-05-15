@@ -105,7 +105,7 @@ suite("CLI dispatcher", () => {
   describe("help and version flags", () => {
     it("--help prints the help banner", async () => {
       const { stdout } = await runCli(["--help"]);
-      expect(stdout).toMatch(/synapsesync-mcp/);
+      expect(stdout).toMatch(/synapsesync/);
       expect(stdout).toMatch(/Setup/);
     });
 

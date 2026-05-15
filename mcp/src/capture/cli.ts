@@ -36,7 +36,7 @@ function captureHelp(): void {
       `  ${accent("list")}             List recently captured sessions`,
     ].join("\n"),
   );
-  clack.outro(muted("synapsesync-mcp capture <command>"));
+  clack.outro(muted("synapsesync capture <command>"));
 }
 
 function startCapture(): void {
@@ -124,7 +124,7 @@ function listCaptures(): void {
   const sessions = store.list();
   if (sessions.length === 0) {
     clack.log.info("No captured sessions yet.");
-    clack.log.message(muted(`  Run ${accent("synapsesync-mcp capture start")} to begin.`));
+    clack.log.message(muted(`  Run ${accent("synapsesync capture start")} to begin.`));
     clack.outro(muted("synapsesync.app"));
     return;
   }
