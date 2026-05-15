@@ -25,6 +25,7 @@ const BIN = path.resolve(__dirname, "../../dist/index.js");
 // Every subcommand registered in the HANDLERS map in mcp/src/index.ts.
 // If you add a new command there, add it here too.
 const REGISTERED_COMMANDS = [
+  "brief",
   "wizard",
   "help",
   "stats",

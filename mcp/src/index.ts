@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import * as clack from "@clack/prompts";
 import { runCapture } from "./capture/cli.js";
+import { runBrief } from "./cli/brief.js";
 import { runRefresh, runReset, runStatus, runTree, runUninstall, runUpgrade, runWhoami } from "./cli/commands.js";
 import { API_URL } from "./cli/config.js";
 import { runStats } from "./cli/stats.js";
@@ -113,6 +114,7 @@ function readPackageVersion(): string {
 // Add a new command by adding one line here — no other edits needed.
 // The allow-list, dispatcher, and help menu all derive from this map.
 const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
+  brief: async (args) => runBrief(args),
   wizard: async () => runWizard(readPackageVersion()),
   help: async () => {
     printHelp();
@@ -143,6 +145,9 @@ function printHelp(): void {
     c("wizard", "Interactive setup + connect tools"),
     c("status", "Connection health + config locations"),
     c("refresh", "Rotate API key, update all configs"),
+    "",
+    `  ${bold("Orient")}`,
+    c("brief", "Emit project brief to stdout (for SessionStart hook)"),
     "",
     `  ${bold("Capture")}`,
     c("capture start", "Start the session capture daemon"),
