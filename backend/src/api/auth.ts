@@ -1,6 +1,14 @@
 import { Hono } from "hono";
 
-import { countApiKeys, createApiKey, createUser, deleteApiKey, findUserByEmail, listApiKeys } from "../db/queries";
+import {
+  countApiKeys,
+  createApiKey,
+  createUser,
+  deleteApiKey,
+  findUserByEmail,
+  getActiveSubscription,
+  listApiKeys,
+} from "../db/queries";
 import { authMiddleware, hashApiKey } from "../lib/auth";
 import {
   API_KEY_MAX_PER_USER,
@@ -9,6 +17,7 @@ import {
   GOOGLE_DRIVE_SCOPE,
   GOOGLE_TOKEN_EXPIRY_FALLBACK,
 } from "../lib/constants";
+import { creemRequest } from "../lib/creem";
 import { AppError, ConflictError } from "../lib/errors";
 import { parseBody, schemas } from "../lib/validate";
 
@@ -396,6 +405,17 @@ account.post("/reset", async (c) => {
 account.delete("/", async (c) => {
   const user = c.get("user");
   const db = c.get("db");
+
+  // Cancel active Creem subscription before deleting data
+  const activeSub = await getActiveSubscription(db, user.id);
+  if (activeSub?.provider_subscription_id) {
+    try {
+      await creemRequest(c.env, "POST", `/subscriptions/${activeSub.provider_subscription_id}/cancel`);
+    } catch (err) {
+      console.error("[account/delete] Failed to cancel Creem subscription:", err);
+      // Continue with deletion — subscription row will be deleted by RPC
+    }
+  }
 
   // Look up supabase_auth_id before deletion
   const { data: userRow } = await db.from("users").select("supabase_auth_id").eq("id", user.id).single();
