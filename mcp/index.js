@@ -13,8 +13,110 @@ const USER_EMAIL = process.env.SYNAPSE_USER_EMAIL;
 const SOURCE = process.env.SYNAPSE_SOURCE || "claude";
 const DEFAULT_PROJECT_NAME = process.env.SYNAPSE_PROJECT || "My Workspace";
 
+// --- CLI commands (run before MCP server starts) ---
+const args = process.argv.slice(2);
+
+if (args[0] === "login") {
+  (async () => {
+    const emailIdx = args.indexOf("--email");
+    const passIdx = args.indexOf("--password");
+    const labelIdx = args.indexOf("--label");
+
+    const email = emailIdx !== -1 ? args[emailIdx + 1] : null;
+    const password = passIdx !== -1 ? args[passIdx + 1] : null;
+    const label = labelIdx !== -1 ? args[labelIdx + 1] : "cli";
+
+    if (!email || !password) {
+      console.error("Usage: synapse-mcp login --email <email> --password <password> [--label <label>]");
+      process.exit(1);
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, label }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error(`Login failed: ${body.error || res.statusText}`);
+        process.exit(1);
+      }
+
+      const data = await res.json();
+      console.log(`\nLogged in as ${data.email}`);
+      console.log(`API Key: ${data.api_key}`);
+      console.log(`Label: ${data.label}`);
+      console.log(`\nAdd this to your .mcp.json:`);
+      console.log(JSON.stringify({
+        mcpServers: {
+          synapse: {
+            command: "npx",
+            args: ["synapse-mcp"],
+            env: { SYNAPSE_API_KEY: data.api_key }
+          }
+        }
+      }, null, 2));
+      console.log(`\nOr run: claude mcp add synapse npx synapse-mcp --env SYNAPSE_API_KEY=${data.api_key}`);
+    } catch (err) {
+      console.error(`Login failed: ${err.message}`);
+      process.exit(1);
+    }
+
+    process.exit(0);
+  })();
+  return;
+}
+
+if (args[0] === "signup") {
+  (async () => {
+    const emailIdx = args.indexOf("--email");
+    const email = emailIdx !== -1 ? args[emailIdx + 1] : null;
+
+    if (!email) {
+      console.error("Usage: synapse-mcp signup --email <email>");
+      process.exit(1);
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error(`Signup failed: ${body.error || res.statusText}`);
+        process.exit(1);
+      }
+
+      const data = await res.json();
+      console.log(`\nAccount created for ${data.email}`);
+      console.log(`API Key: ${data.api_key}`);
+      console.log(`\nAdd this to your .mcp.json:`);
+      console.log(JSON.stringify({
+        mcpServers: {
+          synapse: {
+            command: "npx",
+            args: ["synapse-mcp"],
+            env: { SYNAPSE_API_KEY: data.api_key }
+          }
+        }
+      }, null, 2));
+    } catch (err) {
+      console.error(`Signup failed: ${err.message}`);
+      process.exit(1);
+    }
+
+    process.exit(0);
+  })();
+  return;
+}
+
 if (!API_KEY) {
-  console.error("SYNAPSE_API_KEY is required");
+  console.error("SYNAPSE_API_KEY is required. Run 'npx synapse-mcp login --email <email> --password <password>' to get one.");
   process.exit(1);
 }
 
