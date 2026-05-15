@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 
-import { createSupabaseClient } from "../db/client";
 import {
   countApiKeys,
   createApiKey,
@@ -11,12 +10,17 @@ import {
   listApiKeys,
 } from "../db/queries";
 import { authMiddleware, hashApiKey } from "../lib/auth";
+import {
+  API_KEY_MAX_PER_USER,
+  CLI_SESSION_SALT,
+  CLI_SESSION_TTL_MS,
+  GOOGLE_DRIVE_SCOPE,
+  GOOGLE_TOKEN_EXPIRY_FALLBACK,
+} from "../lib/constants";
 import { AppError, ConflictError } from "../lib/errors";
 import { parseBody, schemas } from "../lib/validate";
 
 import type { Env } from "../lib/env";
-
-const CLI_SESSION_TTL = 5 * 60 * 1000; // 5 minutes
 
 async function sha256hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
@@ -31,7 +35,7 @@ async function deriveSessionKey(secret: string): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(secret), "HKDF", false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
-    { name: "HKDF", hash: "SHA-256", salt: encoder.encode("synapse-cli-session"), info: new Uint8Array(0) },
+    { name: "HKDF", hash: "SHA-256", salt: encoder.encode(CLI_SESSION_SALT), info: new Uint8Array(0) },
     keyMaterial,
     { name: "AES-GCM", length: 256 },
     false,
@@ -76,7 +80,7 @@ const auth = new Hono<{ Bindings: Env }>();
 auth.post("/signup", async (c) => {
   const body = await parseBody(c, schemas.signup);
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
   const existing = await findUserByEmail(db, body.email);
   if (existing) {
     throw new ConflictError("User with this email already exists");
@@ -121,7 +125,7 @@ auth.post("/verify-email", async (c) => {
   }
 
   // Create (or find) the user in public.users
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
   let user = await findUserByEmail(db, body.email);
   if (!user) {
     user = await createUser(db, body.email);
@@ -160,7 +164,7 @@ auth.post("/login", async (c) => {
   }
 
   // Find the user in our users table
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
   const user = await findUserByEmail(db, body.email);
   if (!user) {
     throw new AppError("User not found. Please sign up first.", 404, "NOT_FOUND");
@@ -194,7 +198,7 @@ auth.post("/cli-session", authMiddleware, async (c) => {
   const body = await parseBody(c, schemas.cliSession);
   const user = c.get("user");
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   // Delete existing "cli" key and create a fresh one
   const existingKeys = await listApiKeys(db, user.id);
@@ -212,7 +216,7 @@ auth.post("/cli-session", authMiddleware, async (c) => {
       api_key: apiKey,
       email: user.email ?? "",
       code_challenge: body.code_challenge,
-      exp: Date.now() + CLI_SESSION_TTL,
+      exp: Date.now() + CLI_SESSION_TTL_MS,
     },
     c.env.SUPABASE_SERVICE_KEY,
   );
@@ -256,7 +260,7 @@ auth.get("/google/connect", authMiddleware, async (c) => {
     client_id: c.env.GOOGLE_CLIENT_ID,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: "https://www.googleapis.com/auth/drive.file",
+    scope: GOOGLE_DRIVE_SCOPE,
     access_type: "offline",
     prompt: "consent",
     state,
@@ -295,14 +299,14 @@ auth.get("/google/callback", async (c) => {
     throw new AppError("Failed to exchange code for tokens", 400, "OAUTH_ERROR");
   }
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
   const { error } = await db
     .from("users")
     .update({
       google_oauth_tokens: {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
-        expires_at: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+        expires_at: Date.now() + (tokens.expires_in ?? GOOGLE_TOKEN_EXPIRY_FALLBACK) * 1000,
       },
     })
     .eq("id", userId);
@@ -326,11 +330,11 @@ account.post("/keys", async (c) => {
   const user = c.get("user");
   const body = await parseBody(c, schemas.createApiKey);
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   const keyCount = await countApiKeys(db, user.id);
-  if (keyCount >= 10) {
-    throw new AppError("API key limit reached (10). Revoke an existing key first.", 400, "KEY_LIMIT");
+  if (keyCount >= API_KEY_MAX_PER_USER) {
+    throw new AppError(`API key limit reached (${API_KEY_MAX_PER_USER}). Revoke an existing key first.`, 400, "KEY_LIMIT");
   }
 
   const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
@@ -353,7 +357,7 @@ account.post("/keys", async (c) => {
 // GET /api/account/keys — list all keys
 account.get("/keys", async (c) => {
   const user = c.get("user");
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
   const keys = await listApiKeys(db, user.id);
   return c.json(keys);
 });
@@ -362,7 +366,7 @@ account.get("/keys", async (c) => {
 account.delete("/keys/:id", async (c) => {
   const user = c.get("user");
   const keyId = c.req.param("id");
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   const deleted = await deleteApiKey(db, keyId, user.id);
   if (!deleted) {
@@ -375,7 +379,7 @@ account.delete("/keys/:id", async (c) => {
 // DELETE /api/account — delete the authenticated user and all their data
 account.delete("/", async (c) => {
   const user = c.get("user");
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
   await deleteUser(db, user.id);
   return c.json({ ok: true });
 });
