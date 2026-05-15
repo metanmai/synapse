@@ -136,3 +136,30 @@ export async function removeMember(db: SupabaseClient, projectId: string, userId
   const { error } = await db.from("project_members").delete().eq("project_id", projectId).eq("user_id", userId);
   if (error) throw error;
 }
+
+export async function getProjectStats(db: SupabaseClient, projectId: string) {
+  const [convResult, insightResult] = await Promise.all([
+    db
+      .from("conversations")
+      .select("id, metadata", { count: "exact", head: false })
+      .eq("project_id", projectId)
+      .neq("status", "deleted"),
+    db.from("insights").select("id", { count: "exact", head: true }).eq("project_id", projectId),
+  ]);
+
+  const tools: string[] = [];
+  if (convResult.data) {
+    const toolSet = new Set<string>();
+    for (const c of convResult.data) {
+      const agent = (c.metadata as Record<string, unknown>)?.source_agent;
+      if (typeof agent === "string") toolSet.add(agent);
+    }
+    tools.push(...toolSet);
+  }
+
+  return {
+    conversation_count: convResult.count ?? 0,
+    insight_count: insightResult.count ?? 0,
+    tools,
+  };
+}
