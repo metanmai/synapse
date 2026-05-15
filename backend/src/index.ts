@@ -6,7 +6,10 @@ import { billing } from "./api/billing";
 import { compaction } from "./api/compaction";
 import { context } from "./api/context";
 import { conversations } from "./api/conversations";
+import { eventsBatch } from "./api/events-batch";
 import { insights } from "./api/insights";
+import { projectEvents } from "./api/project-events";
+import { projectStatus } from "./api/project-status";
 import { projects } from "./api/projects";
 import { projectsResolve } from "./api/projects-resolve";
 import { sessionContext } from "./api/session-context";
@@ -68,8 +71,11 @@ app.route("/auth", auth);
 
 // Authenticated routes
 app.route("/api/context", context);
+app.route("/api/events", eventsBatch);
 app.route("/api/projects", projectsResolve);
 app.route("/api/projects", projects);
+app.route("/api/projects", projectStatus);
+app.route("/api/projects", projectEvents);
 app.route("/api/sync", sync);
 app.route("/api/share", share);
 app.route("/api/account", account);
