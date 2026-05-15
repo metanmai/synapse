@@ -4,6 +4,9 @@ export interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
 
+  // Admin
+  ADMIN_SECRET?: string;
+
   // OAuth
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
