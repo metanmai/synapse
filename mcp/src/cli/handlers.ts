@@ -43,6 +43,7 @@ import {
   runSetFocusCmd,
 } from "./handoff-commands.js";
 import { runInit } from "./init.js";
+import { runInviteCmd } from "./invite.js";
 import { readProjectMap } from "./project-map.js";
 import { runDaemon } from "./run-daemon.js";
 import { runStats } from "./stats.js";
@@ -176,6 +177,15 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
     const { target, text } = parseNoteArgs(args);
     const ctx = handlerContext();
     await runNoteCmd({ ...ctx, target, text });
+  },
+  invite: async (args) => {
+    const email = args[0];
+    if (!email || email.startsWith("--")) {
+      throw new Error("usage: synapse invite <email> [--project <id>]");
+    }
+    const projectIdx = args.indexOf("--project");
+    const project_id = projectIdx >= 0 ? args[projectIdx + 1] : undefined;
+    await runInviteCmd({ email, project_id });
   },
   issue: async (args) => {
     const sub = args[0];
