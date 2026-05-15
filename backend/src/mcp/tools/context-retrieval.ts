@@ -12,7 +12,7 @@ import {
   searchEntries,
 } from "../../db/queries";
 
-import { embeddingConfigFromEnv, embedTexts } from "../../lib/embeddings";
+import { embedTexts, embeddingConfigFromEnv } from "../../lib/embeddings";
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
 
