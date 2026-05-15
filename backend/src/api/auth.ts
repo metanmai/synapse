@@ -390,18 +390,28 @@ account.post("/reset", async (c) => {
     await resetUser(db, user.id);
   } catch (err) {
     console.error("[account/reset] resetUser error:", err);
-    // Continue anyway — best-effort cleanup, still create fresh key
   }
 
-  // Force-delete any remaining API keys (in case resetUser's safeDelete missed them)
-  await db.from("api_keys").delete().eq("user_id", user.id);
+  try {
+    // Force-delete any remaining API keys
+    await db.from("api_keys").delete().eq("user_id", user.id);
+  } catch (err) {
+    console.error("[account/reset] api_keys delete error:", err);
+  }
 
   // Create a fresh API key
-  const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
-  const apiKeyHash = await hashApiKey(apiKey);
-  await createApiKey(db, user.id, apiKeyHash, "default");
-
-  return c.json({ ok: true, api_key: apiKey });
+  try {
+    const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+    const apiKeyHash = await hashApiKey(apiKey);
+    await createApiKey(db, user.id, apiKeyHash, "default");
+    return c.json({ ok: true, api_key: apiKey });
+  } catch (err) {
+    console.error("[account/reset] createApiKey error:", err);
+    return c.json(
+      { error: "Reset partially completed but failed to create new API key", code: "RESET_KEY_ERROR" },
+      500,
+    );
+  }
 });
 
 // DELETE /api/account — delete the authenticated user and all their data
