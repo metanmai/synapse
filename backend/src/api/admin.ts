@@ -32,6 +32,8 @@ admin.delete("/users/:id", async (c) => {
     return c.json({ error: `Delete failed: ${rpcErr.message}`, code: "DELETE_ERROR" }, 500);
   }
 
+  console.log(`[admin] Deleted user ${userId}`);
+
   // Delete from auth.users (can't be done in SQL function)
   if (supabaseAuthId) {
     try {
@@ -63,6 +65,8 @@ admin.post("/users/:id/reset", async (c) => {
   const apiKeyHash = await hashApiKey(apiKey);
   await createApiKey(db, userId, apiKeyHash, "default");
 
+  console.log(`[admin] Reset user ${userId}`);
+
   return c.json({ ok: true, api_key: apiKey });
 });
 
@@ -83,6 +87,8 @@ admin.post("/users/:id/grant-plus", async (c) => {
     cancel_at_period_end: false,
   });
 
+  console.log(`[admin] Granted Plus to user ${userId}`);
+
   return c.json({ ok: true, tier: "plus" });
 });
 
@@ -100,6 +106,8 @@ admin.post("/users/:id/revoke-plus", async (c) => {
     .eq("user_id", userId);
 
   if (error) return c.json({ error: `Revoke failed: ${error.message}`, code: "REVOKE_ERROR" }, 500);
+
+  console.log(`[admin] Revoked Plus from user ${userId}`);
 
   return c.json({ ok: true, tier: "free" });
 });
