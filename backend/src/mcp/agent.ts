@@ -11,6 +11,7 @@ import { registerResources } from "./resources";
 import { registerContextCaptureTools } from "./tools/context-capture";
 import { registerContextRetrievalTools } from "./tools/context-retrieval";
 import { registerGoogleSyncTools } from "./tools/google-sync";
+import { registerInsightTools } from "./tools/insights";
 import { registerProjectManagementTools } from "./tools/project-management";
 
 /* McpAgent expects the SDK copy bundled inside `agents`; our top-level McpServer is a different nominal type. */
@@ -55,6 +56,7 @@ export class SynapseAgent extends (McpAgent as AnyMcpAgent) {
     registerProjectManagementTools(this.server, env, getContext);
     registerContextCaptureTools(this.server, env, getContext);
     registerContextRetrievalTools(this.server, env, getContext);
+    registerInsightTools(this.server, env, getContext);
     registerGoogleSyncTools(this.server, env, getContext);
     registerPrompts(this.server, env);
     registerResources(this.server, env);
