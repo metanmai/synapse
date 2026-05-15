@@ -63,8 +63,8 @@
             <p class="text-sm" style="color: var(--color-danger);">{form.error}</p>
           {/if}
           <button type="submit"
-            class="w-full rounded-lg px-4 py-2.5 text-sm font-medium text-white cursor-pointer"
-            style="background-color: var(--color-accent);"
+            class="w-full rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
+            style="background-color: var(--color-accent); color: var(--color-text);"
           >
             Sign in
           </button>
@@ -80,8 +80,8 @@
             <p class="text-sm" style="color: var(--color-danger);">{form.error}</p>
           {/if}
           <button type="submit"
-            class="w-full rounded-lg px-4 py-2.5 text-sm font-medium text-white cursor-pointer"
-            style="background-color: var(--color-accent);"
+            class="w-full rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
+            style="background-color: var(--color-accent); color: var(--color-text);"
           >
             Send magic link
           </button>
@@ -90,14 +90,14 @@
 
       <div class="mt-4 text-center text-sm" style="color: var(--color-text-muted);">
         <button onclick={() => mode = mode === "password" ? "magic" : "password"}
-          class="cursor-pointer" style="color: var(--color-accent);">
+          class="cursor-pointer" style="color: var(--color-link);">
           {mode === "password" ? "Use magic link instead" : "Use password instead"}
         </button>
       </div>
 
       <p class="mt-4 text-center text-sm" style="color: var(--color-text-muted);">
         Don't have an account?
-        <a href="/signup" style="color: var(--color-accent);">Sign up</a>
+        <a href="/signup" style="color: var(--color-link);">Sign up</a>
       </p>
     {/if}
   </div>
