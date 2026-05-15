@@ -9,7 +9,7 @@
       id: "claude-code",
       name: "Claude Code",
       method: "cli",
-      command: `claude mcp add synapse npx synapse-mcp --env SYNAPSE_API_KEY=your-key`,
+      command: `claude mcp add synapse npx synapsesync-mcp --env SYNAPSE_API_KEY=your-key`,
       hint: "Run this in your terminal. Done in one command.",
     },
     {
@@ -20,7 +20,7 @@
   "mcpServers": {
     "synapse": {
       "command": "npx",
-      "args": ["synapse-mcp"],
+      "args": ["synapsesync-mcp"],
       "env": {
         "SYNAPSE_API_KEY": "your-api-key"
       }
@@ -38,7 +38,7 @@
   "mcpServers": {
     "synapse": {
       "command": "npx",
-      "args": ["synapse-mcp"],
+      "args": ["synapsesync-mcp"],
       "env": {
         "SYNAPSE_API_KEY": "your-api-key"
       }
@@ -57,7 +57,7 @@
     "servers": {
       "synapse": {
         "command": "npx",
-        "args": ["synapse-mcp"],
+        "args": ["synapsesync-mcp"],
         "env": {
           "SYNAPSE_API_KEY": "your-api-key"
         }
@@ -76,7 +76,7 @@
   "mcpServers": {
     "synapse": {
       "command": "npx",
-      "args": ["synapse-mcp"],
+      "args": ["synapsesync-mcp"],
       "env": {
         "SYNAPSE_API_KEY": "your-api-key"
       }
