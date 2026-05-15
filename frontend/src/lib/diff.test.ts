@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { computeDiff, type DiffLine } from "./diff";
+import { describe, expect, it } from "vitest";
+import { type DiffLine, computeDiff } from "./diff";
 
 /** Helper to extract only specific diff types */
 function ofType(lines: DiffLine[], type: DiffLine["type"]) {

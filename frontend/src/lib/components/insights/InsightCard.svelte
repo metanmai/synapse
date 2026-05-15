@@ -1,7 +1,7 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
 import type { InsightListItem } from "$lib/types";
-import { getBadgeColor, formatInsightDate, formatInsightType } from "./insight-helpers";
+import { formatInsightDate, formatInsightType, getBadgeColor } from "./insight-helpers";
 
 let { insight, ondelete } = $props<{
   insight: InsightListItem;
