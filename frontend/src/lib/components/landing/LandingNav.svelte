@@ -118,7 +118,6 @@ onMount(() => {
   .nav-logo-img {
     width: 28px;
     height: 28px;
-    filter: brightness(0) invert(0.9);
   }
 
   .nav-links {
