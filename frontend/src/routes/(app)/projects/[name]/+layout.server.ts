@@ -3,17 +3,30 @@ import type { LayoutServerLoad } from "./$types";
 import { createApi } from "$lib/server/api";
 
 export const load: LayoutServerLoad = async ({ params, locals, depends }) => {
-  // Only re-run this layout when explicitly invalidated, not on every navigation
   depends("app:project");
 
   const api = createApi(locals.token);
-
-  // First get the project
   const projects = await api.listProjects();
-  const project = projects.find((p) => p.name === params.name);
+
+  // Match by name — handle both plain name and owner~name format
+  const decodedName = decodeURIComponent(params.name);
+  let project = projects.find((p) => p.name === decodedName);
+
+  // If not found by plain name, try matching as owner~name
+  if (!project && decodedName.includes("~")) {
+    const tildeIdx = decodedName.indexOf("~");
+    const ownerEmail = decodedName.slice(0, tildeIdx);
+    const name = decodedName.slice(tildeIdx + 1);
+    project = projects.find((p) => p.name === name && p.owner_email === ownerEmail);
+  }
+
+  // If still not found, try matching shared projects by name
+  if (!project) {
+    project = projects.find((p) => p.name === decodedName && p.role !== "owner");
+  }
+
   if (!project) error(404, "Project not found");
 
-  // Then fetch all tab data in parallel
   const [entries, shareLinks, activity] = await Promise.all([
     api.listEntries(params.name),
     api.listShareLinks(project.id).catch(() => []),
