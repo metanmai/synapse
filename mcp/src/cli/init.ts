@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { synapseRoot } from "../capture/handoff-paths.js";
 import { writeServiceFile } from "../capture/os-service.js";
 
 interface InitArgs {
@@ -157,7 +158,10 @@ interface SynapseConfig {
 }
 
 function writeConfig(api_key: string): void {
-  const dir = path.join(os.homedir(), ".synapse");
+  // Honor SYNAPSE_HOME (via synapseRoot) so init + daemon agree on where the
+  // config lives. In production both resolve to ~/.synapse; in tests SYNAPSE_HOME
+  // routes both to the isolated tmpdir.
+  const dir = synapseRoot();
   fs.mkdirSync(dir, { recursive: true });
   const configPath = path.join(dir, "config.json");
   const existing: SynapseConfig = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, "utf-8")) : {};
