@@ -72,9 +72,15 @@ let loading = $state(false);
           {/if}
           <button type="submit" disabled={loading}
             class="btn-primary w-full cursor-pointer"
-            style={loading ? 'opacity: 0.6;' : ''}
           >
-            {loading ? "Signing in..." : "Sign in"}
+            {#if loading}
+              <span class="flex items-center justify-center gap-2">
+                <span class="spinner spinner-sm spinner-white"></span>
+                Signing in...
+              </span>
+            {:else}
+              Sign in
+            {/if}
           </button>
         </form>
       {:else}
@@ -95,9 +101,15 @@ let loading = $state(false);
           {/if}
           <button type="submit" disabled={loading}
             class="btn-primary w-full cursor-pointer"
-            style={loading ? 'opacity: 0.6;' : ''}
           >
-            {loading ? "Sending..." : "Send magic link"}
+            {#if loading}
+              <span class="flex items-center justify-center gap-2">
+                <span class="spinner spinner-sm spinner-white"></span>
+                Sending...
+              </span>
+            {:else}
+              Send magic link
+            {/if}
           </button>
         </form>
       {/if}
