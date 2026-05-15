@@ -133,4 +133,37 @@ describe("CaptureWatcher", () => {
     // Should emit at most once (event queue deduplicates by path)
     expect(sessions.length).toBeLessThanOrEqual(1);
   }, 15000);
+
+  it("emits idle event after idle timeout", async () => {
+    // Use a very short idle timeout (800ms) and scan interval (300ms) for testing
+    await watcher.stop();
+    watcher = new CaptureWatcher(registry, 300, 800);
+
+    const idlePaths: string[] = [];
+    watcher.on("idle", (p: string) => idlePaths.push(p));
+
+    await watcher.start();
+
+    // Small delay to ensure chokidar is watching
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const testFile = path.join(tmpDir, "idle-test.jsonl");
+    fs.writeFileSync(testFile, '{"test": true}\n');
+
+    // Wait for the file to be processed (awaitWriteFinish 500ms + scan 300ms + overhead)
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    // No idle yet (800ms timeout hasn't passed since last change)
+    expect(idlePaths.length).toBe(0);
+
+    // Wait for idle timeout to pass (800ms + scan interval 300ms + overhead)
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    expect(idlePaths.length).toBe(1);
+    expect(idlePaths[0]).toBe(testFile);
+
+    // Should not fire again for the same file
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect(idlePaths.length).toBe(1);
+  }, 15000);
 });

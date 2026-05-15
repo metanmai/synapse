@@ -25,13 +25,18 @@ export class CaptureWatcher extends EventEmitter {
   // mtime+size dedup tracking
   private fileStates = new Map<string, FileState>();
 
+  // Idle detection
+  private lastChangeTime = new Map<string, number>();
+  private idleTimeout: number;
+
   // Configurable scan interval (ms)
   private scanInterval: number;
 
-  constructor(registry: AdapterRegistry, scanInterval = 5000) {
+  constructor(registry: AdapterRegistry, scanInterval = 5000, idleTimeout = 300000) {
     super();
     this.registry = registry;
     this.scanInterval = scanInterval;
+    this.idleTimeout = idleTimeout;
   }
 
   async start(): Promise<void> {
@@ -120,6 +125,9 @@ export class CaptureWatcher extends EventEmitter {
   }
 
   private processQueue(): void {
+    // Check for idle files on every scan interval
+    this.checkIdle();
+
     if (this.eventQueue.size === 0) return;
 
     // Snapshot and clear the queue
@@ -128,6 +136,16 @@ export class CaptureWatcher extends EventEmitter {
 
     for (const filePath of paths) {
       this.handleEvent(filePath);
+    }
+  }
+
+  private checkIdle(): void {
+    const now = Date.now();
+    for (const [filePath, lastChange] of this.lastChangeTime) {
+      if (now - lastChange > this.idleTimeout) {
+        this.lastChangeTime.delete(filePath);
+        this.emit("idle", filePath);
+      }
     }
   }
 
@@ -151,6 +169,9 @@ export class CaptureWatcher extends EventEmitter {
   private handleEvent(filePath: string): void {
     // mtime+size dedup
     if (!this.hasFileChanged(filePath)) return;
+
+    // Track last change time for idle detection
+    this.lastChangeTime.set(filePath, Date.now());
 
     const adapter = this.registry.findByPath(filePath);
     if (!adapter) return;
