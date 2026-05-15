@@ -6,6 +6,8 @@ import {
   enforceConnectionLimit,
   enforceFileLimit,
   enforceMemberLimit,
+  enforceProjectQuota,
+  enforcePullQuota,
   getHistoryLimit,
   getTierLimits,
   requirePlus,
@@ -241,6 +243,101 @@ describe("getTierLimits", () => {
       maxHistoryVersions: -1,
       maxMembers: 0,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// enforceProjectQuota
+// ---------------------------------------------------------------------------
+describe("enforceProjectQuota", () => {
+  it("passes when free tier project count is below limit (5)", () => {
+    const c = createMockContext("free");
+    expect(() => enforceProjectQuota(0, c)).not.toThrow();
+    expect(() => enforceProjectQuota(4, c)).not.toThrow();
+  });
+
+  it("throws when free tier project count reaches limit (5)", () => {
+    const c = createMockContext("free");
+    expect(() => enforceProjectQuota(5, c)).toThrowError(AppError);
+
+    try {
+      enforceProjectQuota(5, c);
+    } catch (err) {
+      const e = err as AppError;
+      expect(e.status).toBe(403);
+      expect(e.code).toBe("TIER_LIMIT");
+      expect(e.message).toContain("Project limit reached");
+      expect(e.message).toContain("Upgrade to Plus");
+    }
+  });
+
+  it("throws when free tier project count exceeds limit", () => {
+    const c = createMockContext("free");
+    expect(() => enforceProjectQuota(10, c)).toThrowError(AppError);
+  });
+
+  it("passes when plus tier project count is below limit (50)", () => {
+    const c = createMockContext("plus");
+    expect(() => enforceProjectQuota(0, c)).not.toThrow();
+    expect(() => enforceProjectQuota(49, c)).not.toThrow();
+  });
+
+  it("throws when plus tier project count reaches limit (50)", () => {
+    const c = createMockContext("plus");
+    expect(() => enforceProjectQuota(50, c)).toThrowError(AppError);
+
+    try {
+      enforceProjectQuota(50, c);
+    } catch (err) {
+      const e = err as AppError;
+      expect(e.status).toBe(403);
+      expect(e.code).toBe("TIER_LIMIT");
+      expect(e.message).toContain("Project limit reached");
+      expect(e.message).toContain("Maximum 50 projects on Plus");
+    }
+  });
+
+  it("throws when plus tier project count exceeds limit", () => {
+    const c = createMockContext("plus");
+    expect(() => enforceProjectQuota(100, c)).toThrowError(AppError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// enforcePullQuota
+// ---------------------------------------------------------------------------
+describe("enforcePullQuota", () => {
+  it("passes when free tier pull count is below limit (50)", () => {
+    const c = createMockContext("free");
+    expect(() => enforcePullQuota(0, c)).not.toThrow();
+    expect(() => enforcePullQuota(49, c)).not.toThrow();
+  });
+
+  it("throws when free tier pull count reaches limit (50)", () => {
+    const c = createMockContext("free");
+    expect(() => enforcePullQuota(50, c)).toThrowError(AppError);
+
+    try {
+      enforcePullQuota(50, c);
+    } catch (err) {
+      const e = err as AppError;
+      expect(e.status).toBe(403);
+      expect(e.code).toBe("TIER_LIMIT");
+      expect(e.message).toContain("Daily context pull limit reached");
+      expect(e.message).toContain("Upgrade to Plus");
+    }
+  });
+
+  it("throws when free tier pull count exceeds limit", () => {
+    const c = createMockContext("free");
+    expect(() => enforcePullQuota(100, c)).toThrowError(AppError);
+  });
+
+  it("always passes for plus tier (unlimited pulls)", () => {
+    const c = createMockContext("plus");
+    expect(() => enforcePullQuota(0, c)).not.toThrow();
+    expect(() => enforcePullQuota(50, c)).not.toThrow();
+    expect(() => enforcePullQuota(999, c)).not.toThrow();
   });
 });
 
