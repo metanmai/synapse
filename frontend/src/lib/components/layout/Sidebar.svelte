@@ -3,26 +3,98 @@ import { page } from "$app/stores";
 
 let { projectName } = $props<{ projectName: string }>();
 
-const links = $derived([
-  { href: `/projects/${encodeURIComponent(projectName)}`, label: "Workspace", exact: true },
-  { href: `/projects/${encodeURIComponent(projectName)}/settings`, label: "Settings" },
-  { href: `/projects/${encodeURIComponent(projectName)}/activity`, label: "Activity" },
+const navSections = $derived([
+  {
+    heading: "Project",
+    items: [
+      { href: `/projects/${encodeURIComponent(projectName)}`, label: "Workspace", icon: "📁", exact: true },
+      { href: `/projects/${encodeURIComponent(projectName)}/settings`, label: "Settings", icon: "⚙️" },
+    ],
+  },
+  {
+    heading: "Activity",
+    items: [
+      { href: `/projects/${encodeURIComponent(projectName)}/activity`, label: "Recent", icon: "📋" },
+    ],
+  },
 ]);
 </script>
 
-<nav class="w-48 p-4 space-y-1"
-  style="background: rgba(255, 253, 248, 0.5); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: 4px 0 24px rgba(86, 28, 36, 0.04);">
-  {#each links as link}
-    {@const isActive = link.exact
-      ? $page.url.pathname === link.href
-      : $page.url.pathname.startsWith(link.href)}
-    <a href={link.href}
-      class="block px-3 py-2.5"
-      style="font-size: 14px; border-radius: 12px; transition: var(--transition-base); {isActive
-        ? `background: rgba(86, 28, 36, 0.12); border-left: 3px solid var(--color-pink-dark); color: var(--color-text); font-weight: 600;`
-        : `color: var(--color-text);`}"
-    >
-      {link.label}
-    </a>
+<nav class="sidebar">
+  {#each navSections as section}
+    <div class="sidebar-section">
+      <div class="sidebar-heading">{section.heading}</div>
+      {#each section.items as link}
+        {@const isActive = link.exact
+          ? $page.url.pathname === link.href
+          : $page.url.pathname.startsWith(link.href)}
+        <a href={link.href} class="sidebar-item" class:active={isActive}>
+          <span class="item-icon">{link.icon}</span>
+          <span class="item-text">{link.label}</span>
+        </a>
+      {/each}
+    </div>
   {/each}
 </nav>
+
+<style>
+  .sidebar {
+    width: 11rem;
+    padding: 0.75rem;
+    background: rgba(232, 216, 196, 0.15);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-right: 1px solid rgba(199, 183, 163, 0.2);
+    flex-shrink: 0;
+  }
+
+  .sidebar-section {
+    margin-bottom: 1.25rem;
+  }
+
+  .sidebar-heading {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-muted);
+    margin-bottom: 0.5rem;
+    padding-left: 0.5rem;
+  }
+
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    color: var(--color-text);
+    opacity: 0.65;
+    text-decoration: none;
+    transition: background 0.15s, opacity 0.15s, transform 0.15s;
+  }
+
+  .sidebar-item:hover {
+    background: rgba(86, 28, 36, 0.05);
+    opacity: 0.85;
+    transform: scale(1.02);
+  }
+
+  .sidebar-item.active {
+    background: rgba(86, 28, 36, 0.08);
+    opacity: 1;
+    font-weight: 600;
+  }
+
+  .item-icon {
+    font-size: 0.875rem;
+    line-height: 1;
+  }
+
+  .item-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+</style>
