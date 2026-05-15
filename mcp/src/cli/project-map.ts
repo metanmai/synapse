@@ -23,10 +23,7 @@ export function readProjectMap(): ProjectMap {
   }
 }
 
-export function upsertProjectMapping(
-  cwd: string,
-  entry: { project_id: string; project_name: string },
-): void {
+export function upsertProjectMapping(cwd: string, entry: { project_id: string; project_name: string }): void {
   const p = getProjectMapPath();
   fs.mkdirSync(path.dirname(p), { recursive: true });
   const map = readProjectMap();
