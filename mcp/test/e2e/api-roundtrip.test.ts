@@ -38,7 +38,7 @@ async function api(method: string, path: string, token?: string, body?: unknown)
 }
 
 /** Create a test user via Supabase admin, then use signup+verify or direct key creation. */
-async function createTestUser(email: string): Promise<{ apiKey: string; userId: string }> {
+async function createTestUser(email: string): Promise<{ apiKey: string; userId: string; supabaseAuthId: string }> {
   // 1. Create auto-confirmed Supabase auth user with a password (no email sent)
   const password = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const authRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
@@ -57,6 +57,7 @@ async function createTestUser(email: string): Promise<{ apiKey: string; userId: 
   if (!authRes.ok) {
     throw new Error(`Failed to create Supabase auth user: ${authRes.status} ${await authRes.text()}`);
   }
+  const authUser = (await authRes.json()) as { id: string };
 
   // 2. Login via the backend's /auth/login endpoint — this creates the public.users row + API key
   const { status, data } = await api("POST", "/auth/login", undefined, { email, password, label: "default" });
@@ -64,13 +65,14 @@ async function createTestUser(email: string): Promise<{ apiKey: string; userId: 
     throw new Error(`Login failed: ${status} ${JSON.stringify(data)}`);
   }
 
-  return { apiKey: data.api_key, userId: data.id };
+  return { apiKey: data.api_key, userId: data.id, supabaseAuthId: authUser.id };
 }
 
 // ── shared state ──
 let KEY: string;
 let USER_ID: string;
 let EMAIL: string;
+let SUPABASE_AUTH_ID: string;
 let PROJECT_NAME: string;
 let PROJECT_ID: string;
 let SECOND_KEY: string;
@@ -88,8 +90,10 @@ suite("Full User Journey", () => {
       const result = await createTestUser(EMAIL);
       KEY = result.apiKey;
       USER_ID = result.userId;
+      SUPABASE_AUTH_ID = result.supabaseAuthId;
       expect(KEY).toBeTruthy();
       expect(USER_ID).toBeTruthy();
+      expect(SUPABASE_AUTH_ID).toBeTruthy();
     });
   });
 
@@ -998,22 +1002,13 @@ suite("Full User Journey", () => {
       }
     }
 
-    // Direct admin cleanup: delete the auth user even if the API call failed
-    if (EMAIL && SUPABASE_URL && SUPABASE_KEY) {
+    // Direct admin cleanup by ID — no pagination, no missed users
+    if (SUPABASE_AUTH_ID && SUPABASE_URL && SUPABASE_KEY) {
       try {
-        const listRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=50`, {
+        await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${SUPABASE_AUTH_ID}`, {
+          method: "DELETE",
           headers: { Authorization: `Bearer ${SUPABASE_KEY}`, apikey: SUPABASE_KEY },
         });
-        if (listRes.ok) {
-          const { users } = (await listRes.json()) as { users: { id: string; email?: string }[] };
-          const authUser = users.find((u) => u.email === EMAIL);
-          if (authUser) {
-            await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${authUser.id}`, {
-              method: "DELETE",
-              headers: { Authorization: `Bearer ${SUPABASE_KEY}`, apikey: SUPABASE_KEY },
-            });
-          }
-        }
       } catch {
         // best-effort cleanup
       }
