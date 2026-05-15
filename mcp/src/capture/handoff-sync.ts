@@ -9,7 +9,24 @@ export interface FlushArgs {
   api_url: string;
 }
 
-export async function runFlushCycle(a: FlushArgs): Promise<{ flushed: number }> {
+export interface FlushResult {
+  flushed: number;
+  /**
+   * Set when the backend auto-created (or matched) a canonical project for a
+   * `cwd_<hash>` placeholder we just sent. Callers should swap their in-memory
+   * project_id to this and refresh any project-map entries.
+   */
+  canonical_project_id?: string;
+}
+
+interface BatchResponse {
+  accepted?: number;
+  duplicates?: number;
+  adjusted?: string[];
+  canonical_project_ids?: Record<string, string>;
+}
+
+export async function runFlushCycle(a: FlushArgs): Promise<FlushResult> {
   const dir = projectDir(a.project_id);
   const wmPath = path.join(dir, ".watermark");
   const wm = fs.existsSync(wmPath) ? fs.readFileSync(wmPath, "utf-8").trim() : null;
@@ -24,8 +41,32 @@ export async function runFlushCycle(a: FlushArgs): Promise<{ flushed: number }> 
   });
   if (!res.ok) throw new Error(`batch failed: ${res.status}`);
 
-  fs.writeFileSync(wmPath, pending[pending.length - 1].event_id);
-  return { flushed: pending.length };
+  let canonicalId: string | undefined;
+  try {
+    const body = (await res.json()) as BatchResponse;
+    const remapped = body.canonical_project_ids?.[a.project_id];
+    if (remapped && remapped !== a.project_id) {
+      const newDir = projectDir(remapped);
+      if (fs.existsSync(newDir)) {
+        throw new Error(`auto-create remap collision: ${dir} -> ${newDir} (destination already exists)`);
+      }
+      fs.renameSync(dir, newDir);
+      // Watermark now lives in the new dir, so write it there.
+      fs.writeFileSync(path.join(newDir, ".watermark"), pending[pending.length - 1].event_id);
+      canonicalId = remapped;
+    }
+  } catch (err) {
+    // If the body wasn't JSON we still consider the flush successful — only
+    // re-throw collision errors so the caller can surface them.
+    if (err instanceof Error && err.message.startsWith("auto-create remap collision")) {
+      throw err;
+    }
+  }
+
+  if (!canonicalId) {
+    fs.writeFileSync(wmPath, pending[pending.length - 1].event_id);
+  }
+  return { flushed: pending.length, canonical_project_id: canonicalId };
 }
 
 export async function runPullCycle(a: FlushArgs): Promise<{ pulled: number }> {

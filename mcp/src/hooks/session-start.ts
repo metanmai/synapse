@@ -9,6 +9,7 @@ export interface SessionStartArgs {
   user_id: string;
   stdout: NodeJS.WriteStream;
   skipFallback?: boolean;
+  git_basename?: string;
 }
 
 export async function runSessionStartHook(args: SessionStartArgs): Promise<void> {
@@ -32,7 +33,7 @@ export async function runSessionStartHook(args: SessionStartArgs): Promise<void>
     attached_to: null,
     kind: EventKind.SessionOpened,
     occurred_at: new Date().toISOString(),
-    payload: { hostname: actor.hostname },
+    payload: { hostname: actor.hostname, ...(args.git_basename ? { git_basename: args.git_basename } : {}) },
   });
 
   fs.mkdirSync(projectDir(args.project_id), { recursive: true });
