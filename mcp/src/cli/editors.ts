@@ -10,6 +10,11 @@ export interface EditorInfo {
   write: (apiKey: string) => string[];
 }
 
+export interface WriteResult {
+  written: string[];
+  errors: { editor: string; error: string }[];
+}
+
 const SYNAPSE_INSTRUCTIONS = `# Synapse — Shared Context Layer
 
 You have access to a Synapse MCP server — a remote workspace for storing and retrieving context across sessions.
@@ -46,7 +51,8 @@ function writeMcpJson(filePath: string, apiKey: string): void {
     try {
       existing = JSON.parse(fs.readFileSync(filePath, "utf-8"));
     } catch {
-      /* ignore */
+      // Corrupted JSON — back up original before overwriting
+      fs.copyFileSync(filePath, `${filePath}.bak`);
     }
   }
   existing.mcpServers = { ...((existing.mcpServers as Record<string, unknown>) || {}), ...serverConfig.mcpServers };
@@ -63,6 +69,17 @@ function appendInstructions(filePath: string): boolean {
   return true;
 }
 
+function ensureGitignore(cwd: string, entry: string): void {
+  const gitignore = path.join(cwd, ".gitignore");
+  let content = "";
+  if (fs.existsSync(gitignore)) {
+    content = fs.readFileSync(gitignore, "utf-8");
+  }
+  if (!content.includes(entry)) {
+    fs.appendFileSync(gitignore, `${content.length > 0 && !content.endsWith("\n") ? "\n" : ""}${entry}\n`);
+  }
+}
+
 // --- Per-editor writers ---
 
 function writeGenericMcp(apiKey: string, cwd: string): string[] {
@@ -70,13 +87,7 @@ function writeGenericMcp(apiKey: string, cwd: string): string[] {
   writeMcpJson(path.join(cwd, ".mcp.json"), apiKey);
   written.push(".mcp.json");
 
-  const gitignore = path.join(cwd, ".gitignore");
-  if (fs.existsSync(gitignore)) {
-    const content = fs.readFileSync(gitignore, "utf-8");
-    if (!content.includes(".mcp.json")) {
-      fs.appendFileSync(gitignore, "\n.mcp.json\n");
-    }
-  }
+  ensureGitignore(cwd, ".mcp.json");
   return written;
 }
 
@@ -114,9 +125,16 @@ function writeVSCodeEditor(apiKey: string, cwd: string): string[] {
   let settings: Record<string, unknown> = {};
   if (fs.existsSync(settingsFile)) {
     try {
-      settings = JSON.parse(fs.readFileSync(settingsFile, "utf-8"));
+      const parsed = JSON.parse(fs.readFileSync(settingsFile, "utf-8"));
+      // Only use parsed result if it's a plain object — don't overwrite arrays, strings, etc.
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        settings = parsed;
+      } else {
+        fs.copyFileSync(settingsFile, `${settingsFile}.bak`);
+      }
     } catch {
-      /* ignore */
+      // Corrupted JSON — back up original before overwriting
+      fs.copyFileSync(settingsFile, `${settingsFile}.bak`);
     }
   }
   if (!settings.mcp) settings.mcp = {};
@@ -141,11 +159,15 @@ function writeVSCodeEditor(apiKey: string, cwd: string): string[] {
 function writeClaudeCodeEditor(apiKey: string, home: string, cwd: string): string[] {
   const written: string[] = [];
 
-  if (appendInstructions(path.join(home, ".claude", "CLAUDE.md"))) {
+  // Ensure ~/.claude/ exists before writing CLAUDE.md
+  const claudeDir = path.join(home, ".claude");
+  fs.mkdirSync(claudeDir, { recursive: true });
+
+  if (appendInstructions(path.join(claudeDir, "CLAUDE.md"))) {
     written.push("~/.claude/CLAUDE.md");
   }
 
-  const cmdDir = path.join(home, ".claude", "commands", "synapse");
+  const cmdDir = path.join(claudeDir, "commands", "synapse");
   fs.mkdirSync(cmdDir, { recursive: true });
 
   const commands: Record<string, string> = {
@@ -215,15 +237,23 @@ export function detectEditors(): EditorInfo[] {
   ];
 }
 
-export function writeEditorConfigs(editors: EditorInfo[], apiKey: string): string[] {
+/** Write configs for selected editors. Continues on per-editor failure — returns results + errors. */
+export function writeEditorConfigs(editors: EditorInfo[], apiKey: string): WriteResult {
   const written: string[] = [];
+  const errors: { editor: string; error: string }[] = [];
+
   for (const editor of editors) {
-    written.push(...editor.write(apiKey));
+    try {
+      written.push(...editor.write(apiKey));
+    } catch (err) {
+      errors.push({ editor: editor.name, error: (err as Error).message });
+    }
   }
-  return [...new Set(written)];
+
+  return { written: [...new Set(written)], errors };
 }
 
-export function writeAllDetected(apiKey: string): string[] {
+export function writeAllDetected(apiKey: string): WriteResult {
   return writeEditorConfigs(
     detectEditors().filter((e) => e.detected),
     apiKey,

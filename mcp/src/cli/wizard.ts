@@ -2,7 +2,7 @@ import * as clack from "@clack/prompts";
 import { browserAuth } from "./browser-auth.js";
 import { detectEditors, writeEditorConfigs } from "./editors.js";
 import { createGlyphSpinner } from "./spinner.js";
-import { accent, bold, muted, success } from "./theme.js";
+import { accent, bold, muted, success, error as themeError } from "./theme.js";
 import { showWelcome } from "./welcome.js";
 
 export async function runWizard(version: string): Promise<void> {
@@ -33,7 +33,13 @@ export async function runWizard(version: string): Promise<void> {
     spin.start("Waiting for browser login\u2026");
 
     try {
-      const result = await browserAuth();
+      const result = await browserAuth({
+        onUrl: (url) => {
+          // Show URL as fallback if browser doesn't open
+          spin.update("Waiting for browser login\u2026");
+          clack.log.info(`If the browser didn't open, visit:\n  ${muted(url)}`);
+        },
+      });
       spin.stop(`Signed in as ${result.email}`);
       apiKey = result.api_key;
     } catch (err) {
@@ -90,12 +96,20 @@ export async function runWizard(version: string): Promise<void> {
   // Write configs
   const configSpin = createGlyphSpinner();
   configSpin.start("Writing configs\u2026");
-  const written = writeEditorConfigs(selectedEditors, apiKey);
+  const result = writeEditorConfigs(selectedEditors, apiKey);
   configSpin.stop("Config files written");
 
   // Step 7: Success summary
-  const summary = written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
-  clack.log.message(summary);
+  if (result.written.length > 0) {
+    const summary = result.written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
+    clack.log.message(summary);
+  }
+
+  if (result.errors.length > 0) {
+    for (const e of result.errors) {
+      clack.log.warn(`${themeError("\u2717")} ${e.editor}: ${e.error}`);
+    }
+  }
 
   clack.outro(`Restart your editor to connect. ${muted("synapsesync.app/docs")}`);
 }
