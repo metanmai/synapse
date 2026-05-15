@@ -9,7 +9,7 @@ const tools = [
     id: "claude-code",
     name: "Claude Code",
     method: "cli",
-    command: `claude mcp add synapse npx synapsesync-mcp --env SYNAPSE_API_KEY=your-key`,
+    command: `claude mcp add synapse npx synapsesync-mcp --env SYNAPSE_API_KEY=your-key --env SYNAPSE_SOURCE=claude`,
     hint: "Run this in your terminal. Done in one command.",
   },
   {
@@ -22,7 +22,8 @@ const tools = [
       "command": "npx",
       "args": ["synapsesync-mcp"],
       "env": {
-        "SYNAPSE_API_KEY": "your-api-key"
+        "SYNAPSE_API_KEY": "your-api-key",
+        "SYNAPSE_SOURCE": "cursor"
       }
     }
   }
@@ -40,7 +41,8 @@ const tools = [
       "command": "npx",
       "args": ["synapsesync-mcp"],
       "env": {
-        "SYNAPSE_API_KEY": "your-api-key"
+        "SYNAPSE_API_KEY": "your-api-key",
+        "SYNAPSE_SOURCE": "windsurf"
       }
     }
   }
@@ -59,7 +61,8 @@ const tools = [
         "command": "npx",
         "args": ["synapsesync-mcp"],
         "env": {
-          "SYNAPSE_API_KEY": "your-api-key"
+          "SYNAPSE_API_KEY": "your-api-key",
+          "SYNAPSE_SOURCE": "copilot"
         }
       }
     }
@@ -78,7 +81,8 @@ const tools = [
       "command": "npx",
       "args": ["synapsesync-mcp"],
       "env": {
-        "SYNAPSE_API_KEY": "your-api-key"
+        "SYNAPSE_API_KEY": "your-api-key",
+        "SYNAPSE_SOURCE": "claude"
       }
     }
   }
