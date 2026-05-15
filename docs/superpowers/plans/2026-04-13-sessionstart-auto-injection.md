@@ -1157,12 +1157,13 @@ git push
 
 ---
 
-## Task 8: Documentation + version bump
+## Task 8: Documentation
 
 **Files:**
 - Modify: `/Users/Tanmai.N/.claude/CLAUDE.md` (global)
 - Modify: `/Users/Tanmai.N/Documents/synapse/CLAUDE.md` (project)
-- Modify: `mcp/package.json` (0.8.0 → 0.9.0)
+
+**No version bump:** 0.8.0 is still unpublished. This feature ships as part of the same 0.8.0 release — one coherent first publish for the insights-first era rather than two rapid-fire breaking releases.
 
 - [ ] **Step 1: Add `<synapse-brief>` recognition to both CLAUDE.md files**
 
@@ -1179,14 +1180,7 @@ If your first user message contains a `<synapse-brief>` ... `</synapse-brief>` b
 
 Mirror the same paragraph into `/Users/Tanmai.N/Documents/synapse/CLAUDE.md`.
 
-- [ ] **Step 2: Bump version**
-
-Modify `mcp/package.json`:
-```json
-  "version": "0.9.0",
-```
-
-- [ ] **Step 3: Full test run**
+- [ ] **Step 2: Full test run**
 
 Run: `cd mcp && npm test`
 Expected: all tests pass
@@ -1194,30 +1188,33 @@ Expected: all tests pass
 Run: `cd backend && npm test`
 Expected: all tests pass
 
-- [ ] **Step 4: Smoke test the integration**
+- [ ] **Step 3: Smoke test the integration**
 
 Run: `cd mcp && npm run build && node dist/index.js brief < /dev/null 2>&1 | head -30`
 
 Expected: a `<synapse-brief>` block with your current project's insights + summary (if the `synapse` project has them), OR a workspace fallback block, OR silent exit if `SYNAPSE_API_KEY` isn't in your shell env.
 
-- [ ] **Step 5: Commit + push**
+- [ ] **Step 4: Commit + push**
 
 ```bash
-git add ~/.claude/CLAUDE.md CLAUDE.md mcp/package.json
-git commit -m "chore: bump synapsesync-mcp to 0.9.0 + document <synapse-brief>
+git add ~/.claude/CLAUDE.md CLAUDE.md
+git commit -m "docs: describe <synapse-brief> tag recognition
 
-0.9.0 ships Phase A #1 — SessionStart auto-injection. Every new
-Claude Code session now gets an automatic <synapse-brief> block
-with current project orientation, via a CLI chained onto the
-existing SessionStart hook.
+Teaches Claude Code sessions how to interpret the <synapse-brief>
+block auto-injected by the Synapse SessionStart hook. Tagged
+block = trusted project context, not a tool result.
 
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 git push
 ```
 
-- [ ] **Step 6: (Manual) Publish to npm**
+- [ ] **Step 5: (Manual) Publish to npm**
 
-After CI is green:
+This is the first publish of the 0.8.0 insights-first release, bundling:
+- Read-only MCP surface (removed write/rm/distill)
+- `save_insight` as the sole agent write path
+- SessionStart auto-injection (this plan)
+
 ```bash
 cd mcp && npm publish
 ```
