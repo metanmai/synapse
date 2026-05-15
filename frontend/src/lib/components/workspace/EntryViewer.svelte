@@ -32,7 +32,7 @@
         History
       </a>
       <button onclick={() => onEdit()}
-        class="text-sm cursor-pointer" style="color: var(--color-accent);">
+        class="text-sm cursor-pointer" style="color: var(--color-link);">
         Edit
       </button>
     </div>
