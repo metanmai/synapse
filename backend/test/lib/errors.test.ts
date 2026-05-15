@@ -29,12 +29,18 @@ describe("Error responses include actual error messages", () => {
     expect(body).toHaveProperty("code");
   });
 
-  it("returns JSON error for missing routes", async () => {
+  it("returns JSON error for missing routes under /api/*", async () => {
+    // Auth middleware runs before route resolution on /api/*, so unauthenticated
+    // requests to unknown routes return 401 (not 404) — this is intentional, it
+    // prevents leaking which routes exist to unauthenticated callers.
     const req = new Request("http://localhost/api/nonexistent");
     const ctx = createExecutionContext();
     const res = await worker.fetch(req, env, ctx);
     await waitOnExecutionContext(ctx);
 
-    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string; code: string };
+    expect(res.status).toBe(401);
+    expect(body).toHaveProperty("error");
+    expect(body).toHaveProperty("code");
   });
 });
