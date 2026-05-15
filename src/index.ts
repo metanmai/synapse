@@ -4,7 +4,9 @@ import { AppError } from "./lib/errors";
 import { auth } from "./api/auth";
 import { context } from "./api/context";
 import { projects } from "./api/projects";
+import { sync } from "./api/sync";
 import { McpSyncAgent } from "./mcp/agent";
+import { runScheduledGoogleSync } from "./sync/from-google";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -17,12 +19,25 @@ app.onError((err, c) => {
 });
 
 app.get("/health", (c) => c.json({ status: "ok", service: "mcp-sync" }));
+
+// Auth routes (no auth middleware)
 app.route("/auth", auth);
+
+// Authenticated routes
 app.route("/api/context", context);
 app.route("/api/projects", projects);
+app.route("/api/sync", sync);
 
-// Mount MCP server on /mcp (Streamable HTTP transport)
+// Mount MCP server (Streamable HTTP transport)
 app.mount("/mcp", McpSyncAgent.serve("/mcp").fetch);
 
+// Export Durable Object class (required by Wrangler)
 export { McpSyncAgent };
-export default app;
+
+// Default export for Cloudflare Workers
+export default {
+  fetch: app.fetch,
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(runScheduledGoogleSync(env));
+  },
+};
