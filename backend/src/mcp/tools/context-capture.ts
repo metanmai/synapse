@@ -1,15 +1,20 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { logActivity } from "../../db/activity-logger";
-import { createSupabaseClient } from "../../db/client";
-import { getProjectByName, upsertEntry } from "../../db/queries";
+import { upsertEntry } from "../../db/queries";
 
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
-import { requireMcpUserId } from "../mcp-context";
+import { mcpError, mcpResolveProject, mcpSuccess, requireMcpUserId } from "../mcp-context";
 
-export function registerContextCaptureTools(server: McpServer, env: Env, getContext: GetMcpContext) {
+export function registerContextCaptureTools(
+  server: McpServer,
+  _env: Env,
+  getContext: GetMcpContext,
+  db: SupabaseClient,
+) {
   server.tool(
     "save_context",
     "Save a piece of context (decision, convention, learning, etc.) to a project. Call this when a technical decision is made, an architecture pattern is discussed, or a team convention is established.",
@@ -20,11 +25,10 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
       tags: z.array(z.string()).optional().describe("Optional tags for categorization"),
     },
     async ({ project, path, content, tags }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       const entry = await upsertEntry(db, {
         project_id: proj.id,
@@ -43,9 +47,7 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
       });
 
       const action = entry.created_at === entry.updated_at ? "Created" : "Updated";
-      return {
-        content: [{ type: "text", text: `${action} context at "${path}" in project "${project}".` }],
-      };
+      return mcpSuccess(`${action} context at "${path}" in project "${project}".`);
     },
   );
 
@@ -59,11 +61,10 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
       pending: z.array(z.string()).optional().describe("Pending items for follow-up"),
     },
     async ({ project, summary, decisions, pending }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       const date = new Date().toISOString().split("T")[0];
       const slug = summary
@@ -112,14 +113,7 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
         }
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Session summary saved to "${path}". ${decisions?.length ?? 0} decisions also recorded.`,
-          },
-        ],
-      };
+      return mcpSuccess(`Session summary saved to "${path}". ${decisions?.length ?? 0} decisions also recorded.`);
     },
   );
 
@@ -133,11 +127,10 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
       content_type: z.enum(["markdown", "json"]).describe("Content type"),
     },
     async ({ project, path, content, content_type }) => {
-      const db = createSupabaseClient(env);
       const userId = requireMcpUserId(getContext);
 
-      const proj = await getProjectByName(db, project, userId);
-      if (!proj) return { content: [{ type: "text", text: `Project "${project}" not found.` }] };
+      const proj = await mcpResolveProject(db, project, userId);
+      if (!proj) return mcpError(`Project "${project}" not found.`);
 
       await upsertEntry(db, {
         project_id: proj.id,
@@ -155,9 +148,7 @@ export function registerContextCaptureTools(server: McpServer, env: Env, getCont
         source: "claude",
       });
 
-      return {
-        content: [{ type: "text", text: `File added at "${path}" in project "${project}".` }],
-      };
+      return mcpSuccess(`File added at "${path}" in project "${project}".`);
     },
   );
 }
