@@ -15,8 +15,8 @@ export function InviteDialog({ projectId }: Props) {
     try {
       await addMember.mutateAsync({ email, role });
       setEmail("");
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -30,7 +30,7 @@ export function InviteDialog({ projectId }: Props) {
         className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
         required
       />
-      <select value={role} onChange={(e) => setRole(e.target.value as any)} className="border border-gray-300 rounded px-3 py-2 text-sm">
+      <select value={role} onChange={(e) => setRole(e.target.value as "editor" | "viewer")} className="border border-gray-300 rounded px-3 py-2 text-sm">
         <option value="editor">Editor</option>
         <option value="viewer">Viewer</option>
       </select>
