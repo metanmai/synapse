@@ -399,8 +399,9 @@ account.post("/reset", async (c) => {
     console.error("[account/reset] api_keys delete error:", err);
   }
 
-  // Create a fresh API key
+  // Create a fresh API key — delete any with "default" label first to avoid unique constraint
   try {
+    await db.from("api_keys").delete().eq("user_id", user.id).eq("label", "default");
     const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
     const apiKeyHash = await hashApiKey(apiKey);
     await createApiKey(db, user.id, apiKeyHash, "default");
