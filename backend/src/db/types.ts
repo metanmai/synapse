@@ -64,6 +64,24 @@ export interface ApiKey {
 
 export type { Insight, InsightListItem, InsightType, InsightSource } from "@synapse/shared";
 
+export type {
+  CanonicalMessage,
+  ToolInteraction,
+  MessageSource,
+  MediaAttachment,
+  Conversation,
+  ConversationListItem,
+  ConversationMessage,
+  ConversationMediaRecord,
+  ConversationContext,
+  ConversationLimits,
+  ConversationStatus,
+  FidelityMode,
+  MessageRole,
+  MediaType,
+  ContextType,
+} from "@synapse/shared";
+
 // Default tier limits — can be overridden by env vars
 export function getTierLimitsFromEnv(env?: Record<string, string>) {
   return {
