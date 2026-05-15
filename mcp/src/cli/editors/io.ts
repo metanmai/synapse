@@ -157,3 +157,62 @@ export function globalConfigDir(): string {
   if (process.platform === "win32") return process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
   return process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
 }
+
+/** Remove the "synapse" key from an MCP JSON config. Returns true if the file was modified. */
+export function removeSynapseFromMcpJson(filePath: string): boolean {
+  if (!fs.existsSync(filePath)) return false;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    let changed = false;
+
+    const strip = (obj: Record<string, unknown>, key: string) => Reflect.deleteProperty(obj, key);
+
+    for (const key of ["mcpServers", "servers"]) {
+      if (parsed?.[key]?.synapse) {
+        strip(parsed[key], "synapse");
+        if (Object.keys(parsed[key]).length === 0) strip(parsed, key);
+        changed = true;
+      }
+    }
+    if (parsed?.mcp?.servers?.synapse) {
+      strip(parsed.mcp.servers, "synapse");
+      if (Object.keys(parsed.mcp.servers).length === 0) strip(parsed.mcp, "servers");
+      if (Object.keys(parsed.mcp).length === 0) strip(parsed, "mcp");
+      changed = true;
+    }
+
+    if (changed) {
+      if (Object.keys(parsed).length === 0) {
+        fs.unlinkSync(filePath);
+      } else {
+        fs.writeFileSync(filePath, `${JSON.stringify(parsed, null, 2)}\n`);
+      }
+    }
+    return changed;
+  } catch {
+    return false;
+  }
+}
+
+/** Remove the Synapse instructions block from an instructions file. Returns true if modified. */
+export function removeInstructions(filePath: string): boolean {
+  if (!fs.existsSync(filePath)) return false;
+  const content = fs.readFileSync(filePath, "utf-8");
+  if (!content.includes("# Synapse")) return false;
+  // Remove the Synapse section (from "# Synapse" header to end, or to next top-level heading)
+  const cleaned = content.replace(/\n*# Synapse — Shared Context Layer[\s\S]*$/, "").trimEnd();
+  if (cleaned === content) return false;
+  if (cleaned.length === 0) {
+    fs.unlinkSync(filePath);
+  } else {
+    fs.writeFileSync(filePath, `${cleaned}\n`);
+  }
+  return true;
+}
+
+/** Recursively remove a directory if it exists. Returns true if deleted. */
+export function removeDirIfExists(dirPath: string): boolean {
+  if (!fs.existsSync(dirPath)) return false;
+  fs.rmSync(dirPath, { recursive: true, force: true });
+  return true;
+}
