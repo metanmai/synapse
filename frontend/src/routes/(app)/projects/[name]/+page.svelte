@@ -55,6 +55,20 @@ function insightTypeLabel(type: string): string {
     {/if}
   </section>
 
+  {#if data.projectContext?.summary}
+    <hr class="divider" />
+
+    <section class="overview-section">
+      <div class="section-header">
+        <h2 class="section-title">Project Context</h2>
+        <a href="/projects/{encodeURIComponent(projectSlug)}/context" class="section-link">View full context &rarr;</a>
+      </div>
+      <div class="glass-card context-preview">
+        <pre class="context-preview-text">{data.projectContext.summary.slice(0, 500)}{data.projectContext.summary.length > 500 ? "..." : ""}</pre>
+      </div>
+    </section>
+  {/if}
+
   <hr class="divider" />
 
   <!-- Recent Conversations section -->
@@ -221,5 +235,15 @@ function insightTypeLabel(type: string): string {
     font-size: 12px;
     color: var(--color-text-muted);
     margin-top: 0.25rem;
+  }
+
+  .context-preview-text {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--color-text);
+    margin: 0;
   }
 </style>
