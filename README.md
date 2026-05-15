@@ -65,12 +65,6 @@ The same package ships an MCP server that any MCP client can use. Hosts other th
 
 Your assistant gets tools such as **`read`**, **`write`**, **`search`**, **`tree`**, **`ls`**, and **`history`** against your project paths (e.g. `decisions/`, `notes/`, `architecture/`).
 
-**Optional environment variables**
-
-| Variable | When to set |
-|----------|----------------|
-| `SYNAPSE_PASSPHRASE` + `SYNAPSE_USER_EMAIL` | Optional client-side encryption for content at rest (see package documentation). |
-
 The MCP always talks to the public API at `https://api.synapsesync.app`. Self-hosting your own API requires building `synapsesync-mcp` from source and changing the `API_URL` constant in `mcp/src/index.ts`.
 
 Restart the editor or MCP host after changing config.

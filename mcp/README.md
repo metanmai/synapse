@@ -80,8 +80,6 @@ Install once with `npm install -g synapsesync-mcp`, then run `synapsesync-mcp <c
 | `SYNAPSE_API_KEY` | **Yes** for non-wizard / stdio mode | API key from Synapse. |
 | `SYNAPSE_SOURCE` | No | Label for where edits come from (default `claude`). Examples: `cursor`, `chatgpt`, `copilot`, `windsurf`. |
 | `SYNAPSE_PROJECT` | No | Default project name when the tool needs one (default `My Workspace`). |
-| `SYNAPSE_PASSPHRASE` | No | Optional client-side encryption passphrase (use with `SYNAPSE_USER_EMAIL`). |
-| `SYNAPSE_USER_EMAIL` | No | Email associated with encryption when using a passphrase. |
 
 ## Requirements
 
@@ -164,7 +162,6 @@ Synapse collects and stores the context files you create in your workspace. For 
 
 **Data handling summary:**
 - **What we store:** Workspace files (context, notes, decisions), account info (email), and API keys.
-- **Encryption:** Optional end-to-end encryption via `SYNAPSE_PASSPHRASE`. When enabled, content is encrypted client-side before transmission — the server never sees plaintext.
 - **Third-party sharing:** We do not sell or share your data with third parties. Workspace data is only accessible to you and teammates you explicitly invite.
 - **Data location:** Hosted on Cloudflare Workers and Supabase (Postgres). Data resides in the provider’s default regions.
 - **Deletion:** You can delete any file or your entire account at any time. Deleted data is permanently removed.
