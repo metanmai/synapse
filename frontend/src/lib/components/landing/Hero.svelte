@@ -35,9 +35,7 @@ onMount(() => {
         and every AI tool persistent memory across sessions.
       </p>
       <div class="hero-actions">
-        {#if loggedIn}
-          <a href="/dashboard" class="hero-cta">Go to Dashboard</a>
-        {:else}
+        {#if !loggedIn}
           <a href="/signup" class="hero-cta">Get Started Free</a>
         {/if}
         <a href="#how-it-works" class="hero-secondary">See how it works</a>
