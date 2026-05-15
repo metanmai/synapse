@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import * as clack from "@clack/prompts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -52,6 +54,95 @@ interface HistoryResponse {
 
 function isInteractiveTerminal(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+function readPackageVersion(): string {
+  try {
+    const pkgPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+    const j = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as { version?: string };
+    return j.version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+const CLI_SUBCOMMANDS = new Set(["login", "signup", "init", "wizard", "help"]);
+
+function printHelpPlain(): void {
+  const v = readPackageVersion();
+  console.log(`synapsesync-mcp v${v} — Synapse MCP server & CLI
+
+${bold("Usage")}
+  npx synapsesync-mcp              Show help (interactive terminal only)
+  npx synapsesync-mcp --help       Show this help
+  npx synapsesync-mcp -h
+  npx synapsesync-mcp help
+
+${bold("Setup (interactive — keyboard ↑/↓ in menus)")}
+  login              Sign in, then write .mcp.json and editor configs here
+  signup             Create account (email), then write configs
+  init               Paste an API key, then write configs
+  wizard             Menu: sign up, log in, or use an API key
+
+${bold("Setup (non-interactive / CI)")}
+  login --email <e> --password <p> [--label <l>]   Print JSON snippet (no files)
+  signup --email <email>                           Print JSON snippet (no files)
+  init --key <api-key>                             Write configs
+  init                                             Uses SYNAPSE_API_KEY from the environment
+
+${bold("MCP server")}
+  When stdin is NOT a TTY (e.g. Cursor/Claude launching the server) and
+  SYNAPSE_API_KEY is set, this process runs the MCP server.
+
+${bold("More")}
+  https://synapsesync.app
+`);
+}
+
+function bold(s: string): string {
+  return `\x1b[1m${s}\x1b[22m`;
+}
+
+function dim(s: string): string {
+  return `\x1b[2m${s}\x1b[22m`;
+}
+
+function green(s: string): string {
+  return `\x1b[32m${s}\x1b[39m`;
+}
+
+function printHelpTTY(): void {
+  clack.intro("◆ Synapse · synapsesync-mcp");
+  clack.log.message(
+    [
+      `${bold("Commands")} ${dim("(use ↑/↓ Enter in menus)")}`,
+      "",
+      `  ${green("login")}     Sign in · writes MCP config in this folder`,
+      `  ${green("signup")}    New account (email only) · writes config`,
+      `  ${green("init")}      You already have an API key · writes config`,
+      `  ${green("wizard")}    Pick sign up, log in, or API key`,
+      "",
+      `${dim("Scripted:")} login/signup with flags print JSON; then ${dim("init --key …")}`,
+      "",
+      `${dim("Editors")} run with no TTY + SYNAPSE_API_KEY → MCP tools (read, write, search, …).`,
+    ].join("\n"),
+  );
+  clack.outro("Run from your project root so .mcp.json sits next to your code.");
+}
+
+function printHelp(): void {
+  if (isInteractiveTerminal()) printHelpTTY();
+  else printHelpPlain();
+}
+
+function isHelpArgv(args: string[]): boolean {
+  const a = args[0];
+  return a === "-h" || a === "--help" || a === "help";
+}
+
+function isVersionArgv(args: string[]): boolean {
+  const a = args[0];
+  return a === "-v" || a === "--version";
 }
 
 async function cliAuthSignup(
@@ -324,80 +415,185 @@ You have access to a Synapse MCP server — a remote workspace for storing and r
   console.log("Done! Restart your AI tools to connect to Synapse.\n");
 }
 
-async function runWizard(): Promise<void> {
-  const readline = await import("node:readline/promises");
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  try {
-    console.log("\n  Synapse — guided setup\n");
-    console.log(`  Working directory: ${process.cwd()}`);
-    console.log("  (.mcp.json and editor configs are written here.)\n");
-    console.log("  1) Create account (email only)");
-    console.log("  2) Log in (email + password — may be visible in this terminal)");
-    console.log("  3) I already have an API key\n");
-
-    const choice = (await rl.question("Choose 1, 2, or 3: ")).trim();
-    let apiKey: string | null = null;
-
-    if (choice === "1") {
-      const email = (await rl.question("Email: ")).trim();
-      if (!email) {
-        console.error("Email is required.");
-        process.exit(1);
-      }
-      const r = await cliAuthSignup(email);
-      if (!r.ok) {
-        console.error(`Signup failed: ${r.message}`);
-        process.exit(1);
-      }
-      console.log(`\nAccount created for ${r.data.email}`);
-      apiKey = r.data.api_key;
-    } else if (choice === "2") {
-      const email = (await rl.question("Email: ")).trim();
-      const password = (await rl.question("Password (visible in most terminals): ")).trim();
-      if (!email || !password) {
-        console.error("Email and password are required.");
-        process.exit(1);
-      }
-      const r = await cliAuthLogin(email, password, "wizard");
-      if (!r.ok) {
-        console.error(`Login failed: ${r.message}`);
-        process.exit(1);
-      }
-      console.log(`\nLogged in as ${r.data.email}`);
-      apiKey = r.data.api_key;
-    } else if (choice === "3") {
-      apiKey = (await rl.question("Paste API key: ")).trim();
-      if (!apiKey) {
-        console.error("API key is required.");
-        process.exit(1);
-      }
-    } else {
-      console.error("Invalid choice. Run again and enter 1, 2, or 3.");
-      process.exit(1);
-    }
-
-    runCliInit(apiKey!);
-  } finally {
-    rl.close();
+async function collectApiKeyFromPrompt(): Promise<string> {
+  clack.log.info("Create a key at synapsesync.app → Account → API keys");
+  const key = await clack.password({
+    message: "API key",
+    validate: (v) => (v?.trim() ? undefined : "Required"),
+  });
+  if (clack.isCancel(key)) {
+    clack.cancel("Cancelled.");
+    process.exit(0);
   }
+  return key.trim();
+}
+
+async function collectSignupApiKey(): Promise<string> {
+  const email = await clack.text({
+    message: "Email",
+    placeholder: "you@example.com",
+    validate: (v) => (v?.trim() ? undefined : "Required"),
+  });
+  if (clack.isCancel(email)) {
+    clack.cancel("Cancelled.");
+    process.exit(0);
+  }
+
+  const spin = clack.spinner();
+  spin.start("Creating account…");
+  const r = await cliAuthSignup(email.trim());
+  if (!r.ok) {
+    spin.stop("Signup failed");
+    clack.log.error(r.message);
+    process.exit(1);
+  }
+  spin.stop(`Welcome — ${r.data.email}`);
+  return r.data.api_key;
+}
+
+async function collectLoginApiKey(): Promise<string> {
+  const email = await clack.text({
+    message: "Email",
+    placeholder: "you@example.com",
+    validate: (v) => (v?.trim() ? undefined : "Required"),
+  });
+  if (clack.isCancel(email)) {
+    clack.cancel("Cancelled.");
+    process.exit(0);
+  }
+
+  const pw = await clack.password({
+    message: "Password",
+    validate: (v) => (v?.trim() ? undefined : "Required"),
+  });
+  if (clack.isCancel(pw)) {
+    clack.cancel("Cancelled.");
+    process.exit(0);
+  }
+
+  const spin = clack.spinner();
+  spin.start("Signing in…");
+  const r = await cliAuthLogin(email.trim(), pw, "cli");
+  if (!r.ok) {
+    spin.stop("Could not sign in");
+    clack.log.error(r.message);
+    process.exit(1);
+  }
+  spin.stop(`Signed in as ${r.data.email}`);
+  return r.data.api_key;
+}
+
+async function runInteractiveLoginThenInit(): Promise<void> {
+  clack.intro("◆ Sign in to Synapse");
+  clack.log.info(`Working directory: ${process.cwd()}`);
+  const apiKey = await collectLoginApiKey();
+  runCliInit(apiKey);
+  clack.outro("MCP config written. Restart your editor to connect.");
+}
+
+async function runInteractiveSignupThenInit(): Promise<void> {
+  clack.intro("◆ Create a Synapse account");
+  clack.log.info(`Working directory: ${process.cwd()}`);
+  const apiKey = await collectSignupApiKey();
+  runCliInit(apiKey);
+  clack.outro("MCP config written. Restart your editor to connect.");
+}
+
+async function runInteractiveInitFromPrompt(): Promise<void> {
+  clack.intro("◆ Connect with an API key");
+  clack.log.info(`Working directory: ${process.cwd()}`);
+  const apiKey = await collectApiKeyFromPrompt();
+  runCliInit(apiKey);
+  clack.outro("MCP config written. Restart your editor to connect.");
+}
+
+async function runInteractiveWizard(): Promise<void> {
+  clack.intro("◆ Synapse setup");
+  clack.log.info(`Working directory: ${process.cwd()}`);
+
+  const choice = await clack.select({
+    message: "How do you want to connect?",
+    options: [
+      { value: "signup" as const, label: "Create account", hint: "email only" },
+      { value: "login" as const, label: "Log in", hint: "email + password" },
+      { value: "key" as const, label: "I have an API key", hint: "paste from the dashboard" },
+    ],
+  });
+
+  if (clack.isCancel(choice)) {
+    clack.cancel("Cancelled.");
+    process.exit(0);
+  }
+
+  let apiKey: string;
+  if (choice === "signup") apiKey = await collectSignupApiKey();
+  else if (choice === "login") apiKey = await collectLoginApiKey();
+  else apiKey = await collectApiKeyFromPrompt();
+
+  runCliInit(apiKey);
+  clack.outro("MCP config written. Restart your editor to connect.");
 }
 
 // --- CLI commands (run before MCP server starts, no SDK needed) ---
 const args = process.argv.slice(2);
 
-if (args[0] === "login") {
-  (async () => {
-    const emailIdx = args.indexOf("--email");
-    const passIdx = args.indexOf("--password");
-    const labelIdx = args.indexOf("--label");
+function isMcpServerMode(raw: string[]): boolean {
+  return raw.length === 0 && !isInteractiveTerminal();
+}
 
-    const email = emailIdx !== -1 ? args[emailIdx + 1] : null;
-    const password = passIdx !== -1 ? args[passIdx + 1] : null;
-    const label = labelIdx !== -1 ? args[labelIdx + 1] : "cli";
+function unknownOption(flag: string): never {
+  console.error(`Unknown option: ${flag}\n`);
+  printHelpPlain();
+  process.exit(1);
+}
+
+function unknownSubcommand(cmd: string): never {
+  console.error(`Unknown command: ${cmd}\n`);
+  printHelpPlain();
+  process.exit(1);
+}
+
+async function handleCli(raw: string[]): Promise<void> {
+  if (raw.length === 0 && isInteractiveTerminal()) {
+    printHelp();
+    process.exit(0);
+  }
+
+  if (isHelpArgv(raw)) {
+    printHelp();
+    process.exit(0);
+  }
+
+  if (isVersionArgv(raw)) {
+    console.log(readPackageVersion());
+    process.exit(0);
+  }
+
+  if (raw.length > 0 && raw[0].startsWith("-")) {
+    unknownOption(raw[0]);
+  }
+
+  if (raw.length > 0 && raw[0] && !CLI_SUBCOMMANDS.has(raw[0])) {
+    unknownSubcommand(raw[0]);
+  }
+
+  if (raw[0] === "login") {
+    const emailIdx = raw.indexOf("--email");
+    const passIdx = raw.indexOf("--password");
+    const labelIdx = raw.indexOf("--label");
+
+    const email = emailIdx !== -1 ? raw[emailIdx + 1] : null;
+    const password = passIdx !== -1 ? raw[passIdx + 1] : null;
+    const label = labelIdx !== -1 ? raw[labelIdx + 1] : "cli";
 
     if (!email || !password) {
-      console.error("Usage: synapsesync-mcp login --email <email> --password <password> [--label <label>]");
-      process.exit(1);
+      if (!isInteractiveTerminal()) {
+        console.error("Usage: synapsesync-mcp login --email <email> --password <password> [--label <label>]");
+        console.error("Or run interactively: synapsesync-mcp login");
+        process.exit(1);
+      }
+      await runInteractiveLoginThenInit();
+      process.exit(0);
     }
 
     try {
@@ -427,22 +623,28 @@ if (args[0] === "login") {
           2,
         ),
       );
-      console.log(`\nOr run: claude mcp add synapse npx synapsesync-mcp --env SYNAPSE_API_KEY=${data.api_key}`);
+      console.log("\nThen run: synapsesync-mcp init --key <your-api-key>");
+      console.log(`Or: claude mcp add synapse npx synapsesync-mcp --env SYNAPSE_API_KEY=${data.api_key}`);
     } catch (err) {
       console.error(`Login failed: ${(err as Error).message}`);
       process.exit(1);
     }
 
     process.exit(0);
-  })();
-} else if (args[0] === "signup") {
-  (async () => {
-    const emailIdx = args.indexOf("--email");
-    const email = emailIdx !== -1 ? args[emailIdx + 1] : null;
+  }
+
+  if (raw[0] === "signup") {
+    const emailIdx = raw.indexOf("--email");
+    const email = emailIdx !== -1 ? raw[emailIdx + 1] : null;
 
     if (!email) {
-      console.error("Usage: synapsesync-mcp signup --email <email>");
-      process.exit(1);
+      if (!isInteractiveTerminal()) {
+        console.error("Usage: synapsesync-mcp signup --email <email>");
+        console.error("Or run interactively: synapsesync-mcp signup");
+        process.exit(1);
+      }
+      await runInteractiveSignupThenInit();
+      process.exit(0);
     }
 
     try {
@@ -471,41 +673,59 @@ if (args[0] === "login") {
           2,
         ),
       );
+      console.log("\nThen run: synapsesync-mcp init --key <your-api-key>");
     } catch (err) {
       console.error(`Signup failed: ${(err as Error).message}`);
       process.exit(1);
     }
 
     process.exit(0);
-  })();
-} else if (args[0] === "init") {
-  const keyIdx = args.indexOf("--key");
-  const apiKey = keyIdx !== -1 ? args[keyIdx + 1] : process.env.SYNAPSE_API_KEY;
-
-  if (!apiKey) {
-    console.error("Usage: synapsesync-mcp init --key <api-key>");
-    console.error("  Or set SYNAPSE_API_KEY environment variable");
-    console.error("\nInteractive setup: npx synapsesync-mcp (in a terminal)");
-    console.error("Or: npx synapsesync-mcp login --email <email> --password <password>");
-    process.exit(1);
   }
 
-  runCliInit(apiKey);
-  process.exit(0);
-} else if (args[0] === "wizard") {
-  (async () => {
+  if (raw[0] === "init") {
+    const keyIdx = raw.indexOf("--key");
+    const apiKey = keyIdx !== -1 ? raw[keyIdx + 1] : process.env.SYNAPSE_API_KEY;
+
+    if (!apiKey) {
+      if (!isInteractiveTerminal()) {
+        console.error("Usage: synapsesync-mcp init --key <api-key>");
+        console.error("  Or set SYNAPSE_API_KEY, or run interactively: synapsesync-mcp init");
+        process.exit(1);
+      }
+      await runInteractiveInitFromPrompt();
+      process.exit(0);
+    }
+
+    if (isInteractiveTerminal()) {
+      clack.intro("◆ Writing MCP config");
+      clack.log.info(`Working directory: ${process.cwd()}`);
+    }
+    runCliInit(apiKey);
+    if (isInteractiveTerminal()) {
+      clack.outro("MCP config written. Restart your editor to connect.");
+    }
+    process.exit(0);
+  }
+
+  if (raw[0] === "wizard") {
     if (!isInteractiveTerminal()) {
       console.error("synapsesync-mcp wizard requires an interactive terminal (TTY).");
       process.exit(1);
     }
-    await runWizard();
+    await runInteractiveWizard();
     process.exit(0);
-  })();
-} else if (args.length === 0 && isInteractiveTerminal()) {
-  (async () => {
-    await runWizard();
-    process.exit(0);
-  })();
+  }
+
+  // Should not reach (empty + non-TTY is MCP mode; empty + TTY handled above)
+  printHelp();
+  process.exit(0);
+}
+
+if (!isMcpServerMode(args)) {
+  handleCli(args).catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 } else {
   // --- MCP Server (requires SDK + env vars) ---
 
@@ -517,7 +737,7 @@ if (args[0] === "login") {
 
   if (!API_KEY) {
     console.error(
-      "SYNAPSE_API_KEY is required. In a terminal run: npx synapsesync-mcp (guided setup) or npx synapsesync-mcp login --email <email> --password <password>",
+      "SYNAPSE_API_KEY is required. In a terminal: npx synapsesync-mcp --help  then  npx synapsesync-mcp login  or  npx synapsesync-mcp init",
     );
     process.exit(1);
   }
