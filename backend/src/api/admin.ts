@@ -1,8 +1,11 @@
 import { Hono } from "hono";
 
 import { createApiKey } from "../db/queries/api-keys";
+import { recordDeletedAccount } from "../db/queries/deleted-accounts";
+import { getActiveSubscription } from "../db/queries/subscriptions";
 import { upsertSubscription } from "../db/queries/subscriptions";
 import { hashApiKey } from "../lib/auth";
+import { creemRequest } from "../lib/creem";
 import type { Env } from "../lib/env";
 
 const admin = new Hono<{ Bindings: Env }>();
@@ -22,10 +25,30 @@ admin.delete("/users/:id", async (c) => {
   const userId = c.req.param("id");
   const db = c.get("db");
 
-  // Look up supabase_auth_id before deletion
-  const { data: userRow } = await db.from("users").select("supabase_auth_id").eq("id", userId).single();
+  // Look up user info before deletion
+  const { data: userRow } = await db.from("users").select("email, supabase_auth_id").eq("id", userId).single();
   if (!userRow) return c.json({ error: "User not found", code: "NOT_FOUND" }, 404);
-  const supabaseAuthId = (userRow as { supabase_auth_id?: string }).supabase_auth_id;
+  const { email, supabase_auth_id: supabaseAuthId } = userRow as { email: string; supabase_auth_id?: string };
+
+  // Cancel active subscription
+  const activeSub = await getActiveSubscription(db, userId);
+  let subscriptionCancelled = false;
+  if (activeSub?.provider_subscription_id) {
+    try {
+      await creemRequest(c.env, "POST", `/subscriptions/${activeSub.provider_subscription_id}/cancel`);
+      subscriptionCancelled = true;
+    } catch (err) {
+      console.error("[admin/delete] Failed to cancel Creem subscription:", err);
+    }
+  }
+
+  // Record tombstone
+  await recordDeletedAccount(db, {
+    email,
+    had_subscription: !!activeSub,
+    subscription_cancelled: subscriptionCancelled,
+    deleted_by: "admin",
+  });
 
   const { error: rpcErr } = await db.rpc("delete_user_data", { p_user_id: userId });
   if (rpcErr) {
