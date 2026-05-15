@@ -1,11 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { Env } from "../../lib/env";
-import type { GetMcpContext } from "../agent";
+
 import { createSupabaseClient } from "../../db/client";
-import { getProjectByName } from "../../db/queries/projects";
+import { getProjectByName } from "../../db/queries";
 import { syncProjectToGoogle } from "../../sync/to-google";
 import { syncProjectFromGoogle } from "../../sync/from-google";
+
+import type { Env } from "../../lib/env";
+import type { GetMcpContext } from "../agent";
 
 export function registerGoogleSyncTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   server.tool(
