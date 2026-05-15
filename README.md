@@ -7,11 +7,11 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-5C2D91?style=for-the-badge)](https://modelcontextprotocol.io/)
 [![npm](https://img.shields.io/npm/v/synapsesync-mcp?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/synapsesync-mcp)
 
-[Claude Code handoff](#claude-code-handoff) · [Web dashboard](#web-dashboard) · [REST API](#rest-api) · [Why Synapse](#why-synapse) · [How it works](#how-it-works) · [This repo](#this-repository)
+[Claude Code handoff](#claude-code-handoff) · [Slash commands](#slash-commands) · [Invite a teammate](#invite-a-teammate) · [Web dashboard](#web-dashboard) · [REST API](#rest-api) · [Why Synapse](#why-synapse) · [How it works](#how-it-works) · [This repo](#this-repository)
 
 ---
 
-Synapse stores your AI context as **files in a cloud workspace** so the same memory is there in **every MCP-capable tool**, on **every device**, and for **teammates** you invite — not trapped in a single chat thread.
+Synapse is a **handoff layer** for AI-assisted work. It records what you and your assistant did — focus, decisions, open questions, next steps — to a local event log, syncs it to a cloud workspace, and injects a fresh `<synapse-brief>` on the next `SessionStart`. The next session — yours on another machine, or a teammate's — picks up where the last one left off without re-briefing.
 
 ---
 
@@ -30,9 +30,34 @@ synapse status          # daemon healthy, hook installed, brief cache fresh
 synapse handoff "next: finish auth flow"  # leave a baton for the next session
 ```
 
-`synapse init` writes the SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd, and SubagentStop hook entries into `~/.claude/settings.json`, and installs a launchd / systemd unit that runs the capture daemon in the background.
+`synapse init` writes the SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd, and SubagentStop hook entries into `~/.claude/settings.json`, drops slash command files into `~/.claude/commands/synapse/`, and installs a launchd / systemd unit that runs the capture daemon in the background. Projects are auto-created on the backend the first time the daemon syncs from a new working directory — there is no manual `project create` step.
 
 **Daemon-fired Claude Code:** the daemon can also spawn its own Claude Code sessions (e.g. to compact context, extract decisions, refresh the brief). This is **opt-in** — set `daemon.ai_enabled = true` in `~/.synapse/config.json` to turn it on.
+
+---
+
+## Slash commands
+
+`synapse init` installs the following slash commands into `~/.claude/commands/synapse/`. Type them inside Claude Code; the command body invokes the matching `synapse <cmd>` CLI under the hood.
+
+| Command | What it does | Example |
+|---------|--------------|---------|
+| `/synapse:handoff` | Record an explicit next-step baton for whoever picks this up next. | `/synapse:handoff wire the /callback route, then test against staging` |
+| `/synapse:focus` | Set the current focus for this session (the "what am I working on" line). | `/synapse:focus refactoring billing webhooks` |
+| `/synapse:issue` | Create, resolve, or supersede an open issue (decisions or questions). | `/synapse:issue create question should we drop the legacy adapter?` |
+| `/synapse:status` | One-line health check of the local Synapse daemon. | `/synapse:status` |
+| `/synapse:doctor` | Detailed daemon diagnostics — paths, last sync, queued events. | `/synapse:doctor` |
+| `/synapse:invite` | Invite a teammate to this project by email. | `/synapse:invite alex@example.com` |
+
+Each command is also a plain CLI invocation: `synapse handoff "..."`, `synapse set-focus "..."`, `synapse issue create ...`, `synapse status`, `synapse doctor`, `synapse invite <email>`.
+
+---
+
+## Invite a teammate
+
+Run `synapse invite <email>` (or `/synapse:invite <email>` inside Claude Code) from inside the project directory. The CLI prints a **join URL**; share it with the recipient. When they open it and sign in, the backend redeems the token, adds them to the project, and their next Claude Code session in any clone of the repo will see the same `<synapse-brief>` you do.
+
+Under the hood: `POST /api/projects/:id/invites { email }` mints a crypto-random base64url token and returns the join URL; `POST /api/invites/:token/accept` redeems it and inserts the new `project_members` row.
 
 ### Legacy: for other MCP hosts (Cursor, Windsurf, VS Code)
 
