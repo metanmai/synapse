@@ -6,12 +6,12 @@ const { z } = require("zod");
 
 const crypto = require("crypto");
 
-const API_URL = "https://synapse.tanmai.workers.dev";
+const API_URL = process.env.SYNAPSE_API_URL || "https://synapse.tanmai.workers.dev";
 const API_KEY = process.env.SYNAPSE_API_KEY;
 const PASSPHRASE = process.env.SYNAPSE_PASSPHRASE;
 const USER_EMAIL = process.env.SYNAPSE_USER_EMAIL;
 const SOURCE = process.env.SYNAPSE_SOURCE || "claude";
-const DEFAULT_PROJECT_NAME = "My Workspace";
+const DEFAULT_PROJECT_NAME = process.env.SYNAPSE_PROJECT || "My Workspace";
 
 if (!API_KEY) {
   console.error("SYNAPSE_API_KEY is required");
