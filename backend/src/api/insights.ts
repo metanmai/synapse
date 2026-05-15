@@ -1,14 +1,13 @@
 import { Hono } from "hono";
 
 import { logActivity } from "../db/activity-logger";
-import { createSupabaseClient } from "../db/client";
-import { createInsight, deleteInsight, getInsight, getMemberRole, listInsights, updateInsight } from "../db/queries";
+import { createInsight, deleteInsight, getInsight, listInsights, updateInsight } from "../db/queries";
 import { authMiddleware } from "../lib/auth";
+import type { Env } from "../lib/env";
 import { ForbiddenError, NotFoundError } from "../lib/errors";
 import { idempotency } from "../lib/idempotency";
 import { parseBody, schemas } from "../lib/validate";
-
-import type { Env } from "../lib/env";
+import { requireRole } from "../middleware/project-auth";
 
 const insights = new Hono<{ Bindings: Env }>();
 insights.use("*", authMiddleware);
@@ -34,11 +33,10 @@ insights.get("/", async (c) => {
   const limit = limitStr ? Number.parseInt(limitStr) : undefined;
   const offset = offsetStr ? Number.parseInt(offsetStr) : undefined;
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   // Verify the user is a member of the project
-  const callerRole = await getMemberRole(db, projectId, user.id);
-  if (!callerRole) throw new NotFoundError("Project not found");
+  await requireRole(db, projectId, user.id);
 
   const result = await listInsights(db, projectId, { type, limit, offset });
   return c.json(result);
@@ -49,12 +47,10 @@ insights.post("/", async (c) => {
   const user = c.get("user");
   const body = await parseBody(c, schemas.createInsight);
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
-  // Verify the user is a member of the project
-  const callerRole = await getMemberRole(db, body.project_id, user.id);
-  if (!callerRole) throw new NotFoundError("Project not found");
-  if (callerRole === "viewer") throw new ForbiddenError("Viewers cannot create insights");
+  // Verify the user is at least an editor on the project
+  await requireRole(db, body.project_id, user.id, "editor");
 
   const insight = await createInsight(db, {
     project_id: body.project_id,
@@ -82,7 +78,7 @@ insights.patch("/:id", async (c) => {
   const insightId = c.req.param("id");
   const body = await parseBody(c, schemas.updateInsight);
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   const existing = await getInsight(db, insightId);
   if (!existing) throw new NotFoundError("Insight not found");
@@ -110,7 +106,7 @@ insights.delete("/:id", async (c) => {
   const user = c.get("user");
   const insightId = c.req.param("id");
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   const existing = await getInsight(db, insightId);
   if (!existing) throw new NotFoundError("Insight not found");
