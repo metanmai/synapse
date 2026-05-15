@@ -5,7 +5,7 @@
 </script>
 
 <div class="flex" style="height: calc(100vh - 49px);">
-  <Sidebar projectName={data.project.name} projects={data.projects} />
+  <Sidebar projectName={data.project.name} />
   <div class="flex-1 overflow-y-auto">
     {@render children()}
   </div>
