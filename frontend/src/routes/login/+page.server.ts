@@ -32,12 +32,18 @@ export const actions: Actions = {
     redirect(303, redirectTo);
   },
 
-  magicLink: async ({ request, cookies }) => {
+  magicLink: async ({ request, cookies, url }) => {
     const data = await request.formData();
     const email = data.get("email") as string;
+    const redirectTo = url.searchParams.get("redirect") || "/dashboard";
 
     const supabase = getSupabase(cookies);
-    const { error } = await supabase.auth.signInWithOtp({ email });
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${url.origin}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`,
+      },
+    });
 
     if (error) return fail(400, { error: error.message, email });
 
