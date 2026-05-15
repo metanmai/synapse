@@ -2,7 +2,7 @@
   "mcpServers": {
     "synapse": {
       "command": "node",
-      "args": ["/Users/Tanmai.N/Documents/synapse/mcp/index.js"],
+      "args": ["mcp/index.js"],
       "env": {
         "SYNAPSE_API_KEY": "8ab9a34b-1242-4e47-9b72-c4059c849113-7d30119b-1fe4-4401-827e-140c33a91ce5",
         "SYNAPSE_SOURCE": "claude"
