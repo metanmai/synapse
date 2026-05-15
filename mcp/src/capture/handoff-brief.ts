@@ -36,11 +36,19 @@ function render(s: ProjectStatus, viewer: string): string {
     }
   }
   if (s.open_subtasks.length > 0) {
-    lines.push(`Open subtasks: ${s.open_subtasks.slice(0, 5).map((t) => `[${t.text}]`).join(", ")}`);
+    lines.push(
+      `Open subtasks: ${s.open_subtasks
+        .slice(0, 5)
+        .map((t) => `[${t.text}]`)
+        .join(", ")}`,
+    );
   }
   if (s.open_issues.questions.length > 0) {
     lines.push(
-      `Open questions: ${s.open_issues.questions.slice(0, 3).map((q) => `#${q.number} ${q.title}`).join("; ")}`,
+      `Open questions: ${s.open_issues.questions
+        .slice(0, 3)
+        .map((q) => `#${q.number} ${q.title}`)
+        .join("; ")}`,
     );
   }
   return lines.slice(0, MAX_BRIEF_LINES).join("\n");
