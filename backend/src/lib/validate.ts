@@ -73,34 +73,6 @@ export const schemas = {
     expires_at: z.string().optional(),
   }),
 
-  // Context
-  saveEntry: z.object({
-    project: z.string().min(1, "Project is required"),
-    path: z.string().min(1, "Path is required"),
-    content: z.string().min(1, "Content is required"),
-    tags: z.array(z.string()).optional(),
-    source: z.string().optional(),
-  }),
-
-  sessionSummary: z.object({
-    project: z.string().min(1, "Project is required"),
-    summary: z.string().min(1, "Summary is required"),
-    decisions: z.array(z.string()).optional(),
-    pending: z.array(z.string()).optional(),
-  }),
-
-  saveFile: z.object({
-    project: z.string().min(1, "Project is required"),
-    path: z.string().min(1, "Path is required"),
-    content: z.string().min(1, "Content is required"),
-    content_type: z.enum(["markdown", "json"]).optional(),
-  }),
-
-  restoreEntry: z.object({
-    path: z.string().min(1, "Path is required"),
-    historyId: z.string().min(1, "History ID is required"),
-  }),
-
   // Insights
   createInsight: z.object({
     project_id: z.string().uuid("Valid project ID is required"),
