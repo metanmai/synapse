@@ -55,8 +55,8 @@ create policy "activity_log_read_member" on activity_log for select
 create or replace function handle_new_auth_user()
 returns trigger as $$
 begin
-  insert into public.users (email, api_key_hash, supabase_auth_id)
-  values (new.email, encode(gen_random_bytes(32), 'hex'), new.id);
+  insert into public.users (email, supabase_auth_id)
+  values (new.email, new.id);
   return new;
 end;
 $$ language plpgsql security definer;
