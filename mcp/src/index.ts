@@ -611,7 +611,7 @@ if (args[0] === "login") {
 
   const server = new McpServer({
     name: "synapse",
-    version: "0.2.0",
+    version: "0.3.0",
   });
 
   // --- ls: list files and folders ---
