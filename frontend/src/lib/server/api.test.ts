@@ -217,7 +217,7 @@ describe("API method URL construction", () => {
 describe("API_URL not configured", () => {
   it("throws ApiError(500) when API_URL is empty", async () => {
     // Mock the env module to return empty API_URL, then dynamically re-import
-    vi.doMock("$env/static/private", () => ({ API_URL: "" }));
+    vi.doMock("$env/dynamic/private", () => ({ env: { API_URL: "" } }));
     // vi.resetModules() clears the module cache so the dynamic import picks up the mock
     vi.resetModules();
     const mod = await import("./api");
@@ -230,7 +230,7 @@ describe("API_URL not configured", () => {
       expect((err as InstanceType<typeof mod.ApiError>).status).toBe(500);
       expect((err as InstanceType<typeof mod.ApiError>).message).toContain("API_URL is not configured");
     }
-    vi.doUnmock("$env/static/private");
+    vi.doUnmock("$env/dynamic/private");
   });
 });
 
