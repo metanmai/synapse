@@ -371,47 +371,6 @@
         }
       }
     },
-    "/api/context/save": {
-      "post": {
-        "summary": "Save context entry",
-        "tags": ["Context"],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["project", "path", "content"],
-                "properties": {
-                  "project": { "type": "string" },
-                  "path": { "type": "string" },
-                  "content": { "type": "string" },
-                  "tags": { "type": "array", "items": { "type": "string" } },
-                  "source": {
-                    "type": "string",
-                    "enum": ["human", "claude", "chatgpt", "cursor", "copilot", "windsurf", "google_docs"]
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Entry saved",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/Entry" }
-              }
-            }
-          },
-          "403": {
-            "description": "Tier limit exceeded",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
-          }
-        }
-      }
-    },
     "/api/context/{project}/search": {
       "get": {
         "summary": "Search entries (semantic + full-text + keyword)",
@@ -511,38 +470,6 @@
         }
       }
     },
-    "/api/context/{project}/restore": {
-      "post": {
-        "summary": "Restore version",
-        "tags": ["Context"],
-        "parameters": [{ "name": "project", "in": "path", "required": true, "schema": { "type": "string" } }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["path", "historyId"],
-                "properties": {
-                  "path": { "type": "string" },
-                  "historyId": { "type": "string", "format": "uuid" }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Entry restored",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/Entry" }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/context/{project}/{path}": {
       "get": {
         "summary": "Get entry by path",
@@ -563,27 +490,6 @@
           "404": {
             "description": "Entry not found",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
-          }
-        }
-      },
-      "delete": {
-        "summary": "Delete entry",
-        "tags": ["Context"],
-        "parameters": [
-          { "name": "project", "in": "path", "required": true, "schema": { "type": "string" } },
-          { "name": "path", "in": "path", "required": true, "schema": { "type": "string" } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Entry deleted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": { "ok": { "type": "boolean" } }
-                }
-              }
-            }
           }
         }
       }

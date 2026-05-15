@@ -196,11 +196,6 @@ export async function countUniqueConnections(db: SupabaseClient, projectId: stri
   return uniqueSources.size;
 }
 
-export async function deleteEntry(db: SupabaseClient, projectId: string, path: string): Promise<void> {
-  const { error } = await db.from("entries").delete().eq("project_id", projectId).eq("path", path);
-  if (error) throw error;
-}
-
 export async function getEntryHistory(db: SupabaseClient, projectId: string, path: string): Promise<EntryHistory[]> {
   // First get the entry ID
   const { data: entry } = await db.from("entries").select("id").eq("project_id", projectId).eq("path", path).single();
@@ -214,49 +209,6 @@ export async function getEntryHistory(db: SupabaseClient, projectId: string, pat
     .order("changed_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as EntryHistory[];
-}
-
-export async function restoreEntry(
-  db: SupabaseClient,
-  projectId: string,
-  path: string,
-  historyId: string,
-): Promise<Entry | null> {
-  // Get the history record
-  const { data: historyRecord, error: histError } = await db
-    .from("entry_history")
-    .select("*")
-    .eq("id", historyId)
-    .single();
-  if (histError) throw histError;
-  if (!historyRecord) return null;
-
-  // Upsert restores the content (upsertEntry handles versioning)
-  const { data: existing } = await db
-    .from("entries")
-    .select(ENTRY_COLUMNS)
-    .eq("project_id", projectId)
-    .eq("path", path)
-    .single();
-
-  if (!existing) return null;
-
-  // Save current to history
-  await db.from("entry_history").insert({
-    entry_id: existing.id,
-    content: existing.content,
-    source: existing.source,
-  });
-
-  // Restore old content
-  const { data, error } = await db
-    .from("entries")
-    .update({ content: historyRecord.content, source: "human" })
-    .eq("id", existing.id)
-    .select(ENTRY_COLUMNS)
-    .single();
-  if (error) throw error;
-  return data as Entry;
 }
 
 export async function updateEmbedding(db: SupabaseClient, entryId: string, embedding: number[]): Promise<void> {
