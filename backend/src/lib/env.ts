@@ -41,6 +41,11 @@ export interface Env {
   // Embedding service (optional — semantic search degrades gracefully without it)
   EMBEDDING_SERVICE_URL?: string;
   EMBEDDING_SERVICE_KEY?: string;
+
+  // Compaction (optional — server-side conversation summarisation)
+  COMPACTION_LLM_KEY?: string;
+  COMPACTION_LLM_MODEL?: string;
+  COMPACTION_SCHEDULER: DurableObjectNamespace;
 }
 
 // Helper to read env with defaults
