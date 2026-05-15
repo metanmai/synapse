@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { singleOrNull } from "../../src/db/query-helpers";
 
+function mockError(code: string, message: string) {
+  return { name: "PostgrestError", code, message, details: "", hint: "", toJSON: () => ({}) };
+}
+
 describe("singleOrNull", () => {
   it("returns data when query succeeds", () => {
     const result = singleOrNull({
@@ -9,18 +13,19 @@ describe("singleOrNull", () => {
       count: null,
       status: 200,
       statusText: "OK",
-    });
+      success: true,
+    } as Parameters<typeof singleOrNull>[0]);
     expect(result).toEqual({ id: "123", email: "test@test.com" });
   });
 
   it("returns null when no rows found (PGRST116)", () => {
     const result = singleOrNull({
       data: null,
-      error: { name: "PostgrestError", code: "PGRST116", message: "No rows found", details: "", hint: "" },
+      error: mockError("PGRST116", "No rows found"),
       count: null,
       status: 406,
       statusText: "Not Acceptable",
-    });
+    } as Parameters<typeof singleOrNull>[0]);
     expect(result).toBeNull();
   });
 
@@ -28,17 +33,11 @@ describe("singleOrNull", () => {
     expect(() =>
       singleOrNull({
         data: null,
-        error: {
-          name: "PostgrestError",
-          code: "42P01",
-          message: 'relation "users" does not exist',
-          details: "",
-          hint: "",
-        },
+        error: mockError("42P01", 'relation "users" does not exist'),
         count: null,
         status: 400,
         statusText: "Bad Request",
-      }),
+      } as Parameters<typeof singleOrNull>[0]),
     ).toThrow('relation "users" does not exist');
   });
 
@@ -46,17 +45,11 @@ describe("singleOrNull", () => {
     expect(() =>
       singleOrNull({
         data: null,
-        error: {
-          name: "PostgrestError",
-          code: "42501",
-          message: "permission denied for table users",
-          details: "",
-          hint: "",
-        },
+        error: mockError("42501", "permission denied for table users"),
         count: null,
         status: 403,
         statusText: "Forbidden",
-      }),
+      } as Parameters<typeof singleOrNull>[0]),
     ).toThrow("permission denied for table users");
   });
 
@@ -64,11 +57,11 @@ describe("singleOrNull", () => {
     expect(() =>
       singleOrNull({
         data: null,
-        error: { name: "PostgrestError", code: "08001", message: "could not connect to server", details: "", hint: "" },
+        error: mockError("08001", "could not connect to server"),
         count: null,
         status: 500,
         statusText: "Internal Server Error",
-      }),
+      } as Parameters<typeof singleOrNull>[0]),
     ).toThrow("could not connect to server");
   });
 });
