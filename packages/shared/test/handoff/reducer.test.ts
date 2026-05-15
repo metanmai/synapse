@@ -70,4 +70,31 @@ describe("reducer", () => {
     const s = reduce(events, "p", { now });
     expect(s.active_actors[0]?.activity_state).toBe("idle");
   });
+
+  it("aggregates open subtasks from subtask_added / subtask_completed events", () => {
+    const events = [
+      ev({ kind: EventKind.SubtaskAdded, payload: { task_id: "t1", text: "Wire callback" } }),
+      ev({ kind: EventKind.SubtaskAdded, payload: { task_id: "t2", text: "Write test" } }),
+      ev({ kind: EventKind.SubtaskCompleted, payload: { task_id: "t1" } }),
+    ];
+    const s = reduce(events, "p");
+    expect(s.open_subtasks.map((t) => t.text)).toEqual(["Write test"]);
+  });
+
+  it("issues created via events appear in open_issues by kind", () => {
+    const events = [
+      ev({
+        kind: EventKind.IssueCreated,
+        payload: { id: "i1", number: 1, kind: "decision", title: "Use JWT lib", body: "" },
+      }),
+      ev({
+        kind: EventKind.IssueCreated,
+        payload: { id: "i2", number: 2, kind: "question", title: "PKCE?", body: "" },
+      }),
+      ev({ kind: EventKind.IssueStateChanged, payload: { id: "i1", state: "resolved" } }),
+    ];
+    const s = reduce(events, "p");
+    expect(s.open_issues.questions.map((i) => i.title)).toEqual(["PKCE?"]);
+    expect(s.open_issues.decisions).toEqual([]);
+  });
 });
