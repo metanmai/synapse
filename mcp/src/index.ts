@@ -84,14 +84,14 @@ function printHelp(): void {
     s("-v, --version", "Show version"),
     "",
     bold("MCP server"),
-    `  Runs automatically when stdin is not a TTY and SYNAPSE_API_KEY is set.`,
+    "  Runs automatically when stdin is not a TTY and SYNAPSE_API_KEY is set.",
     "",
     bold("Web app"),
     `  ${accent("synapsesync.app")}            Dashboard, file browser, settings`,
     `  ${accent("synapsesync.app/account")}    API keys, billing, connected accounts`,
     "",
-    muted(`Made by @metanmai \u00B7 github.com/metanmai/synapse`),
-    muted(`Star the repo or sponsor: github.com/sponsors/metanmai`),
+    muted("Made by @metanmai \u00B7 github.com/metanmai/synapse"),
+    muted("Star the repo or sponsor: github.com/sponsors/metanmai"),
     "",
   ];
 
