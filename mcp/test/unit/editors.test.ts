@@ -168,17 +168,17 @@ describe("editors", () => {
       expect(mcpJson.mcpServers).toBeDefined();
       expect(mcpJson.mcpServers.synapse).toBeDefined();
       expect(mcpJson.mcpServers.synapse.command).toBe("npx");
-      expect(mcpJson.mcpServers.synapse.args).toEqual(["synapsesync-mcp"]);
+      expect(mcpJson.mcpServers.synapse.args).toEqual(["synapsesync"]);
       expect(mcpJson.mcpServers.synapse.env.SYNAPSE_API_KEY).toBe("sk-test-key");
     });
 
-    it("written files contain synapsesync-mcp in mcpServers", () => {
+    it("written files contain synapsesync in mcpServers", () => {
       const editors = detectEditors("local");
       const generic = editors.filter((e) => e.id === "generic");
       writeEditorConfigs(generic, "sk-key-123");
 
       const content = fs.readFileSync(path.join(tmpDir, ".mcp.json"), "utf-8");
-      expect(content).toContain("synapsesync-mcp");
+      expect(content).toContain("synapsesync");
     });
 
     it("returns written file list and empty errors array on success", () => {
@@ -235,7 +235,7 @@ describe("editors", () => {
       expect(fs.existsSync(filePath)).toBe(true);
       const content = JSON.parse(fs.readFileSync(filePath, "utf-8"));
       expect(content.mcpServers.synapse.command).toBe("npx");
-      expect(content.mcpServers.synapse.args).toEqual(["synapsesync-mcp"]);
+      expect(content.mcpServers.synapse.args).toEqual(["synapsesync"]);
       expect(content.mcpServers.synapse.env.SYNAPSE_API_KEY).toBe("sk-new-key");
     });
 
@@ -528,11 +528,11 @@ describe("editors", () => {
       expect(result.apiKeys).toEqual([]);
     });
 
-    it("detects .mcp.json with synapsesync-mcp entry", () => {
+    it("detects .mcp.json with synapsesync entry", () => {
       fs.writeFileSync(
         path.join(tmpDir, ".mcp.json"),
         JSON.stringify({
-          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: "sk-found" } } },
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync"], env: { SYNAPSE_API_KEY: "sk-found" } } },
         }),
       );
 
@@ -541,13 +541,13 @@ describe("editors", () => {
       expect(labels(result)).toContain(".mcp.json");
     });
 
-    it("detects .cursor/mcp.json with synapsesync-mcp entry", () => {
+    it("detects .cursor/mcp.json with synapsesync entry", () => {
       const cursorDir = path.join(tmpDir, ".cursor");
       fs.mkdirSync(cursorDir, { recursive: true });
       fs.writeFileSync(
         path.join(cursorDir, "mcp.json"),
         JSON.stringify({
-          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: "sk-cursor" } } },
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync"], env: { SYNAPSE_API_KEY: "sk-cursor" } } },
         }),
       );
 
@@ -561,7 +561,7 @@ describe("editors", () => {
         path.join(tmpDir, ".mcp.json"),
         JSON.stringify({
           mcpServers: {
-            synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: "sk-extracted-key" } },
+            synapse: { command: "npx", args: ["synapsesync"], env: { SYNAPSE_API_KEY: "sk-extracted-key" } },
           },
         }),
       );
@@ -575,7 +575,7 @@ describe("editors", () => {
       fs.writeFileSync(
         path.join(tmpDir, ".mcp.json"),
         JSON.stringify({
-          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: "sk-local" } } },
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync"], env: { SYNAPSE_API_KEY: "sk-local" } } },
         }),
       );
       // Global ~/.claude/.mcp.json has key B
@@ -584,7 +584,7 @@ describe("editors", () => {
       fs.writeFileSync(
         path.join(claudeDir, ".mcp.json"),
         JSON.stringify({
-          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: "sk-global" } } },
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync"], env: { SYNAPSE_API_KEY: "sk-global" } } },
         }),
       );
 
@@ -599,7 +599,7 @@ describe("editors", () => {
       fs.writeFileSync(
         path.join(tmpDir, ".mcp.json"),
         JSON.stringify({
-          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: sameKey } } },
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync"], env: { SYNAPSE_API_KEY: sameKey } } },
         }),
       );
       const cursorDir = path.join(tmpDir, ".cursor");
@@ -607,7 +607,7 @@ describe("editors", () => {
       fs.writeFileSync(
         path.join(cursorDir, "mcp.json"),
         JSON.stringify({
-          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: sameKey } } },
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync"], env: { SYNAPSE_API_KEY: sameKey } } },
         }),
       );
 
@@ -648,7 +648,7 @@ describe("editors", () => {
       fs.writeFileSync(
         path.join(tmpDir, ".mcp.json"),
         JSON.stringify({
-          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: "sk-test" } } },
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync"], env: { SYNAPSE_API_KEY: "sk-test" } } },
         }),
       );
 
@@ -663,7 +663,7 @@ describe("editors", () => {
       fs.writeFileSync(
         path.join(tmpDir, ".mcp.json"),
         JSON.stringify({
-          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: {} } },
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync"], env: {} } },
         }),
       );
 
@@ -706,7 +706,7 @@ describe("editors", () => {
       fs.writeFileSync(
         path.join(tmpDir, ".mcp.json"),
         JSON.stringify({
-          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: "sk-good" } } },
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync"], env: { SYNAPSE_API_KEY: "sk-good" } } },
         }),
       );
       // .cursor/mcp.json has synapse but no key
@@ -715,7 +715,7 @@ describe("editors", () => {
       fs.writeFileSync(
         path.join(cursorDir, "mcp.json"),
         JSON.stringify({
-          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: {} } },
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync"], env: {} } },
         }),
       );
       // CLAUDE.md has instructions
@@ -742,7 +742,7 @@ describe("editors", () => {
       fs.writeFileSync(
         path.join(tmpDir, ".mcp.json"),
         JSON.stringify({
-          mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: "sk-x" } } },
+          mcpServers: { synapse: { command: "npx", args: ["synapsesync"], env: { SYNAPSE_API_KEY: "sk-x" } } },
         }),
       );
 

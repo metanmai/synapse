@@ -1,10 +1,10 @@
 {
-  "name": "synapsesync-mcp",
+  "name": "synapsesync",
   "version": "0.8.0",
-  "description": "MCP server for Synapse — capture AI sessions, distill knowledge, remember everything",
+  "description": "SynapseSync — capture AI sessions, distill knowledge, remember everything (MCP + CLI)",
   "main": "dist/index.js",
   "bin": {
-    "synapsesync-mcp": "dist/index.js"
+    "synapsesync": "dist/index.js"
   },
   "scripts": {
     "build": "tsc && node ./scripts/add-shebang.mjs",

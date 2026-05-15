@@ -44,7 +44,7 @@ export async function runStats(): Promise<void> {
   const existing = detectExistingSetup();
   if (existing.apiKeys.length === 0) {
     clack.log.error("No API key found. Run the setup wizard first:");
-    clack.log.message(`  ${accent("synapsesync-mcp wizard")}`);
+    clack.log.message(`  ${accent("synapsesync wizard")}`);
     process.exit(1);
   }
 
@@ -64,7 +64,7 @@ export async function runStats(): Promise<void> {
   if (!apiKey) {
     spin.stop(themeError("API key expired or invalid"));
     clack.log.error("Sign in again:");
-    clack.log.message(`  ${accent("synapsesync-mcp wizard")}`);
+    clack.log.message(`  ${accent("synapsesync wizard")}`);
     process.exit(1);
   }
 

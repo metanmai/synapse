@@ -1,8 +1,8 @@
-# synapsesync-mcp
+# synapsesync
 
 **Model Context Protocol (MCP) server for [Synapse](https://synapsesync.app)** — shared AI context as files in a cloud workspace, available from Claude, Cursor, Windsurf, VS Code, and other MCP-capable tools.
 
-[![npm version](https://img.shields.io/npm/v/synapsesync-mcp.svg)](https://www.npmjs.com/package/synapsesync-mcp)
+[![npm version](https://img.shields.io/npm/v/synapsesync.svg)](https://www.npmjs.com/package/synapsesync)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 ## What you get
@@ -16,7 +16,7 @@ The published package talks to the public API at **`https://api.synapsesync.app`
 ### 1. Install
 
 ```bash
-npm install -g synapsesync-mcp
+npm install -g synapsesync
 ```
 
 ### 2. Commands & help
@@ -24,8 +24,8 @@ npm install -g synapsesync-mcp
 From your project directory:
 
 ```bash
-synapsesync-mcp               # lists commands (interactive terminal)
-synapsesync-mcp --help
+synapsesync               # lists commands (interactive terminal)
+synapsesync --help
 ```
 
 ### 3. Interactive setup (recommended)
@@ -33,7 +33,7 @@ synapsesync-mcp --help
 Use **arrow keys** and **Enter** in menus (powered by [@clack/prompts](https://github.com/bombshell-dev/clack)).
 
 ```bash
-synapsesync-mcp wizard        # menu: sign up, log in, or paste API key
+synapsesync wizard        # menu: sign up, log in, or paste API key
 ```
 
 These write **`.mcp.json`** and, when detected, editor-specific files for Claude Code, Cursor, Windsurf, or VS Code. **Editors** launch the same package **without a TTY** and **`SYNAPSE_API_KEY` set** — that starts the MCP server, not the setup UI.
@@ -47,7 +47,7 @@ Create or extend your MCP configuration (e.g. Cursor **`.cursor/mcp.json`**, Cla
   "mcpServers": {
     "synapse": {
       "command": "npx",
-      "args": ["synapsesync-mcp"],
+      "args": ["synapsesync"],
       "env": {
         "SYNAPSE_API_KEY": "<your-api-key>"
       }
@@ -60,18 +60,18 @@ Get an API key from **[synapsesync.app](https://synapsesync.app)** → **Account
 
 ## CLI commands
 
-Install once with `npm install -g synapsesync-mcp`, then run `synapsesync-mcp <command>`.
+Install once with `npm install -g synapsesync`, then run `synapsesync <command>`.
 
 | Command | Purpose |
 |--------|---------|
-| `synapsesync-mcp` | In a **TTY**: show interactive menu. With **no TTY** + `SYNAPSE_API_KEY`: MCP server. |
-| `synapsesync-mcp --help` / `-h` / `help` | Show commands and usage. |
-| `synapsesync-mcp wizard` | Interactive menu (signup / login / API key) → writes configs. Requires TTY. |
-| `synapsesync-mcp status` | Show connection health and which editor configs Synapse is configured in. |
-| `synapsesync-mcp refresh` | Rotate the API key and update all editor configs. |
-| `synapsesync-mcp whoami` | Show the signed-in account, tier, and file count. |
-| `synapsesync-mcp reset` | Wipe all workspace data (keeps account + subscription). |
-| `synapsesync-mcp uninstall` | Remove all Synapse configs from this machine. |
+| `synapsesync` | In a **TTY**: show interactive menu. With **no TTY** + `SYNAPSE_API_KEY`: MCP server. |
+| `synapsesync --help` / `-h` / `help` | Show commands and usage. |
+| `synapsesync wizard` | Interactive menu (signup / login / API key) → writes configs. Requires TTY. |
+| `synapsesync status` | Show connection health and which editor configs Synapse is configured in. |
+| `synapsesync refresh` | Rotate the API key and update all editor configs. |
+| `synapsesync whoami` | Show the signed-in account, tier, and file count. |
+| `synapsesync reset` | Wipe all workspace data (keeps account + subscription). |
+| `synapsesync uninstall` | Remove all Synapse configs from this machine. |
 
 ## Environment variables
 
