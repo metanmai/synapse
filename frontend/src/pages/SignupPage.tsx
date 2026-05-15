@@ -15,8 +15,8 @@ export function SignupPage() {
     try {
       await signUpWithEmail(email, password);
       setSuccess(true);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
