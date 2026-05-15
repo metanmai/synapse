@@ -59,7 +59,7 @@ onMount(() => {
     left: 0;
     right: 0;
     z-index: 1000;
-    background: rgba(86, 28, 36, 0.75);
+    background: rgba(86, 28, 36, 0.92);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border-bottom: 1px solid rgba(109, 41, 50, 0.3);
