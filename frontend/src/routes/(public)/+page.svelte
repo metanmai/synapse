@@ -1,16 +1,16 @@
 <script>
-  import LandingNav from "$lib/components/landing/LandingNav.svelte";
-  import Hero from "$lib/components/landing/Hero.svelte";
-  import ToolBar from "$lib/components/landing/ToolBar.svelte";
-  import ProblemSection from "$lib/components/landing/ProblemSection.svelte";
-  import Stats from "$lib/components/landing/Stats.svelte";
-  import HowItWorks from "$lib/components/landing/HowItWorks.svelte";
-  import FeatureCards from "$lib/components/landing/FeatureCards.svelte";
-  import SetupGuide from "$lib/components/landing/SetupGuide.svelte";
-  import Comparison from "$lib/components/landing/Comparison.svelte";
-  import Faq from "$lib/components/landing/Faq.svelte";
-  import CtaSection from "$lib/components/landing/CtaSection.svelte";
-  import LandingFooter from "$lib/components/landing/LandingFooter.svelte";
+import Comparison from "$lib/components/landing/Comparison.svelte";
+import CtaSection from "$lib/components/landing/CtaSection.svelte";
+import Faq from "$lib/components/landing/Faq.svelte";
+import FeatureCards from "$lib/components/landing/FeatureCards.svelte";
+import Hero from "$lib/components/landing/Hero.svelte";
+import HowItWorks from "$lib/components/landing/HowItWorks.svelte";
+import LandingFooter from "$lib/components/landing/LandingFooter.svelte";
+import LandingNav from "$lib/components/landing/LandingNav.svelte";
+import ProblemSection from "$lib/components/landing/ProblemSection.svelte";
+import SetupGuide from "$lib/components/landing/SetupGuide.svelte";
+import Stats from "$lib/components/landing/Stats.svelte";
+import ToolBar from "$lib/components/landing/ToolBar.svelte";
 </script>
 
 <LandingNav />

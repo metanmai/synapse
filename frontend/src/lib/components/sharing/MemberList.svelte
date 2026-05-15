@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
-  import type { ProjectMember } from "$lib/types";
+import { enhance } from "$app/forms";
+import type { ProjectMember } from "$lib/types";
 
-  let { members, projectId } = $props<{ members: ProjectMember[]; projectId: string }>();
+let { members, projectId } = $props<{ members: ProjectMember[]; projectId: string }>();
 </script>
 
 <div class="space-y-2">

@@ -1,7 +1,7 @@
-import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { Env } from "../lib/env";
+import { type McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createSupabaseClient } from "../db/client";
-import { listEntries, getEntry } from "../db/queries/entries";
+import { getEntry, listEntries } from "../db/queries/entries";
+import type { Env } from "../lib/env";
 
 export function registerResources(server: McpServer, env: Env) {
   // Resource templates for project tree and individual entries
@@ -15,11 +15,7 @@ export function registerResources(server: McpServer, env: Env) {
 
       // Note: resource access doesn't have auth context in MCP protocol.
       // For now, list all entries. Auth is handled at the transport level.
-      const { data: proj } = await db
-        .from("projects")
-        .select("id")
-        .eq("name", project)
-        .single();
+      const { data: proj } = await db.from("projects").select("id").eq("name", project).single();
 
       if (!proj) {
         return { contents: [{ uri: uri.href, mimeType: "text/plain", text: "Project not found" }] };
@@ -31,7 +27,7 @@ export function registerResources(server: McpServer, env: Env) {
       return {
         contents: [{ uri: uri.href, mimeType: "text/plain", text: tree }],
       };
-    }
+    },
   );
 
   // Resource template for individual entry content
@@ -45,11 +41,7 @@ export function registerResources(server: McpServer, env: Env) {
       const path = parts.slice(2).join("/");
       const db = createSupabaseClient(env);
 
-      const { data: proj } = await db
-        .from("projects")
-        .select("id")
-        .eq("name", project)
-        .single();
+      const { data: proj } = await db.from("projects").select("id").eq("name", project).single();
 
       if (!proj) {
         return { contents: [{ uri: uri.href, mimeType: "text/plain", text: "Project not found" }] };
@@ -61,12 +53,14 @@ export function registerResources(server: McpServer, env: Env) {
       }
 
       return {
-        contents: [{
-          uri: uri.href,
-          mimeType: entry.content_type === "json" ? "application/json" : "text/markdown",
-          text: entry.content,
-        }],
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: entry.content_type === "json" ? "application/json" : "text/markdown",
+            text: entry.content,
+          },
+        ],
       };
-    }
+    },
   );
 }

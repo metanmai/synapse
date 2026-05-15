@@ -1,22 +1,22 @@
 <script>
-  import ScrollReveal from "./ScrollReveal.svelte";
+import ScrollReveal from "./ScrollReveal.svelte";
 
-  let copied = $state(false);
-  let selectedTool = $state("claude-code");
+let copied = $state(false);
+let selectedTool = $state("claude-code");
 
-  const tools = [
-    {
-      id: "claude-code",
-      name: "Claude Code",
-      method: "cli",
-      command: `claude mcp add synapse npx synapsesync-mcp --env SYNAPSE_API_KEY=your-key`,
-      hint: "Run this in your terminal. Done in one command.",
-    },
-    {
-      id: "cursor",
-      name: "Cursor",
-      method: "json",
-      config: `{
+const tools = [
+  {
+    id: "claude-code",
+    name: "Claude Code",
+    method: "cli",
+    command: `claude mcp add synapse npx synapsesync-mcp --env SYNAPSE_API_KEY=your-key`,
+    hint: "Run this in your terminal. Done in one command.",
+  },
+  {
+    id: "cursor",
+    name: "Cursor",
+    method: "json",
+    config: `{
   "mcpServers": {
     "synapse": {
       "command": "npx",
@@ -27,14 +27,14 @@
     }
   }
 }`,
-      file: ".cursor/mcp.json",
-      hint: "Create this file in your project root.",
-    },
-    {
-      id: "windsurf",
-      name: "Windsurf",
-      method: "json",
-      config: `{
+    file: ".cursor/mcp.json",
+    hint: "Create this file in your project root.",
+  },
+  {
+    id: "windsurf",
+    name: "Windsurf",
+    method: "json",
+    config: `{
   "mcpServers": {
     "synapse": {
       "command": "npx",
@@ -45,14 +45,14 @@
     }
   }
 }`,
-      file: "~/.codeium/windsurf/mcp_config.json",
-      hint: "Add to your Windsurf MCP config.",
-    },
-    {
-      id: "vscode",
-      name: "VS Code",
-      method: "json",
-      config: `{
+    file: "~/.codeium/windsurf/mcp_config.json",
+    hint: "Add to your Windsurf MCP config.",
+  },
+  {
+    id: "vscode",
+    name: "VS Code",
+    method: "json",
+    config: `{
   "mcp": {
     "servers": {
       "synapse": {
@@ -65,14 +65,14 @@
     }
   }
 }`,
-      file: ".vscode/settings.json",
-      hint: "Add to your VS Code settings. Requires the MCP extension.",
-    },
-    {
-      id: "generic",
-      name: "Other MCP Client",
-      method: "json",
-      config: `{
+    file: ".vscode/settings.json",
+    hint: "Add to your VS Code settings. Requires the MCP extension.",
+  },
+  {
+    id: "generic",
+    name: "Other MCP Client",
+    method: "json",
+    config: `{
   "mcpServers": {
     "synapse": {
       "command": "npx",
@@ -83,19 +83,19 @@
     }
   }
 }`,
-      file: ".mcp.json",
-      hint: "Standard MCP config. Works with any MCP-compatible tool.",
-    },
-  ];
+    file: ".mcp.json",
+    hint: "Standard MCP config. Works with any MCP-compatible tool.",
+  },
+];
 
-  const currentTool = $derived(tools.find((t) => t.id === selectedTool) ?? tools[0]);
+const currentTool = $derived(tools.find((t) => t.id === selectedTool) ?? tools[0]);
 
-  async function copySnippet() {
-    const text = currentTool.method === "cli" ? currentTool.command : currentTool.config;
-    await navigator.clipboard.writeText(text);
-    copied = true;
-    setTimeout(() => (copied = false), 2000);
-  }
+async function copySnippet() {
+  const text = currentTool.method === "cli" ? currentTool.command : currentTool.config;
+  await navigator.clipboard.writeText(text);
+  copied = true;
+  setTimeout(() => (copied = false), 2000);
+}
 </script>
 
 <section class="setup">
