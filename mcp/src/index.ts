@@ -250,6 +250,10 @@ async function handleCli(raw: string[]): Promise<void> {
     await runReset();
     process.exit(0);
   }
+  if (cmd === "wizard") {
+    await runWizard(readPackageVersion());
+    process.exit(0);
+  }
 
   if (cmd === "capture") {
     await runCapture(raw.slice(1));
@@ -348,7 +352,7 @@ if (!isMcpServerMode(args)) {
 
   if (!API_KEY) {
     console.error(
-      "SYNAPSE_API_KEY is required. In a terminal: npx synapsesync-mcp --help  then  npx synapsesync-mcp login  or  npx synapsesync-mcp init",
+      "SYNAPSE_API_KEY is required. Install: npm install -g synapsesync-mcp, then run: synapsesync-mcp wizard",
     );
     process.exit(1);
   }

@@ -44,7 +44,7 @@ function captureHelp(): void {
       `  ${accent("hook-uninstall")}   Remove Claude Code hook`,
     ].join("\n"),
   );
-  clack.outro(muted("npx synapsesync-mcp capture <command>"));
+  clack.outro(muted("synapsesync-mcp capture <command>"));
 }
 
 function startCapture(): void {
@@ -132,7 +132,7 @@ function listCaptures(): void {
   const sessions = store.list();
   if (sessions.length === 0) {
     clack.log.info("No captured sessions yet.");
-    clack.log.message(muted(`  Run ${accent("npx synapsesync-mcp capture start")} to begin.`));
+    clack.log.message(muted(`  Run ${accent("synapsesync-mcp capture start")} to begin.`));
     clack.outro(muted("synapsesync.app"));
     return;
   }
