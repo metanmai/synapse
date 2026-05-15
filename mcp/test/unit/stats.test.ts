@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock dependencies before importing the module under test
-vi.mock("../../src/cli/editors/index.js", () => ({
+vi.mock("../../src/cli/editors.js", () => ({
   detectExistingSetup: vi.fn(),
 }));
 vi.mock("../../src/cli/api.js", () => ({
@@ -25,7 +25,7 @@ vi.mock("../../src/cli/theme.js", () => ({
 
 import * as clack from "@clack/prompts";
 import { validateApiKey } from "../../src/cli/api.js";
-import { detectExistingSetup } from "../../src/cli/editors/index.js";
+import { detectExistingSetup } from "../../src/cli/editors.js";
 import { runStats } from "../../src/cli/stats.js";
 
 // --- Helper to build Response-like objects ---

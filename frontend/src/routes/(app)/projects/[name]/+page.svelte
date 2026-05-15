@@ -149,12 +149,14 @@ function closePanel() {
         style="color: var(--color-text-muted); font-size: 10px;">Files</span>
       <div class="flex items-center gap-2">
         <button onclick={() => startNew()}
+          aria-label="New file"
           class="cursor-pointer"
           style="font-size: 14px; width: 24px; height: 24px; border-radius: 6px; border: none; background: transparent; color: var(--color-text-muted); cursor: pointer; transition: all 150ms ease; display: flex; align-items: center; justify-content: center; line-height: 1;"
           onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
           onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
           title="New file">+</button>
         <button onclick={() => importInput?.click()}
+          aria-label="Import zip"
           class="cursor-pointer"
           style="font-size: 12px; width: 24px; height: 24px; border-radius: 6px; border: none; background: transparent; color: var(--color-text-muted); cursor: pointer; transition: all 150ms ease; display: flex; align-items: center; justify-content: center; line-height: 1;"
           onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
@@ -168,8 +170,16 @@ function closePanel() {
   </div>
 
   <!-- Resize handle -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div onmousedown={onDragStart}
+  <div
+    role="separator"
+    aria-label="Resize sidebar"
+    aria-orientation="vertical"
+    tabindex="0"
+    onmousedown={onDragStart}
+    onkeydown={(e) => {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); sidebarWidth = Math.max(sidebarWidth - 10, 140); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); sidebarWidth = Math.min(sidebarWidth + 10, 500); }
+    }}
     class="w-1.5 rounded-full shrink-0 cursor-col-resize hover:opacity-100 transition-opacity"
     style="background-color: {dragging ? 'var(--color-pink)' : 'transparent'}; opacity: {dragging ? 1 : 0.5};"
     onmouseenter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-pink)'}
@@ -211,11 +221,11 @@ function closePanel() {
     {/if}
 
     {#if form?.error}
-      <p class="mt-4 text-sm" style="color: var(--color-danger);">{form.error}</p>
+      <p class="mt-4 text-sm" role="alert" style="color: var(--color-danger);">{form.error}</p>
     {/if}
 
     {#if form?.importResult}
-      <div class="rounded-lg p-3 text-sm mt-4"
+      <div class="rounded-lg p-3 text-sm mt-4" role="status"
         style="background-color: var(--color-success-bg); color: var(--color-success);">
         Import complete: {form.importResult.imported} new, {form.importResult.updated} updated, {form.importResult.skipped} skipped
       </div>
