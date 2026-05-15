@@ -159,7 +159,7 @@ billing.post("/portal", async (c) => {
 
   const sub = await getSubscriptionByUserId(db, user.id);
   if (!sub?.provider_customer_id) {
-    throw new AppError("No billing account found. Subscribe to Pro first.", 400, "VALIDATION_ERROR");
+    throw new AppError("No billing account found. Subscribe to Plus first.", 400, "VALIDATION_ERROR");
   }
 
   const result = await creemRequest<{ customer_portal_url: string }>(c.env, "POST", "/customers/billing", {

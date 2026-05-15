@@ -1,6 +1,6 @@
 // --- Core domain types shared by backend, frontend, and MCP ---
 
-export type Tier = "free" | "pro";
+export type Tier = "free" | "plus";
 
 export interface User {
   id: string;

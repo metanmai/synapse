@@ -10,21 +10,21 @@ describe("getTierLimitsFromEnv", () => {
     expect(limits.free.maxMembers).toBe(2);
   });
 
-  it("returns default pro tier limits", () => {
+  it("returns default plus tier limits", () => {
     const limits = getTierLimitsFromEnv();
-    expect(limits.pro.maxFiles).toBe(500);
-    expect(limits.pro.maxConnections).toBe(0);
-    expect(limits.pro.maxHistoryVersions).toBe(-1);
-    expect(limits.pro.maxMembers).toBe(0);
+    expect(limits.plus.maxFiles).toBe(500);
+    expect(limits.plus.maxConnections).toBe(0);
+    expect(limits.plus.maxHistoryVersions).toBe(-1);
+    expect(limits.plus.maxMembers).toBe(0);
   });
 
   it("respects env var overrides", () => {
     const limits = getTierLimitsFromEnv({
       TIER_FREE_MAX_FILES: "100",
-      TIER_PRO_MAX_FILES: "1000",
+      TIER_PLUS_MAX_FILES: "1000",
     });
     expect(limits.free.maxFiles).toBe(100);
-    expect(limits.pro.maxFiles).toBe(1000);
+    expect(limits.plus.maxFiles).toBe(1000);
     // Non-overridden values keep defaults
     expect(limits.free.maxConnections).toBe(3);
   });
