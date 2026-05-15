@@ -24,7 +24,7 @@ import { AppError, ForbiddenError, NotFoundError } from "../lib/errors";
 import { buildProjectZip } from "../lib/export";
 import { idempotency } from "../lib/idempotency";
 import { importEntries, parseZipEntries } from "../lib/import";
-import { enforceMemberLimit } from "../lib/tier";
+import { enforceMemberLimit, requirePlus } from "../lib/tier";
 import { getTierLimits } from "../lib/tier";
 
 import type { Env } from "../lib/env";
@@ -130,8 +130,10 @@ projects.put("/preferences/:project", async (c) => {
   return c.json(prefs);
 });
 
-// POST /api/projects/:id/share-links
+// POST /api/projects/:id/share-links (Plus only — free tier uses email invites)
 projects.post("/:id/share-links", async (c) => {
+  requirePlus(c, "Share links");
+
   const user = c.get("user");
   const projectId = c.req.param("id");
   const { role, expires_at } = await c.req.json();
