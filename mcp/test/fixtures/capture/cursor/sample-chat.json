@@ -1,0 +1,43 @@
+{
+  "version": 3,
+  "requests": [
+    {
+      "requestId": "req_001",
+      "message": {
+        "text": "explain the auth middleware",
+        "parts": [{ "range": { "start": 0, "endExclusive": 27 }, "text": "explain the auth middleware", "kind": "text" }]
+      },
+      "response": [
+        { "value": "The auth middleware validates JWT tokens on every incoming request. It extracts the token from the Authorization header, verifies it against the secret, and attaches the decoded user to req.user." }
+      ],
+      "result": {
+        "timings": { "firstProgress": 500, "totalElapsed": 1200 },
+        "metadata": { "sessionId": "ses_cursor_001", "agentId": "github.copilot" }
+      },
+      "timestamp": 1743588000000,
+      "agent": { "id": "github.copilot" },
+      "modelId": "gpt-4.1"
+    },
+    {
+      "requestId": "req_002",
+      "message": {
+        "text": "refactor it to use session cookies instead",
+        "parts": [{ "range": { "start": 0, "endExclusive": 42 }, "text": "refactor it to use session cookies instead", "kind": "text" }]
+      },
+      "response": [
+        { "value": "I'll refactor the auth middleware to use session cookies. Here's the updated code..." }
+      ],
+      "result": {
+        "timings": { "firstProgress": 300, "totalElapsed": 900 },
+        "metadata": { "sessionId": "ses_cursor_001", "agentId": "github.copilot" }
+      },
+      "timestamp": 1743588060000,
+      "agent": { "id": "github.copilot" },
+      "modelId": "gpt-4.1"
+    }
+  ],
+  "sessionId": "ses_cursor_001",
+  "creationDate": 1743588000000,
+  "lastMessageDate": 1743588060000,
+  "isImported": false
+}
