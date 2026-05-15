@@ -24,8 +24,3 @@ export async function getSignedUrl(db: SupabaseClient, storagePath: string): Pro
   return data.signedUrl;
 }
 
-export async function deleteMedia(db: SupabaseClient, storagePaths: string[]): Promise<void> {
-  if (storagePaths.length === 0) return;
-  const { error } = await db.storage.from(MEDIA_BUCKET).remove(storagePaths);
-  if (error) throw error;
-}

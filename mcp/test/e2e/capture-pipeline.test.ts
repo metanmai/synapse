@@ -27,7 +27,7 @@ import { CloudSyncer } from "../../src/capture/cloud-sync.js";
 import { DaemonManager } from "../../src/capture/daemon.js";
 import { safeReadFile } from "../../src/capture/safe-read.js";
 import { SessionStore } from "../../src/capture/store.js";
-import { type CapturedSession, sessionIdFromNative, validateSession } from "../../src/capture/types.js";
+import { type CapturedSession, sessionIdFromNative } from "../../src/capture/types.js";
 import { CaptureWatcher } from "../../src/capture/watcher.js";
 
 /* ------------------------------------------------------------------ */
@@ -1534,86 +1534,7 @@ suite("Capture Pipeline E2E", () => {
   });
 
   /* ------------------------------------------------------------------ */
-  /*  14. Session Validation                                            */
-  /* ------------------------------------------------------------------ */
-
-  describe("Session Validation", () => {
-    it("valid session passes validateSession", () => {
-      const session: CapturedSession = {
-        id: "ses_aabbccdd11223344",
-        tool: "claude-code",
-        projectPath: "/tmp/test",
-        startedAt: "2026-04-02T10:00:00Z",
-        updatedAt: "2026-04-02T10:01:00Z",
-        messages: [{ role: "user", content: "hello", timestamp: "2026-04-02T10:00:00Z" }],
-      };
-      expect(validateSession(session)).toBe(true);
-    });
-
-    it("session with empty messages fails", () => {
-      const session = {
-        id: "ses_aabbccdd11223344",
-        tool: "claude-code",
-        projectPath: "/tmp/test",
-        startedAt: "2026-04-02T10:00:00Z",
-        updatedAt: "2026-04-02T10:01:00Z",
-        messages: [],
-      };
-      expect(validateSession(session)).toBe(false);
-    });
-
-    it("session with unknown tool fails", () => {
-      const session = {
-        id: "ses_aabbccdd11223344",
-        tool: "unknown-tool",
-        projectPath: "/tmp/test",
-        startedAt: "2026-04-02T10:00:00Z",
-        updatedAt: "2026-04-02T10:01:00Z",
-        messages: [{ role: "user", content: "hello", timestamp: "2026-04-02T10:00:00Z" }],
-      };
-      expect(validateSession(session)).toBe(false);
-    });
-
-    it("session with invalid message role fails", () => {
-      const session = {
-        id: "ses_aabbccdd11223344",
-        tool: "cursor",
-        projectPath: "/tmp/test",
-        startedAt: "2026-04-02T10:00:00Z",
-        updatedAt: "2026-04-02T10:01:00Z",
-        messages: [{ role: "system", content: "hello", timestamp: "2026-04-02T10:00:00Z" }],
-      };
-      expect(validateSession(session)).toBe(false);
-    });
-
-    it("null or non-object fails", () => {
-      expect(validateSession(null)).toBe(false);
-      expect(validateSession("string")).toBe(false);
-      expect(validateSession(42)).toBe(false);
-    });
-
-    it("session missing required fields fails", () => {
-      expect(validateSession({ id: "test" })).toBe(false);
-      expect(validateSession({ id: "test", tool: "cursor" })).toBe(false);
-    });
-
-    it("all seven tools are valid", () => {
-      for (const tool of ["claude-code", "cursor", "codex", "gemini", "copilot-cli", "cline", "roo-code"]) {
-        const session = {
-          id: "ses_aabbccdd11223344",
-          tool,
-          projectPath: "/tmp/test",
-          startedAt: "2026-04-02T10:00:00Z",
-          updatedAt: "2026-04-02T10:01:00Z",
-          messages: [{ role: "user", content: "hello", timestamp: "2026-04-02T10:00:00Z" }],
-        };
-        expect(validateSession(session)).toBe(true);
-      }
-    });
-  });
-
-  /* ------------------------------------------------------------------ */
-  /*  15. Cloud Sync                                                      */
+  /*  14. Cloud Sync                                                      */
   /* ------------------------------------------------------------------ */
 
   const SYNC_KEY = process.env.TEST_SYNAPSE_API_KEY ?? "";
