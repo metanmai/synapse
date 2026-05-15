@@ -8,9 +8,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const state = url.searchParams.get("state");
   const port = url.searchParams.get("port");
   const hasCli = Boolean(challenge && state && port);
+  const wantsSwitch = url.searchParams.get("switch") === "1";
 
-  // If user is already authenticated and we have CLI params, create session + redirect
-  if (locals.user && locals.token && hasCli) {
+  // If user is already authenticated, CLI params present, and not switching accounts → auto-redirect
+  if (locals.user && locals.token && hasCli && !wantsSwitch) {
     const res = await fetch(`${API_URL}/auth/cli-session`, {
       method: "POST",
       headers: {
@@ -35,6 +36,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     port,
     hasCli,
     authenticated: Boolean(locals.user),
+    email: locals.user?.email ?? null,
     error: null,
   };
 };
@@ -134,5 +136,16 @@ export const actions: Actions = {
     if (error) return fail(400, { error: error.message, email });
 
     return { signupSuccess: true, email };
+  },
+
+  switchAccount: async ({ request, cookies }) => {
+    const formData = await request.formData();
+    const cli = getCliParams(formData);
+
+    const supabase = getSupabase(cookies);
+    await supabase.auth.signOut();
+
+    // Redirect back with switch=1 stripped (user is now logged out, page will show login form)
+    redirect(303, buildRedirect(cli));
   },
 };
