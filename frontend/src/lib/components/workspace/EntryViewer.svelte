@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { Entry } from "$lib/types";
 
-  let { entry, projectName } = $props<{
+  let { entry, projectName, onEdit } = $props<{
     entry: Entry;
     projectName: string;
+    onEdit: () => void;
   }>();
 </script>
 
@@ -30,10 +31,10 @@
         class="text-sm" style="color: var(--color-text-muted);">
         History
       </a>
-      <a href="/projects/{encodeURIComponent(projectName)}?path={encodeURIComponent(entry.path)}&edit"
-        class="text-sm" style="color: var(--color-accent);">
+      <button onclick={() => onEdit()}
+        class="text-sm cursor-pointer" style="color: var(--color-accent);">
         Edit
-      </a>
+      </button>
     </div>
   </div>
   <div class="rounded-xl p-4 whitespace-pre-wrap font-mono text-sm"
