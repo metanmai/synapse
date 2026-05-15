@@ -1,7 +1,8 @@
 import { Context, Next } from "hono";
 
 import { createSupabaseClient } from "../db/client";
-import { findUserByApiKeyHash, findUserBySupabaseAuthId, getActiveSubscription } from "../db/queries";
+import { findUserByApiKeyHash, updateApiKeyLastUsed, ApiKeyExpiredError } from "../db/queries";
+import { findUserBySupabaseAuthId, getActiveSubscription } from "../db/queries";
 import { UnauthorizedError } from "./errors";
 
 import type { Env } from "./env";
@@ -63,9 +64,20 @@ export async function authMiddleware(
   // Fall back to API key
   if (!user) {
     const apiKeyHash = await hashApiKey(token);
-    user = await findUserByApiKeyHash(db, apiKeyHash);
-    if (!user && !isJwt(token)) {
-      console.warn("[auth] API key provided but no matching user found");
+    try {
+      const result = await findUserByApiKeyHash(db, apiKeyHash);
+      if (result) {
+        user = result.user;
+        // Update last_used_at (fire-and-forget)
+        updateApiKeyLastUsed(db, result.apiKeyId);
+      } else if (!isJwt(token)) {
+        console.warn("[auth] API key provided but no matching key found");
+      }
+    } catch (err) {
+      if (err instanceof ApiKeyExpiredError) {
+        throw new UnauthorizedError("API key has expired");
+      }
+      throw err;
     }
   }
 
