@@ -5,6 +5,7 @@ import path from "node:path";
 import * as clack from "@clack/prompts";
 import { validateApiKey } from "./api.js";
 import { API_URL, pad } from "./config.js";
+import { removeServiceFile, serviceFilePath } from "../capture/os-service.js";
 import { type ExistingSetup, detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors/index.js";
 import { globalConfigDir, removeDirIfExists, removeInstructions, removeSynapseFromMcpJson } from "./editors/io.js";
 import { dispatchHook, readHookPayloadFromStdin } from "./hook-dispatch.js";
@@ -23,13 +24,31 @@ interface ClaudeSettingsShape {
   [key: string]: unknown;
 }
 
+// Subcommands the Synapse init flow registers as Claude Code hook handlers.
+// Used to fingerprint Synapse-owned entries when migrating or uninstalling —
+// matches both bare `synapse hook X` (v1.0) and absolute-path
+// `"<node>" "<index.js>" hook X` (v1.1) without colliding on unrelated hooks.
+const SYNAPSE_HOOK_SUBCOMMANDS = [
+  "session-start",
+  "user-prompt-submit",
+  "post-tool-use",
+  "pre-compact",
+  "session-end",
+  "subagent-stop",
+] as const;
+
+export function isSynapseHookCommand(cmd: string | undefined): boolean {
+  if (typeof cmd !== "string") return false;
+  return SYNAPSE_HOOK_SUBCOMMANDS.some((sub) => cmd.endsWith(` hook ${sub}`));
+}
+
 /**
- * Remove every hook block whose command invokes `synapse hook <kind>` —
- * these are written by `synapse init` into ~/.claude/settings.json.
- * Drops empty event arrays, and the `hooks` key entirely if everything
- * Synapse-owned was cleared. Returns true if the file was modified.
+ * Remove every hook block whose command invokes the Synapse hook dispatcher —
+ * detects both v1.0 (`synapse hook X`) and v1.1 (`"<node>" "<index.js>" hook X`)
+ * formats. Drops empty event arrays, and the `hooks` key entirely if every
+ * Synapse-owned hook was cleared. Returns true if the file was modified.
  */
-function removeSynapseHooksFromClaudeSettings(settingsPath: string): boolean {
+export function removeSynapseHooksFromClaudeSettings(settingsPath: string): boolean {
   let parsed: ClaudeSettingsShape;
   try {
     parsed = JSON.parse(fs.readFileSync(settingsPath, "utf-8")) as ClaudeSettingsShape;
@@ -41,9 +60,7 @@ function removeSynapseHooksFromClaudeSettings(settingsPath: string): boolean {
   let changed = false;
   const nextHooks: Record<string, ClaudeHookBlock[]> = {};
   for (const [event, blocks] of Object.entries(parsed.hooks)) {
-    const filtered = blocks.filter(
-      (b) => !b.hooks.some((h) => typeof h.command === "string" && h.command.includes("synapse hook ")),
-    );
+    const filtered = blocks.filter((b) => !b.hooks.some((h) => isSynapseHookCommand(h.command)));
     if (filtered.length !== blocks.length) changed = true;
     if (filtered.length > 0) nextHooks[event] = filtered;
   }
@@ -543,9 +560,21 @@ export async function runUninstall(): Promise<void> {
     }
   }
 
-  // Command/prompt directories
+  // The Synapse-namespaced slash command dir is wholly owned by us —
+  // delete it outright rather than filtering by filename (v1.1 commands are
+  // named handoff.md / focus.md / issue.md / status.md / doctor.md / invite.md
+  // — none contain "synapse" in the filename).
+  const synapseSlashDir = path.join(home, ".claude", "commands", "synapse");
+  if (fs.existsSync(synapseSlashDir)) {
+    targets.push({
+      label: "Delete ~/.claude/commands/synapse/ (slash commands)",
+      action: () => removeDirIfExists(synapseSlashDir),
+    });
+  }
+
+  // Non-namespaced command/prompt directories — only synapse-prefixed files
+  // are removed; other tools' files stay.
   const commandDirs: [string, string][] = [
-    [path.join(home, ".claude", "commands", "synapse"), "~/.claude/commands/synapse/"],
     [path.join(cwd, ".cursor", "commands"), ".cursor/commands/"],
     [path.join(cwd, ".github", "prompts"), ".github/prompts/"],
     [path.join(cwd, ".windsurf", "workflows"), ".windsurf/workflows/"],
@@ -581,12 +610,16 @@ export async function runUninstall(): Promise<void> {
   }
 
   // Synapse hooks installed by `synapse init` into ~/.claude/settings.json.
-  // We strip every block whose command invokes `synapse hook <kind>`.
+  // Strips every block whose command invokes the Synapse hook dispatcher —
+  // works for both v1.0 (`synapse hook X`) and v1.1 (absolute-path) formats.
   const claudeSettingsPath = path.join(home, ".claude", "settings.json");
   if (fs.existsSync(claudeSettingsPath)) {
     try {
-      const raw = fs.readFileSync(claudeSettingsPath, "utf-8");
-      if (raw.includes("synapse hook ")) {
+      const parsed = JSON.parse(fs.readFileSync(claudeSettingsPath, "utf-8")) as ClaudeSettingsShape;
+      const hasSynapseHook = Object.values(parsed.hooks ?? {}).some((blocks) =>
+        blocks.some((b) => b.hooks.some((h) => isSynapseHookCommand(h.command))),
+      );
+      if (hasSynapseHook) {
         targets.push({
           label: "Remove Synapse hooks from ~/.claude/settings.json",
           action: () => removeSynapseHooksFromClaudeSettings(claudeSettingsPath),
@@ -595,6 +628,17 @@ export async function runUninstall(): Promise<void> {
     } catch {
       /* skip unreadable */
     }
+  }
+
+  // OS service unit installed by `synapse init` (launchd plist on macOS,
+  // systemd unit on Linux). Unloads from the supervisor before deleting.
+  const servicePath = serviceFilePath();
+  if (servicePath && fs.existsSync(servicePath)) {
+    const label =
+      process.platform === "darwin"
+        ? "Unload + delete launchd plist (~/Library/LaunchAgents/app.synapsesync.daemon.plist)"
+        : "Disable + delete systemd unit (~/.config/systemd/user/synapsesync.service)";
+    targets.push({ label, action: () => removeServiceFile() });
   }
 
   // Capture daemon
