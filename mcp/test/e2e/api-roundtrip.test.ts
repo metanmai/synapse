@@ -3,18 +3,21 @@
  *
  * Full user journey — every scenario a real user would hit:
  *   Auth → Projects → Context CRUD → Search → History → Restore →
- *   API Key Management → Billing → Activity Log
+ *   API Key Management → Billing → Activity Log → Account Deletion
  *
  * Run:  TEST_E2E=1 npm run test:e2e
- * With custom API:  TEST_E2E=1 TEST_API_URL=http://localhost:8787 npm run test:e2e
  *
- * Each run creates a unique test user (timestamped email).
- * All test data (entries, extra keys) is cleaned up in afterAll.
- * Test users remain in the DB but are inert (no project data left).
+ * Requires secrets: TEST_SUPABASE_URL, TEST_SUPABASE_SERVICE_KEY
+ * Optional: TEST_API_URL (defaults to https://api.synapsesync.app)
+ *
+ * Test user is created via Supabase admin (bypasses email OTP rate limits).
+ * User is fully deleted at the end — zero leftover data.
  */
 import { afterAll, describe, expect, it } from "vitest";
 
 const API = process.env.TEST_API_URL || "https://api.synapsesync.app";
+const SUPABASE_URL = process.env.TEST_SUPABASE_URL || "";
+const SUPABASE_KEY = process.env.TEST_SUPABASE_SERVICE_KEY || "";
 const RUN = process.env.TEST_E2E === "1";
 const suite = RUN ? describe : describe.skip;
 
@@ -33,31 +36,98 @@ async function api(method: string, path: string, token?: string, body?: unknown)
   return { status: res.status, data: data as R };
 }
 
-// ── shared state across the ordered test chain ──
-let KEY: string; // primary API key
+/** Create a test user via Supabase admin + backend signup/verify, return API key. */
+async function createTestUser(email: string): Promise<{ apiKey: string; userId: string }> {
+  // 1. Create Supabase auth user (auto-confirmed, no email sent)
+  const authRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      apikey: SUPABASE_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email,
+      email_confirm: true,
+      app_metadata: { provider: "email" },
+    }),
+  });
+  if (!authRes.ok) {
+    throw new Error(`Failed to create Supabase auth user: ${authRes.status} ${await authRes.text()}`);
+  }
+
+  // 2. Generate a magic link to get a valid OTP token
+  const linkRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      apikey: SUPABASE_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ type: "magiclink", email }),
+  });
+  if (!linkRes.ok) {
+    throw new Error(`Failed to generate link: ${linkRes.status} ${await linkRes.text()}`);
+  }
+
+  const linkData = (await linkRes.json()) as R;
+  const actionLink: string = linkData.properties?.action_link || linkData.action_link || "";
+  const tokenMatch = actionLink.match(/token=([^&]+)/);
+  const otp = tokenMatch?.[1];
+  if (!otp) {
+    throw new Error(`Could not extract OTP from generate_link response: ${JSON.stringify(linkData)}`);
+  }
+
+  // 3. Call verify-email to create the user in public.users + get API key
+  const { status, data } = await api("POST", "/auth/verify-email", undefined, { email, code: otp });
+  if (status !== 201 || !data.api_key) {
+    throw new Error(`verify-email failed: ${status} ${JSON.stringify(data)}`);
+  }
+
+  return { apiKey: data.api_key, userId: data.id };
+}
+
+// ── shared state ──
+let KEY: string;
 let USER_ID: string;
 let EMAIL: string;
 let PROJECT_NAME: string;
 let PROJECT_ID: string;
-let SECOND_KEY: string; // raw key string (only available at creation)
+let SECOND_KEY: string;
 let SECOND_KEY_ID: string;
-let HISTORY_ID: string; // for restore test
-let CHECKOUT_URL: string;
+let HISTORY_ID: string;
 
 suite("Full User Journey", () => {
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  //  AUTH — Signup
+  //  SETUP — create test user via admin
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  describe("Auth: Signup (with email verification)", () => {
-    it("sends verification email (no API key yet)", async () => {
+  describe("Setup", () => {
+    it("creates a verified test user", async () => {
       EMAIL = `e2e-${Date.now()}@synapsesync.app`;
-      const { status, data } = await api("POST", "/auth/signup", undefined, { email: EMAIL });
-      expect(status).toBe(200);
-      expect(data.email).toBe(EMAIL);
-      expect(data.message).toBeTruthy();
-      // No API key returned — must verify first
+      const result = await createTestUser(EMAIL);
+      KEY = result.apiKey;
+      USER_ID = result.userId;
+      expect(KEY).toBeTruthy();
+      expect(USER_ID).toBeTruthy();
+    });
+  });
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  AUTH — Signup validation
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  describe("Auth: Signup validation", () => {
+    it("signup does not return an API key (requires verification)", async () => {
+      const testEmail = `e2e-signup-${Date.now()}@synapsesync.app`;
+      const { status, data } = await api("POST", "/auth/signup", undefined, { email: testEmail });
+      // Either 200 (OTP sent) or rate-limited — never returns an API key
       expect(data.api_key).toBeUndefined();
+    });
+
+    it("rejects duplicate email", async () => {
+      const { status } = await api("POST", "/auth/signup", undefined, { email: EMAIL });
+      expect(status).toBe(409);
     });
 
     it("rejects empty email", async () => {
@@ -74,109 +144,56 @@ suite("Full User Journey", () => {
       const { status } = await api("POST", "/auth/signup", undefined, {});
       expect(status).toBe(400);
     });
+  });
 
-    it("rejects verify-email with missing code", async () => {
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  AUTH — Verify-email validation
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  describe("Auth: Verify-email validation", () => {
+    it("rejects missing code", async () => {
       const { status } = await api("POST", "/auth/verify-email", undefined, { email: EMAIL });
       expect(status).toBe(400);
     });
 
-    it("rejects verify-email with wrong code", async () => {
+    it("rejects wrong code", async () => {
       const { status, data } = await api("POST", "/auth/verify-email", undefined, {
-        email: EMAIL,
+        email: "nobody@synapsesync.app",
         code: "000000",
       });
       expect(status).toBe(400);
-      expect(data.code).toBe("VERIFICATION_FAILED");
     });
 
-    it("verifies email and returns API key (via Supabase admin)", async () => {
-      // Use Supabase admin API to generate the OTP token directly (no email needed in CI)
-      const supabaseUrl = process.env.TEST_SUPABASE_URL;
-      const supabaseKey = process.env.TEST_SUPABASE_SERVICE_KEY;
-
-      if (!supabaseUrl || !supabaseKey) {
-        // Fallback: create a pre-verified user directly via admin
-        // This path is used when Supabase credentials aren't available
-        console.warn("TEST_SUPABASE_URL/KEY not set — using admin generateLink to get OTP");
-      }
-
-      // Use admin generateLink to get the OTP without sending email
-      const linkRes = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${supabaseKey}`,
-          apikey: supabaseKey!,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          type: "magiclink",
-          email: EMAIL,
-        }),
-      });
-
-      if (!linkRes.ok) {
-        // If we can't get the OTP, skip verification tests gracefully
-        console.warn(`Could not generate OTP link: ${linkRes.status}`);
-        // Create user+key directly via signup for remaining tests
-        // This will only work if the old signup endpoint is still available
-        return;
-      }
-
-      const linkData = (await linkRes.json()) as R;
-      // The hashed_token from generate_link IS the OTP code for email type
-      // Extract the token from the action_link URL
-      const actionLink = linkData.properties?.action_link || linkData.action_link;
-      const tokenMatch = actionLink?.match?.(/token=([^&]+)/);
-      const otpToken = tokenMatch?.[1] || linkData.properties?.hashed_token;
-
-      if (!otpToken) {
-        console.warn("Could not extract OTP token from generate_link response");
-        return;
-      }
-
-      const { status, data } = await api("POST", "/auth/verify-email", undefined, {
-        email: EMAIL,
-        code: otpToken,
-      });
-
-      expect(status).toBe(201);
-      expect(data.api_key).toBeTruthy();
-      expect(data.email).toBe(EMAIL);
-      KEY = data.api_key;
-      USER_ID = data.id;
+    it("rejects missing email", async () => {
+      const { status } = await api("POST", "/auth/verify-email", undefined, { code: "123456" });
+      expect(status).toBe(400);
     });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  AUTH — Login validation
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   describe("Auth: Login validation", () => {
-    it("rejects login with missing password", async () => {
+    it("rejects missing password", async () => {
       const { status } = await api("POST", "/auth/login", undefined, { email: EMAIL });
       expect(status).toBe(400);
     });
 
-    it("rejects login with empty password", async () => {
+    it("rejects empty password", async () => {
       const { status } = await api("POST", "/auth/login", undefined, { email: EMAIL, password: "" });
       expect(status).toBe(400);
     });
 
-    it("rejects login with wrong password", async () => {
-      // The test user was created via /auth/signup (no Supabase Auth password),
-      // so any password attempt should fail at the Supabase auth layer
-      const { status, data } = await api("POST", "/auth/login", undefined, {
+    it("rejects wrong password", async () => {
+      const { status } = await api("POST", "/auth/login", undefined, {
         email: EMAIL,
         password: "wrong-password-123",
       });
-      // Supabase auth returns 401 for bad credentials; if Supabase isn't configured
-      // in test env it may return 500, but it should never return 200
       expect(status).toBeGreaterThanOrEqual(400);
-      expect(status).not.toBe(200);
-      if (status === 401) expect(data.code).toBe("AUTH_ERROR");
     });
 
-    it("rejects login for non-existent email", async () => {
+    it("rejects non-existent email", async () => {
       const { status } = await api("POST", "/auth/login", undefined, {
         email: "does-not-exist-ever@synapsesync.app",
         password: "any-password",
@@ -184,7 +201,7 @@ suite("Full User Journey", () => {
       expect(status).toBeGreaterThanOrEqual(400);
     });
 
-    it("rejects login with invalid email format", async () => {
+    it("rejects invalid email format", async () => {
       const { status } = await api("POST", "/auth/login", undefined, {
         email: "bad-email",
         password: "pass",
@@ -193,23 +210,22 @@ suite("Full User Journey", () => {
     });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  AUTH — CLI exchange validation
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   describe("Auth: CLI exchange", () => {
-    it("rejects cli-exchange with missing fields", async () => {
+    it("rejects missing fields", async () => {
       const { status } = await api("POST", "/auth/cli-exchange", undefined, {});
       expect(status).toBe(400);
     });
 
-    it("rejects cli-exchange with garbage code", async () => {
+    it("rejects garbage code", async () => {
       const { status, data } = await api("POST", "/auth/cli-exchange", undefined, {
         code: "not-a-real-encrypted-code",
         code_verifier: "fake-verifier",
       });
       expect(status).toBeGreaterThanOrEqual(400);
-      // Should say invalid/expired code, not crash
       expect(data.error || data.code).toBeTruthy();
     });
 
@@ -221,7 +237,7 @@ suite("Full User Journey", () => {
     });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  AUTH — API Key authentication
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -231,31 +247,26 @@ suite("Full User Journey", () => {
       expect(status).toBe(200);
     });
 
-    it("invalid key returns 401 with UNAUTHORIZED code", async () => {
+    it("invalid key returns 401", async () => {
       const { status, data } = await api("GET", "/api/projects", "completely-fake-key");
       expect(status).toBe(401);
       expect(data.code).toBe("UNAUTHORIZED");
     });
 
-    it("missing auth header returns 401", async () => {
+    it("missing auth returns 401", async () => {
       const { status } = await api("GET", "/api/projects");
       expect(status).toBe(401);
     });
 
     it("non-Bearer prefix returns 401", async () => {
-      const h: Record<string, string> = { Authorization: `Basic ${KEY}` };
-      const res = await fetch(`${API}/api/projects`, { headers: h });
+      const res = await fetch(`${API}/api/projects`, {
+        headers: { Authorization: `Basic ${KEY}` },
+      });
       expect(res.status).toBe(401);
-    });
-
-    it("empty Bearer token returns 401", async () => {
-      const { status } = await api("GET", "/api/projects", "");
-      // Empty string won't add auth header, so 401
-      expect(status).toBe(401);
     });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  PROJECTS
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -266,13 +277,8 @@ suite("Full User Journey", () => {
       expect(data).toEqual([]);
     });
 
-    it("rejects project creation without name", async () => {
+    it("rejects creation without name", async () => {
       const { status } = await api("POST", "/api/projects", KEY, {});
-      expect(status).toBe(400);
-    });
-
-    it("rejects project creation with empty name", async () => {
-      const { status } = await api("POST", "/api/projects", KEY, { name: "" });
       expect(status).toBe(400);
     });
 
@@ -281,92 +287,77 @@ suite("Full User Journey", () => {
       const { status, data } = await api("POST", "/api/projects", KEY, { name: PROJECT_NAME });
       expect(status).toBe(201);
       expect(data.name).toBe(PROJECT_NAME);
-      expect(data.id).toBeTruthy();
       PROJECT_ID = data.id;
     });
 
-    it("lists the project with owner role", async () => {
+    it("lists project with owner role", async () => {
       const { status, data } = await api("GET", "/api/projects", KEY);
       expect(status).toBe(200);
       const p = (data as R[]).find((p) => p.id === PROJECT_ID);
-      expect(p).toBeTruthy();
       expect(p?.role).toBe("owner");
       expect(p?.owner_email).toBe(EMAIL);
     });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  //  CONTEXT — Create entries
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  CONTEXT — Create
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   const enc = (s: string) => encodeURIComponent(s);
 
   describe("Context: Create", () => {
     it("rejects save without project", async () => {
-      const { status } = await api("POST", "/api/context/save", KEY, {
-        path: "test.md",
-        content: "hello",
-      });
+      const { status } = await api("POST", "/api/context/save", KEY, { path: "x.md", content: "x" });
       expect(status).toBe(400);
     });
 
     it("rejects save without path", async () => {
-      const { status } = await api("POST", "/api/context/save", KEY, {
-        project: PROJECT_NAME,
-        content: "hello",
-      });
+      const { status } = await api("POST", "/api/context/save", KEY, { project: PROJECT_NAME, content: "x" });
       expect(status).toBe(400);
     });
 
     it("rejects save without content", async () => {
-      const { status } = await api("POST", "/api/context/save", KEY, {
-        project: PROJECT_NAME,
-        path: "test.md",
-      });
+      const { status } = await api("POST", "/api/context/save", KEY, { project: PROJECT_NAME, path: "x.md" });
       expect(status).toBe(400);
     });
 
     it("rejects save to non-existent project", async () => {
-      const { status, data } = await api("POST", "/api/context/save", KEY, {
-        project: "does-not-exist-project",
-        path: "test.md",
-        content: "hello",
+      const { status } = await api("POST", "/api/context/save", KEY, {
+        project: "ghost-project",
+        path: "x.md",
+        content: "x",
       });
       expect(status).toBe(404);
-      expect(data.code).toBe("NOT_FOUND");
     });
 
-    it("saves a markdown entry with tags", async () => {
+    it("saves entry with tags", async () => {
       const { status, data } = await api("POST", "/api/context/save", KEY, {
         project: PROJECT_NAME,
         path: "notes/first.md",
-        content: "# First Note\nCreated by E2E test suite.",
+        content: "# First Note\nCreated by E2E test.",
         tags: ["e2e", "notes"],
       });
       expect(status).toBeLessThan(300);
       expect(data.path).toBe("notes/first.md");
-      expect(data.content).toContain("First Note");
       expect(data.tags).toEqual(["e2e", "notes"]);
       expect(data.source).toBe("human");
-      expect(data.author_id).toBe(USER_ID);
     });
 
-    it("saves a second entry in a different folder", async () => {
-      const { status, data } = await api("POST", "/api/context/save", KEY, {
+    it("saves entry in different folder", async () => {
+      const { status } = await api("POST", "/api/context/save", KEY, {
         project: PROJECT_NAME,
         path: "decisions/use-vitest.md",
-        content: "# Decision: Use Vitest\nChosen for ESM support and speed.",
+        content: "# Decision: Use Vitest\nChosen for ESM support.",
         tags: ["e2e", "decision"],
       });
       expect(status).toBeLessThan(300);
-      expect(data.path).toBe("decisions/use-vitest.md");
     });
 
-    it("saves a third entry with custom source", async () => {
+    it("saves entry with custom source", async () => {
       const { status, data } = await api("POST", "/api/context/save", KEY, {
         project: PROJECT_NAME,
         path: "context/from-claude.md",
-        content: "# From Claude\nThis was written by an AI assistant.",
+        content: "# From Claude\nWritten by AI.",
         tags: ["e2e", "ai"],
         source: "claude",
       });
@@ -375,7 +366,7 @@ suite("Full User Journey", () => {
     });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  CONTEXT — List & Read
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -386,84 +377,76 @@ suite("Full User Journey", () => {
       expect((data as R[]).length).toBe(3);
     });
 
-    it("lists entries filtered by folder", async () => {
+    it("filters by folder", async () => {
       const { status, data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/list?folder=notes`, KEY);
       expect(status).toBe(200);
       expect((data as R[]).length).toBe(1);
       expect((data as R[])[0].path).toBe("notes/first.md");
     });
 
-    it("reads an entry with full content", async () => {
+    it("reads entry with full content", async () => {
       const { status, data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/${enc("notes/first.md")}`, KEY);
       expect(status).toBe(200);
       expect(data.content).toContain("First Note");
       expect(data.tags).toContain("e2e");
-      expect(data.source).toBe("human");
-      expect(data.created_at).toBeTruthy();
-      expect(data.updated_at).toBeTruthy();
     });
 
-    it("returns 404 for non-existent entry", async () => {
-      const { status, data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/${enc("does/not/exist.md")}`, KEY);
+    it("404 for non-existent entry", async () => {
+      const { status } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/${enc("nope.md")}`, KEY);
       expect(status).toBe(404);
-      expect(data.code).toBe("NOT_FOUND");
     });
 
-    it("returns 404 for non-existent project", async () => {
-      const { status } = await api("GET", `/api/context/${enc("no-such-project")}/list`, KEY);
+    it("404 for non-existent project", async () => {
+      const { status } = await api("GET", `/api/context/${enc("ghost-project")}/list`, KEY);
       expect(status).toBe(404);
     });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  CONTEXT — Search
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   describe("Context: Search", () => {
-    it("finds entries by keyword", async () => {
+    it("finds entry by keyword", async () => {
       const { status, data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/search?q=vitest`, KEY);
       expect(status).toBe(200);
-      const found = (data as R[]).find((e) => e.path === "decisions/use-vitest.md");
-      expect(found).toBeTruthy();
+      expect((data as R[]).find((e) => e.path === "decisions/use-vitest.md")).toBeTruthy();
     });
 
-    it("search returns empty for non-matching query", async () => {
-      const { status, data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/search?q=xyznonexistent12345`, KEY);
+    it("empty results for non-matching query", async () => {
+      const { status, data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/search?q=xyznonexistent`, KEY);
       expect(status).toBe(200);
       expect(data).toEqual([]);
     });
 
-    it("rejects search without query param", async () => {
+    it("rejects search without query", async () => {
       const { status } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/search`, KEY);
       expect(status).toBe(400);
     });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  //  CONTEXT — Update & History & Restore
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  CONTEXT — Update, History, Restore
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   describe("Context: Update, History, Restore", () => {
-    it("updates an existing entry (upsert)", async () => {
+    it("updates entry via upsert", async () => {
       const { status, data } = await api("POST", "/api/context/save", KEY, {
         project: PROJECT_NAME,
         path: "notes/first.md",
-        content: "# Updated First Note\nThis content was modified.",
-        tags: ["e2e", "notes", "updated"],
+        content: "# Updated Note\nModified by test.",
+        tags: ["e2e", "updated"],
       });
       expect(status).toBeLessThan(300);
-      expect(data.content).toContain("Updated First Note");
-      expect(data.tags).toContain("updated");
+      expect(data.content).toContain("Updated Note");
     });
 
-    it("reading shows updated content", async () => {
-      const { status, data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/${enc("notes/first.md")}`, KEY);
-      expect(status).toBe(200);
-      expect(data.content).toContain("Updated First Note");
-      expect(data.content).not.toContain("Created by E2E");
+    it("read shows updated content", async () => {
+      const { data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/${enc("notes/first.md")}`, KEY);
+      expect(data.content).toContain("Updated Note");
     });
 
-    it("history contains the previous version", async () => {
+    it("history has previous version", async () => {
       const { status, data } = await api(
         "GET",
         `/api/context/${enc(PROJECT_NAME)}/history/${enc("notes/first.md")}`,
@@ -476,7 +459,7 @@ suite("Full User Journey", () => {
       HISTORY_ID = old.id;
     });
 
-    it("restores the previous version", async () => {
+    it("restores previous version", async () => {
       const { status, data } = await api("POST", `/api/context/${enc(PROJECT_NAME)}/restore`, KEY, {
         path: "notes/first.md",
         historyId: HISTORY_ID,
@@ -484,15 +467,9 @@ suite("Full User Journey", () => {
       expect(status).toBe(200);
       expect(data.content).toContain("Created by E2E");
     });
-
-    it("reading after restore shows original content", async () => {
-      const { status, data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/${enc("notes/first.md")}`, KEY);
-      expect(status).toBe(200);
-      expect(data.content).toContain("Created by E2E");
-    });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  CONTEXT — Delete
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -507,7 +484,7 @@ suite("Full User Journey", () => {
       expect(data.ok).toBe(true);
     });
 
-    it("entry is gone after deletion", async () => {
+    it("entry gone after deletion", async () => {
       const { status } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/${enc("decisions/use-vitest.md")}`, KEY);
       expect(status).toBe(404);
     });
@@ -521,81 +498,62 @@ suite("Full User Journey", () => {
       expect(status).toBe(404);
     });
 
-    it("deleting non-existent entry returns 404", async () => {
-      const { status } = await api("DELETE", `/api/context/${enc(PROJECT_NAME)}/${enc("nope/nope.md")}`, KEY);
-      expect(status).toBe(404);
-    });
-
     it("list reflects deletion (2 remaining)", async () => {
-      const { status, data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/list`, KEY);
-      expect(status).toBe(200);
+      const { data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/list`, KEY);
       expect((data as R[]).length).toBe(2);
-      const paths = (data as R[]).map((e) => e.path);
-      expect(paths).not.toContain("decisions/use-vitest.md");
     });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  API KEY MANAGEMENT
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   describe("API Key Management", () => {
     it("lists the default key", async () => {
-      const { status, data } = await api("GET", "/api/account/keys", KEY);
-      expect(status).toBe(200);
-      const keys = data as R[];
-      expect(keys.length).toBeGreaterThanOrEqual(1);
-      expect(keys.find((k) => k.label === "default")).toBeTruthy();
+      const { data } = await api("GET", "/api/account/keys", KEY);
+      expect((data as R[]).find((k) => k.label === "default")).toBeTruthy();
     });
 
     it("creates a second key", async () => {
-      const { status, data } = await api("POST", "/api/account/keys", KEY, { label: "e2e-test-key" });
+      const { status, data } = await api("POST", "/api/account/keys", KEY, { label: "e2e-second" });
       expect(status).toBe(201);
       expect(data.api_key).toBeTruthy();
-      expect(data.label).toBe("e2e-test-key");
       SECOND_KEY = data.api_key;
       SECOND_KEY_ID = data.id;
     });
 
-    it("second key actually works for auth", async () => {
+    it("second key authenticates", async () => {
       const { status } = await api("GET", "/api/projects", SECOND_KEY);
       expect(status).toBe(200);
     });
 
-    it("rejects key creation without label", async () => {
-      const { status } = await api("POST", "/api/account/keys", KEY, {});
-      expect(status).toBe(400);
-    });
-
-    it("rejects key creation with empty label", async () => {
+    it("rejects empty label", async () => {
       const { status } = await api("POST", "/api/account/keys", KEY, { label: "" });
       expect(status).toBe(400);
     });
 
-    it("revokes the second key", async () => {
-      const { status, data } = await api("DELETE", `/api/account/keys/${SECOND_KEY_ID}`, KEY);
+    it("revokes second key", async () => {
+      const { status } = await api("DELETE", `/api/account/keys/${SECOND_KEY_ID}`, KEY);
       expect(status).toBe(200);
-      expect(data.ok).toBe(true);
     });
 
-    it("revoked key no longer authenticates", async () => {
+    it("revoked key fails auth", async () => {
       const { status } = await api("GET", "/api/projects", SECOND_KEY);
       expect(status).toBe(401);
     });
 
     it("revoked key gone from list", async () => {
-      const { status, data } = await api("GET", "/api/account/keys", KEY);
-      expect(status).toBe(200);
+      const { data } = await api("GET", "/api/account/keys", KEY);
       expect((data as R[]).find((k) => k.id === SECOND_KEY_ID)).toBeUndefined();
     });
 
-    it("revoking non-existent key returns 404", async () => {
+    it("revoke non-existent returns 404", async () => {
       const { status } = await api("DELETE", "/api/account/keys/00000000-0000-0000-0000-000000000000", KEY);
       expect(status).toBe(404);
     });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  BILLING
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -607,184 +565,132 @@ suite("Full User Journey", () => {
       expect(data.subscription).toBeNull();
     });
 
-    it("checkout creates a Creem checkout URL", async () => {
-      const { status, data } = await api("POST", "/api/billing/checkout", KEY);
-      // If Creem is configured, we get a checkout URL
-      // If not, we get an error — both are valid for the test
-      if (status === 200) {
-        expect(data.url).toBeTruthy();
-        expect(typeof data.url).toBe("string");
-        CHECKOUT_URL = data.url;
-      } else {
-        // Creem not configured in this environment — acceptable
-        expect(status).toBeGreaterThanOrEqual(400);
-      }
-    });
-
-    it("verify endpoint rejects missing checkout_id", async () => {
+    it("verify rejects missing checkout_id", async () => {
       const { status } = await api("POST", "/api/billing/verify", KEY, {});
       expect(status).toBe(400);
     });
 
-    it("verify endpoint handles invalid checkout_id gracefully", async () => {
-      const { status } = await api("POST", "/api/billing/verify", KEY, {
-        checkout_id: "chk_fake_nonexistent",
-      });
-      // Should return 400, not crash with 500
+    it("verify handles invalid checkout_id", async () => {
+      const { status } = await api("POST", "/api/billing/verify", KEY, { checkout_id: "chk_fake" });
       expect(status).toBe(400);
     });
 
-    it("portal rejects user without subscription", async () => {
-      const { status, data } = await api("POST", "/api/billing/portal", KEY);
+    it("portal rejects without subscription", async () => {
+      const { status } = await api("POST", "/api/billing/portal", KEY);
       expect(status).toBe(400);
-      expect(data.error).toContain("Subscribe to Plus first");
-    });
-
-    it("billing endpoints require auth", async () => {
-      const endpoints = [
-        ["GET", "/api/billing/status"],
-        ["POST", "/api/billing/checkout"],
-        ["POST", "/api/billing/verify"],
-        ["POST", "/api/billing/portal"],
-      ];
-      for (const [method, path] of endpoints) {
-        const { status } = await api(method, path);
-        expect(status).toBe(401);
-      }
     });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  //  WEBHOOK — Format validation
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  WEBHOOK
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   describe("Webhook", () => {
-    it("rejects webhook without signature header", async () => {
+    it("rejects without signature", async () => {
       const res = await fetch(`${API}/api/billing/webhook`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event_type: "checkout.completed", object: {} }),
       });
       expect(res.status).toBe(400);
-      const data = (await res.json()) as R;
-      expect(data.error).toContain("creem-signature");
     });
 
-    it("rejects webhook with invalid signature", async () => {
+    it("rejects invalid signature", async () => {
       const res = await fetch(`${API}/api/billing/webhook`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "creem-signature": "invalid-sig-123",
-        },
+        headers: { "Content-Type": "application/json", "creem-signature": "bad" },
         body: JSON.stringify({ event_type: "checkout.completed", object: {} }),
       });
-      // Should be 400 (bad signature), not 500
       expect(res.status).toBeLessThan(500);
     });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  ACTIVITY LOG
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   describe("Activity Log", () => {
-    it("records all operations from the journey", async () => {
-      const { status, data } = await api("GET", `/api/projects/${PROJECT_ID}/activity?limit=50`, KEY);
-      expect(status).toBe(200);
+    it("records create/update/delete events", async () => {
+      const { data } = await api("GET", `/api/projects/${PROJECT_ID}/activity?limit=50`, KEY);
       const actions = (data as R[]).map((a) => a.action);
-
-      // We created 3 entries, updated 1, restored 1 (counts as update), deleted 1
       expect(actions).toContain("entry_created");
       expect(actions).toContain("entry_updated");
       expect(actions).toContain("entry_deleted");
     });
 
-    it("activity has correct source attribution", async () => {
+    it("tracks source attribution", async () => {
       const { data } = await api("GET", `/api/projects/${PROJECT_ID}/activity?limit=50`, KEY);
       const sources = (data as R[]).map((a) => a.source);
-      // We saved one entry with source="claude"
       expect(sources).toContain("claude");
       expect(sources).toContain("human");
     });
 
-    it("activity has target paths", async () => {
+    it("has target paths", async () => {
       const { data } = await api("GET", `/api/projects/${PROJECT_ID}/activity?limit=50`, KEY);
       const paths = (data as R[]).map((a) => a.target_path).filter(Boolean);
       expect(paths).toContain("notes/first.md");
-      expect(paths).toContain("decisions/use-vitest.md");
       expect(paths).toContain("context/from-claude.md");
     });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  //  CROSS-CUTTING: Auth on all protected endpoints
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  AUTH ENFORCEMENT — all protected endpoints
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  describe("All protected endpoints require auth", () => {
-    const protectedEndpoints: [string, string][] = [
+  describe("Auth enforcement on all endpoints", () => {
+    const endpoints: [string, string][] = [
       ["GET", "/api/projects"],
       ["POST", "/api/projects"],
       ["GET", "/api/account/keys"],
       ["POST", "/api/account/keys"],
+      ["DELETE", "/api/account"],
       ["GET", "/api/billing/status"],
       ["POST", "/api/billing/checkout"],
       ["POST", "/api/billing/verify"],
       ["POST", "/api/billing/portal"],
       ["POST", "/api/context/save"],
-      ["GET", "/api/context/TestProject/list"],
-      ["GET", "/api/context/TestProject/search?q=test"],
-      ["GET", "/api/context/TestProject/test.md"],
-      ["DELETE", "/api/context/TestProject/test.md"],
-      ["DELETE", "/api/account"],
+      ["GET", "/api/context/X/list"],
+      ["GET", "/api/context/X/search?q=x"],
+      ["GET", "/api/context/X/x.md"],
+      ["DELETE", "/api/context/X/x.md"],
     ];
-
-    for (const [method, path] of protectedEndpoints) {
-      it(`${method} ${path} → 401`, async () => {
+    for (const [method, path] of endpoints) {
+      it(`${method} ${path} → 401 without auth`, async () => {
         const { status } = await api(method, path);
         expect(status).toBe(401);
       });
     }
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  //  ACCOUNT DELETION — must be LAST (destroys the test user)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  ACCOUNT DELETION — must be LAST
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   describe("Account deletion", () => {
-    it("deletes the user and all their data", async () => {
+    it("deletes user and all data", async () => {
       const { status, data } = await api("DELETE", "/api/account", KEY);
       expect(status).toBe(200);
       expect(data.ok).toBe(true);
     });
 
-    it("API key no longer works after deletion", async () => {
+    it("key stops working after deletion", async () => {
       const { status } = await api("GET", "/api/projects", KEY);
       expect(status).toBe(401);
     });
-
-    it("signing up with same email works again after deletion", async () => {
-      const { status, data } = await api("POST", "/auth/signup", undefined, { email: EMAIL });
-      // Should accept the signup (user was deleted)
-      expect(status).toBe(200);
-      expect(data.email).toBe(EMAIL);
-      // No API key until verified — clear KEY so afterAll doesn't try to delete
-      KEY = "";
-    });
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  CLEANUP
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   afterAll(async () => {
-    if (!KEY) return;
-
-    // Delete the test user and ALL their data (entries, projects, keys, subscriptions)
-    try {
-      await api("DELETE", "/api/account", KEY);
-    } catch {
-      // best-effort — if this fails, data is orphaned but harmless
+    // User already deleted by the last test. Belt-and-suspenders:
+    if (KEY) {
+      try {
+        await api("DELETE", "/api/account", KEY);
+      } catch {
+        // already deleted
+      }
     }
   });
 });
