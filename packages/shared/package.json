@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/types.ts",
     "./handoff/types.js": "./src/handoff/types.ts",
-    "./handoff/events.js": "./src/handoff/events.ts"
+    "./handoff/events.js": "./src/handoff/events.ts",
+    "./handoff/reducer.js": "./src/handoff/reducer.ts"
   }
 }
