@@ -147,7 +147,7 @@ In `backend/package.json`, change `"name": "synapse"` to `"name": "@synapse/back
 
 In `frontend/package.json`, change `"name": "synapse-frontend"` to `"name": "@synapse/frontend"`.
 
-In `mcp/package.json`, keep `"name": "synapsesync-mcp"` (it's the npm publish name). Fix the author typo: change `"tanmain"` to `"tanmai"`.
+In `mcp/package.json`, keep `"name": "synapsesync-mcp"` (it's the npm publish name). Set `author` / `repository` to match the GitHub org (e.g. `metanmai`).
 
 - [ ] **Step 3: Install from root**
 
