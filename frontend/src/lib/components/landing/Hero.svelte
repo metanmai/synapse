@@ -21,6 +21,8 @@ onMount(() => {
     <div class="orb orb-2"></div>
     <div class="orb orb-3"></div>
     <div class="orb orb-4"></div>
+    <div class="hero-grain"></div>
+    <div class="hero-vignette"></div>
   </div>
 
   <div class="hero-container">
@@ -147,6 +149,24 @@ onMount(() => {
       linear-gradient(180deg, var(--color-cream) 0%, var(--color-white) 40%, var(--color-cream) 100%);
   }
 
+  .hero-grain {
+    position: absolute;
+    inset: 0;
+    opacity: 0.06;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 256px 256px;
+    pointer-events: none;
+  }
+
+  .hero-vignette {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 70% 60% at 50% 45%, transparent 0%, transparent 40%, rgba(86, 28, 36, 0.04) 70%, rgba(86, 28, 36, 0.1) 100%);
+    pointer-events: none;
+  }
+
   .orb {
     position: absolute;
     border-radius: 50%;
@@ -157,7 +177,7 @@ onMount(() => {
   .orb-1 {
     width: 400px;
     height: 400px;
-    background: radial-gradient(circle, rgba(86, 28, 36, 0.12) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(86, 28, 36, 0.16) 0%, transparent 70%);
     top: 5%;
     left: -5%;
     animation: float-orb 20s ease-in-out infinite;
@@ -166,7 +186,7 @@ onMount(() => {
   .orb-2 {
     width: 350px;
     height: 350px;
-    background: radial-gradient(circle, rgba(199, 183, 163, 0.25) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(199, 183, 163, 0.3) 0%, transparent 70%);
     top: 15%;
     right: -3%;
     animation: float-orb-reverse 18s ease-in-out infinite;
@@ -175,7 +195,7 @@ onMount(() => {
   .orb-3 {
     width: 300px;
     height: 300px;
-    background: radial-gradient(circle, rgba(109, 41, 50, 0.08) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(109, 41, 50, 0.12) 0%, transparent 70%);
     bottom: 10%;
     left: 30%;
     animation: float-orb 22s ease-in-out infinite 3s;
