@@ -2,7 +2,7 @@ import fs from "node:fs";
 import * as clack from "@clack/prompts";
 import { validateApiKey } from "./api.js";
 import { browserAuth } from "./browser-auth.js";
-import type { SetupScope, ConfigLocation } from "./editors/index.js";
+import type { ConfigLocation, SetupScope } from "./editors/index.js";
 import { detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors/index.js";
 import { createGlyphSpinner } from "./spinner.js";
 import { accent, bold, muted, success, error as themeError } from "./theme.js";
@@ -57,10 +57,12 @@ export async function runWizard(version: string): Promise<void> {
     }
 
     // Build per-location status lines
-    const statusLines = existing.locations.map((loc) => {
-      const keyValid = loc.apiKey ? (keyResults.get(loc.apiKey) ?? null) : null;
-      return formatLocationStatus(loc, keyValid);
-    }).join("\n");
+    const statusLines = existing.locations
+      .map((loc) => {
+        const keyValid = loc.apiKey ? (keyResults.get(loc.apiKey) ?? null) : null;
+        return formatLocationStatus(loc, keyValid);
+      })
+      .join("\n");
 
     const hasProblems = existing.locations.some(
       (loc) => loc.status === "no_key" || (loc.apiKey != null && keyResults.get(loc.apiKey) === false),
@@ -235,10 +237,7 @@ function injectApiKey(filePath: string, apiKey: string): void {
   const parsed = JSON.parse(raw);
 
   // Find the synapse server object in whichever format
-  const synapse =
-    parsed?.mcpServers?.synapse ??
-    parsed?.mcp?.servers?.synapse ??
-    parsed?.servers?.synapse;
+  const synapse = parsed?.mcpServers?.synapse ?? parsed?.mcp?.servers?.synapse ?? parsed?.servers?.synapse;
 
   if (synapse && typeof synapse === "object") {
     if (!synapse.env || typeof synapse.env !== "object") {
