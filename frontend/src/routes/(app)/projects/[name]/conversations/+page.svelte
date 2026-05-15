@@ -1,47 +1,9 @@
 <script lang="ts">
-import { goto } from "$app/navigation";
-import { navigating } from "$app/stores";
-import ConversationList from "$lib/components/conversations/ConversationList.svelte";
+import { formatRelativeDate } from "$lib/components/conversations/conversation-helpers";
 
 let { data } = $props();
 
 const encodedProject = $derived(encodeURIComponent(data.project.name));
-let filtering = $state(false);
-let toolFilter = $state("all");
-
-const toolTabs = [
-  { value: "all", label: "All" },
-  { value: "claude-code", label: "Claude Code" },
-  { value: "cursor", label: "Cursor" },
-  { value: "codex", label: "Codex" },
-  { value: "gemini", label: "Gemini" },
-];
-
-const filteredConversations = $derived(
-  toolFilter === "all"
-    ? data.conversations
-    : data.conversations.filter(
-        (c) => (c as unknown as { working_context?: { tool?: string } }).working_context?.tool === toolFilter,
-      ),
-);
-
-const loadingConversationId = $derived.by(() => {
-  if (!$navigating?.to?.url) return null;
-  const match = $navigating.to.url.pathname.match(/\/conversations\/([^/]+)$/);
-  return match ? match[1] : null;
-});
-
-async function handleStatusChange(e: Event) {
-  const value = (e.target as HTMLSelectElement).value;
-  const params = new URLSearchParams();
-  if (value !== "all") params.set("status", value);
-  const qs = params.toString();
-  filtering = true;
-  await goto(`/projects/${encodedProject}/conversations${qs ? `?${qs}` : ""}`, {
-    invalidateAll: true,
-  });
-  filtering = false;
-}
 
 function pageUrl(page: number): string {
   const params = new URLSearchParams();
@@ -50,141 +12,140 @@ function pageUrl(page: number): string {
   const qs = params.toString();
   return `/projects/${encodedProject}/conversations${qs ? `?${qs}` : ""}`;
 }
-
-const emptyLabel = $derived(data.statusFilter === "all" ? null : data.statusFilter);
 </script>
 
-<div class="max-w-4xl p-6">
-    <div class="flex items-center justify-between mb-6">
-      <h1 class="text-xl font-semibold" style="color: var(--color-accent);">
-        Sessions
-      </h1>
-      <div class="header-actions">
-        <div class="filter-group">
-          <label for="status-filter" class="filter-label">Status</label>
-          <select
-            id="status-filter"
-            class="filter-select"
-            value={data.statusFilter}
-            onchange={handleStatusChange}
-          >
-            <option value="all">All</option>
-            <option value="active">Active</option>
-            <option value="archived">Archived</option>
-          </select>
-        </div>
-        <a
-          href="/projects/{encodedProject}/conversations/import"
-          class="import-btn"
-        >
-          Import
-        </a>
-      </div>
-    </div>
+<div class="conversations-container">
+  <h1 class="page-title">Conversations</h1>
 
-    <div class="tool-tabs">
-      {#each toolTabs as tab}
-        <button
-          class="tool-tab cursor-pointer"
-          class:tool-tab-active={toolFilter === tab.value}
-          onclick={() => (toolFilter = tab.value)}
+  {#if data.conversations.length === 0}
+    <div class="empty-state">
+      <p class="empty-text">No conversations yet.</p>
+    </div>
+  {:else}
+    <div class="conversation-list">
+      {#each data.conversations as convo (convo.id)}
+        <a
+          href="/projects/{encodedProject}/conversations/{convo.id}"
+          class="conversation-card"
         >
-          {tab.label}
-        </button>
+          <div class="card-header">
+            <span class="card-title">{convo.title || "Untitled conversation"}</span>
+          </div>
+          <div class="card-meta">
+            <span class="meta-item">
+              {convo.message_count} message{convo.message_count === 1 ? "" : "s"}
+            </span>
+            <span class="meta-separator"></span>
+            <span class="meta-item">
+              {formatRelativeDate(convo.updated_at)}
+            </span>
+          </div>
+        </a>
       {/each}
     </div>
+  {/if}
 
-    {#if filtering}
-      <div class="flex items-center gap-2 py-4" style="color: var(--color-text-muted); font-size: 13px;">
-        <div class="spinner spinner-sm"></div>
-        Loading...
-      </div>
-    {:else}
-      <ConversationList
-        conversations={filteredConversations}
-        projectName={data.project.name}
-        {emptyLabel}
-        {loadingConversationId}
-      />
-    {/if}
+  {#if data.totalPages > 1}
+    <nav class="pagination" aria-label="Conversations pagination">
+      {#if data.page > 1}
+        <a href={pageUrl(data.page - 1)} class="page-link">
+          &larr; Previous
+        </a>
+      {:else}
+        <span class="page-link page-disabled">&larr; Previous</span>
+      {/if}
 
-    {#if data.totalPages > 1}
-      <nav class="pagination" aria-label="Conversations pagination">
-        {#if data.page > 1}
-          <a href={pageUrl(data.page - 1)} class="page-link">
-            &larr; Previous
-          </a>
-        {:else}
-          <span class="page-link page-disabled">&larr; Previous</span>
-        {/if}
+      <span class="page-info">
+        Page {data.page} of {data.totalPages}
+      </span>
 
-        <span class="page-info">
-          Page {data.page} of {data.totalPages}
-        </span>
-
-        {#if data.page < data.totalPages}
-          <a href={pageUrl(data.page + 1)} class="page-link">
-            Next &rarr;
-          </a>
-        {:else}
-          <span class="page-link page-disabled">Next &rarr;</span>
-        {/if}
-      </nav>
-    {/if}
+      {#if data.page < data.totalPages}
+        <a href={pageUrl(data.page + 1)} class="page-link">
+          Next &rarr;
+        </a>
+      {:else}
+        <span class="page-link page-disabled">Next &rarr;</span>
+      {/if}
+    </nav>
+  {/if}
 </div>
 
 <style>
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
+  .conversations-container {
+    padding: 1.5rem;
+    max-width: 48rem;
   }
 
-  .filter-group {
+  .page-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-accent);
+    margin-bottom: 1.5rem;
+  }
+
+  .conversation-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .conversation-card {
+    display: block;
+    padding: 1rem;
+    border-radius: 12px;
+    background: rgba(255, 253, 248, 0.5);
+    border: 1px solid rgba(199, 183, 163, 0.25);
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+
+  .conversation-card:hover {
+    background: rgba(255, 253, 248, 0.8);
+    transform: translateY(-1px);
+  }
+
+  .card-header {
+    margin-bottom: 0.375rem;
+  }
+
+  .card-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+
+  .card-meta {
     display: flex;
     align-items: center;
     gap: 0.375rem;
-  }
-
-  .filter-label {
     font-size: 0.75rem;
-    font-weight: 600;
     color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
   }
 
-  .filter-select {
-    font-size: 0.8125rem;
-    padding: 5px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--color-border);
-    background: var(--color-bg-muted);
-    color: var(--color-text);
-    outline: none;
-    cursor: pointer;
-    transition: var(--transition-base);
+  .meta-item {
+    display: flex;
+    align-items: center;
   }
 
-  .filter-select:focus {
-    border-color: var(--color-pink);
-    box-shadow: 0 0 0 2px rgba(86, 28, 36, 0.08);
+  .meta-separator::after {
+    content: "\00b7";
+    color: var(--color-text-muted);
+    font-weight: 700;
   }
 
-  .import-btn {
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--color-pink-dark);
-    padding: 6px 14px;
-    border-radius: 8px;
-    border: 1px solid var(--color-pink);
-    background: transparent;
-    text-decoration: none;
-    transition: var(--transition-base);
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
   }
 
-  .import-btn:hover {
-    background: rgba(86, 28, 36, 0.06);
+  .empty-text {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
   }
 
   .pagination {
@@ -204,7 +165,7 @@ const emptyLabel = $derived(data.statusFilter === "all" ? null : data.statusFilt
     text-decoration: none;
     padding: 6px 12px;
     border-radius: 8px;
-    transition: var(--transition-base);
+    transition: background 0.15s ease;
   }
 
   .page-link:hover:not(.page-disabled) {
@@ -220,38 +181,5 @@ const emptyLabel = $derived(data.statusFilter === "all" ? null : data.statusFilt
   .page-info {
     font-size: 0.75rem;
     color: var(--color-text-muted);
-  }
-
-  .tool-tabs {
-    display: flex;
-    gap: 0.25rem;
-    margin-bottom: 1rem;
-    padding: 0.25rem;
-    background: var(--color-bg-muted);
-    border-radius: 8px;
-    width: fit-content;
-  }
-
-  .tool-tab {
-    font-size: 0.75rem;
-    font-weight: 500;
-    padding: 0.375rem 0.75rem;
-    border-radius: 6px;
-    border: none;
-    background: transparent;
-    color: var(--color-text-muted);
-    transition: all 0.15s ease;
-  }
-
-  .tool-tab:hover {
-    color: var(--color-text);
-    background: rgba(86, 28, 36, 0.04);
-  }
-
-  .tool-tab-active {
-    background: var(--color-bg-raised);
-    color: var(--color-accent);
-    font-weight: 600;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   }
 </style>
