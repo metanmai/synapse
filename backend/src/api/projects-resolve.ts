@@ -12,18 +12,16 @@ projectsResolve.post("/resolve", async (c) => {
   const { cwd, git_origin_url, git_basename } = await parseBody(c, schemas.resolveProject);
   const db = c.get("db");
 
-  // Collaboration-aware: include projects where the user is either owner OR a member.
+  // Collaboration-aware: owners are added to project_members on creation,
+  // so a single query covers both owned and shared projects.
   const { data: memberRows, error: memberErr } = await db
     .from("project_members")
     .select("project_id")
     .eq("user_id", user.id);
   if (memberErr) throw memberErr;
-  const memberIds = (memberRows ?? []).map((r: { project_id: string }) => r.project_id);
-  const accessibleIds = new Set<string>([...memberIds]);
-  // Also include owned projects
-  const { data: ownedRows, error: ownedErr } = await db.from("projects").select("id").eq("user_id", user.id);
-  if (ownedErr) throw ownedErr;
-  for (const o of ownedRows ?? []) accessibleIds.add((o as { id: string }).id);
+  const accessibleIds = new Set<string>(
+    (memberRows ?? []).map((r: { project_id: string }) => r.project_id),
+  );
 
   if (accessibleIds.size === 0) {
     return c.json({ project_id: null, name: null, confidence: null, signal: "no_access" });
