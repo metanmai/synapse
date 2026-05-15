@@ -27,19 +27,23 @@ function getWorkerPath(): string {
   return path.join(path.dirname(fileURLToPath(import.meta.url)), "capture-worker.js");
 }
 
-/** Build an idempotent bash command that starts the daemon if not already running. */
+/** Build an idempotent bash command that starts the daemon if not already running.
+ *  Wrapped in a subshell so `exit 0` (daemon already running) doesn't kill the
+ *  outer shell — callers can safely chain additional commands after this. */
 export function buildStartCommand(workerPath?: string): string {
   const worker = workerPath ?? getWorkerPath();
   const pidFile = path.join(SYNAPSE_DIR, "capture.pid");
   const logFile = path.join(SYNAPSE_DIR, "capture.log");
 
-  return [
+  const inner = [
     `PID_FILE="${pidFile}"`,
     `if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then exit 0; fi`,
     `mkdir -p "${SYNAPSE_DIR}"`,
     `nohup node "${worker}" > "${logFile}" 2>&1 &`,
     `echo $! > "$PID_FILE"`,
   ].join("; ");
+
+  return `( ${inner} )`;
 }
 
 /** Read Claude Code settings from disk. Returns empty object if file doesn't exist. */
@@ -86,7 +90,7 @@ export function installHooks(settingsPath?: string): {
     hooks: [
       {
         type: "command",
-        command: `${buildStartCommand()} && synapsesync-mcp brief`,
+        command: `${buildStartCommand()} ; synapsesync-mcp brief`,
         timeout: 15,
       },
     ],
