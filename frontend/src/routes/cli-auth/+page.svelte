@@ -14,10 +14,14 @@ let loading = $state(false);
 
   <div class="glass w-full max-w-md rounded-xl" style="padding: 2rem;">
 
-    {#if data.error && !data.challenge}
+    {#if data.authenticated && !data.hasCli}
+      <!-- Authenticated but no CLI params — just show success -->
       <div class="text-center">
-        <h2 class="text-lg font-semibold mb-2" style="color: var(--color-danger);">Invalid link</h2>
-        <p class="text-sm" style="color: var(--color-text-muted);">{data.error}</p>
+        <div style="font-size: 2rem; color: var(--color-accent); margin-bottom: 1rem;">&#9670;</div>
+        <h2 class="text-lg font-semibold mb-2">You're signed in!</h2>
+        <p class="text-sm" style="color: var(--color-text-muted);">
+          You can close this tab and return to your terminal.
+        </p>
       </div>
 
     {:else if form?.magicLinkSent}
@@ -48,15 +52,22 @@ let loading = $state(false);
         <p class="text-sm mt-1" style="color: var(--color-text-muted);">Connecting from the terminal</p>
       </div>
 
+      <!-- OAuth buttons -->
       <div class="space-y-3 mb-6">
         <form method="POST" action="?/oauth" use:enhance>
           <input type="hidden" name="provider" value="google" />
+          <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
+          <input type="hidden" name="cli_state" value={data.state ?? ""} />
+          <input type="hidden" name="cli_port" value={data.port ?? ""} />
           <button type="submit" class="btn-secondary w-full cursor-pointer">
             Continue with Google
           </button>
         </form>
         <form method="POST" action="?/oauth" use:enhance>
           <input type="hidden" name="provider" value="github" />
+          <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
+          <input type="hidden" name="cli_state" value={data.state ?? ""} />
+          <input type="hidden" name="cli_port" value={data.port ?? ""} />
           <button type="submit" class="btn-secondary w-full cursor-pointer">
             Continue with GitHub
           </button>
@@ -81,6 +92,9 @@ let loading = $state(false);
               await update();
             };
           }} class="space-y-4">
+            <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
+            <input type="hidden" name="cli_state" value={data.state ?? ""} />
+            <input type="hidden" name="cli_port" value={data.port ?? ""} />
             <input type="email" name="email" placeholder="Email" required
               value={form?.email ?? ""}
               class="w-full text-sm"
@@ -111,6 +125,9 @@ let loading = $state(false);
               await update();
             };
           }} class="space-y-4">
+            <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
+            <input type="hidden" name="cli_state" value={data.state ?? ""} />
+            <input type="hidden" name="cli_port" value={data.port ?? ""} />
             <input type="email" name="email" placeholder="Email" required
               value={form?.email ?? ""}
               class="w-full text-sm"
@@ -144,6 +161,7 @@ let loading = $state(false);
         </p>
 
       {:else}
+        <!-- Signup mode -->
         <form method="POST" action="?/signup" use:enhance={() => {
           loading = true;
           return async ({ update }) => {
@@ -151,6 +169,9 @@ let loading = $state(false);
             await update();
           };
         }} class="space-y-4">
+          <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
+          <input type="hidden" name="cli_state" value={data.state ?? ""} />
+          <input type="hidden" name="cli_port" value={data.port ?? ""} />
           <input type="email" name="email" placeholder="Email" required
             value={form?.email ?? ""}
             class="w-full text-sm"
