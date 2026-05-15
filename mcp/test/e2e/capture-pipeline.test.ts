@@ -18,10 +18,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { AdapterRegistry } from "../../src/capture/adapter-registry.js";
 import { ClaudeCodeAdapter } from "../../src/capture/adapters/claude-code.js";
 import { ClineAdapter } from "../../src/capture/adapters/cline.js";
-import { RooCodeAdapter } from "../../src/capture/adapters/roo-code.js";
 import { CodexAdapter } from "../../src/capture/adapters/codex.js";
 import { CursorAdapter } from "../../src/capture/adapters/cursor.js";
 import { GeminiAdapter } from "../../src/capture/adapters/gemini.js";
+import { RooCodeAdapter } from "../../src/capture/adapters/roo-code.js";
 import { CloudSyncer } from "../../src/capture/cloud-sync.js";
 import { DaemonManager } from "../../src/capture/daemon.js";
 import { safeReadFile } from "../../src/capture/safe-read.js";
