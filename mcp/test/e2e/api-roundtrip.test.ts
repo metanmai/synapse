@@ -841,12 +841,34 @@ suite("Full User Journey", () => {
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   afterAll(async () => {
-    // User already deleted by the last test. Belt-and-suspenders:
+    // Belt-and-suspenders: try API-level deletion first, then fall back to
+    // direct Supabase admin cleanup so auth.users never accumulates test data.
     if (KEY) {
       try {
         await api("DELETE", "/api/account", KEY);
       } catch {
-        // already deleted
+        // already deleted or key invalid
+      }
+    }
+
+    // Direct admin cleanup: delete the auth user even if the API call failed
+    if (EMAIL && SUPABASE_URL && SUPABASE_KEY) {
+      try {
+        const listRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=50`, {
+          headers: { Authorization: `Bearer ${SUPABASE_KEY}`, apikey: SUPABASE_KEY },
+        });
+        if (listRes.ok) {
+          const { users } = (await listRes.json()) as { users: { id: string; email?: string }[] };
+          const authUser = users.find((u) => u.email === EMAIL);
+          if (authUser) {
+            await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${authUser.id}`, {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${SUPABASE_KEY}`, apikey: SUPABASE_KEY },
+            });
+          }
+        }
+      } catch {
+        // best-effort cleanup
       }
     }
   });
