@@ -91,7 +91,7 @@ const tools = [
 const currentTool = $derived(tools.find((t) => t.id === selectedTool) ?? tools[0]);
 
 async function copySnippet() {
-  const text = currentTool.method === "cli" ? currentTool.command : currentTool.config;
+  const text = currentTool.method === "cli" ? (currentTool.command ?? "") : (currentTool.config ?? "");
   await navigator.clipboard.writeText(text);
   copied = true;
   setTimeout(() => (copied = false), 2000);

@@ -17,13 +17,10 @@ export const load: PageServerLoad = async ({ locals }) => {
     created_at: string;
   }[] = [];
 
-  try {
-    billing = await api.getBillingStatus();
-  } catch {}
+  const [billingResult, keysResult] = await Promise.allSettled([api.getBillingStatus(), api.listApiKeys()]);
 
-  try {
-    keys = await api.listApiKeys();
-  } catch {}
+  if (billingResult.status === "fulfilled") billing = billingResult.value;
+  if (keysResult.status === "fulfilled") keys = keysResult.value;
 
   return { billing, keys };
 };
