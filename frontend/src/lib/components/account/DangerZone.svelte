@@ -17,51 +17,44 @@ let deleteLoading = $state(false);
 const deleteConfirmed = $derived(deleteInput === "DELETE");
 </script>
 
-<div class="glass rounded-xl" style="padding: 2rem; border: 1px solid var(--color-danger);">
+<div class="glass rounded-xl" style="padding: 2rem;">
   <h3 style="font-size: 18px; font-weight: 700; color: var(--color-danger); margin-bottom: 0.5rem;">Danger Zone</h3>
 
   {#if resetSuccess}
     <div
-      class="rounded-lg p-3 text-sm mb-4"
+      class="rounded-lg p-3 text-sm mb-3"
       style="background-color: var(--color-success-bg); color: var(--color-success);"
     >
       Account data has been reset. A new API key has been generated.
     </div>
   {/if}
   {#if resetError}
-    <div class="rounded-lg p-3 text-sm mb-4" style="background-color: #fde8e8; color: var(--color-danger);">
+    <div class="rounded-lg p-3 text-sm mb-3" style="color: var(--color-danger);">
       {resetError}
     </div>
   {/if}
   {#if deleteError}
-    <div class="rounded-lg p-3 text-sm mb-4" style="background-color: #fde8e8; color: var(--color-danger);">
+    <div class="rounded-lg p-3 text-sm mb-3" style="color: var(--color-danger);">
       {deleteError}
     </div>
   {/if}
 
   <!-- Reset Account -->
   <div class="mb-5">
-    <div class="flex items-start justify-between gap-4">
-      <div>
-        <p class="text-sm font-semibold" style="color: var(--color-text);">Reset account data</p>
-        <p class="text-xs" style="color: var(--color-text-muted);">
-          Deletes all projects, files, conversations, and insights. Your account and subscription stay intact. A fresh API key will be generated.
-        </p>
-      </div>
-      {#if !showResetConfirm}
-        <button
-          type="button"
-          class="btn-secondary cursor-pointer shrink-0"
-          style="border-color: var(--color-danger); color: var(--color-danger);"
-          onclick={() => { showResetConfirm = true; }}
-        >
-          Reset data
-        </button>
-      {/if}
-    </div>
+    <p class="text-sm mb-1" style="color: var(--color-text-muted);">
+      Deletes all projects, files, conversations, and insights. Your account and subscription stay intact.
+    </p>
 
-    {#if showResetConfirm}
-      <div class="rounded-lg p-4 mt-3" style="background-color: #fde8e8;">
+    {#if !showResetConfirm}
+      <button
+        type="button"
+        class="btn-danger cursor-pointer"
+        onclick={() => { showResetConfirm = true; }}
+      >
+        Reset data
+      </button>
+    {:else}
+      <div class="rounded-lg p-4 mt-2" style="background-color: var(--color-bg-muted); border: 1px solid var(--color-border);">
         <p class="text-sm mb-3" style="color: var(--color-danger); font-weight: 600;">
           Are you sure? This will permanently delete all your workspace data.
         </p>
@@ -74,14 +67,12 @@ const deleteConfirmed = $derived(deleteInput === "DELETE");
               await update();
             };
           }}>
-            <button
-              type="submit"
-              disabled={resetLoading}
-              class="cursor-pointer"
-              style="padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; border: none; background-color: var(--color-danger); color: white;"
-            >
+            <button type="submit" disabled={resetLoading} class="btn-danger cursor-pointer">
               {#if resetLoading}
-                Resetting...
+                <span class="flex items-center justify-center gap-2">
+                  <span class="spinner spinner-sm spinner-white"></span>
+                  Resetting...
+                </span>
               {:else}
                 Yes, reset all data
               {/if}
@@ -101,27 +92,20 @@ const deleteConfirmed = $derived(deleteInput === "DELETE");
 
   <!-- Delete Account -->
   <div style="border-top: 1px solid var(--color-border); padding-top: 1.25rem;">
-    <div class="flex items-start justify-between gap-4">
-      <div>
-        <p class="text-sm font-semibold" style="color: var(--color-text);">Delete account</p>
-        <p class="text-xs" style="color: var(--color-text-muted);">
-          Permanently deletes your account, all data, and cancels any subscription. This cannot be undone.
-        </p>
-      </div>
-      {#if !showDeleteConfirm}
-        <button
-          type="button"
-          class="cursor-pointer shrink-0"
-          style="padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; border: none; background-color: var(--color-danger); color: white;"
-          onclick={() => { showDeleteConfirm = true; }}
-        >
-          Delete account
-        </button>
-      {/if}
-    </div>
+    <p class="text-sm mb-1" style="color: var(--color-text-muted);">
+      Permanently deletes your account, all data, and cancels any subscription. This cannot be undone.
+    </p>
 
-    {#if showDeleteConfirm}
-      <div class="rounded-lg p-4 mt-3" style="background-color: #fde8e8;">
+    {#if !showDeleteConfirm}
+      <button
+        type="button"
+        class="btn-danger cursor-pointer"
+        onclick={() => { showDeleteConfirm = true; }}
+      >
+        Delete account
+      </button>
+    {:else}
+      <div class="rounded-lg p-4 mt-2" style="background-color: var(--color-bg-muted); border: 1px solid var(--color-border);">
         <p class="text-sm mb-2" style="color: var(--color-danger); font-weight: 600;">
           This is irreversible. Type <strong>DELETE</strong> to confirm.
         </p>
@@ -132,8 +116,8 @@ const deleteConfirmed = $derived(deleteInput === "DELETE");
           type="text"
           bind:value={deleteInput}
           placeholder="Type DELETE to confirm"
-          class="w-full rounded-lg px-3 py-2 text-sm mb-3"
-          style="border: 1px solid var(--color-danger); background: white; outline: none;"
+          class="w-full text-sm mb-3"
+          style="border-radius: var(--radius-sm); padding: 12px 16px; transition: var(--transition-base); background-color: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text); outline: none;"
         />
         <div class="flex gap-2">
           <form method="POST" action="?/deleteAccount" use:enhance={() => {
@@ -146,11 +130,13 @@ const deleteConfirmed = $derived(deleteInput === "DELETE");
             <button
               type="submit"
               disabled={!deleteConfirmed || deleteLoading}
-              class="cursor-pointer"
-              style="padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; border: none; background-color: {deleteConfirmed ? 'var(--color-danger)' : 'var(--color-border)'}; color: {deleteConfirmed ? 'white' : 'var(--color-text-muted)'};"
+              class="btn-danger cursor-pointer"
             >
               {#if deleteLoading}
-                Deleting...
+                <span class="flex items-center justify-center gap-2">
+                  <span class="spinner spinner-sm spinner-white"></span>
+                  Deleting...
+                </span>
               {:else}
                 Permanently delete account
               {/if}
@@ -168,3 +154,24 @@ const deleteConfirmed = $derived(deleteInput === "DELETE");
     {/if}
   </div>
 </div>
+
+<style>
+  .btn-danger {
+    background: var(--color-danger);
+    color: white;
+    border: none;
+    border-radius: var(--radius-pill);
+    padding: 10px 24px;
+    font-weight: 600;
+    font-size: 14px;
+    transition: var(--transition-base);
+  }
+  .btn-danger:hover {
+    opacity: 0.9;
+    box-shadow: 0 8px 32px rgba(139, 0, 0, 0.25);
+  }
+  .btn-danger:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+</style>
