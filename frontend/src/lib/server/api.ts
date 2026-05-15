@@ -110,6 +110,14 @@ export function createApi(token: string | null) {
       request<{ ok: true }>(`/api/account/keys/${keyId}`, token, {
         method: "DELETE",
       }),
+    resetAccount: () =>
+      request<{ ok: true; api_key: string }>("/api/account/reset", token, {
+        method: "POST",
+      }),
+    deleteAccount: () =>
+      request<{ ok: true }>("/api/account", token, {
+        method: "DELETE",
+      }),
 
     // Billing
     getBillingStatus: () =>

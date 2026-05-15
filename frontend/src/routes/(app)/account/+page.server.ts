@@ -94,4 +94,26 @@ export const actions: Actions = {
     const { url } = await api.createPortalSession();
     redirect(303, url);
   },
+
+  resetAccount: async ({ locals }) => {
+    const api = createApi(locals.token);
+    try {
+      await api.resetAccount();
+      return { resetSuccess: true };
+    } catch (err) {
+      return fail(500, { resetError: err instanceof Error ? err.message : "Reset failed" });
+    }
+  },
+
+  deleteAccount: async ({ locals, cookies }) => {
+    const api = createApi(locals.token);
+    try {
+      await api.deleteAccount();
+    } catch (err) {
+      return fail(500, { deleteError: err instanceof Error ? err.message : "Delete failed" });
+    }
+    const supabase = getSupabase(cookies);
+    await supabase.auth.signOut();
+    redirect(303, "/login");
+  },
 };
