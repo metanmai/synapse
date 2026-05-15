@@ -75,13 +75,11 @@ export interface HandoffLoopArgs {
 
 export interface FireArgs {
   project_id: string;
-  ai_enabled: boolean;
   idle_threshold_ms: number;
   spawnFn?: typeof spawnInferNextStep;
 }
 
 export async function maybeFireInferNextStep(a: FireArgs): Promise<void> {
-  if (!a.ai_enabled) return;
   const events = readEvents(projectDir(a.project_id));
   if (events.length === 0) return;
 
