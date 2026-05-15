@@ -8,7 +8,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
 
   if (!code) redirect(303, "/login?error=missing_code");
 
-  const supabase = getSupabase();
+  const supabase = getSupabase(cookies);
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error || !data.session) redirect(303, "/login?error=auth_failed");
