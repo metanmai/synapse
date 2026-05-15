@@ -15,12 +15,14 @@ export function getTierLimitsFromEnv(env?: Record<string, string>) {
     free: {
       maxFiles: parseInt(env?.TIER_FREE_MAX_FILES ?? "50"),
       maxConnections: parseInt(env?.TIER_FREE_MAX_CONNECTIONS ?? "3"),
-      history: false,
+      maxHistoryVersions: parseInt(env?.TIER_FREE_MAX_HISTORY ?? "3"), // 0 = none, -1 = unlimited
+      maxMembers: parseInt(env?.TIER_FREE_MAX_MEMBERS ?? "2"), // 0 = unlimited
     },
     pro: {
       maxFiles: parseInt(env?.TIER_PRO_MAX_FILES ?? "500"),
       maxConnections: parseInt(env?.TIER_PRO_MAX_CONNECTIONS ?? "0"), // 0 = unlimited
-      history: true,
+      maxHistoryVersions: -1, // unlimited
+      maxMembers: 0, // unlimited
     },
   };
 }
