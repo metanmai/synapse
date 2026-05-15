@@ -18,9 +18,15 @@ function render(s: ProjectStatus, viewer: string): string {
   const lines: string[] = [];
   lines.push(`Project: ${s.project_id}`);
   if (s.current_next_step) {
-    const provenance = s.current_next_step.inferred
-      ? "inferred from activity"
-      : `set by ${s.current_next_step.set_by.user_id}`;
+    let provenance: string;
+    if (s.current_next_step.inferred) {
+      provenance =
+        s.current_next_step.inferred_method === "heuristic"
+          ? "inferred from recent activity"
+          : "inferred from activity by Claude Code";
+    } else {
+      provenance = `set by ${s.current_next_step.set_by.user_id}`;
+    }
     lines.push(`Next step (${provenance}): "${s.current_next_step.text}"`);
   }
   const mostRecent = s.active_actors[0];

@@ -7,6 +7,7 @@ import { appendEvent, readEvents } from "./events-log.js";
 import { writeBrief } from "./handoff-brief.js";
 import { flushNowSignalPath, healthcheckPath, projectDir } from "./handoff-paths.js";
 import { runFlushCycle, runPullCycle } from "./handoff-sync.js";
+import { synthesizeHeuristicNextStep } from "./heuristic-synth.js";
 
 export interface DaemonStatus {
   running: boolean;
@@ -96,7 +97,18 @@ export async function maybeFireInferNextStep(a: FireArgs): Promise<void> {
     .map((e) => `${e.kind}: ${JSON.stringify(e.payload).slice(0, 80)}`)
     .join("\n");
   const fn = a.spawnFn ?? spawnInferNextStep;
-  const text = await fn({ project_id: a.project_id, recent_events_summary: summary });
+
+  let text: string;
+  let inferred_method: "llm" | "heuristic";
+  try {
+    text = await fn({ project_id: a.project_id, recent_events_summary: summary });
+    inferred_method = "llm";
+  } catch (err) {
+    console.warn("[handoff] LLM inference failed, falling back to heuristic:", err);
+    text = synthesizeHeuristicNextStep(events);
+    inferred_method = "heuristic";
+  }
+
   if (!text || text.length === 0) return;
 
   appendEvent(projectDir(a.project_id), {
@@ -112,7 +124,7 @@ export async function maybeFireInferNextStep(a: FireArgs): Promise<void> {
     },
     kind: EventKind.NextStepInferred,
     occurred_at: new Date().toISOString(),
-    payload: { text, on_behalf_of: lastEvent.actor.user_id },
+    payload: { text, on_behalf_of: lastEvent.actor.user_id, inferred_method },
   });
 }
 

@@ -84,6 +84,7 @@ export interface ProjectStatus {
     set_by: Actor;
     set_at: string;
     inferred: boolean;
+    inferred_method?: "llm" | "heuristic";
   } | null;
   active_actors: Array<{
     actor: Actor;
