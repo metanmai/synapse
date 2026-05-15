@@ -8,27 +8,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const state = url.searchParams.get("state");
   const port = url.searchParams.get("port");
   const hasCli = Boolean(challenge && state && port);
-  const wantsSwitch = url.searchParams.get("switch") === "1";
-
-  // If user is already authenticated, CLI params present, and not switching accounts → auto-redirect
-  if (locals.user && locals.token && hasCli && !wantsSwitch) {
-    const res = await fetch(`${API_URL}/auth/cli-session`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${locals.token}`,
-      },
-      body: JSON.stringify({ code_challenge: challenge }),
-    });
-
-    if (res.ok) {
-      const data = (await res.json()) as { code: string };
-      redirect(
-        303,
-        `http://localhost:${port}/callback?code=${encodeURIComponent(data.code)}&state=${encodeURIComponent(state ?? "")}`,
-      );
-    }
-  }
 
   return {
     challenge,
@@ -136,6 +115,34 @@ export const actions: Actions = {
     if (error) return fail(400, { error: error.message, email });
 
     return { signupSuccess: true, email };
+  },
+
+  continueAs: async ({ request, locals }) => {
+    const formData = await request.formData();
+    const cli = getCliParams(formData);
+
+    if (!locals.user || !locals.token || !cli.challenge || !cli.state || !cli.port) {
+      return fail(400, { error: "Missing session or CLI parameters." });
+    }
+
+    const res = await fetch(`${API_URL}/auth/cli-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${locals.token}`,
+      },
+      body: JSON.stringify({ code_challenge: cli.challenge }),
+    });
+
+    if (!res.ok) {
+      return fail(500, { error: "Failed to create CLI session. Please try again." });
+    }
+
+    const data = (await res.json()) as { code: string };
+    redirect(
+      303,
+      `http://localhost:${cli.port}/callback?code=${encodeURIComponent(data.code)}&state=${encodeURIComponent(cli.state)}`,
+    );
   },
 
   switchAccount: async ({ request, cookies }) => {
