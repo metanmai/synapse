@@ -131,6 +131,7 @@ function menuPathIsFile(menuPath: string): boolean {
   <div onclick={(e) => e.stopPropagation()}
     onkeydown={(e) => { if (e.key === 'Escape') menuOpen = null; }}
     role="menu"
+    tabindex="-1"
     class="fixed rounded-lg shadow-lg py-1 context-menu"
     style="left: {menuPos.x}px; top: {menuPos.y}px;">
     <button role="menuitem" onclick={() => handleAction("activity", menuOpen!, menuPathIsFolder(menuOpen!))}
@@ -181,6 +182,7 @@ function menuPathIsFile(menuPath: string): boolean {
     <div class="tree-row tree-row-folder group flex items-center gap-1 cursor-pointer"
       role="treeitem"
       tabindex="0"
+      aria-selected={false}
       aria-expanded={expanded.has(child.path)}
       onclick={() => toggle(child.path)}
       onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(child.path); } else if (e.key === 'ArrowRight' && !expanded.has(child.path)) { e.preventDefault(); toggle(child.path); } else if (e.key === 'ArrowLeft' && expanded.has(child.path)) { e.preventDefault(); toggle(child.path); } }}
