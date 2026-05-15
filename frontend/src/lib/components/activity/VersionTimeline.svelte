@@ -1,6 +1,6 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
-import { computeDiff, type DiffLine } from "$lib/diff";
+import { type DiffLine, computeDiff } from "$lib/diff";
 import type { EntryHistory } from "$lib/types";
 
 let { versions, currentContent } = $props<{
@@ -20,10 +20,7 @@ function getDiff(index: number): DiffLine[] {
   // - version[0] diff = version[0].content vs currentContent (the live entry)
   // - version[N] diff = version[N].content vs version[N-1].content
   const olderContent = versions[index].content;
-  const newerContent =
-    index === 0
-      ? (currentContent ?? versions[index].content)
-      : versions[index - 1].content;
+  const newerContent = index === 0 ? (currentContent ?? versions[index].content) : versions[index - 1].content;
   return computeDiff(olderContent, newerContent);
 }
 

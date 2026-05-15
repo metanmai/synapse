@@ -1,9 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { singleOrNull } from "../query-helpers";
-import { buildIlikeWords, mergeSearchResults, type ScoredEntry } from "../search-helpers";
+import { type ScoredEntry, buildIlikeWords, mergeSearchResults } from "../search-helpers";
 import type { Entry, EntryHistory } from "../types";
 
-const ENTRY_COLUMNS = "id, project_id, path, content, content_type, author_id, source, tags, google_doc_id, created_at, updated_at";
+const ENTRY_COLUMNS =
+  "id, project_id, path, content, content_type, author_id, source, tags, google_doc_id, created_at, updated_at";
 
 export async function upsertEntry(
   db: SupabaseClient,
@@ -158,11 +159,7 @@ export async function searchEntries(
             })
             .join(",");
 
-          let iq = db
-            .from("entries")
-            .select(ENTRY_COLUMNS)
-            .eq("project_id", projectId)
-            .or(orClauses);
+          let iq = db.from("entries").select(ENTRY_COLUMNS).eq("project_id", projectId).or(orClauses);
 
           if (options?.folder) iq = iq.like("path", `${options.folder}/%`);
           if (options?.tags?.length) iq = iq.overlaps("tags", options.tags);
@@ -180,11 +177,7 @@ export async function searchEntries(
       : Promise.resolve([]);
 
   // Run all three tiers in parallel
-  const [semantic, fulltext, ilike] = await Promise.all([
-    semanticPromise,
-    fulltextPromise,
-    ilikePromise,
-  ]);
+  const [semantic, fulltext, ilike] = await Promise.all([semanticPromise, fulltextPromise, ilikePromise]);
 
   return mergeSearchResults(semantic, fulltext, ilike);
 }
@@ -267,7 +260,12 @@ export async function restoreEntry(
   if (!historyRecord) return null;
 
   // Upsert restores the content (upsertEntry handles versioning)
-  const { data: existing } = await db.from("entries").select(ENTRY_COLUMNS).eq("project_id", projectId).eq("path", path).single();
+  const { data: existing } = await db
+    .from("entries")
+    .select(ENTRY_COLUMNS)
+    .eq("project_id", projectId)
+    .eq("path", path)
+    .single();
 
   if (!existing) return null;
 

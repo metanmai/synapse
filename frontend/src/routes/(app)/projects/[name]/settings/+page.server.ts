@@ -1,8 +1,12 @@
 import { createApi } from "$lib/server/api";
 import { fail } from "@sveltejs/kit";
-import type { Actions } from "./$types";
+import type { Actions, PageServerLoad } from "./$types";
 
-// No load function — shareLinks and project come from parent layout
+export const load: PageServerLoad = async ({ locals }) => {
+  const api = createApi(locals.token);
+  const billing = await api.getBillingStatus().catch(() => ({ tier: "free" as const, subscription: null }));
+  return { tier: billing.tier };
+};
 
 export const actions: Actions = {
   addMember: async ({ request, locals }) => {
