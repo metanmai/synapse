@@ -125,6 +125,10 @@ export function registerConversationTools(server: McpServer, _env: Env, getConte
     {
       project: z.string().describe("Project name"),
       conversationId: z.string().describe("Conversation ID to load"),
+      mode: z
+        .enum(["full", "compact"])
+        .default("full")
+        .describe("'compact' returns the compacted summary, 'full' returns all messages"),
       fidelity: z
         .enum(["summary", "full"])
         .optional()
@@ -134,7 +138,7 @@ export function registerConversationTools(server: McpServer, _env: Env, getConte
         .optional()
         .describe("Start from this message sequence number (for partial loads / pagination)"),
     },
-    async ({ project, conversationId, fidelity, fromSequence }) => {
+    async ({ project, conversationId, mode, fidelity, fromSequence }) => {
       const userId = requireMcpUserId(getContext);
 
       const proj = await mcpResolveProject(db, project, userId);
@@ -146,6 +150,26 @@ export function registerConversationTools(server: McpServer, _env: Env, getConte
       }
       if (conv.project_id !== proj.id) {
         return mcpError(`Conversation "${conversationId}" does not belong to project "${project}".`);
+      }
+
+      // Compact mode: return compacted summary if available
+      if (mode === "compact" && conv.compacted_summary) {
+        await logActivity(db, {
+          project_id: proj.id,
+          user_id: userId,
+          action: "conversation_loaded",
+          source: "mcp",
+          metadata: { conversation_id: conversationId, mode: "compact" },
+        });
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `# ${conv.title ?? "Conversation"} (compacted)\n\nCompacted: ${conv.compacted_at}\nModel: ${conv.compaction_model}\n\n${conv.compacted_summary}`,
+            },
+          ],
+        };
       }
 
       const messages = await getMessages(db, conversationId, {
@@ -188,8 +212,8 @@ export function registerConversationTools(server: McpServer, _env: Env, getConte
             parts.push(msg.content);
           }
           if (msg.tool_interaction) {
-            const mode = fidelity ?? conv.fidelity_mode;
-            if (mode === "summary") {
+            const toolMode = fidelity ?? conv.fidelity_mode;
+            if (toolMode === "summary") {
               parts.push(`> Tool: ${msg.tool_interaction.summary}`);
             } else {
               parts.push(`> Tool: ${msg.tool_interaction.name}`);
