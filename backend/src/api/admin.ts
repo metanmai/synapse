@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 
 import { createApiKey } from "../db/queries/api-keys";
+import { upsertSubscription } from "../db/queries/subscriptions";
 import { hashApiKey } from "../lib/auth";
 import type { Env } from "../lib/env";
 
@@ -63,6 +64,44 @@ admin.post("/users/:id/reset", async (c) => {
   await createApiKey(db, userId, apiKeyHash, "default");
 
   return c.json({ ok: true, api_key: apiKey });
+});
+
+// POST /api/admin/users/:id/grant-plus — grant Plus tier to a user
+admin.post("/users/:id/grant-plus", async (c) => {
+  const userId = c.req.param("id");
+  const db = c.get("db");
+
+  const { data: userRow } = await db.from("users").select("id").eq("id", userId).single();
+  if (!userRow) return c.json({ error: "User not found", code: "NOT_FOUND" }, 404);
+
+  await upsertSubscription(db, {
+    user_id: userId,
+    provider: "admin",
+    provider_subscription_id: `admin-grant-${userId}`,
+    status: "active",
+    current_period_end: null,
+    cancel_at_period_end: false,
+  });
+
+  return c.json({ ok: true, tier: "plus" });
+});
+
+// POST /api/admin/users/:id/revoke-plus — revoke Plus tier from a user
+admin.post("/users/:id/revoke-plus", async (c) => {
+  const userId = c.req.param("id");
+  const db = c.get("db");
+
+  const { data: userRow } = await db.from("users").select("id").eq("id", userId).single();
+  if (!userRow) return c.json({ error: "User not found", code: "NOT_FOUND" }, 404);
+
+  const { error } = await db
+    .from("subscriptions")
+    .update({ status: "inactive", updated_at: new Date().toISOString() })
+    .eq("user_id", userId);
+
+  if (error) return c.json({ error: `Revoke failed: ${error.message}`, code: "REVOKE_ERROR" }, 500);
+
+  return c.json({ ok: true, tier: "free" });
 });
 
 export { admin };
