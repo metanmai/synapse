@@ -386,7 +386,15 @@ account.post("/reset", async (c) => {
   const user = c.get("user");
   const db = c.get("db");
 
-  await resetUser(db, user.id);
+  try {
+    await resetUser(db, user.id);
+  } catch (err) {
+    console.error("[account/reset] resetUser error:", err);
+    // Continue anyway — best-effort cleanup, still create fresh key
+  }
+
+  // Force-delete any remaining API keys (in case resetUser's safeDelete missed them)
+  await db.from("api_keys").delete().eq("user_id", user.id);
 
   // Create a fresh API key
   const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
