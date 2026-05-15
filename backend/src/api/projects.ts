@@ -16,6 +16,7 @@ import {
   listShareLinks,
   removeMember,
   setPreference,
+  updateMemberRole,
 } from "../db/queries";
 import { authMiddleware } from "../lib/auth";
 import { DEFAULT_PAGE_LIMIT } from "../lib/constants";
@@ -85,6 +86,31 @@ projects.post("/:id/members", async (c) => {
     metadata: { role },
   });
   return c.json(member, 201);
+});
+
+// PATCH /api/projects/:id/members/:email
+projects.patch("/:id/members/:email", async (c) => {
+  const user = c.get("user");
+  const projectId = c.req.param("id");
+  const email = c.req.param("email");
+  const { role } = await parseBody(c, schemas.updateMemberRole);
+
+  const db = c.get("db");
+  await requireRole(db, projectId, user.id, "owner");
+
+  const target = await findUserByEmail(db, email);
+  if (!target) throw new NotFoundError(`No user found with email ${email}`);
+
+  await updateMemberRole(db, projectId, target.id, role);
+  await logActivity(db, {
+    project_id: projectId,
+    user_id: user.id,
+    action: "member_role_changed",
+    target_email: email,
+    source: "human",
+    metadata: { role },
+  });
+  return c.json({ ok: true });
 });
 
 // DELETE /api/projects/:id/members/:email
