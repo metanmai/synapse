@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateSession, validateMessage } from "../../../src/capture/types.js";
+import { validateMessage, validateSession } from "../../../src/capture/types.js";
 
 describe("validateMessage", () => {
   it("accepts a valid user message", () => {
@@ -18,13 +18,13 @@ describe("validateMessage", () => {
   });
 
   it("rejects a message with missing content", () => {
-    const msg = { role: "user" as const, timestamp: "2026-04-02T10:00:00Z" };
-    expect(validateMessage(msg as any)).toBe(false);
+    const msg: unknown = { role: "user", timestamp: "2026-04-02T10:00:00Z" };
+    expect(validateMessage(msg)).toBe(false);
   });
 
   it("rejects a message with invalid role", () => {
-    const msg = { role: "system", content: "hello", timestamp: "2026-04-02T10:00:00Z" };
-    expect(validateMessage(msg as any)).toBe(false);
+    const msg: unknown = { role: "system", content: "hello", timestamp: "2026-04-02T10:00:00Z" };
+    expect(validateMessage(msg)).toBe(false);
   });
 });
 
@@ -65,6 +65,6 @@ describe("validateSession", () => {
       updatedAt: "2026-04-02T10:05:00Z",
       messages: [{ role: "user" as const, content: "hi", timestamp: "2026-04-02T10:00:00Z" }],
     };
-    expect(validateSession(session as any)).toBe(false);
+    expect(validateSession(session as unknown)).toBe(false);
   });
 });
