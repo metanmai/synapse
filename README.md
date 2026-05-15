@@ -34,9 +34,11 @@ synapse handoff "next: finish auth flow"  # leave a baton for the next session
 
 **Daemon-fired Claude Code:** the daemon can also spawn its own Claude Code sessions (e.g. to compact context, extract decisions, refresh the brief). This is **opt-in** — set `daemon.ai_enabled = true` in `~/.synapse/config.json` to turn it on.
 
-### For other MCP hosts (Cursor, Windsurf, VS Code)
+### Legacy: for other MCP hosts (Cursor, Windsurf, VS Code)
 
 The same package ships an MCP server that any MCP client can use. Hosts other than Claude Code don't get the hook-driven handoff layer; they get the same workspace via tools.
+
+The legacy MCP surface has been trimmed: `ls`, `read`, `search`, `history`, `tree`, `list_conversations`, and `load_conversation` have been removed. Only **`save_insight`** and **`list_insights`** remain for backward compatibility with existing MCP installs; for everything else use the handoff CLI or the REST API. The MCP server itself is deprecated and is scheduled for removal in v2.0.
 
 1. **Get an API key** — Sign up at **[synapsesync.app](https://synapsesync.app)**, open **Account → API keys**, and create a key (or create the account from the CLI).
 2. **Run the wizard:**
@@ -63,7 +65,7 @@ The same package ships an MCP server that any MCP client can use. Hosts other th
 
 4. **Scripted / CI** — `login --email … --password …` or `signup --email …` print JSON snippets; run `init --key <key>` to write config files.
 
-Your assistant gets tools such as **`read`**, **`write`**, **`search`**, **`tree`**, **`ls`**, and **`history`** against your project paths (e.g. `decisions/`, `notes/`, `architecture/`).
+Your assistant gets the legacy **`save_insight`** and **`list_insights`** tools for capturing decisions/learnings into your project.
 
 The MCP always talks to the public API at `https://api.synapsesync.app`. Self-hosting your own API requires building `synapsesync-mcp` from source and changing the `API_URL` constant in `mcp/src/index.ts`.
 
