@@ -45,7 +45,7 @@
   {#if showUpgradeSuccess}
     <div
       class="rounded-lg p-3 text-sm mb-3"
-      style="background-color: var(--color-success-bg, #ecfdf5); color: var(--color-success, #065f46);"
+      style="background-color: var(--color-success-bg); color: var(--color-success);"
     >
       Welcome to Pro! Your upgrade is active.
     </div>
