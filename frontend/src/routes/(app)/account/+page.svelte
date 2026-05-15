@@ -1,5 +1,5 @@
 <script>
-  import ApiKeyCard from "$lib/components/account/ApiKeyCard.svelte";
+  import ApiKeysCard from "$lib/components/account/ApiKeysCard.svelte";
   import ConnectedAccounts from "$lib/components/account/ConnectedAccounts.svelte";
   import BillingCard from "$lib/components/account/BillingCard.svelte";
 
@@ -13,7 +13,7 @@
   </div>
   <div class="space-y-6">
     <BillingCard billing={data.billing} />
-    <ApiKeyCard apiKey={form?.apiKey} error={form?.error} />
+    <ApiKeysCard keys={data.keys} newKey={form?.newKey} keyError={form?.keyError} />
     <ConnectedAccounts />
   </div>
 </div>
