@@ -54,13 +54,6 @@ function setupEvents(home: string, pid: string, events: TestEvent[]) {
 }
 
 describe("auto-infer next_step", () => {
-  it("does not fire when ai_enabled=false", async () => {
-    const spy = vi.fn();
-    // biome-ignore lint/suspicious/noExplicitAny: test stub
-    await maybeFireInferNextStep({ project_id: "p1", ai_enabled: false, idle_threshold_ms: 1000, spawnFn: spy as any });
-    expect(spy).not.toHaveBeenCalled();
-  });
-
   it("does not fire when an explicit next_step_set was made within idle window", async () => {
     setupEvents(tmp, "p2", [
       { kind: "user_prompted", occurred_at: minutesAgo(45) },
@@ -69,7 +62,6 @@ describe("auto-infer next_step", () => {
     const spy = vi.fn();
     await maybeFireInferNextStep({
       project_id: "p2",
-      ai_enabled: true,
       idle_threshold_ms: 30 * 60_000,
       // biome-ignore lint/suspicious/noExplicitAny: test stub
       spawnFn: spy as any,
@@ -82,7 +74,6 @@ describe("auto-infer next_step", () => {
     const stub = vi.fn(async () => "wire /callback");
     await maybeFireInferNextStep({
       project_id: "p3",
-      ai_enabled: true,
       idle_threshold_ms: 30 * 60_000,
       // biome-ignore lint/suspicious/noExplicitAny: test stub
       spawnFn: stub as any,

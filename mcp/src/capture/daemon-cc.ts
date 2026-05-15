@@ -1,9 +1,7 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { EventKind } from "@synapse/shared/handoff/events.js";
-import { appendEvent, readEvents } from "./events-log.js";
-import { projectDir, synapseRoot } from "./handoff-paths.js";
+import { synapseRoot } from "./handoff-paths.js";
 
 export function writeDaemonCcProfile(): string {
   const p = path.join(synapseRoot(), "daemon-cc-profile.json");
@@ -47,86 +45,4 @@ export async function spawnInferNextStep(a: SpawnArgs): Promise<string> {
       code === 0 ? resolve(out.trim()) : reject(new Error(`claude exited ${code}`)),
     );
   });
-}
-
-// ---------------------------------------------------------------------------
-// Cost tracking
-// ---------------------------------------------------------------------------
-
-const HAIKU_INPUT_PER_MTOK = 0.8;
-const HAIKU_OUTPUT_PER_MTOK = 4.0;
-const SONNET_INPUT_PER_MTOK = 3.0;
-const SONNET_OUTPUT_PER_MTOK = 15.0;
-
-/** Rough token estimate: ~4 chars per token (industry rule-of-thumb). */
-export function estimateTokens(s: string): number {
-  return Math.ceil(s.length / 4);
-}
-
-function daemonActor() {
-  return {
-    user_id: "daemon",
-    kind: "synapse-daemon" as const,
-    device_id: "daemon",
-    hostname: "daemon",
-    client: "claude-code",
-  };
-}
-
-export function recordRunStart(a: { project_id: string; purpose: string }): string {
-  const run_id = Math.random().toString(36).slice(2);
-  appendEvent(projectDir(a.project_id), {
-    project_id: a.project_id,
-    session_id: "daemon",
-    actor: daemonActor(),
-    attached_to: null,
-    kind: EventKind.DaemonRunStarted,
-    occurred_at: new Date().toISOString(),
-    payload: { run_id, purpose: a.purpose },
-  });
-  return run_id;
-}
-
-export function recordRunComplete(a: {
-  project_id: string;
-  run_id: string;
-  input_tokens: number;
-  output_tokens: number;
-  model: "haiku" | "sonnet";
-}): void {
-  const inputRate = a.model === "haiku" ? HAIKU_INPUT_PER_MTOK : SONNET_INPUT_PER_MTOK;
-  const outputRate = a.model === "haiku" ? HAIKU_OUTPUT_PER_MTOK : SONNET_OUTPUT_PER_MTOK;
-  const cost_usd = (a.input_tokens / 1_000_000) * inputRate + (a.output_tokens / 1_000_000) * outputRate;
-  appendEvent(projectDir(a.project_id), {
-    project_id: a.project_id,
-    session_id: "daemon",
-    actor: daemonActor(),
-    attached_to: null,
-    kind: EventKind.DaemonRunCompleted,
-    occurred_at: new Date().toISOString(),
-    payload: {
-      run_id: a.run_id,
-      input_tokens: a.input_tokens,
-      output_tokens: a.output_tokens,
-      model: a.model,
-      cost_usd,
-    },
-  });
-}
-
-export function getMonthlyCostUsd(): number {
-  const dir = path.join(synapseRoot(), "projects");
-  if (!fs.existsSync(dir)) return 0;
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
-  let total = 0;
-  for (const p of fs.readdirSync(dir)) {
-    const events = readEvents(path.join(dir, p));
-    for (const e of events) {
-      if (e.kind === EventKind.DaemonRunCompleted && new Date(e.occurred_at).getTime() >= monthStart) {
-        const payload = e.payload as { cost_usd?: number };
-        total += payload.cost_usd ?? 0;
-      }
-    }
-  }
-  return total;
 }

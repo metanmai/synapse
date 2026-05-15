@@ -15,8 +15,6 @@ export const EventKind = {
   FocusSet: "focus_set",
   NextStepSet: "next_step_set",
   NextStepInferred: "next_step_inferred",
-  DaemonRunStarted: "daemon_run_started",
-  DaemonRunCompleted: "daemon_run_completed",
 } as const;
 
 export type EventKind = (typeof EventKind)[keyof typeof EventKind];
