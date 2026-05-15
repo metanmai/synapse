@@ -1,6 +1,12 @@
 import type { Context } from "hono";
 import { getTierLimitsFromEnv } from "../db/types";
-import { DEFAULT_APP_URL, DEFAULT_TIER_PLUS_PRICE } from "./constants";
+import {
+  DEFAULT_APP_URL,
+  DEFAULT_TIER_PLUS_PRICE,
+  FREE_MAX_PROJECTS,
+  FREE_MAX_PULLS_PER_DAY,
+  PLUS_MAX_PROJECTS,
+} from "./constants";
 import { envOr } from "./env";
 import type { Env } from "./env";
 import { AppError } from "./errors";
@@ -68,6 +74,30 @@ export function enforceConnectionLimit(currentConnections: number, _source: stri
     const price = envOr(c.env, "TIER_PLUS_PRICE", DEFAULT_TIER_PLUS_PRICE);
     throw new AppError(
       `Connection limit reached (${limits.maxConnections} sources on ${tier} tier). Upgrade to Plus ($${price}/mo) for unlimited connections.`,
+      403,
+      "TIER_LIMIT",
+    );
+  }
+}
+
+export function enforceProjectQuota(currentCount: number, c: Context<{ Bindings: Env }>) {
+  const tier = c.get("tier") ?? "free";
+  const max = tier === "plus" ? PLUS_MAX_PROJECTS : FREE_MAX_PROJECTS;
+  if (currentCount >= max) {
+    throw new AppError(
+      `Project limit reached (${max}). ${tier === "free" ? "Upgrade to Plus for up to 50 projects." : "Maximum 50 projects on Plus."}`,
+      403,
+      "TIER_LIMIT",
+    );
+  }
+}
+
+export function enforcePullQuota(pullCount: number, c: Context<{ Bindings: Env }>) {
+  const tier = c.get("tier") ?? "free";
+  if (tier === "plus") return;
+  if (pullCount >= FREE_MAX_PULLS_PER_DAY) {
+    throw new AppError(
+      `Daily context pull limit reached (${FREE_MAX_PULLS_PER_DAY}). Upgrade to Plus for unlimited pulls.`,
       403,
       "TIER_LIMIT",
     );
