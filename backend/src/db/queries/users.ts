@@ -33,16 +33,3 @@ export async function findUserBySupabaseAuthId(
     await db.from("users").select("*").eq("supabase_auth_id", supabaseAuthId).single()
   );
 }
-
-export async function updateStripeCustomerId(
-  db: SupabaseClient,
-  userId: string,
-  stripeCustomerId: string
-): Promise<void> {
-  const { error } = await db
-    .from("users")
-    .update({ stripe_customer_id: stripeCustomerId })
-    .eq("id", userId);
-
-  if (error) throw error;
-}
