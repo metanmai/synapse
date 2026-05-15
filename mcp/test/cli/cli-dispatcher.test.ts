@@ -216,7 +216,9 @@ describe("CLI dispatcher — handoff layer subcommands", () => {
   });
 
   describe("`synapse init` argument parsing", () => {
-    // init writes to os.homedir(), so we override HOME for these cases.
+    // init writes hooks/slash commands to `os.homedir()/.claude/` (HOME-based)
+    // and config.json to `synapseRoot()` (SYNAPSE_HOME-based, with `.synapse`
+    // fallback under HOME). Override HOME so the test owns both surfaces.
     let originalHome: string | undefined;
     let initHome: string;
 
@@ -236,18 +238,22 @@ describe("CLI dispatcher — handoff layer subcommands", () => {
       fs.rmSync(initHome, { recursive: true, force: true });
     });
 
+    // The cli-dispatcher beforeEach sets SYNAPSE_HOME=tmp, so config.json
+    // lands directly at `${tmp}/config.json` (synapseRoot), not under HOME.
+    function readConfig(): { api_key?: string } {
+      return JSON.parse(fs.readFileSync(path.join(tmp, "config.json"), "utf-8"));
+    }
+
     it("stores the value after --api-key (not the flag itself)", async () => {
       const { code } = await runCli("init", "--api-key", "sk-test-flag-form", "--skip-service");
       expect(code).toBe(0);
-      const config = JSON.parse(fs.readFileSync(path.join(initHome, ".synapse/config.json"), "utf-8"));
-      expect(config.api_key).toBe("sk-test-flag-form");
+      expect(readConfig().api_key).toBe("sk-test-flag-form");
     });
 
     it("accepts a positional key", async () => {
       const { code } = await runCli("init", "sk-test-positional", "--skip-service");
       expect(code).toBe(0);
-      const config = JSON.parse(fs.readFileSync(path.join(initHome, ".synapse/config.json"), "utf-8"));
-      expect(config.api_key).toBe("sk-test-positional");
+      expect(readConfig().api_key).toBe("sk-test-positional");
     });
 
     it("exits non-zero with a usage hint when no key is supplied", async () => {
