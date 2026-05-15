@@ -1,5 +1,5 @@
 import { EventKind } from "./events.js";
-import type { Event, FileTouch, ProjectStatus } from "./types.js";
+import type { Event, FileTouch, Issue, ProjectStatus, Subtask } from "./types.js";
 
 const IDLE_THRESHOLD_MS = 30 * 60 * 1000;
 
@@ -11,11 +11,20 @@ export function reduce(events: Event[], project_id: string, opts: ReduceOptions 
   const now = (opts.now ?? new Date()).toISOString();
   // Order by occurred_at (LWW), fall back to received_at if occurred_at is implausible (>5 min in future of now).
   const nowMs = new Date(now).getTime();
-  const ordered = [...events].sort((a, b) => orderKey(a, nowMs).localeCompare(orderKey(b, nowMs)));
+  const ordered = events
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => {
+      const ka = orderKey(a.e, nowMs);
+      const kb = orderKey(b.e, nowMs);
+      return ka < kb ? -1 : ka > kb ? 1 : a.i - b.i;
+    })
+    .map(({ e }) => e);
 
   let next_step: ProjectStatus["current_next_step"] = null;
   const actors = new Map<string, ProjectStatus["active_actors"][number]>();
   const recent = ordered.slice(-50);
+  const subtasks = new Map<string, Subtask>();
+  const issues = new Map<string, Issue>();
 
   for (const e of ordered) {
     const aKey = e.actor.user_id;
@@ -56,6 +65,71 @@ export function reduce(events: Event[], project_id: string, opts: ReduceOptions 
         slot.recent_files = [f, ...slot.recent_files.filter((x) => x.path !== f.path)].slice(0, 10);
         break;
       }
+      case EventKind.SubtaskAdded: {
+        const p = e.payload as { task_id?: string; text?: string };
+        const id = String(p.task_id ?? e.event_id);
+        subtasks.set(id, {
+          id,
+          text: String(p.text ?? ""),
+          state: "open",
+          parent: { type: "session", id: e.session_id },
+          done_at: null,
+          done_by: null,
+        });
+        break;
+      }
+      case EventKind.SubtaskCompleted: {
+        const p = e.payload as { task_id?: string };
+        const id = String(p.task_id);
+        const t = subtasks.get(id);
+        if (t) {
+          t.state = "done";
+          t.done_at = e.occurred_at;
+          t.done_by = e.actor;
+        }
+        break;
+      }
+      case EventKind.IssueCreated: {
+        const p = e.payload as {
+          id: string;
+          number: number;
+          kind: "decision" | "question";
+          title: string;
+          body?: string;
+        };
+        issues.set(p.id, {
+          id: p.id,
+          number: p.number,
+          type: "issue",
+          kind: p.kind,
+          state: "open",
+          title: p.title,
+          body: p.body ?? "",
+          author: e.actor,
+          assignees: [],
+          labels: [],
+          references: [],
+          timeline: [],
+          created_at: e.occurred_at,
+          updated_at: e.occurred_at,
+          closed_at: null,
+          superseded_by: null,
+          resolved_by: null,
+          originated_in_session: { type: "session", id: e.session_id },
+        });
+        break;
+      }
+      case EventKind.IssueStateChanged: {
+        const p = e.payload as { id: string; state: "open" | "resolved" | "superseded"; superseded_by?: string };
+        const it = issues.get(p.id);
+        if (it) {
+          it.state = p.state;
+          it.updated_at = e.occurred_at;
+          if (p.state === "resolved") it.resolved_by = e.actor;
+          if (p.state === "superseded" && p.superseded_by) it.superseded_by = { type: "issue", id: p.superseded_by };
+        }
+        break;
+      }
     }
     actors.set(aKey, slot);
   }
@@ -69,8 +143,11 @@ export function reduce(events: Event[], project_id: string, opts: ReduceOptions 
     current_next_step: next_step,
     active_actors: [...actors.values()].sort((a, b) => b.last_event_at.localeCompare(a.last_event_at)),
     recent_activity: recent,
-    open_issues: { decisions: [], questions: [] }, // populated by Task 8 (issue handling)
-    open_subtasks: [], // populated by Task 8 (subtask extraction)
+    open_issues: {
+      decisions: [...issues.values()].filter((i) => i.kind === "decision" && i.state === "open"),
+      questions: [...issues.values()].filter((i) => i.kind === "question" && i.state === "open"),
+    },
+    open_subtasks: [...subtasks.values()].filter((t) => t.state === "open"),
     updated_at: now,
   };
 }
@@ -78,6 +155,6 @@ export function reduce(events: Event[], project_id: string, opts: ReduceOptions 
 function orderKey(e: Event, nowMs: number): string {
   // Use received_at when occurred_at is implausibly far in the future relative to now (clock skew guard).
   const occMs = new Date(e.occurred_at).getTime();
-  if (occMs - nowMs > 5 * 60 * 1000) return `${e.received_at}|${e.event_id}`;
-  return `${e.occurred_at}|${e.event_id}`;
+  if (occMs - nowMs > 5 * 60 * 1000) return e.received_at;
+  return e.occurred_at;
 }
