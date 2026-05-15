@@ -64,7 +64,7 @@
           {/if}
           <button type="submit"
             class="w-full rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
-            style="background-color: var(--color-accent); color: var(--color-text);"
+            style="background-color: var(--color-accent); color: white;"
           >
             Sign in
           </button>
@@ -81,7 +81,7 @@
           {/if}
           <button type="submit"
             class="w-full rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer"
-            style="background-color: var(--color-accent); color: var(--color-text);"
+            style="background-color: var(--color-accent); color: white;"
           >
             Send magic link
           </button>
