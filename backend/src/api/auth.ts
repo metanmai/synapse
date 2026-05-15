@@ -8,6 +8,34 @@ import { parseBody, schemas } from "../lib/validate";
 
 import type { Env } from "../lib/env";
 
+interface CliSession {
+  code: string;
+  code_challenge: string;
+  api_key: string;
+  email: string;
+  created_at: number;
+}
+
+const CLI_SESSION_TTL = 5 * 60 * 1000; // 5 minutes
+const cliSessions = new Map<string, CliSession>();
+
+function cleanExpiredSessions(): void {
+  const now = Date.now();
+  for (const [code, session] of cliSessions) {
+    if (now - session.created_at > CLI_SESSION_TTL) {
+      cliSessions.delete(code);
+    }
+  }
+}
+
+async function sha256hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 const auth = new Hono<{ Bindings: Env }>();
 
 auth.post("/signup", async (c) => {
@@ -80,6 +108,68 @@ auth.post("/login", async (c) => {
     email: user.email,
     api_key: apiKey,
     label: keyLabel,
+  });
+});
+
+// POST /auth/cli-session — create a CLI auth session after browser login
+auth.post("/cli-session", authMiddleware, async (c) => {
+  const body = await parseBody(c, schemas.cliSession);
+  const user = c.get("user");
+
+  cleanExpiredSessions();
+
+  const db = createSupabaseClient(c.env);
+
+  // Delete existing "cli" key and create a fresh one
+  const existingKeys = await listApiKeys(db, user.id);
+  const existingCliKey = existingKeys.find((k) => k.label === "cli");
+  if (existingCliKey) {
+    await deleteApiKey(db, existingCliKey.id, user.id);
+  }
+
+  const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+  const apiKeyHash = await hashApiKey(apiKey);
+  await createApiKey(db, user.id, apiKeyHash, "cli");
+
+  const code = crypto.randomUUID();
+  cliSessions.set(code, {
+    code,
+    code_challenge: body.code_challenge,
+    api_key: apiKey,
+    email: user.email ?? "",
+    created_at: Date.now(),
+  });
+
+  return c.json({ code });
+});
+
+// POST /auth/cli-exchange — exchange code + verifier for API key (no auth required)
+auth.post("/cli-exchange", async (c) => {
+  const body = await parseBody(c, schemas.cliExchange);
+
+  const session = cliSessions.get(body.code);
+  if (!session) {
+    throw new AppError("Invalid or expired code", 404, "NOT_FOUND");
+  }
+
+  // Check expiry
+  if (Date.now() - session.created_at > CLI_SESSION_TTL) {
+    cliSessions.delete(body.code);
+    throw new AppError("Code expired", 404, "NOT_FOUND");
+  }
+
+  // PKCE verification
+  const challengeFromVerifier = await sha256hex(body.code_verifier);
+  if (challengeFromVerifier !== session.code_challenge) {
+    throw new AppError("Invalid code verifier", 401, "AUTH_ERROR");
+  }
+
+  // Single-use: delete after successful exchange
+  cliSessions.delete(body.code);
+
+  return c.json({
+    api_key: session.api_key,
+    email: session.email,
   });
 });
 
