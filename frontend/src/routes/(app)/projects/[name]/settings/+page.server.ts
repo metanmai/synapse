@@ -2,11 +2,9 @@ import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { createApi } from "$lib/server/api";
 
-export const load: PageServerLoad = async ({ parent, locals }) => {
-  const { project } = await parent();
-  const api = createApi(locals.token);
-  const shareLinks = await api.listShareLinks(project.id);
-  return { shareLinks };
+// shareLinks comes from parent layout — no extra fetch needed
+export const load: PageServerLoad = async () => {
+  return {};
 };
 
 export const actions: Actions = {
