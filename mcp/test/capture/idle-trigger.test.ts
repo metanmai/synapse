@@ -85,5 +85,29 @@ describe("auto-infer next_step", () => {
       .filter(Boolean)
       .map((l) => JSON.parse(l));
     expect(events.at(-1).kind).toBe("next_step_inferred");
+    expect(events.at(-1).payload.inferred_method).toBe("llm");
+  });
+
+  it("falls back to heuristic when spawn fails", async () => {
+    setupEvents(tmp, "p4", [
+      { kind: "user_prompted", occurred_at: minutesAgo(45), payload: { prompt_excerpt: "implement /callback" } },
+    ]);
+    const failingSpawn = vi.fn(async () => {
+      throw new Error("claude not found");
+    });
+    await maybeFireInferNextStep({
+      project_id: "p4",
+      idle_threshold_ms: 30 * 60_000,
+      // biome-ignore lint/suspicious/noExplicitAny: test stub
+      spawnFn: failingSpawn as any,
+    });
+    const events = fs
+      .readFileSync(path.join(tmp, "projects/p4/events.jsonl"), "utf-8")
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
+    expect(events.at(-1).kind).toBe("next_step_inferred");
+    expect(events.at(-1).payload.inferred_method).toBe("heuristic");
+    expect(events.at(-1).payload.text).toContain("/callback");
   });
 });
