@@ -1,4 +1,7 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -152,6 +155,232 @@ if (args[0] === "login") {
       process.exit(1);
     }
 
+    process.exit(0);
+  })();
+} else if (args[0] === "init") {
+  (() => {
+    const keyIdx = args.indexOf("--key");
+    const apiKey = keyIdx !== -1 ? args[keyIdx + 1] : process.env.SYNAPSE_API_KEY;
+
+    if (!apiKey) {
+      console.error("Usage: synapsesync-mcp init --key <api-key>");
+      console.error("  Or set SYNAPSE_API_KEY environment variable");
+      console.error("\nGet a key: npx synapsesync-mcp login --email <email> --password <password>");
+      process.exit(1);
+    }
+
+    const home = os.homedir();
+    const cwd = process.cwd();
+
+    const SYNAPSE_INSTRUCTIONS = `# Synapse — Shared Context Layer
+
+You have access to a Synapse MCP server — a remote workspace for storing and retrieving context across sessions.
+
+## Available Tools
+- search — Semantic search across all files (finds by meaning, not just keywords)
+- read — Read a file's content
+- write — Create or update a file
+- ls — List files in a directory
+- tree — Show full directory tree
+- history — View version history
+- rm — Delete a file
+
+## How to Use
+1. BEFORE starting any task, search Synapse for existing context: search({ query: "topic" })
+2. AFTER completing work, save important context: write({ path: "decisions/topic.md", content: "..." })
+3. Use directory prefixes: decisions/, notes/, bugs/, architecture/, projects/<name>/
+
+## Key Behaviors
+- Always check Synapse before scanning the codebase — context may already exist
+- Save decisions, architecture notes, bug diagnoses, and session summaries to Synapse
+- Use semantic search — "auth flow" will find documents about "login and session tokens"
+- Never write context to local files unless explicitly asked
+`;
+
+    function setupGeneric() {
+      const mcpConfig = path.join(cwd, ".mcp.json");
+      const config = { mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } } } };
+
+      let existing: Record<string, unknown> = {};
+      if (fs.existsSync(mcpConfig)) {
+        try { existing = JSON.parse(fs.readFileSync(mcpConfig, "utf-8")); } catch {}
+      }
+      existing.mcpServers = { ...(existing.mcpServers as Record<string, unknown> || {}), ...config.mcpServers };
+      fs.writeFileSync(mcpConfig, JSON.stringify(existing, null, 2) + "\n");
+
+      const gitignore = path.join(cwd, ".gitignore");
+      if (fs.existsSync(gitignore)) {
+        const content = fs.readFileSync(gitignore, "utf-8");
+        if (!content.includes(".mcp.json")) {
+          fs.appendFileSync(gitignore, "\n.mcp.json\n");
+        }
+      }
+      console.log("  ✓ .mcp.json");
+    }
+
+    function setupCursor() {
+      const configDir = path.join(cwd, ".cursor");
+      fs.mkdirSync(configDir, { recursive: true });
+      const mcpConfig = path.join(configDir, "mcp.json");
+      const config = { mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } } } };
+      let existing: Record<string, unknown> = {};
+      if (fs.existsSync(mcpConfig)) {
+        try { existing = JSON.parse(fs.readFileSync(mcpConfig, "utf-8")); } catch {}
+      }
+      existing.mcpServers = { ...(existing.mcpServers as Record<string, unknown> || {}), ...config.mcpServers };
+      fs.writeFileSync(mcpConfig, JSON.stringify(existing, null, 2) + "\n");
+      console.log("  ✓ .cursor/mcp.json");
+
+      const rulesFile = path.join(cwd, ".cursorrules");
+      let rulesContent = "";
+      if (fs.existsSync(rulesFile)) {
+        rulesContent = fs.readFileSync(rulesFile, "utf-8");
+      }
+      if (!rulesContent.includes("Synapse")) {
+        fs.appendFileSync(rulesFile, "\n" + SYNAPSE_INSTRUCTIONS);
+        console.log("  ✓ .cursorrules");
+      } else {
+        console.log("  ○ .cursorrules (already has Synapse)");
+      }
+    }
+
+    function setupWindsurf() {
+      const configDir = path.join(home, ".codeium", "windsurf");
+      fs.mkdirSync(configDir, { recursive: true });
+      const mcpConfig = path.join(configDir, "mcp_config.json");
+      const config = { mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } } } };
+      let existing: Record<string, unknown> = {};
+      if (fs.existsSync(mcpConfig)) {
+        try { existing = JSON.parse(fs.readFileSync(mcpConfig, "utf-8")); } catch {}
+      }
+      existing.mcpServers = { ...(existing.mcpServers as Record<string, unknown> || {}), ...config.mcpServers };
+      fs.writeFileSync(mcpConfig, JSON.stringify(existing, null, 2) + "\n");
+      console.log("  ✓ ~/.codeium/windsurf/mcp_config.json");
+
+      const rulesFile = path.join(cwd, ".windsurfrules");
+      let rulesContent = "";
+      if (fs.existsSync(rulesFile)) {
+        rulesContent = fs.readFileSync(rulesFile, "utf-8");
+      }
+      if (!rulesContent.includes("Synapse")) {
+        fs.appendFileSync(rulesFile, "\n" + SYNAPSE_INSTRUCTIONS);
+        console.log("  ✓ .windsurfrules");
+      } else {
+        console.log("  ○ .windsurfrules (already has Synapse)");
+      }
+    }
+
+    function setupVSCode() {
+      const settingsFile = path.join(cwd, ".vscode", "settings.json");
+      let settings: Record<string, unknown> = {};
+      if (fs.existsSync(settingsFile)) {
+        try { settings = JSON.parse(fs.readFileSync(settingsFile, "utf-8")); } catch {}
+      }
+      if (!settings.mcp) settings.mcp = {};
+      const mcp = settings.mcp as Record<string, unknown>;
+      if (!mcp.servers) mcp.servers = {};
+      (mcp.servers as Record<string, unknown>).synapse = { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } };
+      fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + "\n");
+      console.log("  ✓ .vscode/settings.json");
+
+      const ghDir = path.join(cwd, ".github");
+      fs.mkdirSync(ghDir, { recursive: true });
+      const instrFile = path.join(ghDir, "copilot-instructions.md");
+      let instrContent = "";
+      if (fs.existsSync(instrFile)) {
+        instrContent = fs.readFileSync(instrFile, "utf-8");
+      }
+      if (!instrContent.includes("Synapse")) {
+        fs.appendFileSync(instrFile, "\n" + SYNAPSE_INSTRUCTIONS);
+        console.log("  ✓ .github/copilot-instructions.md");
+      } else {
+        console.log("  ○ .github/copilot-instructions.md (already has Synapse)");
+      }
+    }
+
+    function setupClaudeCode() {
+      const claudeMd = path.join(home, ".claude", "CLAUDE.md");
+      let claudeContent = "";
+      if (fs.existsSync(claudeMd)) {
+        claudeContent = fs.readFileSync(claudeMd, "utf-8");
+      }
+      if (!claudeContent.includes("Synapse")) {
+        fs.appendFileSync(claudeMd, "\n" + SYNAPSE_INSTRUCTIONS);
+        console.log("  ✓ ~/.claude/CLAUDE.md");
+      } else {
+        console.log("  ○ ~/.claude/CLAUDE.md (already has Synapse)");
+      }
+
+      const cmdDir = path.join(home, ".claude", "commands", "synapse");
+      fs.mkdirSync(cmdDir, { recursive: true });
+
+      const commands: Record<string, string> = {
+        "search.md": `Search the Synapse workspace. The search query is: $ARGUMENTS\n\nUses semantic search — understands meaning, not just keywords.\n\nRun \`mcp__synapse__search({ query: "$ARGUMENTS" })\` and display results. If not connected, say "Not connected."\n`,
+        "tree.md": `Show the full Synapse workspace file tree.\n\nRun \`mcp__synapse__tree()\` and display the tree. If not connected, say "Not connected."\n`,
+        "sync.md": `Sync project context to Synapse.\n\n1. Run \`mcp__synapse__tree()\` to check connection\n2. Summarize recent git changes\n3. Write project overview and recent changes to Synapse\n`,
+        "whoami.md": `Show current Synapse account info.\n\n1. Run \`mcp__synapse__ls()\` to verify connection\n2. Run \`mcp__synapse__tree()\` to count files\n3. Show: "Connected. Files: [count]."\n`,
+        "clean.md": `Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Run \`mcp__synapse__tree()\`\n2. Identify duplicates, test files, empty entries\n3. Confirm with user before deleting\n4. Delete confirmed entries with \`mcp__synapse__rm()\`\n`,
+      };
+
+      for (const [filename, content] of Object.entries(commands)) {
+        const filepath = path.join(cmdDir, filename);
+        if (!fs.existsSync(filepath)) {
+          fs.writeFileSync(filepath, content);
+          console.log(`  ✓ ~/.claude/commands/synapse/${filename}`);
+        } else {
+          console.log(`  ○ ~/.claude/commands/synapse/${filename} (exists)`);
+        }
+      }
+
+      // Also write .mcp.json in cwd
+      setupGeneric();
+    }
+
+    const tools: { name: string; detected: boolean; setup: () => void }[] = [];
+
+    // Claude Code
+    const claudeDir = path.join(home, ".claude");
+    if (fs.existsSync(claudeDir)) {
+      tools.push({ name: "Claude Code", detected: true, setup: setupClaudeCode });
+    }
+
+    // Cursor
+    const cursorDir = path.join(cwd, ".cursor");
+    if (fs.existsSync(cursorDir) || fs.existsSync(path.join(cwd, ".cursorrules"))) {
+      tools.push({ name: "Cursor", detected: true, setup: setupCursor });
+    }
+
+    // Windsurf
+    const windsurfDir = path.join(home, ".codeium");
+    if (fs.existsSync(windsurfDir)) {
+      tools.push({ name: "Windsurf", detected: true, setup: setupWindsurf });
+    }
+
+    // VS Code
+    const vscodeDir = path.join(cwd, ".vscode");
+    if (fs.existsSync(vscodeDir)) {
+      tools.push({ name: "VS Code", detected: true, setup: setupVSCode });
+    }
+
+    // Always offer generic .mcp.json
+    tools.push({ name: "Generic MCP (.mcp.json)", detected: true, setup: setupGeneric });
+
+    console.log("\n🧠 Synapse Init\n");
+    console.log("Detecting AI tools...\n");
+
+    if (tools.length === 0) {
+      console.log("No AI tools detected. Writing generic .mcp.json...");
+      setupGeneric();
+    } else {
+      console.log(`Found ${tools.length} tool(s):\n`);
+      for (const tool of tools) {
+        console.log(`${tool.name}`);
+        tool.setup();
+        console.log();
+      }
+    }
+
+    console.log("Done! Restart your AI tools to connect to Synapse.\n");
     process.exit(0);
   })();
 } else {
