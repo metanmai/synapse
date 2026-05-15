@@ -23,9 +23,9 @@ Connect Claude Code, Cursor, Windsurf, VS Code (MCP), or any client that support
 2. **CLI setup (recommended)** — In a terminal, `cd` to your project and run:
 
    ```bash
-   npx synapsesync-mcp --help    # command list
-   npx synapsesync-mcp login     # interactive sign-in → writes .mcp.json + editor configs
-   # or: signup | init | wizard
+   npm install -g synapsesync-mcp
+   synapsesync-mcp wizard        # interactive sign-up / sign-in → writes .mcp.json + editor configs
+   synapsesync-mcp --help        # see all commands
    ```
 
    Interactive flows use keyboard navigation (arrow keys + Enter). Editors that spawn the MCP **without a TTY** still run the **server** when **`SYNAPSE_API_KEY`** is set — not the setup UI.
