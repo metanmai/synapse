@@ -92,7 +92,7 @@ export const SYNAPSE_COMMAND_DEFS: Record<string, CommandDef> = {
 };
 
 export function synapseMcpServer(apiKey: string): Record<string, unknown> {
-  return { command: "npx", args: ["synapsesync-mcp"], env: { SYNAPSE_API_KEY: apiKey } };
+  return { command: "npx", args: ["synapsesync"], env: { SYNAPSE_API_KEY: apiKey } };
 }
 
 export function writeMcpJson(filePath: string, apiKey: string): void {

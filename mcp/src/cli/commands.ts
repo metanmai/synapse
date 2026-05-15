@@ -68,7 +68,7 @@ async function resolveKey(existing?: ExistingSetup): Promise<string> {
   const setup = existing ?? detectExistingSetup();
   if (setup.apiKeys.length === 0) {
     clack.log.error("No API key found. Run the setup wizard first:");
-    clack.log.message(`  ${accent("synapsesync-mcp wizard")}`);
+    clack.log.message(`  ${accent("synapsesync wizard")}`);
     process.exit(1);
   }
   for (const key of setup.apiKeys) {
@@ -76,7 +76,7 @@ async function resolveKey(existing?: ExistingSetup): Promise<string> {
     if (s.status === "valid") return key;
   }
   clack.log.error(themeError("All API keys are expired. Sign in again:"));
-  clack.log.message(`  ${accent("synapsesync-mcp wizard")}`);
+  clack.log.message(`  ${accent("synapsesync wizard")}`);
   process.exit(1);
 }
 
@@ -199,7 +199,7 @@ export async function runStatus(): Promise<void> {
 
   if (!existing.configured) {
     clack.log.warn("Synapse is not configured anywhere.");
-    clack.log.message(`  Run ${accent("synapsesync-mcp wizard")} to set up.`);
+    clack.log.message(`  Run ${accent("synapsesync wizard")} to set up.`);
     clack.outro(muted("synapsesync.app"));
     return;
   }
@@ -261,9 +261,9 @@ export async function runStatus(): Promise<void> {
       ].join("\n"),
     );
   } else if (existing.apiKeys.length > 0) {
-    clack.log.warn(`All API keys are expired. Run ${accent("synapsesync-mcp refresh")} to get a new key.`);
+    clack.log.warn(`All API keys are expired. Run ${accent("synapsesync refresh")} to get a new key.`);
   } else {
-    clack.log.warn(`No API keys found. Run ${accent("synapsesync-mcp wizard")} to set up.`);
+    clack.log.warn(`No API keys found. Run ${accent("synapsesync wizard")} to set up.`);
   }
 
   clack.outro(muted("synapsesync.app"));
@@ -279,7 +279,7 @@ export async function runRefresh(): Promise<void> {
   const existing = detectExistingSetup();
   if (existing.apiKeys.length === 0) {
     clack.log.error("No existing API key found. Run the setup wizard:");
-    clack.log.message(`  ${accent("synapsesync-mcp wizard")}`);
+    clack.log.message(`  ${accent("synapsesync wizard")}`);
     process.exit(1);
   }
 
@@ -339,7 +339,7 @@ export async function runWhoami(): Promise<void> {
   clack.log.message(
     [
       `${pad(muted("Email"), LW)} ${bold(email)}`,
-      `${pad(muted("Tier"), LW)} ${accent(billing.tier)}${billing.tier === "free" ? muted("  \u2192 synapsesync-mcp upgrade") : ""}`,
+      `${pad(muted("Tier"), LW)} ${accent(billing.tier)}${billing.tier === "free" ? muted("  \u2192 synapsesync upgrade") : ""}`,
       `${pad(muted("Files"), LW)} ${accent(String(fileCount))}`,
       `${pad(muted("API keys"), LW)} ${accent(String(keys.length))}`,
       `${pad(muted("Dashboard"), LW)} ${accent("synapsesync.app")}`,

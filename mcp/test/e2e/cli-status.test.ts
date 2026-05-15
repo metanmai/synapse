@@ -63,7 +63,7 @@ function writeMcpConfig(filePath: string, apiKey?: string): void {
     filePath,
     JSON.stringify(
       {
-        mcpServers: { synapse: { command: "npx", args: ["synapsesync-mcp"], env } },
+        mcpServers: { synapse: { command: "npx", args: ["synapsesync"], env } },
       },
       null,
       2,
