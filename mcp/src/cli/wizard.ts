@@ -30,14 +30,17 @@ export async function runWizard(version: string): Promise<void> {
 
   if (authMethod === "browser") {
     const spin = createGlyphSpinner();
-    spin.start("Waiting for browser login\u2026");
 
     try {
       const result = await browserAuth({
-        onUrl: (url) => {
-          // Show URL as fallback if browser doesn't open
-          spin.update("Waiting for browser login\u2026");
-          clack.log.info(`If the browser didn't open, visit:\n  ${muted(url)}`);
+        onUrl: (url, autoOpened) => {
+          if (autoOpened) {
+            spin.start("Waiting for browser login\u2026");
+            clack.log.info(`If the browser didn't open, visit:\n  ${muted(url)}`);
+          } else {
+            spin.start("Waiting for login\u2026");
+            clack.log.info(`Open this URL to sign in:\n  ${muted(url)}`);
+          }
         },
       });
       spin.stop(`Signed in as ${result.email}`);
