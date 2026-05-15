@@ -7,6 +7,7 @@ import { validateApiKey } from "./api.js";
 import { API_URL, pad } from "./config.js";
 import { type ExistingSetup, detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors/index.js";
 import { globalConfigDir, removeDirIfExists, removeInstructions, removeSynapseFromMcpJson } from "./editors/io.js";
+import { dispatchHook, readHookPayloadFromStdin } from "./hook-dispatch.js";
 import { createGlyphSpinner } from "./spinner.js";
 import { accent, bold, muted, success, error as themeError } from "./theme.js";
 
@@ -120,6 +121,29 @@ export async function runTree(): Promise<void> {
   clack.log.message(lines.join("\n"));
   clack.log.message(muted(`Browse your files at ${accent("synapsesync.app")}`));
   clack.outro(muted("synapsesync.app"));
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  hook — dispatch a Claude Code hook event
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//
+//  Used by the entries in ~/.claude/settings.json that look like
+//  `synapse hook session-start`. Reads the JSON event from stdin and
+//  forwards it to the matching handler.
+
+export async function runHook(args: string[]): Promise<void> {
+  const kind = args[0];
+  if (!kind) {
+    process.stderr.write("usage: synapse hook <kind>\n");
+    process.exit(1);
+  }
+  try {
+    const payload = await readHookPayloadFromStdin();
+    await dispatchHook(kind, payload);
+  } catch (err) {
+    // Hooks must never break Claude Code — log and exit 0.
+    process.stderr.write(`hook ${kind} failed: ${err instanceof Error ? err.message : String(err)}\n`);
+  }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
