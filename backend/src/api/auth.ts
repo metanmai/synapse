@@ -8,6 +8,7 @@ import {
   findUserByEmail,
   getActiveSubscription,
   listApiKeys,
+  recordDeletedAccount,
 } from "../db/queries";
 import { authMiddleware, hashApiKey } from "../lib/auth";
 import {
@@ -408,14 +409,23 @@ account.delete("/", async (c) => {
 
   // Cancel active Creem subscription before deleting data
   const activeSub = await getActiveSubscription(db, user.id);
+  let subscriptionCancelled = false;
   if (activeSub?.provider_subscription_id) {
     try {
       await creemRequest(c.env, "POST", `/subscriptions/${activeSub.provider_subscription_id}/cancel`);
+      subscriptionCancelled = true;
     } catch (err) {
       console.error("[account/delete] Failed to cancel Creem subscription:", err);
-      // Continue with deletion — subscription row will be deleted by RPC
     }
   }
+
+  // Record tombstone before data is wiped
+  await recordDeletedAccount(db, {
+    email: user.email,
+    had_subscription: !!activeSub,
+    subscription_cancelled: subscriptionCancelled,
+    deleted_by: "self",
+  });
 
   // Look up supabase_auth_id before deletion
   const { data: userRow } = await db.from("users").select("supabase_auth_id").eq("id", user.id).single();
