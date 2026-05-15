@@ -1,19 +1,8 @@
 #!/usr/bin/env node
 
-const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
-const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
-const { z } = require("zod");
-
-const crypto = require("crypto");
-
 const API_URL = process.env.SYNAPSE_API_URL || "https://api.synapsesync.app";
-const API_KEY = process.env.SYNAPSE_API_KEY;
-const PASSPHRASE = process.env.SYNAPSE_PASSPHRASE;
-const USER_EMAIL = process.env.SYNAPSE_USER_EMAIL;
-const SOURCE = process.env.SYNAPSE_SOURCE || "claude";
-const DEFAULT_PROJECT_NAME = process.env.SYNAPSE_PROJECT || "My Workspace";
 
-// --- CLI commands (run before MCP server starts) ---
+// --- CLI commands (run before MCP server starts, no SDK needed) ---
 const args = process.argv.slice(2);
 
 if (args[0] === "login") {
@@ -114,6 +103,18 @@ if (args[0] === "signup") {
   })();
   return;
 }
+
+// --- MCP Server (requires SDK + env vars) ---
+const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
+const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
+const { z } = require("zod");
+const crypto = require("crypto");
+
+const API_KEY = process.env.SYNAPSE_API_KEY;
+const PASSPHRASE = process.env.SYNAPSE_PASSPHRASE;
+const USER_EMAIL = process.env.SYNAPSE_USER_EMAIL;
+const SOURCE = process.env.SYNAPSE_SOURCE || "claude";
+const DEFAULT_PROJECT_NAME = process.env.SYNAPSE_PROJECT || "My Workspace";
 
 if (!API_KEY) {
   console.error("SYNAPSE_API_KEY is required. Run 'npx synapsesync-mcp login --email <email> --password <password>' to get one.");
