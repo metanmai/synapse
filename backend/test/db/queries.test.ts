@@ -3,7 +3,7 @@ import { type Mock, describe, expect, it, vi } from "vitest";
 import { createMockDb, mockNoRows, mockSuccess } from "./mock-supabase";
 
 // ── Entries ──────────────────────────────────────────────────────
-import { countEntries, deleteEntry, getEntry, listEntries, upsertEntry } from "../../src/db/queries/entries";
+import { countEntries, getEntry, listEntries, upsertEntry } from "../../src/db/queries/entries";
 
 // ── Projects ─────────────────────────────────────────────────────
 import {
@@ -234,29 +234,6 @@ describe("entries queries", () => {
       await listEntries(db as unknown as SupabaseClient, "p1");
 
       expect(db.chainable.like).not.toHaveBeenCalled();
-    });
-  });
-
-  // ── deleteEntry ────────────────────────────────────────────
-  describe("deleteEntry", () => {
-    it("deletes from entries with project_id and path filters", async () => {
-      const db = createMockDb({ data: null, error: null });
-      await deleteEntry(db as unknown as SupabaseClient, "p1", "notes/a.md");
-
-      expect(db.from).toHaveBeenCalledWith("entries");
-      expect(db.chainable.delete).toHaveBeenCalled();
-      expect(db.chainable.eq).toHaveBeenCalledWith("project_id", "p1");
-      expect(db.chainable.eq).toHaveBeenCalledWith("path", "notes/a.md");
-    });
-
-    it("throws when Supabase returns an error", async () => {
-      const db = createMockDb({
-        data: null,
-        error: { name: "PostgrestError", code: "42501", message: "permission denied", details: "", hint: "" },
-      });
-      await expect(deleteEntry(db as unknown as SupabaseClient, "p1", "x")).rejects.toEqual(
-        expect.objectContaining({ message: "permission denied" }),
-      );
     });
   });
 

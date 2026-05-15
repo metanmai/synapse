@@ -2,8 +2,8 @@
  * End-to-end roundtrip tests against the live Synapse API.
  *
  * Full user journey — every scenario a real user would hit:
- *   Auth → Projects → Context CRUD → Search → History → Restore →
- *   API Key Management → Billing → Activity Log → Insights →
+ *   Auth → Projects → Context Read → Search → History →
+ *   API Key Management → Billing → Insights →
  *   Conversations → Account Deletion
  *
  * Run:  TEST_E2E=1 npm run test:e2e
@@ -77,7 +77,6 @@ let PROJECT_NAME: string;
 let PROJECT_ID: string;
 let SECOND_KEY: string;
 let SECOND_KEY_ID: string;
-let HISTORY_ID: string;
 
 suite("Full User Journey", () => {
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -284,117 +283,26 @@ suite("Full User Journey", () => {
   });
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  //  CONTEXT — Create
+  //  CONTEXT — Read-only (list, read, search, history)
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   const enc = (s: string) => encodeURIComponent(s);
 
-  describe("Context: Create", () => {
-    it("rejects save without project", async () => {
-      const { status } = await api("POST", "/api/context/save", KEY, { path: "x.md", content: "x" });
-      expect(status).toBe(400);
-    });
-
-    it("rejects save without path", async () => {
-      const { status } = await api("POST", "/api/context/save", KEY, { project: PROJECT_NAME, content: "x" });
-      expect(status).toBe(400);
-    });
-
-    it("rejects save without content", async () => {
-      const { status } = await api("POST", "/api/context/save", KEY, { project: PROJECT_NAME, path: "x.md" });
-      expect(status).toBe(400);
-    });
-
-    it("rejects save to non-existent project", async () => {
-      const { status } = await api("POST", "/api/context/save", KEY, {
-        project: "ghost-project",
-        path: "x.md",
-        content: "x",
-      });
-      expect(status).toBe(404);
-    });
-
-    it("saves entry with tags", async () => {
-      const { status, data } = await api("POST", "/api/context/save", KEY, {
-        project: PROJECT_NAME,
-        path: "notes/first.md",
-        content: "# First Note\nCreated by E2E test.",
-        tags: ["e2e", "notes"],
-      });
-      expect(status).toBeLessThan(300);
-      expect(data.path).toBe("notes/first.md");
-      expect(data.tags).toEqual(["e2e", "notes"]);
-      expect(data.source).toBe("human");
-    });
-
-    it("saves entry in different folder", async () => {
-      const { status } = await api("POST", "/api/context/save", KEY, {
-        project: PROJECT_NAME,
-        path: "decisions/use-vitest.md",
-        content: "# Decision: Use Vitest\nChosen for ESM support.",
-        tags: ["e2e", "decision"],
-      });
-      expect(status).toBeLessThan(300);
-    });
-
-    it("saves entry with custom source", async () => {
-      const { status, data } = await api("POST", "/api/context/save", KEY, {
-        project: PROJECT_NAME,
-        path: "context/from-claude.md",
-        content: "# From Claude\nWritten by AI.",
-        tags: ["e2e", "ai"],
-        source: "claude",
-      });
-      expect(status).toBeLessThan(300);
-      expect(data.source).toBe("claude");
-    });
-  });
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  //  CONTEXT — List & Read
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  describe("Context: List & Read", () => {
-    it("lists all 3 entries", async () => {
+  describe("Context: Read-only", () => {
+    it("lists entries (empty for new project)", async () => {
       const { status, data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/list`, KEY);
       expect(status).toBe(200);
-      expect((data as R[]).length).toBe(3);
+      expect(Array.isArray(data)).toBe(true);
     });
 
-    it("filters by folder", async () => {
-      const { status, data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/list?folder=notes`, KEY);
-      expect(status).toBe(200);
-      expect((data as R[]).length).toBe(1);
-      expect((data as R[])[0].path).toBe("notes/first.md");
-    });
-
-    it("reads entry with full content", async () => {
-      const { status, data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/${enc("notes/first.md")}`, KEY);
-      expect(status).toBe(200);
-      expect(data.content).toContain("First Note");
-      expect(data.tags).toContain("e2e");
-    });
-
-    it("404 for non-existent entry", async () => {
-      const { status } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/${enc("nope.md")}`, KEY);
-      expect(status).toBe(404);
-    });
-
-    it("404 for non-existent project", async () => {
+    it("404 for non-existent project list", async () => {
       const { status } = await api("GET", `/api/context/${enc("ghost-project")}/list`, KEY);
       expect(status).toBe(404);
     });
-  });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  //  CONTEXT — Search
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  describe("Context: Search", () => {
-    it("finds entry by keyword", async () => {
-      const { status, data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/search?q=vitest`, KEY);
-      expect(status).toBe(200);
-      expect((data as R[]).find((e) => e.path === "decisions/use-vitest.md")).toBeTruthy();
+    it("rejects search without query", async () => {
+      const { status } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/search`, KEY);
+      expect(status).toBe(400);
     });
 
     it("empty results for non-matching query", async () => {
@@ -403,88 +311,9 @@ suite("Full User Journey", () => {
       expect(data).toEqual([]);
     });
 
-    it("rejects search without query", async () => {
-      const { status } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/search`, KEY);
-      expect(status).toBe(400);
-    });
-  });
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  //  CONTEXT — Update, History, Restore
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  describe("Context: Update, History, Restore", () => {
-    it("updates entry via upsert", async () => {
-      const { status, data } = await api("POST", "/api/context/save", KEY, {
-        project: PROJECT_NAME,
-        path: "notes/first.md",
-        content: "# Updated Note\nModified by test.",
-        tags: ["e2e", "updated"],
-      });
-      expect(status).toBeLessThan(300);
-      expect(data.content).toContain("Updated Note");
-    });
-
-    it("read shows updated content", async () => {
-      const { data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/${enc("notes/first.md")}`, KEY);
-      expect(data.content).toContain("Updated Note");
-    });
-
-    it("history has previous version", async () => {
-      const { status, data } = await api(
-        "GET",
-        `/api/context/${enc(PROJECT_NAME)}/history/${enc("notes/first.md")}`,
-        KEY,
-      );
-      expect(status).toBe(200);
-      expect((data as R[]).length).toBeGreaterThanOrEqual(1);
-      const old = (data as R[]).find((v) => v.content.includes("Created by E2E"));
-      expect(old).toBeTruthy();
-      HISTORY_ID = old.id;
-    });
-
-    it("restores previous version", async () => {
-      const { status, data } = await api("POST", `/api/context/${enc(PROJECT_NAME)}/restore`, KEY, {
-        path: "notes/first.md",
-        historyId: HISTORY_ID,
-      });
-      expect(status).toBe(200);
-      expect(data.content).toContain("Created by E2E");
-    });
-  });
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  //  CONTEXT — Delete
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  describe("Context: Delete", () => {
-    it("deletes an entry", async () => {
-      const { status, data } = await api(
-        "DELETE",
-        `/api/context/${enc(PROJECT_NAME)}/${enc("decisions/use-vitest.md")}`,
-        KEY,
-      );
-      expect(status).toBe(200);
-      expect(data.ok).toBe(true);
-    });
-
-    it("entry gone after deletion", async () => {
-      const { status } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/${enc("decisions/use-vitest.md")}`, KEY);
+    it("404 for non-existent entry read", async () => {
+      const { status } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/${enc("nope.md")}`, KEY);
       expect(status).toBe(404);
-    });
-
-    it("double-delete returns 404", async () => {
-      const { status } = await api(
-        "DELETE",
-        `/api/context/${enc(PROJECT_NAME)}/${enc("decisions/use-vitest.md")}`,
-        KEY,
-      );
-      expect(status).toBe(404);
-    });
-
-    it("list reflects deletion (2 remaining)", async () => {
-      const { data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/list`, KEY);
-      expect((data as R[]).length).toBe(2);
     });
   });
 
@@ -594,26 +423,10 @@ suite("Full User Journey", () => {
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   describe("Activity Log", () => {
-    it("records create/update/delete events", async () => {
+    it("records insight events", async () => {
       const { data } = await api("GET", `/api/projects/${PROJECT_ID}/activity?limit=50`, KEY);
       const actions = (data as R[]).map((a) => a.action);
-      expect(actions).toContain("entry_created");
-      expect(actions).toContain("entry_updated");
-      expect(actions).toContain("entry_deleted");
-    });
-
-    it("tracks source attribution", async () => {
-      const { data } = await api("GET", `/api/projects/${PROJECT_ID}/activity?limit=50`, KEY);
-      const sources = (data as R[]).map((a) => a.source);
-      expect(sources).toContain("claude");
-      expect(sources).toContain("human");
-    });
-
-    it("has target paths", async () => {
-      const { data } = await api("GET", `/api/projects/${PROJECT_ID}/activity?limit=50`, KEY);
-      const paths = (data as R[]).map((a) => a.target_path).filter(Boolean);
-      expect(paths).toContain("notes/first.md");
-      expect(paths).toContain("context/from-claude.md");
+      expect(actions).toContain("insight_created");
     });
   });
 
@@ -900,11 +713,9 @@ suite("Full User Journey", () => {
       ["POST", "/api/billing/checkout"],
       ["POST", "/api/billing/verify"],
       ["POST", "/api/billing/portal"],
-      ["POST", "/api/context/save"],
       ["GET", "/api/context/X/list"],
       ["GET", "/api/context/X/search?q=x"],
       ["GET", "/api/context/X/x.md"],
-      ["DELETE", "/api/context/X/x.md"],
       // Insights
       ["GET", "/api/insights?project_id=test"],
       ["POST", "/api/insights"],

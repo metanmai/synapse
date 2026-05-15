@@ -110,84 +110,30 @@ Response (201):
 ### Get activity log
 `GET /api/projects/:id/activity?limit=50&offset=0`
 
-## Context Entries
+## Context Entries (read-only)
 
-### Save entry
-`POST /api/context/save`
-
-Body:
-```json
-{ "project": "project-name", "path": "decisions/chose-redis.md", "content": "...", "tags": ["decision"], "source": "claude" }
-```
-
-Response (201):
-```json
-{ "id": "uuid", "project_id": "uuid", "path": "decisions/chose-redis.md", "content": "...", "tags": ["decision"], "source": "claude", "created_at": "...", "updated_at": "..." }
-```
+Historical filesystem-style entries remain queryable for backwards compatibility. New knowledge flows through Insights instead — see the Insights section.
 
 ### Get entry
 `GET /api/context/:project/:path`
 
-Response:
-```json
-{ "id": "uuid", "path": "decisions/chose-redis.md", "content": "...", "tags": ["decision"], "source": "claude", "created_at": "...", "updated_at": "..." }
-```
-
 ### List entries
 `GET /api/context/:project/list?folder=decisions`
-
-Response:
-```json
-[{ "path": "decisions/chose-redis.md", "tags": ["decision"], "updated_at": "..." }]
-```
 
 ### Search entries
 `GET /api/context/:project/search?q=query&tags=decision&folder=decisions`
 
-Search uses a 3-tier strategy, run in parallel and merged by relevance:
-1. **Semantic search** — finds conceptually similar content using vector embeddings (e.g., "auth flow" matches "login and session tokens")
-2. **Full-text search** — Postgres `tsvector` websearch matching
-3. **Keyword search** — ILIKE fallback for partial/fuzzy matches
-
-Semantic search requires the optional embedding service. Without it, search gracefully degrades to full-text + keyword only.
-
-Response:
-```json
-[{ "path": "decisions/chose-redis.md", "content": "...", "tags": ["decision"] }]
-```
-
-### Delete entry
-`DELETE /api/context/:project/:path`
-
-Response:
-```json
-{ "ok": true }
-```
+Search uses a 3-tier strategy, run in parallel and merged by relevance: semantic (vector embeddings), full-text (Postgres `tsvector`), and keyword (ILIKE). Semantic requires the optional embedding service; without it, search gracefully degrades.
 
 ### Version history
 `GET /api/context/:project/history/:path`
 
-Free tier: last 3 versions. Pro: unlimited.
-
-Response:
-```json
-[{ "id": "uuid", "content": "...", "created_at": "..." }]
-```
-
-### Restore version
-`POST /api/context/:project/restore`
-
-Body: `{ "path": "decisions/chose-redis.md", "historyId": "uuid" }`
-
-Response:
-```json
-{ "id": "uuid", "path": "decisions/chose-redis.md", "content": "...", "updated_at": "..." }
-```
+Free tier: last 3 versions. Plus: unlimited.
 
 ### Load context
 `GET /api/context/:project/load`
 
-Returns context entries based on user preferences (full, smart, on_demand, summary_only).
+Returns entries based on user preferences (full, smart, on_demand, summary_only).
 
 ## API Keys
 
