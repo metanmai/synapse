@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { authMiddleware } from "../lib/auth";
 import { createStripeClient } from "../lib/stripe";
 import { createSupabaseClient } from "../db/client";
-import { getSubscriptionByUserId, upsertSubscription, getSubscriptionByStripeId } from "../db/queries";
+import { getSubscriptionByUserId, upsertSubscription, getSubscriptionByStripeId, getActiveSubscription } from "../db/queries";
 import { updateStripeCustomerId } from "../db/queries";
 import { AppError } from "../lib/errors";
 import { envOr } from "../lib/env";
@@ -32,7 +32,7 @@ billing.post("/webhook", async (c) => {
 
   let event;
   try {
-    event = stripe.webhooks.constructEvent(body, signature, c.env.STRIPE_WEBHOOK_SECRET);
+    event = await stripe.webhooks.constructEventAsync(body, signature, c.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error("[billing] Webhook signature verification failed:", err);
     throw new AppError("Invalid webhook signature", 400, "VALIDATION_ERROR");
@@ -133,6 +133,12 @@ billing.post("/checkout", async (c) => {
   const stripe = createStripeClient(c.env);
   const db = createSupabaseClient(c.env);
   const appUrl = envOr(c.env, "APP_URL", "https://app.synapse.dev");
+
+  // Guard against duplicate subscriptions
+  const existingSub = await getActiveSubscription(db, user.id);
+  if (existingSub) {
+    throw new AppError("You already have an active subscription. Manage it from the billing portal.", 400, "VALIDATION_ERROR");
+  }
 
   // Lazily create Stripe customer
   let customerId = user.stripe_customer_id;
