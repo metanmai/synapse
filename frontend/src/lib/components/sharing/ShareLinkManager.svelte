@@ -18,7 +18,7 @@
       <input type="hidden" name="projectId" value={projectId} />
       <input type="hidden" name="role" value="viewer" />
       <button type="submit" class="rounded-lg px-3 py-2 text-sm cursor-pointer"
-        style="border: 1px solid var(--color-border);">
+        style="border: 1px solid var(--color-pink); color: var(--color-pink-dark);">
         Create viewer link
       </button>
     </form>
@@ -26,7 +26,7 @@
       <input type="hidden" name="projectId" value={projectId} />
       <input type="hidden" name="role" value="editor" />
       <button type="submit" class="rounded-lg px-3 py-2 text-sm cursor-pointer"
-        style="border: 1px solid var(--color-border);">
+        style="border: 1px solid var(--color-pink); color: var(--color-pink-dark);">
         Create editor link
       </button>
     </form>
@@ -39,7 +39,7 @@
         <div>
           <span class="font-mono text-xs">{link.token.slice(0, 12)}...</span>
           <span class="ml-2 text-xs rounded-full px-2 py-0.5"
-            style="background-color: var(--color-bg-muted);">
+            style="background-color: var(--color-accent); color: white;">
             {link.role}
           </span>
         </div>
