@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "./lib/env";
 import { AppError } from "./lib/errors";
 import { auth } from "./api/auth";
+import { context } from "./api/context";
 import { McpSyncAgent } from "./mcp/agent";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -16,6 +17,7 @@ app.onError((err, c) => {
 
 app.get("/health", (c) => c.json({ status: "ok", service: "mcp-sync" }));
 app.route("/auth", auth);
+app.route("/api/context", context);
 
 // Mount MCP server on /mcp (Streamable HTTP transport)
 app.mount("/mcp", McpSyncAgent.serve("/mcp").fetch);
