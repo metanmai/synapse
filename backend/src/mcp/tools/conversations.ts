@@ -7,28 +7,15 @@ import {
   appendMessages,
   createConversation,
   getConversation,
-  getConversationLimits,
   getMessages,
   insertMedia,
   listConversations,
 } from "../../db/queries";
-import { getActiveSubscription } from "../../db/queries/subscriptions";
 import { uploadMedia } from "../../lib/storage";
 
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
 import { mcpError, mcpResolveProject, mcpSuccess, requireMcpUserId } from "../mcp-context";
-
-/** Helper: check if user has Plus tier with sync enabled. Returns error text or null. */
-async function requirePlusSync(db: SupabaseClient, userId: string): Promise<string | null> {
-  const sub = await getActiveSubscription(db, userId);
-  const tier = sub ? "plus" : "free";
-  const limits = await getConversationLimits(db, tier);
-  if (!limits?.sync_enabled) {
-    return "Conversation sync requires a Plus subscription. Upgrade at https://synapsesync.app/account to enable cross-agent conversation syncing.";
-  }
-  return null;
-}
 
 /** Detect media type from MIME type string. */
 function mediaTypeFromMime(mime: string): "image" | "file" | "pdf" | "audio" | "video" {
@@ -43,7 +30,7 @@ export function registerConversationTools(server: McpServer, _env: Env, getConte
   // --- sync_conversation ---
   server.tool(
     "sync_conversation",
-    "Push messages to a conversation. Creates a new conversation if no conversationId is provided, otherwise appends messages to the existing one. Plus only.",
+    "Push messages to a conversation. Creates a new conversation if no conversationId is provided, otherwise appends messages to the existing one.",
     {
       project: z.string().describe("Project name"),
       conversationId: z
@@ -74,10 +61,6 @@ export function registerConversationTools(server: McpServer, _env: Env, getConte
     },
     async ({ project, conversationId, title, systemPrompt, workingContext, fidelity, messages }) => {
       const userId = requireMcpUserId(getContext);
-
-      // Tier check
-      const tierError = await requirePlusSync(db, userId);
-      if (tierError) return mcpError(tierError);
 
       const proj = await mcpResolveProject(db, project, userId);
       if (!proj) return mcpError(`Project "${project}" not found.`);
@@ -138,7 +121,7 @@ export function registerConversationTools(server: McpServer, _env: Env, getConte
   // --- load_conversation ---
   server.tool(
     "load_conversation",
-    "Load a conversation to resume it in another agent. Returns the system prompt, working context, and full message transcript. Plus only.",
+    "Load a conversation to resume it in another agent. Returns the system prompt, working context, and full message transcript.",
     {
       project: z.string().describe("Project name"),
       conversationId: z.string().describe("Conversation ID to load"),
@@ -153,10 +136,6 @@ export function registerConversationTools(server: McpServer, _env: Env, getConte
     },
     async ({ project, conversationId, fidelity, fromSequence }) => {
       const userId = requireMcpUserId(getContext);
-
-      // Tier check
-      const tierError = await requirePlusSync(db, userId);
-      if (tierError) return mcpError(tierError);
 
       const proj = await mcpResolveProject(db, project, userId);
       if (!proj) return mcpError(`Project "${project}" not found.`);
@@ -245,7 +224,7 @@ export function registerConversationTools(server: McpServer, _env: Env, getConte
   // --- list_conversations ---
   server.tool(
     "list_conversations",
-    "List conversations in a project, with optional status filter. Returns titles, message counts, dates, and IDs. Plus only.",
+    "List conversations in a project, with optional status filter. Returns titles, message counts, dates, and IDs.",
     {
       project: z.string().describe("Project name"),
       status: z.enum(["active", "archived"]).optional().describe("Filter by status (default: all non-deleted)"),
@@ -253,10 +232,6 @@ export function registerConversationTools(server: McpServer, _env: Env, getConte
     },
     async ({ project, status, limit }) => {
       const userId = requireMcpUserId(getContext);
-
-      // Tier check
-      const tierError = await requirePlusSync(db, userId);
-      if (tierError) return mcpError(tierError);
 
       const proj = await mcpResolveProject(db, project, userId);
       if (!proj) return mcpError(`Project "${project}" not found.`);
@@ -289,7 +264,7 @@ export function registerConversationTools(server: McpServer, _env: Env, getConte
   // --- upload_media ---
   server.tool(
     "upload_media",
-    "Upload media (image, file, PDF, audio, video) to a conversation message. The content must be base64-encoded. Plus only.",
+    "Upload media (image, file, PDF, audio, video) to a conversation message. The content must be base64-encoded.",
     {
       conversationId: z.string().describe("Conversation ID"),
       messageId: z.string().describe("Message ID to attach media to"),
@@ -299,10 +274,6 @@ export function registerConversationTools(server: McpServer, _env: Env, getConte
     },
     async ({ conversationId, messageId, filename, mimeType, content }) => {
       const userId = requireMcpUserId(getContext);
-
-      // Tier check
-      const tierError = await requirePlusSync(db, userId);
-      if (tierError) return mcpError(tierError);
 
       // Verify conversation exists
       const conv = await getConversation(db, conversationId);
