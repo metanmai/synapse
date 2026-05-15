@@ -39,11 +39,6 @@ function insightTypeLabel(type: string): string {
   <section class="overview-section">
     <div class="section-header">
       <h2 class="section-title">Insights ({data.insightTotal})</h2>
-      {#if data.insightTotal > data.insights.length}
-        <a href="/projects/{encodeURIComponent(projectSlug)}/insights" class="section-link">
-          Show all {data.insightTotal} &rarr;
-        </a>
-      {/if}
     </div>
 
     {#if data.insights.length === 0}
