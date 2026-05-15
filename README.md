@@ -7,7 +7,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-5C2D91?style=for-the-badge)](https://modelcontextprotocol.io/)
 [![npm](https://img.shields.io/npm/v/synapsesync-mcp?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/synapsesync-mcp)
 
-[MCP setup](#mcp-setup) · [Web dashboard](#web-dashboard) · [REST API](#rest-api) · [Why Synapse](#why-synapse) · [How it works](#how-it-works) · [This repo](#this-repository)
+[Claude Code handoff](#claude-code-handoff) · [Web dashboard](#web-dashboard) · [REST API](#rest-api) · [Why Synapse](#why-synapse) · [How it works](#how-it-works) · [This repo](#this-repository)
 
 ---
 
@@ -15,20 +15,35 @@ Synapse stores your AI context as **files in a cloud workspace** so the same mem
 
 ---
 
-## MCP setup
+## Claude Code handoff
 
-Connect Claude Code, Cursor, Windsurf, VS Code (MCP), or any client that supports **Model Context Protocol**.
+**Tanmai** pairs with Claude Code on her laptop; she has to stop mid-feature. **Alex** picks the same project up on a different machine an hour later — Claude Code opens, reads the project brief, and Alex continues from where Tanmai left off without re-briefing.
 
-1. **Get an API key** — Sign up at **[synapsesync.app](https://synapsesync.app)**, open **Account → API keys**, and create a key (or create the account from the CLI — see below).
-2. **CLI setup (recommended)** — In a terminal, `cd` to your project and run:
+Synapse makes that work by recording Claude Code session events to a local log, syncing them through a background daemon, and injecting a `<synapse-brief>` summary on every `SessionStart`. The brief is generated from real events (edits, prompts, commits, handoffs) — not from chat summarisation.
+
+### Setup (Claude Code, recommended)
+
+```bash
+npm install -g synapsesync-mcp
+synapse init            # sign in, write hook entries, install the LaunchAgent / systemd daemon
+synapse status          # daemon healthy, hook installed, brief cache fresh
+synapse handoff "next: finish auth flow"  # leave a baton for the next session
+```
+
+`synapse init` writes the SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd, and SubagentStop hook entries into `~/.claude/settings.json`, and installs a launchd / systemd unit that runs the capture daemon in the background.
+
+**Daemon-fired Claude Code:** the daemon can also spawn its own Claude Code sessions (e.g. to compact context, extract decisions, refresh the brief). This is **opt-in** — set `daemon.ai_enabled = true` in `~/.synapse/config.json` to turn it on.
+
+### For other MCP hosts (Cursor, Windsurf, VS Code)
+
+The same package ships an MCP server that any MCP client can use. Hosts other than Claude Code don't get the hook-driven handoff layer; they get the same workspace via tools.
+
+1. **Get an API key** — Sign up at **[synapsesync.app](https://synapsesync.app)**, open **Account → API keys**, and create a key (or create the account from the CLI).
+2. **Run the wizard:**
 
    ```bash
-   npm install -g synapsesync-mcp
-   synapsesync-mcp wizard        # interactive sign-up / sign-in → writes .mcp.json + editor configs
-   synapsesync-mcp --help        # see all commands
+   synapsesync-mcp wizard        # interactive sign-in → writes .mcp.json + editor configs
    ```
-
-   Interactive flows use keyboard navigation (arrow keys + Enter). Editors that spawn the MCP **without a TTY** still run the **server** when **`SYNAPSE_API_KEY`** is set — not the setup UI.
 
 3. **Or register the server yourself** — Add the published **`synapsesync-mcp`** package to your MCP config:
 
