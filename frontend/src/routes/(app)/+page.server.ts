@@ -4,8 +4,12 @@ import { createApi } from "$lib/server/api";
 
 export const load: PageServerLoad = async ({ locals }) => {
   const api = createApi(locals.token);
-  const projects = await api.listProjects();
-  return { projects };
+  try {
+    const projects = await api.listProjects();
+    return { projects, error: null };
+  } catch {
+    return { projects: [], error: "Unable to connect to the API. Is the backend running?" };
+  }
 };
 
 export const actions: Actions = {
