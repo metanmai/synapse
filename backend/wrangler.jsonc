@@ -25,7 +25,7 @@
     "crons": ["*/5 * * * *"]
   },
   "vars": {
-    "STRIPE_PRO_PRICE_ID": "price_PLACEHOLDER"
+    "CREEM_PRO_PRODUCT_ID": "prod_PLACEHOLDER"
   },
   "observability": {
     "enabled": true,
