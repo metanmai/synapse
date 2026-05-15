@@ -4,8 +4,11 @@ import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals }) => {
   const api = createApi(locals.token);
-  const history = await api.getEntryHistory(params.name, params.path);
-  return { history, entryPath: params.path };
+  const [history, entry] = await Promise.all([
+    api.getEntryHistory(params.name, params.path),
+    api.getEntry(params.name, params.path).catch(() => null),
+  ]);
+  return { history, entryPath: params.path, currentContent: entry?.content ?? "" };
 };
 
 export const actions: Actions = {
