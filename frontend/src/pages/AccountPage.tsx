@@ -1,6 +1,6 @@
 import { useAuth } from "../lib/auth";
-import { ApiKeyCard } from "../components/account/ApiKeyCard";
-import { ConnectedAccounts } from "../components/account/ConnectedAccounts";
+
+import { ApiKeyCard, ConnectedAccounts } from "../components/account";
 
 export function AccountPage() {
   const { user } = useAuth();
