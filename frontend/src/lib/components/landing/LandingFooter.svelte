@@ -17,7 +17,7 @@
       </div>
     </div>
     <div class="footer-bottom">
-      <p class="footer-copy">&copy; 2026 Synapse. All rights reserved.</p>
+      <p class="footer-copy">&copy; 2026 Tantencity. All rights reserved.</p>
     </div>
   </div>
 </footer>
