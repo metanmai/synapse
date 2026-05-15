@@ -189,13 +189,11 @@ function closePanel() {
   </div>
 
   <!-- Main content -->
-  <div class="flex-1 p-8 overflow-y-auto min-w-0">
+  <div class="flex-1 p-8 overflow-y-auto min-w-0 relative">
     {#if loading}
-      <div class="flex flex-col items-center justify-center mt-20 gap-3">
-        <div class="spinner"></div>
-        <span style="color: var(--color-text-muted); font-size: 13px;">Loading entry...</span>
-      </div>
-    {:else if mode === "activity" && contextPath}
+      <div class="loading-bar"></div>
+    {/if}
+    {#if mode === "activity" && contextPath}
       <PathActivityPanel
         path={contextPath}
         isFolder={contextIsFolder}
@@ -252,6 +250,24 @@ function closePanel() {
   .file-tree-sidebar {
     flex-shrink: 0;
     min-width: 0;
+  }
+
+  .loading-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--color-pink), var(--color-pink-dark), var(--color-pink));
+    background-size: 200% 100%;
+    animation: loading-slide 1.2s ease-in-out infinite;
+    border-radius: 0 0 2px 2px;
+    z-index: 10;
+  }
+
+  @keyframes loading-slide {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
   }
 
   @media (max-width: 768px) {
