@@ -6,6 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import { runCapture } from "./capture/cli.js";
 import { runRefresh, runStatus, runTree, runUpgrade, runWhoami } from "./cli/commands.js";
 import { API_URL } from "./cli/config.js";
 import { runStats } from "./cli/stats.js";
@@ -107,7 +108,17 @@ function readPackageVersion(): string {
   }
 }
 
-const CLI_SUBCOMMANDS = new Set(["wizard", "help", "stats", "tree", "status", "refresh", "upgrade", "whoami"]);
+const CLI_SUBCOMMANDS = new Set([
+  "wizard",
+  "help",
+  "stats",
+  "tree",
+  "status",
+  "refresh",
+  "upgrade",
+  "whoami",
+  "capture",
+]);
 
 // --- CLI help ---
 
@@ -130,6 +141,12 @@ function printHelp(): void {
     "",
     bold("Account"),
     s("npx synapsesync-mcp upgrade", "Upgrade to Plus ($5.99/mo)"),
+    "",
+    bold("Capture"),
+    s("npx synapsesync-mcp capture start", "Start session capture daemon"),
+    s("npx synapsesync-mcp capture stop", "Stop capture daemon"),
+    s("npx synapsesync-mcp capture status", "Check daemon status"),
+    s("npx synapsesync-mcp capture list", "List captured sessions"),
     "",
     s("-h, --help", "Show this help"),
     s("-v, --version", "Show version"),
@@ -220,6 +237,11 @@ async function handleCli(raw: string[]): Promise<void> {
   }
   if (cmd === "whoami") {
     await runWhoami();
+    process.exit(0);
+  }
+
+  if (cmd === "capture") {
+    await runCapture(raw.slice(1));
     process.exit(0);
   }
 
