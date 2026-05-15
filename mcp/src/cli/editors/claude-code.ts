@@ -52,10 +52,10 @@ export function writeClaudeCodeGlobal(apiKey: string, home: string): string[] {
     written.push("~/.claude/CLAUDE.md");
   }
 
-  // Write global MCP config for Claude Code
-  const mcpJsonPath = path.join(claudeDir, ".mcp.json");
+  // Write user-scoped MCP config — Claude Code reads mcpServers from ~/.claude.json
+  const mcpJsonPath = path.join(home, ".claude.json");
   writeMcpJson(mcpJsonPath, apiKey);
-  written.push("~/.claude/.mcp.json");
+  written.push("~/.claude.json");
 
   const cmdDir = path.join(claudeDir, "commands", "synapse");
   fs.mkdirSync(cmdDir, { recursive: true });
