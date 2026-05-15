@@ -80,14 +80,14 @@ export function installHooks(settingsPath?: string): {
     return { installed: false, settingsPath: p, alreadyInstalled: true };
   }
 
-  // Add SessionStart hook
+  // Add SessionStart hook: daemon-start && brief auto-injection
   if (!settings.hooks.SessionStart) settings.hooks.SessionStart = [];
   settings.hooks.SessionStart.push({
     hooks: [
       {
         type: "command",
-        command: buildStartCommand(),
-        timeout: 10,
+        command: `${buildStartCommand()} && synapsesync-mcp brief`,
+        timeout: 15,
       },
     ],
   });
