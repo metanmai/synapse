@@ -13,6 +13,7 @@ import type { Env } from "./lib/env";
 import { envList } from "./lib/env";
 import { AppError } from "./lib/errors";
 import { rateLimit } from "./lib/rate-limit";
+import { CompactionScheduler } from "./durable-objects/compaction-scheduler";
 import { SynapseAgent } from "./mcp/agent";
 import { dbMiddleware } from "./middleware/db";
 import { runScheduledGoogleSync } from "./sync/from-google";
@@ -75,8 +76,8 @@ app.route("/api/conversations", conversations);
 // Mount MCP server (Streamable HTTP transport)
 app.mount("/mcp", SynapseAgent.serve("/mcp").fetch);
 
-// Export Durable Object class (required by Wrangler)
-export { SynapseAgent };
+// Export Durable Object classes (required by Wrangler)
+export { SynapseAgent, CompactionScheduler };
 
 // Default export for Cloudflare Workers
 export default {
