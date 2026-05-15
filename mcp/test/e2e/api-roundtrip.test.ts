@@ -779,6 +779,108 @@ suite("Full User Journey", () => {
   });
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  PROJECT STATS & QUOTAS
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  describe("Project Stats & Quotas", () => {
+    // ── Project Stats ──
+
+    it("GET /api/projects returns enriched stats", async () => {
+      const { status, data } = await api("GET", "/api/projects", KEY);
+      expect(status).toBe(200);
+      const project = (data as R[]).find((p) => p.id === PROJECT_ID);
+      expect(project).toBeTruthy();
+      // We created 2 insights earlier (one was deleted, so 2 remain: "Use Postgres" + "Supabase Storage")
+      expect(project.insight_count).toBeGreaterThanOrEqual(2);
+      // We created 2 conversations (one soft-deleted + one import), but soft-deleted are excluded
+      // At minimum the imported conversation should still be active
+      expect(typeof project.conversation_count).toBe("number");
+      // tools is an array of agent strings derived from conversation metadata
+      expect(Array.isArray(project.tools)).toBe(true);
+    });
+
+    // ── Free tier can use conversations ──
+
+    it("free tier user can create conversations", async () => {
+      // Verify the test user is on the free tier
+      const billing = await api("GET", "/api/billing/status", KEY);
+      expect(billing.status).toBe(200);
+      expect(billing.data.tier).toBe("free");
+
+      // Conversations should work on free tier (status 201, not 403)
+      const { status, data } = await api("POST", "/api/conversations", KEY, {
+        project_id: PROJECT_ID,
+        title: "Free Tier Conversation Test",
+        fidelity_mode: "summary",
+        metadata: { source_agent: "e2e-test" },
+      });
+      expect(status).toBe(201);
+      expect(data.id).toBeTruthy();
+
+      // Clean up: soft-delete this conversation
+      await api("PATCH", `/api/conversations/${data.id}`, KEY, { status: "deleted" });
+    });
+
+    it("project stats include tools from conversation metadata", async () => {
+      // Create a conversation with a known source_agent in metadata
+      const { data: conv } = await api("POST", "/api/conversations", KEY, {
+        project_id: PROJECT_ID,
+        title: "Agent Tracking Test",
+        fidelity_mode: "summary",
+        metadata: { source_agent: "claude-code" },
+      });
+
+      // Now check that tools includes our agent
+      const { data: projects } = await api("GET", "/api/projects", KEY);
+      const project = (projects as R[]).find((p) => p.id === PROJECT_ID);
+      expect(project.tools).toContain("claude-code");
+
+      // Clean up
+      if (conv?.id) {
+        await api("PATCH", `/api/conversations/${conv.id}`, KEY, { status: "deleted" });
+      }
+    });
+
+    // ── Project Quota Enforcement ──
+
+    const EXTRA_PROJECT_IDS: string[] = [];
+
+    it("can create projects up to the free tier limit", async () => {
+      // The user already has 1 project (PROJECT_ID). Free limit is 5.
+      // Create 4 more to reach the limit.
+      for (let i = 0; i < 4; i++) {
+        const { status, data } = await api("POST", "/api/projects", KEY, {
+          name: `E2E-Quota-${Date.now()}-${i}`,
+        });
+        expect(status).toBe(201);
+        EXTRA_PROJECT_IDS.push(data.id);
+      }
+      // Confirm we now have 5 projects
+      const { data: all } = await api("GET", "/api/projects", KEY);
+      expect((all as R[]).length).toBe(5);
+    });
+
+    it("rejects project creation beyond the free tier limit (403)", async () => {
+      const { status, data } = await api("POST", "/api/projects", KEY, {
+        name: `E2E-Over-Limit-${Date.now()}`,
+      });
+      expect(status).toBe(403);
+      expect(data.code).toBe("TIER_LIMIT");
+      expect(data.error).toContain("Project limit reached");
+    });
+
+    it("extra projects are cleaned up by account deletion at end", async () => {
+      // No individual project delete endpoint exists — the account deletion
+      // test at the end of this suite wipes all user data including projects.
+      // Verify the original project still exists alongside the extras.
+      const { status, data } = await api("GET", "/api/projects", KEY);
+      expect(status).toBe(200);
+      expect((data as R[]).find((p) => p.id === PROJECT_ID)).toBeTruthy();
+      expect((data as R[]).length).toBe(5);
+    });
+  });
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  AUTH ENFORCEMENT — all protected endpoints
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
