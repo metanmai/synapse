@@ -2,34 +2,24 @@ import type { Env } from "../lib/env";
 import { createSupabaseClient } from "../db/client";
 import type { GoogleOAuthTokens } from "../db/types";
 import { upsertEntry } from "../db/queries/entries";
+import { getAccessToken } from "./google-auth";
 
-async function getAccessToken(env: Env, tokens: GoogleOAuthTokens): Promise<string> {
-  if (Date.now() < tokens.expires_at) return tokens.access_token;
+interface GoogleDriveFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  modifiedTime?: string;
+}
 
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
-      refresh_token: tokens.refresh_token,
-      grant_type: "refresh_token",
-    }),
-  });
-
-  const data = await res.json() as any;
-  if (!data.access_token) throw new Error("Failed to refresh Google token");
-
-  tokens.access_token = data.access_token;
-  tokens.expires_at = Date.now() + data.expires_in * 1000;
-  return data.access_token;
+interface GoogleDriveListResponse {
+  files: GoogleDriveFile[];
 }
 
 async function listDriveFiles(
   accessToken: string,
   folderId: string,
   modifiedAfter?: string
-): Promise<any[]> {
+): Promise<GoogleDriveFile[]> {
   let query = `'${folderId}' in parents and trashed=false`;
   if (modifiedAfter) {
     query += ` and modifiedTime > '${modifiedAfter}'`;
@@ -39,7 +29,7 @@ async function listDriveFiles(
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,modifiedTime)`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
-  const data = await res.json() as any;
+  const data = await res.json() as GoogleDriveListResponse;
   return data.files ?? [];
 }
 
@@ -88,7 +78,7 @@ export async function syncProjectFromGoogle(env: Env, projectId: string): Promis
     throw new Error("Project has no linked Google Drive folder");
   }
 
-  const tokens = (project as any).users?.google_oauth_tokens as GoogleOAuthTokens | null;
+  const tokens = (project as unknown as { users?: { google_oauth_tokens?: GoogleOAuthTokens } }).users?.google_oauth_tokens ?? null;
   if (!tokens) throw new Error("Project owner has not connected Google");
 
   const accessToken = await getAccessToken(env, tokens);
