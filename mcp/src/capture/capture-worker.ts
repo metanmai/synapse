@@ -6,6 +6,7 @@ import { ClaudeCodeAdapter } from "./adapters/claude-code.js";
 import { CodexAdapter } from "./adapters/codex.js";
 import { CursorAdapter } from "./adapters/cursor.js";
 import { GeminiAdapter } from "./adapters/gemini.js";
+import { CloudSyncer } from "./cloud-sync.js";
 import { SessionStore } from "./store.js";
 import { CaptureWatcher } from "./watcher.js";
 
@@ -28,11 +29,28 @@ async function main(): Promise<void> {
   log(`Registered adapters: ${registry.tools().join(", ")}`);
 
   const store = new SessionStore();
+  const syncer = new CloudSyncer(log);
   const watcher = new CaptureWatcher(registry);
 
   watcher.on("session", (session) => {
     log(`Captured session ${session.id} from ${session.tool} (${session.messages.length} messages)`);
     store.save(session);
+  });
+
+  watcher.on("idle", async (filePath: string) => {
+    const adapter = registry.findByPath(filePath);
+    if (!adapter) return;
+    const session = adapter.parse(filePath);
+    if (!session) return;
+
+    // Load from store (may have more recent data)
+    const stored = store.load(session.id);
+    if (!stored) return;
+
+    const ok = await syncer.sync(stored);
+    if (ok) {
+      log(`Synced session ${stored.id} to cloud (${stored.messages.length} messages)`);
+    }
   });
 
   watcher.on("error", (err) => {
