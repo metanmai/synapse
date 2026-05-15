@@ -414,7 +414,8 @@
     },
     "/api/context/{project}/search": {
       "get": {
-        "summary": "Search entries",
+        "summary": "Search entries (semantic + full-text + keyword)",
+        "description": "Searches using a 3-tier strategy run in parallel: (1) semantic search via vector embeddings — finds conceptually similar content even with different wording, (2) Postgres full-text search, (3) ILIKE keyword fallback. Results are merged and deduplicated by relevance. Semantic search requires the optional embedding service; without it, degrades gracefully to full-text + keyword.",
         "tags": ["Context"],
         "parameters": [
           { "name": "project", "in": "path", "required": true, "schema": { "type": "string" } },
