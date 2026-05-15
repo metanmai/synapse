@@ -1,7 +1,7 @@
 {
-  "name": "mcp-sync",
+  "name": "synapse",
   "version": "1.0.0",
-  "description": "Universal AI context layer — MCP server for sharing context across AI tools and teams",
+  "description": "Universal AI context layer — shared context across AI tools and teams",
   "scripts": {
     "dev": "wrangler dev --test-scheduled",
     "test": "vitest run",
