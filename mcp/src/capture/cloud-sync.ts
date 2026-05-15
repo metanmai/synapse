@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { API_URL } from "../cli/config.js";
+import { upsertProjectMapping } from "../cli/project-map.js";
 import type { CapturedSession, SessionMessage } from "./types.js";
 
 interface SyncState {
@@ -72,6 +73,7 @@ export class CloudSyncer {
   private apiKey: string | null;
   private syncStates = new Map<string, SyncState>();
   private projectId: string | null = null;
+  private projectName: string | null = null;
   private log: (msg: string) => void;
 
   constructor(log?: (msg: string) => void) {
@@ -104,6 +106,7 @@ export class CloudSyncer {
         const ok = await this.appendMessages(existing.cloudConversationId, newMessages);
         if (ok) {
           existing.lastSyncedMessageCount = session.messages.length;
+          this.updateProjectMap(session.projectPath, projectId);
         }
         return ok;
       }
@@ -118,6 +121,7 @@ export class CloudSyncer {
           cloudConversationId: conversationId,
           lastSyncedMessageCount: session.messages.length,
         });
+        this.updateProjectMap(session.projectPath, projectId);
       }
       return ok;
     } catch (err) {
@@ -142,6 +146,7 @@ export class CloudSyncer {
       const projects = (await res.json()) as Project[];
       if (projects.length > 0) {
         this.projectId = projects[0].id;
+        this.projectName = projects[0].name;
         return this.projectId;
       }
 
@@ -203,6 +208,19 @@ export class CloudSyncer {
     } catch (err) {
       this.log(`Failed to append messages: ${err}`);
       return false;
+    }
+  }
+
+  private updateProjectMap(projectPath: string, projectId: string): void {
+    try {
+      if (this.projectName) {
+        upsertProjectMapping(projectPath, {
+          project_id: projectId,
+          project_name: this.projectName,
+        });
+      }
+    } catch {
+      /* map is best-effort cache; never fail a sync for it */
     }
   }
 
