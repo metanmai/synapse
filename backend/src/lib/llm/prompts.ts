@@ -13,9 +13,7 @@ export function truncateMessages(messages: MessageLike[], maxMessages: number): 
 }
 
 export function buildCompactionPrompt(messages: MessageLike[], title?: string | null): string {
-  const transcript = messages
-    .map((m) => `[${m.role}] ${m.content ?? "(empty)"}`)
-    .join("\n\n");
+  const transcript = messages.map((m) => `[${m.role}] ${m.content ?? "(empty)"}`).join("\n\n");
 
   const titleLine = title ? `\nConversation title: ${title}\n` : "";
 
@@ -26,17 +24,10 @@ ${titleLine}
 ${transcript}`;
 }
 
-export function buildAggregationPrompt(
-  recentSummaries: string[],
-  existingContext: string | null,
-): string {
-  const summariesSection = recentSummaries
-    .map((s, i) => `### Session ${i + 1}\n${s}`)
-    .join("\n\n");
+export function buildAggregationPrompt(recentSummaries: string[], existingContext: string | null): string {
+  const summariesSection = recentSummaries.map((s, i) => `### Session ${i + 1}\n${s}`).join("\n\n");
 
-  const existingSection = existingContext
-    ? `\n## Existing project context\n${existingContext}\n`
-    : "";
+  const existingSection = existingContext ? `\n## Existing project context\n${existingContext}\n` : "";
 
   return `You are given summaries of recent AI coding sessions for a project, plus an existing project context summary. Merge them into a single updated project context. Preserve important decisions, architecture details, and current state. Remove outdated information that's been superseded by newer sessions. Keep it under 2000 words.
 ${existingSection}

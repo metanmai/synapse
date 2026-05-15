@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCompactionPrompt, buildAggregationPrompt, truncateMessages } from "../../src/lib/llm/prompts";
+import { buildAggregationPrompt, buildCompactionPrompt, truncateMessages } from "../../src/lib/llm/prompts";
 
 describe("buildCompactionPrompt", () => {
   it("includes all messages in the transcript", () => {
@@ -14,10 +14,7 @@ describe("buildCompactionPrompt", () => {
   });
 
   it("includes conversation title when provided", () => {
-    const prompt = buildCompactionPrompt(
-      [{ role: "user", content: "hello" }],
-      "Fix login redirect",
-    );
+    const prompt = buildCompactionPrompt([{ role: "user", content: "hello" }], "Fix login redirect");
     expect(prompt).toContain("Fix login redirect");
   });
 });
