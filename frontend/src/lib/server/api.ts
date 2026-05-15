@@ -228,14 +228,14 @@ export function createApi(token: string | null) {
         `/api/conversations?project_id=${projectId}${status ? `&status=${status}` : ""}&limit=${limit}&offset=${offset}`,
         token,
       ),
-    getConversation: (conversationId: string, fidelity?: string, page = 1, limit = 50) =>
+    getConversation: (conversationId: string, fidelity?: string, fromSequence?: number, msgLimit = 200) =>
       request<{
         conversation: import("$lib/types").Conversation;
         messages: import("$lib/types").ConversationMessage[];
         context: Record<string, unknown>[];
         media: import("$lib/types").ConversationMediaRecord[];
       }>(
-        `/api/conversations/${conversationId}?${fidelity ? `fidelity=${fidelity}&` : ""}page=${page}&limit=${limit}`,
+        `/api/conversations/${conversationId}?${fidelity ? `fidelity=${fidelity}&` : ""}${fromSequence ? `from_sequence=${fromSequence}&` : ""}msg_limit=${msgLimit}`,
         token,
       ),
     createConversation: (projectId: string, title?: string) =>

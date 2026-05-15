@@ -134,28 +134,45 @@ export async function runStatus(): Promise<void> {
     return;
   }
 
-  // Show config locations
-  const LW = 24;
-  clack.log.message(
-    `${bold("Configured in")}\n${existing.locations.map((l) => `  ${accent("\u2713")} ${muted(l)}`).join("\n")}`,
-  );
-
-  // Validate keys
+  // Validate each unique API key
   const spin = createGlyphSpinner();
-  spin.start("Checking connection\u2026");
+  spin.start("Checking connections\u2026");
 
+  const keyResults = new Map<string, boolean>();
   let validKey: string | null = null;
+
   for (const key of existing.apiKeys) {
     const s = await validateApiKey(key);
-    if (s.status === "valid") {
-      validKey = key;
-      break;
-    }
+    const isValid = s.status === "valid";
+    keyResults.set(key, isValid);
+    if (isValid && !validKey) validKey = key;
   }
 
-  if (validKey) {
-    spin.stop(`${success("\u2713")} Connected`);
+  spin.stop("Connection check complete");
 
+  // Show per-location status
+  const LW = 24;
+  const statusLines = existing.locations.map((loc) => {
+    const label = loc.label.padEnd(42);
+    if (loc.status === "instructions_only") {
+      return `  ${muted("\u25CB")} ${muted(label)} ${muted("instructions only")}`;
+    }
+    if (loc.status === "no_key") {
+      return `  ${themeError("\u2717")} ${muted(label)} ${themeError("missing API key")}`;
+    }
+    const isValid = loc.apiKey ? keyResults.get(loc.apiKey) : undefined;
+    if (isValid === true) {
+      return `  ${success("\u2713")} ${muted(label)} ${success("connected")}`;
+    }
+    if (isValid === false) {
+      return `  ${themeError("\u2717")} ${muted(label)} ${themeError("invalid key")}`;
+    }
+    return `  ${muted("?")} ${muted(label)} ${muted("unchecked")}`;
+  }).join("\n");
+
+  clack.log.message(`${bold("Configured in")}\n${statusLines}`);
+
+  if (validKey) {
     // Fetch account info
     const projects = await apiFetch<R[]>(validKey, "/api/projects");
     const billing = await apiFetch<{ tier: string }>(validKey, "/api/billing/status");
@@ -167,17 +184,14 @@ export async function runStatus(): Promise<void> {
 
     clack.log.message(
       [
-        `${pad(muted("API key"), LW)} ${success("valid")}`,
         `${pad(muted("Tier"), LW)} ${accent(billing.tier)}`,
         `${pad(muted("Files"), LW)} ${accent(String(fileCount))}`,
-        `${pad(muted("Keys found"), LW)} ${accent(`${existing.apiKeys.length} unique`)}`,
       ].join("\n"),
     );
   } else if (existing.apiKeys.length > 0) {
-    spin.stop(themeError("API key expired"));
-    clack.log.message(`  Run ${accent("npx synapsesync-mcp refresh")} to get a new key.`);
+    clack.log.warn(`All API keys are expired. Run ${accent("npx synapsesync-mcp refresh")} to get a new key.`);
   } else {
-    spin.stop(muted("No API key found in configs"));
+    clack.log.warn(`No API keys found. Run ${accent("npx synapsesync-mcp")} to set up.`);
   }
 
   clack.outro(muted("synapsesync.app"));
@@ -207,7 +221,7 @@ export async function runRefresh(): Promise<void> {
   spin.stop(`${success("\u2713")} New key created`);
 
   // Detect scope from existing setup
-  const isGlobal = existing.locations.some((l) => l.startsWith("~"));
+  const isGlobal = existing.locations.some((l) => l.label.startsWith("~"));
   const scope = isGlobal ? "global" : "local";
   const editors = detectEditors(scope).filter((e) => e.detected);
   const writeResult = writeEditorConfigs(editors, newKey);
