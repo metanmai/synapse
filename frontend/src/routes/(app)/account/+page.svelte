@@ -14,6 +14,6 @@ let { data, form } = $props();
   <div class="space-y-6">
     <BillingCard billing={data.billing} />
     <ApiKeysCard keys={data.keys} newKey={form?.newKey} keyError={form?.keyError} />
-    <ConnectedAccounts />
+    <ConnectedAccounts providers={data.user.providers} />
   </div>
 </div>
