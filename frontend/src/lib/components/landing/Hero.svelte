@@ -1,53 +1,203 @@
+<script lang="ts">
+  import { onMount } from "svelte";
+
+  let scrollY = $state(0);
+
+  onMount(() => {
+    const handleScroll = () => {
+      scrollY = window.scrollY;
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  });
+</script>
+
 <section class="hero">
-  <div class="hero-content">
-    <h1 class="hero-headline">Your AI tools finally remember</h1>
-    <p class="hero-sub">
-      Synapse is a shared context layer that gives Claude, ChatGPT, Cursor,
-      and every AI tool persistent memory across sessions.
-    </p>
-    <a href="/signup" class="hero-cta">Get Started Free</a>
+  <!-- Gradient mesh background -->
+  <div class="hero-bg" aria-hidden="true">
+    <div class="mesh-gradient"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="orb orb-4"></div>
   </div>
 
-  <div class="hero-visual">
-    <!-- Animated context-flow illustration -->
-    <div class="hub">
-      <div class="hub-core">
-        <img src="/logo.svg" alt="" class="hub-logo" />
+  <div class="hero-container">
+    <div class="hero-content" style="transform: translateY({scrollY * 0.08}px);">
+      <div class="hero-badge">Shared context layer for AI</div>
+      <h1 class="hero-headline">
+        Your AI tools
+        <span class="gradient-text">finally remember</span>
+      </h1>
+      <p class="hero-sub">
+        Synapse is a shared context layer that gives Claude, ChatGPT, Cursor,
+        and every AI tool persistent memory across sessions.
+      </p>
+      <div class="hero-actions">
+        <a href="/signup" class="hero-cta">Get Started Free</a>
+        <a href="#how-it-works" class="hero-secondary">See how it works</a>
       </div>
-      <div class="orbit-ring"></div>
     </div>
 
-    <div class="tool tool-1">
-      <span class="tool-label">Claude</span>
+    <div class="hero-visual" style="transform: translateY({scrollY * -0.04}px);">
+      <!-- Stylized workspace mockup -->
+      <div class="workspace-mockup">
+        <div class="mockup-glow" aria-hidden="true"></div>
+        <!-- Title bar -->
+        <div class="mockup-titlebar">
+          <div class="titlebar-dots">
+            <span class="dot dot-red"></span>
+            <span class="dot dot-yellow"></span>
+            <span class="dot dot-green"></span>
+          </div>
+          <span class="titlebar-text">Synapse Workspace</span>
+        </div>
+        <!-- Sidebar + content -->
+        <div class="mockup-body">
+          <div class="mockup-sidebar">
+            <div class="sidebar-section">
+              <div class="sidebar-heading">Projects</div>
+              <div class="sidebar-item active">
+                <span class="item-icon">&#128193;</span>
+                <span class="item-text">my-app</span>
+              </div>
+              <div class="sidebar-item">
+                <span class="item-icon">&#128193;</span>
+                <span class="item-text">design-system</span>
+              </div>
+            </div>
+            <div class="sidebar-section">
+              <div class="sidebar-heading">Recent</div>
+              <div class="sidebar-item">
+                <span class="item-icon">&#128196;</span>
+                <span class="item-text">api-design.md</span>
+              </div>
+              <div class="sidebar-item">
+                <span class="item-icon">&#128196;</span>
+                <span class="item-text">chose-redis.md</span>
+              </div>
+              <div class="sidebar-item">
+                <span class="item-icon">&#128196;</span>
+                <span class="item-text">auth-flow.md</span>
+              </div>
+            </div>
+          </div>
+          <div class="mockup-content">
+            <div class="content-header">api-design.md</div>
+            <div class="content-lines">
+              <div class="content-line line-heading"># API Gateway Design</div>
+              <div class="content-line line-text">We chose a gateway pattern for...</div>
+              <div class="content-line line-text short">Rate limiting at the edge</div>
+              <div class="content-line line-heading small">## Decision</div>
+              <div class="content-line line-text">Use Cloudflare Workers with...</div>
+              <div class="content-line line-tag-row">
+                <span class="content-tag">architecture</span>
+                <span class="content-tag">decision</span>
+              </div>
+            </div>
+            <!-- Tool badges floating -->
+            <div class="connected-tools">
+              <div class="tool-badge tool-badge-1">Claude</div>
+              <div class="tool-badge tool-badge-2">Cursor</div>
+              <div class="tool-badge tool-badge-3">ChatGPT</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="tool tool-2">
-      <span class="tool-label">ChatGPT</span>
-    </div>
-    <div class="tool tool-3">
-      <span class="tool-label">Cursor</span>
-    </div>
+  </div>
 
-    <!-- Animated connection lines -->
-    <svg class="connections" viewBox="0 0 400 300" fill="none">
-      <line x1="200" y1="150" x2="80" y2="60" class="conn-line conn-1" />
-      <line x1="200" y1="150" x2="320" y2="60" class="conn-line conn-2" />
-      <line x1="200" y1="150" x2="200" y2="270" class="conn-line conn-3" />
-    </svg>
+  <!-- Scroll indicator -->
+  <div class="scroll-indicator" aria-hidden="true">
+    <div class="scroll-mouse">
+      <div class="scroll-wheel"></div>
+    </div>
   </div>
 </section>
 
 <style>
   .hero {
     min-height: 100vh;
-    padding-top: 64px; /* nav height */
+    padding-top: 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Gradient mesh background */
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+
+  .mesh-gradient {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 40%, rgba(232, 216, 196, 0.8) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 80% at 80% 30%, rgba(199, 183, 163, 0.5) 0%, transparent 50%),
+      radial-gradient(ellipse 70% 50% at 50% 80%, rgba(232, 216, 196, 0.6) 0%, transparent 50%),
+      linear-gradient(180deg, var(--color-cream) 0%, var(--color-white) 40%, var(--color-cream) 100%);
+  }
+
+  .orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    will-change: transform;
+  }
+
+  .orb-1 {
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(86, 28, 36, 0.12) 0%, transparent 70%);
+    top: 5%;
+    left: -5%;
+    animation: float-orb 20s ease-in-out infinite;
+  }
+
+  .orb-2 {
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(199, 183, 163, 0.25) 0%, transparent 70%);
+    top: 15%;
+    right: -3%;
+    animation: float-orb-reverse 18s ease-in-out infinite;
+  }
+
+  .orb-3 {
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(109, 41, 50, 0.08) 0%, transparent 70%);
+    bottom: 10%;
+    left: 30%;
+    animation: float-orb 22s ease-in-out infinite 3s;
+  }
+
+  .orb-4 {
+    width: 250px;
+    height: 250px;
+    background: radial-gradient(circle, rgba(232, 216, 196, 0.3) 0%, transparent 70%);
+    bottom: 20%;
+    right: 15%;
+    animation: float-orb-reverse 16s ease-in-out infinite 2s;
+  }
+
+  .hero-container {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 4rem;
     max-width: 1200px;
     margin: 0 auto;
-    padding-left: 2rem;
-    padding-right: 2rem;
+    padding: 2rem;
+    width: 100%;
   }
 
   .hero-content {
@@ -55,180 +205,379 @@
     max-width: 560px;
   }
 
+  .hero-badge {
+    display: inline-block;
+    padding: 0.375rem 1rem;
+    background: rgba(86, 28, 36, 0.08);
+    border: 1px solid rgba(86, 28, 36, 0.15);
+    border-radius: 9999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-brown);
+    letter-spacing: 0.02em;
+    margin-bottom: 1.5rem;
+  }
+
   .hero-headline {
-    font-size: clamp(2.5rem, 5vw, 4.5rem);
+    font-size: clamp(3rem, 6vw, 5.5rem);
     font-weight: 900;
-    line-height: 1.1;
+    line-height: 1.05;
     color: var(--color-burgundy);
-    margin: 0 0 1.25rem;
+    margin: 0 0 1.5rem;
+    letter-spacing: -0.02em;
+  }
+
+  .gradient-text {
+    background: linear-gradient(135deg, var(--color-burgundy) 0%, var(--color-brown) 40%, #9b4a56 60%, var(--color-burgundy) 100%);
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: gradient-shift 6s ease-in-out infinite;
   }
 
   .hero-sub {
     font-size: 1.25rem;
     font-weight: 400;
-    line-height: 1.6;
+    line-height: 1.7;
     color: var(--color-burgundy);
     opacity: 0.7;
-    margin: 0 0 2rem;
+    margin: 0 0 2.5rem;
+  }
+
+  .hero-actions {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
   }
 
   .hero-cta {
     display: inline-block;
-    background-color: var(--color-brown);
+    background: linear-gradient(135deg, var(--color-brown), #7d3340);
     color: var(--color-cream);
-    padding: 1rem 2.5rem;
+    padding: 1.125rem 2.75rem;
     border-radius: 9999px;
     font-size: 1.125rem;
     font-weight: 700;
     text-decoration: none;
-    transition: transform 0.2s, background-color 0.2s;
+    transition: transform 0.25s, box-shadow 0.25s;
+    box-shadow: 0 4px 20px rgba(109, 41, 50, 0.3);
   }
 
   .hero-cta:hover {
-    transform: scale(1.05);
-    background-color: #7d3340;
+    transform: scale(1.05) translateY(-2px);
+    box-shadow: 0 8px 32px rgba(109, 41, 50, 0.45);
   }
 
+  .hero-secondary {
+    color: var(--color-brown);
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: none;
+    border-bottom: 2px solid rgba(109, 41, 50, 0.3);
+    padding-bottom: 2px;
+    transition: border-color 0.2s, color 0.2s;
+  }
+
+  .hero-secondary:hover {
+    color: var(--color-burgundy);
+    border-bottom-color: var(--color-burgundy);
+  }
+
+  /* ── Workspace mockup ── */
   .hero-visual {
     flex: 1;
-    max-width: 400px;
-    height: 300px;
+    max-width: 520px;
     position: relative;
   }
 
-  /* Central hub */
-  .hub {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-  }
-
-  .hub-core {
-    width: 64px;
-    height: 64px;
-    background-color: var(--color-burgundy);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    animation: pulse 3s ease-in-out infinite;
+  .workspace-mockup {
     position: relative;
-    z-index: 2;
+    background: rgba(255, 253, 248, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(199, 183, 163, 0.4);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow:
+      0 20px 60px rgba(86, 28, 36, 0.12),
+      0 4px 16px rgba(86, 28, 36, 0.06);
   }
 
-  .hub-logo {
-    width: 32px;
-    height: 32px;
-    filter: brightness(0) invert(0.9);
-  }
-
-  .orbit-ring {
+  .mockup-glow {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 100px;
-    height: 100px;
-    transform: translate(-50%, -50%);
-    border: 2px solid var(--color-tan);
-    border-radius: 50%;
-    opacity: 0.4;
-    animation: orbit-pulse 3s ease-in-out infinite 0.5s;
+    top: -40%;
+    left: -20%;
+    width: 140%;
+    height: 140%;
+    background: radial-gradient(ellipse at center, rgba(86, 28, 36, 0.04) 0%, transparent 60%);
+    pointer-events: none;
   }
 
-  /* Tool nodes */
-  .tool {
-    position: absolute;
-    width: 56px;
-    height: 56px;
-    background-color: var(--color-white);
-    border: 2px solid var(--color-brown);
-    border-radius: 12px;
+  .mockup-titlebar {
     display: flex;
     align-items: center;
-    justify-content: center;
-    z-index: 2;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: rgba(86, 28, 36, 0.06);
+    border-bottom: 1px solid rgba(199, 183, 163, 0.25);
   }
 
-  .tool-label {
-    font-size: 0.625rem;
+  .titlebar-dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  .dot-red { background: #ff6059; }
+  .dot-yellow { background: #ffbd2e; }
+  .dot-green { background: #28c840; }
+
+  .titlebar-text {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--color-burgundy);
+    opacity: 0.5;
+  }
+
+  .mockup-body {
+    display: flex;
+    min-height: 260px;
+  }
+
+  .mockup-sidebar {
+    width: 140px;
+    padding: 0.75rem;
+    border-right: 1px solid rgba(199, 183, 163, 0.2);
+    background: rgba(232, 216, 196, 0.15);
+    flex-shrink: 0;
+  }
+
+  .sidebar-section {
+    margin-bottom: 1rem;
+  }
+
+  .sidebar-heading {
+    font-size: 0.5625rem;
     font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-tan);
+    margin-bottom: 0.375rem;
+  }
+
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.375rem;
+    border-radius: 6px;
+    font-size: 0.625rem;
+    color: var(--color-burgundy);
+    opacity: 0.6;
+    transition: background 0.15s, opacity 0.15s;
+  }
+
+  .sidebar-item.active {
+    background: rgba(86, 28, 36, 0.08);
+    opacity: 1;
+    font-weight: 600;
+  }
+
+  .item-icon {
+    font-size: 0.6875rem;
+    line-height: 1;
+  }
+
+  .item-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mockup-content {
+    flex: 1;
+    padding: 1rem;
+    position: relative;
+  }
+
+  .content-header {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--color-burgundy);
+    opacity: 0.4;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(199, 183, 163, 0.2);
+  }
+
+  .content-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .content-line {
+    font-size: 0.6875rem;
+    line-height: 1.5;
+    color: var(--color-burgundy);
+  }
+
+  .line-heading {
+    font-weight: 700;
+    font-size: 0.75rem;
+    color: var(--color-burgundy);
+  }
+
+  .line-heading.small {
+    font-size: 0.6875rem;
+    margin-top: 0.25rem;
+  }
+
+  .line-text {
+    opacity: 0.55;
+  }
+
+  .line-text.short {
+    width: 60%;
+  }
+
+  .line-tag-row {
+    display: flex;
+    gap: 0.375rem;
+    margin-top: 0.375rem;
+  }
+
+  .content-tag {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    background: rgba(86, 28, 36, 0.08);
+    border-radius: 9999px;
+    font-size: 0.5625rem;
+    font-weight: 600;
     color: var(--color-brown);
-    text-align: center;
   }
 
-  .tool-1 {
-    top: 2%;
-    left: 8%;
-    animation: float 4s ease-in-out infinite;
-  }
-
-  .tool-2 {
-    top: 2%;
-    right: 8%;
-    animation: float 4s ease-in-out infinite 1s;
-  }
-
-  .tool-3 {
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    animation: float3 4s ease-in-out infinite 2s;
-  }
-
-  /* SVG connection lines */
-  .connections {
+  /* Tool badges floating around the mockup */
+  .connected-tools {
     position: absolute;
     inset: 0;
-    width: 100%;
-    height: 100%;
+    pointer-events: none;
   }
 
-  .conn-line {
-    stroke: var(--color-tan);
-    stroke-width: 2;
-    stroke-dasharray: 8 4;
+  .tool-badge {
+    position: absolute;
+    padding: 0.25rem 0.625rem;
+    background: rgba(255, 253, 248, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(199, 183, 163, 0.4);
+    border-radius: 9999px;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    color: var(--color-burgundy);
+    box-shadow: 0 2px 8px rgba(86, 28, 36, 0.1);
   }
 
-  .conn-1 { animation: dash 2s linear infinite; }
-  .conn-2 { animation: dash 2s linear infinite 0.6s; }
-  .conn-3 { animation: dash 2s linear infinite 1.2s; }
-
-  @keyframes pulse {
-    0%, 100% { transform: translate(-50%, -50%) scale(1); }
-    50% { transform: translate(-50%, -50%) scale(1.08); }
+  .tool-badge-1 {
+    top: -8px;
+    right: -16px;
+    animation: float-orb 6s ease-in-out infinite;
   }
 
-  @keyframes orbit-pulse {
-    0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.4; }
-    50% { transform: translate(-50%, -50%) scale(1.3); opacity: 0.15; }
+  .tool-badge-2 {
+    bottom: 30px;
+    right: -20px;
+    animation: float-orb-reverse 5s ease-in-out infinite 1s;
   }
 
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
+  .tool-badge-3 {
+    bottom: -8px;
+    left: 20px;
+    animation: float-orb 7s ease-in-out infinite 2s;
   }
 
-  @keyframes float3 {
+  /* Scroll indicator */
+  .scroll-indicator {
+    position: absolute;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
+    opacity: 0.4;
+    animation: scroll-bob 2s ease-in-out infinite;
+  }
+
+  .scroll-mouse {
+    width: 24px;
+    height: 38px;
+    border: 2px solid var(--color-burgundy);
+    border-radius: 12px;
+    position: relative;
+  }
+
+  .scroll-wheel {
+    width: 4px;
+    height: 8px;
+    background: var(--color-burgundy);
+    border-radius: 2px;
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    animation: scroll-wheel 2s ease-in-out infinite;
+  }
+
+  @keyframes scroll-bob {
     0%, 100% { transform: translateX(-50%) translateY(0); }
-    50% { transform: translateX(-50%) translateY(-8px); }
+    50% { transform: translateX(-50%) translateY(6px); }
   }
 
-  @keyframes dash {
-    to { stroke-dashoffset: -24; }
+  @keyframes scroll-wheel {
+    0%, 100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+    100% { opacity: 0; transform: translateX(-50%) translateY(10px); }
   }
 
   @media (max-width: 768px) {
     .hero {
+      padding-top: calc(64px + 1rem);
+      min-height: auto;
+      padding-bottom: 4rem;
+    }
+
+    .hero-container {
       flex-direction: column;
       text-align: center;
-      gap: 2rem;
-      padding-top: calc(64px + 2rem);
+      gap: 3rem;
+    }
+
+    .hero-actions {
+      justify-content: center;
     }
 
     .hero-visual {
-      max-width: 300px;
-      height: 240px;
+      max-width: 100%;
+    }
+
+    .mockup-sidebar {
+      display: none;
+    }
+
+    .scroll-indicator {
+      display: none;
+    }
+
+    .orb-1, .orb-2 { width: 200px; height: 200px; }
+    .orb-3, .orb-4 { display: none; }
+
+    .hero-badge {
+      margin-bottom: 1rem;
     }
   }
 </style>
