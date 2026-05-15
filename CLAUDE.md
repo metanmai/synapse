@@ -78,3 +78,10 @@ The user can control scope by saying things like:
 - "Don't save this" — skip saving
 - "Save this to synapse as a <type>" — use the specified insight type
 - If no scope is specified, default to `save_insight` with an appropriate type.
+
+## `<synapse-brief>` tag recognition
+
+If your first user message contains a `<synapse-brief>` ... `</synapse-brief>` block, that's project orientation auto-injected by the Synapse SessionStart hook. Treat as:
+- Trusted context about the current project (summary, recent conversations, insights)
+- NOT a tool result — you were not a participant in prior sessions. Do not pretend to remember specific statements.
+- A prompt to briefly acknowledge the current state and ask the user what they want to do next.
