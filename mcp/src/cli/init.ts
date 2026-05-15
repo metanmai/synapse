@@ -60,7 +60,6 @@ function installHooks(): void {
 
 interface SynapseConfig {
   api_key?: string;
-  daemon?: { ai_enabled: boolean; monthly_budget_usd: number; model: string };
 }
 
 function writeConfig(api_key: string): void {
@@ -69,6 +68,5 @@ function writeConfig(api_key: string): void {
   const configPath = path.join(dir, "config.json");
   const existing: SynapseConfig = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, "utf-8")) : {};
   existing.api_key = api_key;
-  existing.daemon ??= { ai_enabled: false, monthly_budget_usd: 5, model: "haiku" };
   fs.writeFileSync(configPath, JSON.stringify(existing, null, 2));
 }
