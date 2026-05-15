@@ -130,20 +130,21 @@ function menuPathIsFile(menuPath: string): boolean {
 {#if menuOpen}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div onclick={(e) => e.stopPropagation()}
+    role="menu"
     class="fixed rounded-lg shadow-lg py-1"
     style="left: {menuPos.x}px; top: {menuPos.y}px; z-index: 9999;
       background-color: var(--color-bg-raised); border: 1px solid var(--color-border); min-width: 120px;">
-    <button onclick={() => handleAction("activity", menuOpen!, menuPathIsFolder(menuOpen!))}
+    <button role="menuitem" onclick={() => handleAction("activity", menuOpen!, menuPathIsFolder(menuOpen!))}
       class="block w-full text-left px-3 py-1.5 cursor-pointer hover:opacity-80"
       style="font-size: 11px; color: var(--color-text);">
       Activity
     </button>
-    <button onclick={() => handleAction("share", menuOpen!, menuPathIsFolder(menuOpen!))}
+    <button role="menuitem" onclick={() => handleAction("share", menuOpen!, menuPathIsFolder(menuOpen!))}
       class="block w-full text-left px-3 py-1.5 cursor-pointer hover:opacity-80"
       style="font-size: 11px; color: var(--color-text);">
       Share
     </button>
-    <a href={`/projects/${encodeURIComponent(projectName)}/api/export`}
+    <a role="menuitem" href={`/projects/${encodeURIComponent(projectName)}/api/export`}
       download
       class="block w-full text-left px-3 py-1.5 cursor-pointer hover:opacity-80"
       style="font-size: 11px; color: var(--color-text); text-decoration: none;"
@@ -151,7 +152,7 @@ function menuPathIsFile(menuPath: string): boolean {
       Export
     </a>
     {#if menuOpen && menuPathIsFile(menuOpen)}
-      <button onclick={() => handleAction("delete", menuOpen!, false)}
+      <button role="menuitem" onclick={() => handleAction("delete", menuOpen!, false)}
         class="block w-full text-left px-3 py-1.5 cursor-pointer hover:opacity-80"
         style="font-size: 11px; color: var(--color-danger);">
         Delete
@@ -162,9 +163,12 @@ function menuPathIsFile(menuPath: string): boolean {
 
 {#snippet fileRow(filePath: string, fileName: string, depth: number)}
   {@const isSelected = selectedPath === filePath}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="group flex items-center gap-1 cursor-pointer"
+    role="treeitem"
+    tabindex="0"
+    aria-selected={isSelected}
     onclick={() => onSelect(filePath)}
+    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(filePath); } }}
     style="padding: 6px 8px 6px {depth * 12 + 8}px; font-size: 12px;
       border-radius: 8px; transition: all 150ms ease;
       {isSelected
@@ -175,6 +179,7 @@ function menuPathIsFile(menuPath: string): boolean {
   >
     <span class="flex-1 min-w-0 truncate">{fileName}</span>
     <button onclick={(e) => { e.stopPropagation(); toggleMenu(e, filePath); }}
+      aria-label="Actions for {fileName}"
       class="opacity-0 group-hover:opacity-100 shrink-0 px-0.5 rounded cursor-pointer"
       style="font-size: 12px; color: {isSelected ? 'var(--color-pink-dark)' : 'var(--color-text-muted)'}; line-height: 1;"
     >...</button>
@@ -183,43 +188,49 @@ function menuPathIsFile(menuPath: string): boolean {
 
 {#snippet folder(node: TreeNode, depth: number)}
   {#each Object.values(node.children).sort((a, b) => a.name.localeCompare(b.name)) as child}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="group flex items-center gap-1 cursor-pointer"
+      role="treeitem"
+      tabindex="0"
+      aria-expanded={expanded.has(child.path)}
       onclick={() => toggle(child.path)}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(child.path); } else if (e.key === 'ArrowRight' && !expanded.has(child.path)) { e.preventDefault(); toggle(child.path); } else if (e.key === 'ArrowLeft' && expanded.has(child.path)) { e.preventDefault(); toggle(child.path); } }}
       style="padding: 6px 8px 6px {depth * 12 + 8}px; border-radius: 8px; transition: all 150ms ease; border-left: 3px solid transparent;"
       onmouseenter={(e) => { e.currentTarget.style.background = 'rgba(86, 28, 36, 0.05)'; }}
       onmouseleave={(e) => { e.currentTarget.style.background = ''; }}>
-      <span class="opacity-60 shrink-0" style="font-size: 10px; color: var(--color-accent);">{expanded.has(child.path) ? "▼" : "▶"}</span>
+      <span class="opacity-60 shrink-0" aria-hidden="true" style="font-size: 10px; color: var(--color-accent);">{expanded.has(child.path) ? "▼" : "▶"}</span>
       <span class="flex-1 min-w-0 truncate" style="color: var(--color-accent); font-size: 12px; font-weight: 500;">{child.name}</span>
       <button onclick={(e) => { e.stopPropagation(); onNewInFolder?.(child.path); }}
+        aria-label="New file in {child.name}"
         class="opacity-0 group-hover:opacity-100 shrink-0 rounded cursor-pointer"
         style="font-size: 14px; color: var(--color-text-muted); line-height: 1; padding: 0 3px;"
         title="New file in {child.name}"
       >+</button>
       <button onclick={(e) => { e.stopPropagation(); toggleMenu(e, child.path); }}
+        aria-label="Actions for {child.name}"
         class="opacity-0 group-hover:opacity-100 shrink-0 px-0.5 rounded cursor-pointer"
         style="font-size: 12px; color: var(--color-text-muted); line-height: 1;"
       >...</button>
     </div>
     {#if expanded.has(child.path)}
-      {#each child.files.sort((a, b) => a.name.localeCompare(b.name)) as file}
-        {@render fileRow(file.path, file.name, depth + 1)}
-      {/each}
-      {@render folder(child, depth + 1)}
+      <div role="group">
+        {#each child.files.sort((a, b) => a.name.localeCompare(b.name)) as file}
+          {@render fileRow(file.path, file.name, depth + 1)}
+        {/each}
+        {@render folder(child, depth + 1)}
+      </div>
     {/if}
   {/each}
 {/snippet}
 
-<div>
+<div role="tree" aria-label="File tree">
   <!-- Search bar -->
   <div class="mb-2 px-1">
-    <input type="text" placeholder="Search files..." bind:value={searchQuery}
+    <label for="folder-tree-search" class="sr-only">Search files</label>
+    <input id="folder-tree-search" type="text" placeholder="Search files..." bind:value={searchQuery}
       oninput={onSearchInput}
-      class="w-full rounded-md px-2 py-1.5"
+      class="w-full rounded-md px-2 py-1.5 folder-tree-search"
       style="font-size: 12px; border: 1px solid var(--color-border); background: var(--color-bg);
         outline: none;"
-      onfocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-pink)')}
-      onblur={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
     />
     <p style="font-size: 10px; color: var(--color-text-muted); margin-top: 3px; padding: 0 2px;">
       Semantic search — finds by meaning
@@ -237,9 +248,12 @@ function menuPathIsFile(menuPath: string): boolean {
       <p class="px-2 py-1" style="color: var(--color-text-muted); font-size: 12px;">No matches</p>
     {:else}
       {#each searchResults as result}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="cursor-pointer"
+          role="treeitem"
+          tabindex="0"
+          aria-selected={selectedPath === result.path}
           onclick={() => onSelect(result.path)}
+          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(result.path); } }}
           style="padding: 6px 8px; border-radius: 8px; transition: all 150ms ease;
             {selectedPath === result.path
               ? `background: rgba(86, 28, 36, 0.08); border-left: 3px solid var(--color-pink-dark);`
@@ -269,3 +283,9 @@ function menuPathIsFile(menuPath: string): boolean {
     {/if}
   {/if}
 </div>
+
+<style>
+  .folder-tree-search:focus {
+    border-color: var(--color-pink) !important;
+  }
+</style>
