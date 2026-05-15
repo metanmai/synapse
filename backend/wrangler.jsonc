@@ -9,6 +9,10 @@
       {
         "class_name": "SynapseAgent",
         "name": "MCP_OBJECT"
+      },
+      {
+        "class_name": "CompactionScheduler",
+        "name": "COMPACTION_SCHEDULER"
       }
     ]
   },
@@ -16,16 +20,22 @@
     {
       "new_sqlite_classes": ["SynapseAgent"],
       "tag": "v1"
+    },
+    {
+      "new_sqlite_classes": ["CompactionScheduler"],
+      "tag": "v2"
     }
   ],
   "routes": [{ "pattern": "api.synapsesync.app", "custom_domain": true }],
   "triggers": {
-    "crons": ["*/5 * * * *"]
+    "crons": ["*/5 * * * *", "0 3 * * *"]
   },
   // ADMIN_SECRET, CREEM_PRO_PRODUCT_ID, EMBEDDING_SERVICE_URL, EMBEDDING_SERVICE_KEY,
   // SUPABASE_URL, SUPABASE_SERVICE_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
   // are all set via `wrangler secret put` — do NOT define them as vars here
   // or they will be overwritten with empty values on every deploy.
+  // COMPACTION_LLM_KEY, COMPACTION_LLM_MODEL
+  // are also set via `wrangler secret put`
   "observability": {
     "enabled": true,
     "logs": {
