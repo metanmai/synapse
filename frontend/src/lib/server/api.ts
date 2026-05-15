@@ -1,4 +1,6 @@
-import { API_URL } from "$env/static/private";
+import { env } from "$env/dynamic/private";
+
+const API_URL = env.API_URL;
 
 export class ApiError extends Error {
   constructor(
