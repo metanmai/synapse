@@ -28,7 +28,12 @@ export async function listProjectsForUser(
   if (error) throw error;
   if (!data) return [];
 
-  return data.map((row: any) => ({
+  type MemberRow = {
+    role: string;
+    projects: Project & { users?: { email?: string | null } | null };
+  };
+
+  return (data as unknown as MemberRow[]).map((row) => ({
     ...row.projects,
     owner_email: row.projects.users?.email ?? "",
     role: row.role,
