@@ -67,16 +67,26 @@ describe("auto-infer next_step", () => {
       { kind: "next_step_set", occurred_at: minutesAgo(40), payload: { text: "explicit" } },
     ]);
     const spy = vi.fn();
-    // biome-ignore lint/suspicious/noExplicitAny: test stub
-    await maybeFireInferNextStep({ project_id: "p2", ai_enabled: true, idle_threshold_ms: 30 * 60_000, spawnFn: spy as any });
+    await maybeFireInferNextStep({
+      project_id: "p2",
+      ai_enabled: true,
+      idle_threshold_ms: 30 * 60_000,
+      // biome-ignore lint/suspicious/noExplicitAny: test stub
+      spawnFn: spy as any,
+    });
     expect(spy).not.toHaveBeenCalled();
   });
 
   it("fires when idle >threshold and no explicit handoff", async () => {
     setupEvents(tmp, "p3", [{ kind: "user_prompted", occurred_at: minutesAgo(45) }]);
     const stub = vi.fn(async () => "wire /callback");
-    // biome-ignore lint/suspicious/noExplicitAny: test stub
-    await maybeFireInferNextStep({ project_id: "p3", ai_enabled: true, idle_threshold_ms: 30 * 60_000, spawnFn: stub as any });
+    await maybeFireInferNextStep({
+      project_id: "p3",
+      ai_enabled: true,
+      idle_threshold_ms: 30 * 60_000,
+      // biome-ignore lint/suspicious/noExplicitAny: test stub
+      spawnFn: stub as any,
+    });
     expect(stub).toHaveBeenCalled();
     const events = fs
       .readFileSync(path.join(tmp, "projects/p3/events.jsonl"), "utf-8")
