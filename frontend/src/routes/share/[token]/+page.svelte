@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
-  import { goto } from "$app/navigation";
+import { enhance } from "$app/forms";
+import { goto } from "$app/navigation";
 
-  let { form } = $props();
+let { form } = $props();
 
-  $effect(() => {
-    if (form?.success) {
-      setTimeout(() => goto("/"), 2000);
-    }
-  });
+$effect(() => {
+  if (form?.success) {
+    setTimeout(() => goto("/"), 2000);
+  }
+});
 </script>
 
 <div class="min-h-screen flex items-center justify-center" style="background-color: var(--color-bg);">

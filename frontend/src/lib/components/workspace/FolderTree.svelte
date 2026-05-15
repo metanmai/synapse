@@ -1,122 +1,122 @@
 <script lang="ts">
-  import type { EntryListItem } from "$lib/types";
+import type { EntryListItem } from "$lib/types";
 
-  let { entries, selectedPath, projectName, onSelect, onAction } = $props<{
-    entries: EntryListItem[];
-    selectedPath: string | null;
-    projectName: string;
-    onSelect: (path: string) => void;
-    onAction: (action: "activity" | "share" | "delete", path: string, isFolder: boolean) => void;
-  }>();
+let { entries, selectedPath, projectName, onSelect, onAction } = $props<{
+  entries: EntryListItem[];
+  selectedPath: string | null;
+  projectName: string;
+  onSelect: (path: string) => void;
+  onAction: (action: "activity" | "share" | "delete", path: string, isFolder: boolean) => void;
+}>();
 
-  let searchQuery = $state("");
+let searchQuery = $state("");
 
-  // Fuzzy match: all query chars must appear in order in the target
-  function fuzzyMatch(query: string, target: string): { match: boolean; score: number } {
-    const q = query.toLowerCase();
-    const t = target.toLowerCase();
-    let qi = 0;
-    let score = 0;
-    let prevMatchIdx = -2;
+// Fuzzy match: all query chars must appear in order in the target
+function fuzzyMatch(query: string, target: string): { match: boolean; score: number } {
+  const q = query.toLowerCase();
+  const t = target.toLowerCase();
+  let qi = 0;
+  let score = 0;
+  let prevMatchIdx = -2;
 
-    for (let ti = 0; ti < t.length && qi < q.length; ti++) {
-      if (t[ti] === q[qi]) {
-        score += 1;
-        // Bonus for consecutive matches
-        if (ti === prevMatchIdx + 1) score += 2;
-        // Bonus for matching after separator
-        if (ti === 0 || t[ti - 1] === "/" || t[ti - 1] === "-" || t[ti - 1] === "_" || t[ti - 1] === ".") score += 3;
-        prevMatchIdx = ti;
-        qi++;
+  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
+    if (t[ti] === q[qi]) {
+      score += 1;
+      // Bonus for consecutive matches
+      if (ti === prevMatchIdx + 1) score += 2;
+      // Bonus for matching after separator
+      if (ti === 0 || t[ti - 1] === "/" || t[ti - 1] === "-" || t[ti - 1] === "_" || t[ti - 1] === ".") score += 3;
+      prevMatchIdx = ti;
+      qi++;
+    }
+  }
+  return { match: qi === q.length, score };
+}
+
+let searchResults = $derived.by(() => {
+  if (searchQuery.length < 1) return null;
+  const results: { path: string; name: string; score: number }[] = [];
+  for (const entry of entries) {
+    const { match, score } = fuzzyMatch(searchQuery, entry.path);
+    if (match) {
+      results.push({ path: entry.path, name: entry.path.split("/").pop() || entry.path, score });
+    }
+  }
+  return results.sort((a, b) => b.score - a.score);
+});
+
+interface TreeNode {
+  name: string;
+  path: string;
+  children: Record<string, TreeNode>;
+  files: { name: string; path: string }[];
+}
+
+function buildTree(items: EntryListItem[]): TreeNode {
+  const root: TreeNode = { name: "", path: "", children: {}, files: [] };
+  for (const item of items) {
+    const parts = item.path.split("/");
+    let current = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const dir = parts[i];
+      if (!current.children[dir]) {
+        current.children[dir] = {
+          name: dir,
+          path: parts.slice(0, i + 1).join("/"),
+          children: {},
+          files: [],
+        };
       }
+      current = current.children[dir];
     }
-    return { match: qi === q.length, score };
+    current.files.push({ name: parts[parts.length - 1], path: item.path });
   }
+  return root;
+}
 
-  let searchResults = $derived.by(() => {
-    if (searchQuery.length < 1) return null;
-    const results: { path: string; name: string; score: number }[] = [];
-    for (const entry of entries) {
-      const { match, score } = fuzzyMatch(searchQuery, entry.path);
-      if (match) {
-        results.push({ path: entry.path, name: entry.path.split("/").pop() || entry.path, score });
-      }
-    }
-    return results.sort((a, b) => b.score - a.score);
-  });
+let tree = $derived(buildTree(entries));
 
-  interface TreeNode {
-    name: string;
-    path: string;
-    children: Record<string, TreeNode>;
-    files: { name: string; path: string }[];
-  }
+let expanded = $state<Set<string>>(new Set());
+let menuOpen = $state<string | null>(null);
+let menuPos = $state<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  function buildTree(items: EntryListItem[]): TreeNode {
-    const root: TreeNode = { name: "", path: "", children: {}, files: [] };
-    for (const item of items) {
-      const parts = item.path.split("/");
-      let current = root;
-      for (let i = 0; i < parts.length - 1; i++) {
-        const dir = parts[i];
-        if (!current.children[dir]) {
-          current.children[dir] = {
-            name: dir,
-            path: parts.slice(0, i + 1).join("/"),
-            children: {},
-            files: [],
-          };
-        }
-        current = current.children[dir];
-      }
-      current.files.push({ name: parts[parts.length - 1], path: item.path });
-    }
-    return root;
-  }
-
-  let tree = $derived(buildTree(entries));
-
-  let expanded = $state<Set<string>>(new Set());
-  let menuOpen = $state<string | null>(null);
-  let menuPos = $state<{ x: number; y: number }>({ x: 0, y: 0 });
-
-  $effect(() => {
-    const dirs = new Set<string>();
-    for (const item of entries) {
-      const parts = item.path.split("/");
-      for (let i = 1; i < parts.length; i++) {
-        dirs.add(parts.slice(0, i).join("/"));
-      }
-    }
-    expanded = dirs;
-  });
-
-  function toggle(path: string) {
-    const next = new Set(expanded);
-    if (next.has(path)) next.delete(path);
-    else next.add(path);
-    expanded = next;
-  }
-
-  function toggleMenu(e: MouseEvent, path: string) {
-    e.stopPropagation();
-    if (menuOpen === path) {
-      menuOpen = null;
-    } else {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      menuPos = { x: rect.left, y: rect.bottom + 4 };
-      menuOpen = path;
+$effect(() => {
+  const dirs = new Set<string>();
+  for (const item of entries) {
+    const parts = item.path.split("/");
+    for (let i = 1; i < parts.length; i++) {
+      dirs.add(parts.slice(0, i).join("/"));
     }
   }
+  expanded = dirs;
+});
 
-  function handleAction(action: "activity" | "share" | "delete", path: string, isFolder: boolean) {
+function toggle(path: string) {
+  const next = new Set(expanded);
+  if (next.has(path)) next.delete(path);
+  else next.add(path);
+  expanded = next;
+}
+
+function toggleMenu(e: MouseEvent, path: string) {
+  e.stopPropagation();
+  if (menuOpen === path) {
     menuOpen = null;
-    onAction(action, path, isFolder);
+  } else {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    menuPos = { x: rect.left, y: rect.bottom + 4 };
+    menuOpen = path;
   }
+}
 
-  function handleWindowClick() {
-    if (menuOpen) menuOpen = null;
-  }
+function handleAction(action: "activity" | "share" | "delete", path: string, isFolder: boolean) {
+  menuOpen = null;
+  onAction(action, path, isFolder);
+}
+
+function handleWindowClick() {
+  if (menuOpen) menuOpen = null;
+}
 </script>
 
 <svelte:window onclick={handleWindowClick} />

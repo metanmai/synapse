@@ -1,30 +1,28 @@
 <script lang="ts">
-  import type { ActivityLogEntry } from "$lib/types";
+import type { ActivityLogEntry } from "$lib/types";
 
-  let { path, isFolder, activity, onClose } = $props<{
-    path: string;
-    isFolder: boolean;
-    activity: ActivityLogEntry[];
-    onClose: () => void;
-  }>();
+let { path, isFolder, activity, onClose } = $props<{
+  path: string;
+  isFolder: boolean;
+  activity: ActivityLogEntry[];
+  onClose: () => void;
+}>();
 
-  const actionLabels: Record<string, string> = {
-    entry_created: "created",
-    entry_updated: "updated",
-    entry_deleted: "deleted",
-    member_added: "added member",
-    member_removed: "removed member",
-    share_link_created: "shared",
-    share_link_revoked: "unshared",
-  };
+const actionLabels: Record<string, string> = {
+  entry_created: "created",
+  entry_updated: "updated",
+  entry_deleted: "deleted",
+  member_added: "added member",
+  member_removed: "removed member",
+  share_link_created: "shared",
+  share_link_revoked: "unshared",
+};
 
-  let filtered = $derived(
-    activity.filter((e) =>
-      isFolder
-        ? e.target_path?.startsWith(path + "/") || e.target_path === path
-        : e.target_path === path
-    )
-  );
+let filtered = $derived(
+  activity.filter((e) =>
+    isFolder ? e.target_path?.startsWith(path + "/") || e.target_path === path : e.target_path === path,
+  ),
+);
 </script>
 
 <div>
