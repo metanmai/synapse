@@ -37,4 +37,25 @@ describe("synapse init", () => {
     expect(JSON.stringify(settings.hooks.SessionStart)).toContain("echo existing");
     expect(JSON.stringify(settings.hooks.SessionStart)).toContain("synapse");
   });
+
+  it("installs slash command files in ~/.claude/commands/synapse/", async () => {
+    await runInit({ api_key: "k", skip_service: true });
+    const dir = path.join(tmp, ".claude/commands/synapse");
+    expect(fs.existsSync(dir)).toBe(true);
+    const files = fs.readdirSync(dir);
+    expect(files).toContain("handoff.md");
+    expect(files).toContain("focus.md");
+    expect(files).toContain("issue.md");
+    expect(files).toContain("status.md");
+    expect(files).toContain("doctor.md");
+    expect(files).toContain("invite.md");
+  });
+
+  it("slash command files are idempotent — re-running init doesn't duplicate", async () => {
+    await runInit({ api_key: "k", skip_service: true });
+    await runInit({ api_key: "k", skip_service: true });
+    const dir = path.join(tmp, ".claude/commands/synapse");
+    const files = fs.readdirSync(dir);
+    expect(files).toHaveLength(6);
+  });
 });
