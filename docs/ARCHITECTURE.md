@@ -41,6 +41,31 @@ Exact schemas live in `supabase/migrations/`.
 
 Optional **Python** sidecar in `embedding-service/` — not required to boot the stack; required for best semantic search results. Configured via Worker env (`EMBEDDING_SERVICE_*`).
 
+## Claude Code handoff layer
+
+A local-first event log + background daemon sit between Claude Code and the Worker so that work done on one machine can be resumed on another without re-briefing.
+
+```text
+Claude Code hooks ──▶ ~/.synapse/projects/<id>/events.jsonl
+                                 │
+                                 ▼
+                       capture daemon (launchd / systemd)
+                                 │
+                                 ├──▶ Worker (events, briefs, handoffs)
+                                 │
+                                 └──▶ ~/.synapse/projects/<id>/brief.md
+                                                  │
+                                                  ▼
+                                  injected into next SessionStart
+                                  as <synapse-brief>…</synapse-brief>
+```
+
+- **Hooks** (`mcp/src/hooks/`) write structured events for `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `PreCompact`, `SessionEnd`, `SubagentStop`. Dispatched by `synapse hook <kind>` (`mcp/src/cli/hook-dispatch.ts`).
+- **Daemon** (`mcp/src/capture/daemon.ts`) flushes events to the Worker, refreshes the brief cache, and optionally spawns Claude Code itself for opt-in AI tasks (`daemon.ai_enabled`).
+- **Brief** (`mcp/src/capture/handoff-brief.ts`) renders the cached project state into the SessionStart prompt — same shape on every device.
+
+See [docs/superpowers/specs/2026-05-11-claude-code-handoff-layer-design.md](superpowers/specs/2026-05-11-claude-code-handoff-layer-design.md) for the design and [docs/superpowers/plans/2026-05-11-claude-code-handoff-layer.md](superpowers/plans/2026-05-11-claude-code-handoff-layer.md) for the implementation plan.
+
 ## CI
 
 GitHub Actions runs `npm install`, `lint`, `typecheck`, and `test` on pushes and PRs to `main` (see `.github/workflows/ci.yml`).
