@@ -57,7 +57,7 @@ export function DashboardPage() {
         <p className="text-gray-500">No projects yet. Create one to get started.</p>
       ) : (
         <div className="space-y-2">
-          {projects.map((p: any) => (
+          {projects.map((p) => (
             <Link
               key={p.id}
               to={`/projects/${encodeURIComponent(p.name)}`}
