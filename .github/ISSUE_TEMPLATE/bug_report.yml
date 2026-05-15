@@ -33,7 +33,7 @@ body:
       options:
         - Web app (SvelteKit)
         - Worker / API
-        - MCP package (synapsesync-mcp)
+        - MCP package (synapsesync)
         - Database / Supabase
         - Docs / other
     validations:
