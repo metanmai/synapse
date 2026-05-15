@@ -1,5 +1,6 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
+  import { marked } from "marked";
   import type { EntryHistory } from "$lib/types";
 
   let { versions } = $props<{ versions: EntryHistory[] }>();
@@ -25,9 +26,10 @@
           </button>
         </form>
       </div>
-      <pre class="text-xs font-mono rounded-lg p-3 whitespace-pre-wrap max-h-48 overflow-y-auto"
-        style="background-color: var(--color-bg-muted); line-height: 1.6;"
-      >{version.content}</pre>
+      <div class="prose text-xs rounded-lg p-3 max-h-48 overflow-y-auto"
+        style="background-color: var(--color-bg-muted); line-height: 1.6;">
+        {@html marked.parse(version.content, { async: false })}
+      </div>
     </div>
   {/each}
   {#if versions.length === 0}
