@@ -198,4 +198,3 @@ export async function getEntryHistory(db: SupabaseClient, projectId: string, pat
   if (error) throw error;
   return (data ?? []) as EntryHistory[];
 }
-

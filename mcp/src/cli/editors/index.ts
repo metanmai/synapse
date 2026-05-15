@@ -12,4 +12,4 @@ export {
   detectEditors,
   detectExistingSetup,
 } from "./detect.js";
-export { type WriteResult, writeEditorConfigs, writeAllDetected } from "./orchestrate.js";
+export { type WriteResult, writeEditorConfigs } from "./orchestrate.js";

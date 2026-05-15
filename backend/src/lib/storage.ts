@@ -23,4 +23,3 @@ export async function getSignedUrl(db: SupabaseClient, storagePath: string): Pro
   if (error) throw error;
   return data.signedUrl;
 }
-

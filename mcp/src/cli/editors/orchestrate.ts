@@ -1,5 +1,4 @@
-import type { EditorInfo, SetupScope } from "./detect.js";
-import { detectEditors } from "./detect.js";
+import type { EditorInfo } from "./detect.js";
 
 export interface WriteResult {
   written: string[];
@@ -18,11 +17,4 @@ export function writeEditorConfigs(editors: EditorInfo[], apiKey: string): Write
     }
   }
   return { written: [...new Set(written)], errors };
-}
-
-export function writeAllDetected(apiKey: string, scope: SetupScope = "local"): WriteResult {
-  return writeEditorConfigs(
-    detectEditors(scope).filter((e) => e.detected),
-    apiKey,
-  );
 }
