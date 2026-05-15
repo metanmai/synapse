@@ -26,7 +26,6 @@ import {
   type SetupScope,
   detectEditors,
   detectExistingSetup,
-  writeAllDetected,
   writeEditorConfigs,
 } from "../../src/cli/editors/index.js";
 
@@ -750,27 +749,6 @@ describe("editors", () => {
       const result = detectExistingSetup();
       const loc = result.locations.find((l) => l.label === ".mcp.json");
       expect(loc?.filePath).toBe(path.join(tmpDir, ".mcp.json"));
-    });
-  });
-
-  // ─── writeAllDetected ──────────────────────────────────────────────
-
-  describe("writeAllDetected", () => {
-    it("writes configs only for detected editors", () => {
-      // Only Generic MCP is always detected in local scope
-      const result = writeAllDetected("sk-test", "local");
-      expect(result.written.length).toBeGreaterThan(0);
-      expect(result.errors).toEqual([]);
-    });
-
-    it("writes configs for all detected editors in global scope", () => {
-      // Create .claude and .cursor to trigger detection
-      fs.mkdirSync(path.join(tmpHomeDir, ".claude"), { recursive: true });
-      fs.mkdirSync(path.join(tmpHomeDir, ".cursor"), { recursive: true });
-
-      const result = writeAllDetected("sk-test", "global");
-      expect(result.written.length).toBeGreaterThan(0);
-      expect(result.errors).toEqual([]);
     });
   });
 
