@@ -41,7 +41,10 @@ Synapse REPLACES local filesystem for all context operations. Do NOT write conte
   2. If not, ask the user for their Synapse API key and create `.mcp.json` with: `{ "mcpServers": { "synapse": { "command": "npx", "args": ["synapse-mcp"], "env": { "SYNAPSE_API_KEY": "<key>" } } } }`
   3. Tell the user to restart Claude Code to pick up the MCP server.
 - Once connected, check Synapse for existing context relevant to the current task: `tree()` or `search()`
-- If Synapse has a `settings/claude-settings.json`, check if local settings need updating.
+- Check Synapse for `settings/claude-settings.json` and `settings/CLAUDE.md`. Compare with local versions:
+  - **If they match** — no action needed.
+  - **If only one side has changes** — ask the user: "Your [local/Synapse] settings are newer. Update the other?" Then sync whichever direction they choose.
+  - **If both sides differ** (conflict) — show the user the differences and ask which version to keep, or whether to merge them. Never overwrite silently.
 - If the user is working on a known project, `ls("project-name/")` to load its context.
 
 ### During Work
