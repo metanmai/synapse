@@ -3,15 +3,15 @@ let { children } = $props();
 </script>
 
 <svelte:head>
-  <title>Synapse — Your AI tools finally remember</title>
-  <meta name="description" content="Synapse is a shared context layer that gives Claude, ChatGPT, Cursor, and every AI tool persistent memory across sessions." />
+  <title>Synapse — Shared AI context across tools, devices & teams</title>
+  <meta name="description" content="Synapse saves AI context in one cloud workspace so you can use it across Claude, ChatGPT, Cursor, and other tools, on any device, with teammates — same memory everywhere." />
   {@html `<script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "Synapse",
   "url": "https://synapsesync.app",
-  "description": "A shared context layer that gives AI tools like Claude, ChatGPT, and Cursor persistent memory across sessions.",
+  "description": "Shared AI context in one cloud workspace: use it across tools (Claude, ChatGPT, Cursor, MCP clients), devices, and teammates.",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Web",
   "offers": {
