@@ -44,6 +44,7 @@ import {
 } from "./handoff-commands.js";
 import { runInit } from "./init.js";
 import { readProjectMap } from "./project-map.js";
+import { runDaemon } from "./run-daemon.js";
 import { runStats } from "./stats.js";
 import { runDoctor as runHandoffDoctor, runStatus as runHandoffStatus } from "./status.js";
 
@@ -151,6 +152,14 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
     const api_key = args[0] ?? "";
     const skip_service = args.includes("--skip-service");
     await runInit({ api_key, skip_service });
+  },
+  // `daemon` is the entry the OS service (launchd plist / systemd unit
+  // written by `synapse init`) invokes. It discovers tracked projects,
+  // starts the handoff loop, and blocks forever — the loop's intervals +
+  // signal handlers keep the event loop alive and supervise shutdown.
+  daemon: async () => {
+    runDaemon();
+    await new Promise<void>(() => {});
   },
   // ── v1.1 handoff-layer subcommands ────────────────────────────────────
   handoff: async (args) => {
