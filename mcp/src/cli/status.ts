@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { getMonthlyCostUsd } from "../capture/daemon-cc.js";
 import { healthcheckPath, synapseRoot } from "../capture/handoff-paths.js";
 
 export async function runStatus(): Promise<string> {
@@ -24,6 +25,7 @@ export async function runDoctor(): Promise<string> {
     const queued = countQueued(eventsPath, wmPath);
     lines.push(`  ${p}: Queued events: ${queued}`);
   }
+  lines.push(`Monthly daemon cost: $${getMonthlyCostUsd().toFixed(4)}`);
   return lines.join("\n");
 }
 
