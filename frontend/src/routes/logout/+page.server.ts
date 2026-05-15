@@ -4,7 +4,7 @@ import { clearSessionCookie, getSupabase } from "$lib/server/auth";
 
 export const actions: Actions = {
   default: async ({ cookies }) => {
-    const supabase = getSupabase();
+    const supabase = getSupabase(cookies);
     await supabase.auth.signOut();
     clearSessionCookie(cookies);
     redirect(303, "/login");
