@@ -81,6 +81,15 @@ export type {
   ContextType,
 } from "@synapse/shared";
 
+export interface ProjectContext {
+  id: string;
+  project_id: string;
+  summary: string;
+  conversation_count: number;
+  model: string;
+  updated_at: string;
+}
+
 // Default tier limits — can be overridden by env vars
 export function getTierLimitsFromEnv(env?: Record<string, string>) {
   return {
