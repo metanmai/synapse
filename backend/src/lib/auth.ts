@@ -27,36 +27,6 @@ function isJwt(token: string): boolean {
   return parts.length === 3 && parts.every((p) => p.length > 0);
 }
 
-async function verifyJwt(
-  token: string,
-  secret: string
-): Promise<{ sub: string } | null> {
-  try {
-    const [headerB64, payloadB64, signatureB64] = token.split(".");
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      "raw",
-      encoder.encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["verify"]
-    );
-    const data = encoder.encode(`${headerB64}.${payloadB64}`);
-    const signature = Uint8Array.from(
-      atob(signatureB64.replace(/-/g, "+").replace(/_/g, "/")),
-      (c) => c.charCodeAt(0)
-    );
-    const valid = await crypto.subtle.verify("HMAC", key, signature, data);
-    if (!valid) return null;
-
-    const payload = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")));
-    if (payload.exp && payload.exp < Date.now() / 1000) return null;
-    return payload;
-  } catch {
-    return null;
-  }
-}
-
 export async function authMiddleware(
   c: Context<{ Bindings: Env }>,
   next: Next
@@ -70,11 +40,15 @@ export async function authMiddleware(
   const db = createSupabaseClient(c.env);
   let user: User | null = null;
 
-  // Try JWT first if it looks like one
+  // Try JWT by verifying with Supabase auth
   if (isJwt(token)) {
-    const payload = await verifyJwt(token, c.env.SUPABASE_JWT_SECRET);
-    if (payload?.sub) {
-      user = await findUserBySupabaseAuthId(db, payload.sub);
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data } = await supabase.auth.getUser(token);
+    if (data?.user) {
+      user = await findUserBySupabaseAuthId(db, data.user.id);
     }
   }
 
