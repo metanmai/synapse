@@ -62,6 +62,8 @@ export interface ApiKey {
   created_at: string;
 }
 
+export type { Insight, InsightListItem, InsightType, InsightSource } from "@synapse/shared";
+
 // Default tier limits — can be overridden by env vars
 export function getTierLimitsFromEnv(env?: Record<string, string>) {
   return {
