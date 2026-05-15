@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-14
 **Author:** Tanmai (with Claude)
-**Status:** Draft — pending review
+**Status:** Implemented (v1.1.0)
 **Prior spec:** [2026-05-11 v1 design](./2026-05-11-claude-code-handoff-layer-design.md). v1.1 is incremental.
 
 ---
