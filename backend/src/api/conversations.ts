@@ -238,6 +238,22 @@ conversations.post("/:id/messages", async (c) => {
     },
   });
 
+  // Poke CompactionScheduler DO to schedule/reset compaction alarm
+  try {
+    const doId = c.env.COMPACTION_SCHEDULER.idFromName(`conversation-${conversationId}`);
+    const stub = c.env.COMPACTION_SCHEDULER.get(doId);
+    await stub.fetch(
+      new Request("https://do/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId }),
+      }),
+    );
+  } catch (err) {
+    // Non-critical — log but don't fail the request
+    console.error(`[conversations] Failed to poke CompactionScheduler for ${conversationId}:`, err);
+  }
+
   return c.json({ messages });
 });
 
