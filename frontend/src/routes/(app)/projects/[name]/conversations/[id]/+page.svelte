@@ -1,7 +1,11 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
-import { invalidateAll } from "$app/navigation";
-import MessageThread from "$lib/components/conversations/MessageThread.svelte";
+import {
+  formatMessageTime,
+  getToolBadge,
+  getToolLabel,
+  toolSummary,
+} from "$lib/components/conversations/conversation-helpers";
 import type { Conversation, ConversationMediaRecord, ConversationMessage } from "$lib/types";
 
 let { data, form } = $props();
@@ -13,13 +17,24 @@ let messages = $state<ConversationMessage[]>([]);
 let context = $state<Record<string, unknown>[]>([]);
 let media = $state<ConversationMediaRecord[]>([]);
 
-let showTools = $state(false);
+let viewMode = $state<"compact" | "full">("full");
 let showExportMenu = $state(false);
 let confirmDelete = $state(false);
 let actionLoading = $state("");
 
 const projectName = $derived(data.project.name);
 const encodedProject = $derived(encodeURIComponent(projectName));
+
+const sourceTool = $derived(
+  (conv?.metadata?.source_tool as string | undefined) ?? (messages.length > 0 ? messages[0].source_agent : undefined),
+);
+
+const totalTokens = $derived(
+  messages.reduce((sum, m) => {
+    if (!m.token_count) return sum;
+    return sum + (m.token_count.input ?? 0) + (m.token_count.output ?? 0);
+  }, 0),
+);
 
 async function loadConversation() {
   loading = true;
@@ -43,21 +58,9 @@ async function loadConversation() {
 }
 
 $effect(() => {
-  // Re-fetch when conversationId changes (e.g. navigating between conversations)
   data.conversationId;
   loadConversation();
 });
-
-function fidelityLabel(mode: string): string {
-  switch (mode) {
-    case "full":
-      return "Full fidelity";
-    case "summary":
-      return "Summary mode";
-    default:
-      return mode;
-  }
-}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -68,6 +71,27 @@ function formatDate(iso: string): string {
     minute: "2-digit",
     hour12: true,
   });
+}
+
+function formatTokenEstimate(tokens: number): string {
+  if (tokens === 0) return "0 tokens";
+  if (tokens < 1000) return `${tokens} tokens`;
+  return `${(tokens / 1000).toFixed(1)}k tokens`;
+}
+
+function roleInitial(role: string): string {
+  switch (role) {
+    case "user":
+      return "U";
+    case "assistant":
+      return "A";
+    case "system":
+      return "S";
+    case "tool":
+      return "T";
+    default:
+      return "?";
+  }
 }
 
 function toggleExportMenu() {
@@ -105,7 +129,6 @@ function handleActionResult(label: string) {
       actionLoading = "";
       await update();
       confirmDelete = false;
-      // Re-fetch to get updated status
       await loadConversation();
     };
   };
@@ -114,7 +137,7 @@ function handleActionResult(label: string) {
 
 <svelte:window onclick={closeExportMenu} />
 
-<div class="max-w-4xl p-6">
+<div class="page-container">
   {#if loading}
     <!-- Loading skeleton -->
     <div class="conv-header">
@@ -137,8 +160,8 @@ function handleActionResult(label: string) {
       {#each { length: 5 } as _}
         <div class="skeleton-message">
           <div class="skeleton-row">
-            <div class="skeleton skeleton-badge"></div>
-            <div class="skeleton skeleton-meta-sm"></div>
+            <div class="skeleton skeleton-avatar"></div>
+            <div class="skeleton skeleton-meta"></div>
           </div>
           <div class="skeleton skeleton-content"></div>
           <div class="skeleton skeleton-content-short"></div>
@@ -247,9 +270,16 @@ function handleActionResult(label: string) {
       {/if}
 
       <div class="conv-meta">
+        {#if sourceTool}
+          {@const badge = getToolBadge(sourceTool)}
+          <span class="source-badge" style="background: {badge.bg}; color: {badge.text};">
+            {getToolLabel(sourceTool)}
+          </span>
+          <span class="meta-sep">&middot;</span>
+        {/if}
         <span class="meta-item">{conv.message_count} message{conv.message_count === 1 ? "" : "s"}</span>
         <span class="meta-sep">&middot;</span>
-        <span class="meta-item">{fidelityLabel(conv.fidelity_mode)}</span>
+        <span class="meta-item">{formatTokenEstimate(totalTokens)}</span>
         <span class="meta-sep">&middot;</span>
         <span class="meta-item">{formatDate(conv.created_at)}</span>
         {#if conv.status !== "active"}
@@ -259,28 +289,103 @@ function handleActionResult(label: string) {
       </div>
     </div>
 
-    <!-- System prompt -->
-    {#if conv.system_prompt}
-      <div class="system-prompt-box">
-        <div class="system-prompt-label">System Prompt</div>
-        <pre class="system-prompt-content">{conv.system_prompt}</pre>
-      </div>
-    {/if}
-
-    <!-- Controls -->
-    <div class="controls">
-      <label class="toggle-label">
-        <input type="checkbox" bind:checked={showTools} class="toggle-checkbox" />
-        <span>Show tool details</span>
-      </label>
+    <!-- View toggle -->
+    <div class="view-toggle">
+      <button
+        type="button"
+        class="toggle-btn toggle-btn-left"
+        class:toggle-active={viewMode === "compact"}
+        onclick={() => { viewMode = "compact"; }}
+      >
+        Compact
+      </button>
+      <button
+        type="button"
+        class="toggle-btn toggle-btn-right"
+        class:toggle-active={viewMode === "full"}
+        onclick={() => { viewMode = "full"; }}
+      >
+        Full transcript
+      </button>
     </div>
 
-    <!-- Messages -->
-    <MessageThread {messages} {showTools} />
+    <!-- Transcript container -->
+    <div class="transcript-container glass">
+      {#if viewMode === "compact"}
+        <!-- Compact view placeholder -->
+        <div class="compact-placeholder">
+          <p>Compact summaries will appear here once compaction is enabled.</p>
+          <p class="compact-hint">Switch to Full transcript to view the conversation.</p>
+        </div>
+      {:else}
+        <!-- Full transcript: chat-style messages -->
+        {#if messages.length === 0}
+          <div class="empty-state">No messages in this conversation.</div>
+        {:else}
+          <div class="chat-thread">
+            {#each messages as msg (msg.id)}
+              <div class="chat-row chat-row-{msg.role}">
+                <div class="avatar avatar-{msg.role}">
+                  {roleInitial(msg.role)}
+                </div>
+                <div class="chat-bubble">
+                  <div class="chat-header">
+                    <span class="chat-role">{msg.role}</span>
+                    {#if msg.source_agent && msg.source_agent !== "claude-code"}
+                      <span class="chat-agent">{msg.source_agent}</span>
+                    {/if}
+                    {#if msg.source_model}
+                      <span class="chat-model">{msg.source_model}</span>
+                    {/if}
+                    <span class="chat-time">{formatMessageTime(msg.created_at)}</span>
+                  </div>
+
+                  {#if msg.content}
+                    <pre class="chat-content">{msg.content}</pre>
+                  {/if}
+
+                  {#if msg.tool_interaction}
+                    <div class="tool-card">
+                      <span class="tool-name">{msg.tool_interaction.name}</span>
+                      <span class="tool-desc">{toolSummary(msg)}</span>
+                    </div>
+                  {/if}
+
+                  {#if msg.attachments_summary}
+                    <div class="chat-attachments">{msg.attachments_summary}</div>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+    </div>
+
+    <!-- Footer -->
+    <div class="conv-footer">
+      <span class="footer-item">
+        {#if sourceTool}
+          Source: {getToolLabel(sourceTool)}
+        {:else}
+          Source: Unknown
+        {/if}
+      </span>
+      <span class="footer-sep">&middot;</span>
+      <span class="footer-item">{conv.message_count} message{conv.message_count === 1 ? "" : "s"}</span>
+      <span class="footer-sep">&middot;</span>
+      <span class="footer-item">{formatTokenEstimate(totalTokens)}</span>
+    </div>
   {/if}
 </div>
 
 <style>
+  .page-container {
+    max-width: 56rem;
+    padding: 1.5rem;
+  }
+
+  /* ---------- Header ---------- */
   .conv-header {
     margin-bottom: 1.5rem;
   }
@@ -316,6 +421,51 @@ function handleActionResult(label: string) {
     word-break: break-word;
   }
 
+  .conv-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .meta-item {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  .meta-sep {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    opacity: 0.5;
+  }
+
+  .source-badge {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
+  }
+
+  .status-badge {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
+  }
+
+  .status-archived {
+    background: rgba(107, 114, 128, 0.12);
+    color: #6b7280;
+  }
+
+  .status-deleted {
+    background: rgba(139, 0, 0, 0.1);
+    color: var(--color-danger);
+  }
+
+  /* ---------- Action buttons ---------- */
   .action-buttons {
     display: flex;
     align-items: center;
@@ -407,63 +557,152 @@ function handleActionResult(label: string) {
     margin-bottom: 0.75rem;
   }
 
-  .conv-meta {
+  /* ---------- View toggle ---------- */
+  .view-toggle {
+    display: flex;
+    margin-bottom: 1rem;
+  }
+
+  .toggle-btn {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    padding: 6px 16px;
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: var(--transition-base);
+  }
+
+  .toggle-btn-left {
+    border-radius: 8px 0 0 8px;
+  }
+
+  .toggle-btn-right {
+    border-radius: 0 8px 8px 0;
+    border-left: none;
+  }
+
+  .toggle-active {
+    background: rgba(86, 28, 36, 0.08);
+    color: var(--color-text);
+    font-weight: 600;
+  }
+
+  /* ---------- Transcript container ---------- */
+  .transcript-container {
+    min-height: 200px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+  }
+
+  /* ---------- Compact view ---------- */
+  .compact-placeholder {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+
+  .compact-hint {
+    font-size: 0.75rem;
+    margin-top: 0.5rem;
+    opacity: 0.7;
+  }
+
+  /* ---------- Chat thread ---------- */
+  .chat-thread {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .chat-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    letter-spacing: 0.02em;
+  }
+
+  .avatar-user {
+    background: linear-gradient(135deg, #e8d8c4, #c7b7a3);
+    color: var(--color-accent);
+  }
+
+  .avatar-assistant {
+    background: linear-gradient(135deg, var(--color-pink-dark), var(--color-pink));
+    color: white;
+  }
+
+  .avatar-system {
+    background: linear-gradient(135deg, #d1d5db, #9ca3af);
+    color: white;
+  }
+
+  .avatar-tool {
+    background: linear-gradient(135deg, #c084fc, #9333ea);
+    color: white;
+  }
+
+  .chat-bubble {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .chat-header {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    margin-bottom: 0.25rem;
     flex-wrap: wrap;
   }
 
-  .meta-item {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-  }
-
-  .meta-sep {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    opacity: 0.5;
-  }
-
-  .status-badge {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 1px 8px;
-    border-radius: var(--radius-pill);
-  }
-
-  .status-archived {
-    background: rgba(107, 114, 128, 0.12);
-    color: #6b7280;
-  }
-
-  .status-deleted {
-    background: rgba(139, 0, 0, 0.1);
-    color: var(--color-danger);
-  }
-
-  .system-prompt-box {
-    margin-bottom: 1.25rem;
-    padding: 0.75rem 1rem;
-    border-radius: var(--radius-sm);
-    background: var(--color-bg-muted);
-    border: 1px solid var(--color-border);
-  }
-
-  .system-prompt-label {
+  .chat-role {
     font-size: 0.6875rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--color-text-muted);
-    margin-bottom: 0.5rem;
   }
 
-  .system-prompt-content {
-    font-size: 0.8125rem;
-    line-height: 1.6;
+  .chat-agent {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    background: var(--color-bg-muted);
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--color-border);
+  }
+
+  .chat-model {
+    font-size: 0.625rem;
+    color: var(--color-text-muted);
+    font-family: "SF Mono", "Fira Code", "Fira Mono", monospace;
+  }
+
+  .chat-time {
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+    margin-left: auto;
+  }
+
+  .chat-content {
+    font-size: 0.875rem;
+    line-height: 1.65;
     color: var(--color-text);
     white-space: pre-wrap;
     word-wrap: break-word;
@@ -472,32 +711,66 @@ function handleActionResult(label: string) {
     background: none;
     border: none;
     padding: 0;
-    opacity: 0.8;
   }
 
-  .controls {
-    margin-bottom: 1rem;
+  /* ---------- Tool card ---------- */
+  .tool-card {
+    background: var(--color-bg-muted);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    font-size: 12px;
+    margin-top: 0.5rem;
     display: flex;
-    align-items: center;
-    gap: 1rem;
+    flex-direction: column;
+    gap: 0.125rem;
   }
 
-  .toggle-label {
+  .tool-name {
+    font-weight: 600;
+    color: #9333ea;
+  }
+
+  .tool-desc {
+    color: var(--color-text-muted);
+  }
+
+  .chat-attachments {
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+    margin-top: 0.375rem;
+    font-style: italic;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+  }
+
+  /* ---------- Footer ---------- */
+  .conv-footer {
+    background: var(--color-bg-muted);
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.8125rem;
+    flex-wrap: wrap;
+  }
+
+  .footer-item {
+    font-size: 0.75rem;
     color: var(--color-text-muted);
-    cursor: pointer;
-    user-select: none;
   }
 
-  .toggle-checkbox {
-    accent-color: var(--color-accent);
-    cursor: pointer;
+  .footer-sep {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    opacity: 0.5;
   }
 
-  /* Skeleton loading styles */
+  /* ---------- Skeleton loading ---------- */
   .skeleton {
     background: linear-gradient(90deg, var(--color-bg-muted) 25%, var(--color-border) 50%, var(--color-bg-muted) 75%);
     background-size: 200% 100%;
@@ -527,9 +800,10 @@ function handleActionResult(label: string) {
     width: 70px;
   }
 
-  .skeleton-badge {
-    height: 1rem;
-    width: 60px;
+  .skeleton-avatar {
+    height: 32px;
+    width: 32px;
+    border-radius: 50%;
   }
 
   .skeleton-content {
@@ -546,16 +820,12 @@ function handleActionResult(label: string) {
   .skeleton-messages {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 1rem;
     margin-top: 1.5rem;
   }
 
   .skeleton-message {
     padding: 0.875rem 1rem;
-    border-radius: var(--radius-sm);
-    background-color: var(--color-bg-raised);
-    border: 1px solid var(--color-border);
-    border-left: 4px solid var(--color-border);
   }
 
   @keyframes shimmer {
