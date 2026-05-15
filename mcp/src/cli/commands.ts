@@ -1,8 +1,12 @@
 import child_process from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import * as clack from "@clack/prompts";
 import { validateApiKey } from "./api.js";
 import { API_URL, pad } from "./config.js";
 import { type ExistingSetup, detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors/index.js";
+import { globalConfigDir, removeDirIfExists, removeInstructions, removeSynapseFromMcpJson } from "./editors/io.js";
 import { createGlyphSpinner } from "./spinner.js";
 import { accent, bold, muted, success, error as themeError } from "./theme.js";
 
@@ -414,4 +418,185 @@ export async function runUpgrade(): Promise<void> {
   }
 
   clack.outro(muted("synapsesync.app"));
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  uninstall — remove all Synapse configs
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+export async function runUninstall(): Promise<void> {
+  clack.intro(`${accent("\u25C6")} ${bold("Uninstall Synapse")}`);
+
+  const home = os.homedir();
+  const cwd = process.cwd();
+
+  // Discover everything Synapse has touched
+  const targets: { label: string; action: () => boolean }[] = [];
+
+  // MCP config files — remove the synapse key
+  const mcpFiles: [string, string][] = [
+    [path.join(cwd, ".mcp.json"), ".mcp.json"],
+    [path.join(cwd, ".cursor", "mcp.json"), ".cursor/mcp.json"],
+    [path.join(cwd, ".vscode", "mcp.json"), ".vscode/mcp.json"],
+    [path.join(home, ".cursor", "mcp.json"), "~/.cursor/mcp.json"],
+    [path.join(home, ".claude.json"), "~/.claude.json"],
+    [path.join(home, ".claude", ".mcp.json"), "~/.claude/.mcp.json"],
+    [path.join(home, ".codeium", "windsurf", "mcp_config.json"), "~/.codeium/windsurf/mcp_config.json"],
+    [path.join(globalConfigDir(), "Code", "User", "mcp.json"), "VS Code user mcp.json"],
+  ];
+  for (const [filePath, label] of mcpFiles) {
+    if (fs.existsSync(filePath)) {
+      try {
+        const content = fs.readFileSync(filePath, "utf-8");
+        if (content.includes("synapse")) {
+          targets.push({ label: `Remove synapse from ${label}`, action: () => removeSynapseFromMcpJson(filePath) });
+        }
+      } catch {
+        /* skip unreadable */
+      }
+    }
+  }
+
+  // Instruction injections — remove the Synapse section
+  const instructionFiles: [string, string][] = [
+    [path.join(home, ".claude", "CLAUDE.md"), "~/.claude/CLAUDE.md"],
+    [path.join(cwd, ".cursorrules"), ".cursorrules"],
+    [path.join(cwd, ".windsurfrules"), ".windsurfrules"],
+    [path.join(cwd, ".github", "copilot-instructions.md"), ".github/copilot-instructions.md"],
+  ];
+  for (const [filePath, label] of instructionFiles) {
+    if (fs.existsSync(filePath)) {
+      try {
+        const content = fs.readFileSync(filePath, "utf-8");
+        if (content.includes("# Synapse")) {
+          targets.push({ label: `Remove Synapse section from ${label}`, action: () => removeInstructions(filePath) });
+        }
+      } catch {
+        /* skip */
+      }
+    }
+  }
+
+  // Command/prompt directories
+  const commandDirs: [string, string][] = [
+    [path.join(home, ".claude", "commands", "synapse"), "~/.claude/commands/synapse/"],
+    [path.join(cwd, ".cursor", "commands"), ".cursor/commands/"],
+    [path.join(cwd, ".github", "prompts"), ".github/prompts/"],
+    [path.join(cwd, ".windsurf", "workflows"), ".windsurf/workflows/"],
+    [path.join(home, ".cursor", "commands"), "~/.cursor/commands/"],
+  ];
+  for (const [dirPath, label] of commandDirs) {
+    if (fs.existsSync(dirPath)) {
+      try {
+        const files = fs.readdirSync(dirPath);
+        if (files.some((f) => f.includes("synapse"))) {
+          targets.push({
+            label: `Delete synapse commands from ${label}`,
+            action: () => {
+              for (const f of files) {
+                if (f.includes("synapse")) {
+                  fs.unlinkSync(path.join(dirPath, f));
+                }
+              }
+              try {
+                const remaining = fs.readdirSync(dirPath);
+                if (remaining.length === 0) fs.rmdirSync(dirPath);
+              } catch {
+                /* skip */
+              }
+              return true;
+            },
+          });
+        }
+      } catch {
+        /* skip */
+      }
+    }
+  }
+
+  // Capture hooks
+  try {
+    const { uninstallHooks, isInstalled } = await import("../capture/hooks.js");
+    if (isInstalled()) {
+      targets.push({
+        label: "Remove capture hook from Claude Code settings",
+        action: () => uninstallHooks().removed,
+      });
+    }
+  } catch {
+    /* hooks module not available */
+  }
+
+  // Capture daemon
+  try {
+    const { DaemonManager } = await import("../capture/daemon.js");
+    const daemon = new DaemonManager();
+    if (daemon.isRunning()) {
+      targets.push({
+        label: "Stop capture daemon",
+        action: () => {
+          const pid = daemon.readPid();
+          if (pid) {
+            try {
+              process.kill(pid, "SIGTERM");
+            } catch {
+              /* already gone */
+            }
+          }
+          daemon.cleanup();
+          return true;
+        },
+      });
+    }
+  } catch {
+    /* daemon module not available */
+  }
+
+  // ~/.synapse directory
+  const synapseDir = path.join(home, ".synapse");
+  if (fs.existsSync(synapseDir)) {
+    targets.push({
+      label: "Delete ~/.synapse/ (local sessions + daemon files)",
+      action: () => removeDirIfExists(synapseDir),
+    });
+  }
+
+  if (targets.length === 0) {
+    clack.log.info("No Synapse configuration found on this machine.");
+    clack.outro(muted("Nothing to do."));
+    return;
+  }
+
+  // Show what will be removed
+  clack.log.message(
+    `${bold("Found Synapse in these locations:")}\n${targets.map((t) => `  ${themeError("\u2022")} ${muted(t.label)}`).join("\n")}`,
+  );
+
+  const confirm = await clack.confirm({
+    message: `Remove Synapse from all ${targets.length} locations?`,
+    initialValue: false,
+  });
+
+  if (clack.isCancel(confirm) || !confirm) {
+    clack.outro(muted("Uninstall cancelled."));
+    return;
+  }
+
+  // Execute removals
+  let removed = 0;
+  for (const target of targets) {
+    try {
+      if (target.action()) {
+        clack.log.success(target.label);
+        removed++;
+      }
+    } catch (err) {
+      clack.log.warn(`${target.label}: ${err instanceof Error ? err.message : "failed"}`);
+    }
+  }
+
+  clack.log.message(`\n${bold(`Removed ${removed}/${targets.length} items.`)}`);
+  clack.log.message(muted("To also delete your cloud data, visit synapsesync.app/account"));
+
+  clack.outro(muted("Synapse has been uninstalled."));
 }
