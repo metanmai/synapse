@@ -8,7 +8,7 @@
       </div>
       <div class="footer-col">
         <h4 class="footer-heading">Company</h4>
-        <a href="mailto:hello@synapsesync.app" class="footer-link">Contact</a>
+        <a href="mailto:metanmai@gmail.com" class="footer-link">Contact</a>
       </div>
       <div class="footer-col">
         <h4 class="footer-heading">Legal</h4>
