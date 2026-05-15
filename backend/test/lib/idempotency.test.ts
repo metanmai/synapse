@@ -32,7 +32,7 @@ describe("Idempotency middleware", () => {
     const res1 = await app.request("/test", {
       headers: { "Idempotency-Key": key },
     });
-    const body1 = await res1.json();
+    const body1 = (await res1.json()) as { count: number };
     expect(res1.status).toBe(200);
     expect(getCallCount()).toBe(1);
 
@@ -40,7 +40,7 @@ describe("Idempotency middleware", () => {
     const res2 = await app.request("/test", {
       headers: { "Idempotency-Key": key },
     });
-    const body2 = await res2.json();
+    const body2 = (await res2.json()) as { count: number };
 
     expect(res2.headers.get("Idempotency-Replayed")).toBe("true");
     expect(body2.count).toBe(body1.count);
