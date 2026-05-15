@@ -3,7 +3,6 @@ import { singleOrNull } from "../query-helpers";
 import type {
   Conversation,
   ConversationContext,
-  ConversationLimits,
   ConversationListItem,
   ConversationMediaRecord,
   ConversationMessage,
@@ -25,8 +24,6 @@ const MEDIA_COLUMNS =
   "id, message_id, conversation_id, type, mime_type, filename, size, storage_path, encrypted, created_at";
 
 const CONTEXT_COLUMNS = "id, conversation_id, type, key, value, snapshot_at, encrypted, created_at";
-
-const LIMITS_COLUMNS = "tier, max_conversations, max_messages, max_media_bytes, sync_enabled";
 
 // --- Conversation CRUD ---
 
@@ -346,12 +343,4 @@ export async function getConversationContext(
     .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []) as ConversationContext[];
-}
-
-// --- Limits ---
-
-export async function getConversationLimits(db: SupabaseClient, tier: string): Promise<ConversationLimits | null> {
-  return singleOrNull<ConversationLimits>(
-    await db.from("conversation_limits").select(LIMITS_COLUMNS).eq("tier", tier).single(),
-  );
 }
