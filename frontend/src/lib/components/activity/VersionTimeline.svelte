@@ -13,7 +13,7 @@
         <div class="text-xs" style="color: var(--color-text-muted);">
           {new Date(version.changed_at).toLocaleString()} ·
           <span class="rounded-full px-2 py-0.5"
-            style="background-color: var(--color-bg-muted);">
+            style="background-color: var(--color-pink); color: white;">
             {version.source}
           </span>
         </div>
