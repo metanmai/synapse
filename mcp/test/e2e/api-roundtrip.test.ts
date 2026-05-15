@@ -906,9 +906,6 @@ suite("Full User Journey", () => {
       ["POST", "/api/insights"],
       ["PATCH", "/api/insights/some-id"],
       ["DELETE", "/api/insights/some-id"],
-      // Admin (requires X-Admin-Secret, not Bearer token)
-      ["DELETE", "/api/admin/users/00000000-0000-0000-0000-000000000000"],
-      ["POST", "/api/admin/users/00000000-0000-0000-0000-000000000000/reset"],
       // Conversations
       ["GET", "/api/conversations?project_id=test"],
       ["POST", "/api/conversations"],

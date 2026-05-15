@@ -281,6 +281,75 @@ export async function runWhoami(): Promise<void> {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  reset — wipe all data, keep account
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+export async function runReset(): Promise<void> {
+  clack.intro(`${accent("\u25C6")} ${bold("Reset Account Data")}`);
+
+  const apiKey = await resolveKey();
+
+  clack.log.warn(
+    [
+      `${themeError("This will permanently delete all your workspace data:")}`,
+      "",
+      `  ${themeError("\u2022")} All projects and files`,
+      `  ${themeError("\u2022")} All conversations and messages`,
+      `  ${themeError("\u2022")} All insights`,
+      `  ${themeError("\u2022")} All API keys (a fresh one will be generated)`,
+      "",
+      "Your account and subscription will remain intact.",
+    ].join("\n"),
+  );
+
+  const confirm = await clack.confirm({
+    message: "Are you sure you want to reset all data?",
+    initialValue: false,
+  });
+
+  if (clack.isCancel(confirm) || !confirm) {
+    clack.outro(muted("Reset cancelled."));
+    return;
+  }
+
+  const doubleConfirm = await clack.text({
+    message: `Type ${bold("RESET")} to confirm:`,
+    validate: (val) => (val !== "RESET" ? 'Please type "RESET" to confirm.' : undefined),
+  });
+
+  if (clack.isCancel(doubleConfirm)) {
+    clack.outro(muted("Reset cancelled."));
+    return;
+  }
+
+  const spin = createGlyphSpinner();
+  spin.start("Resetting account data\u2026");
+
+  try {
+    const result = await apiFetch<{ ok: boolean; api_key: string }>(apiKey, "/api/account/reset", "POST");
+    spin.stop(`${success("\u2713")} Account data reset`);
+
+    // Update editor configs with the new API key
+    const existing = detectExistingSetup();
+    const isGlobal = existing.locations.some((l) => l.label.startsWith("~"));
+    const scope = isGlobal ? "global" : "local";
+    const editors = detectEditors(scope).filter((e) => e.detected);
+    const writeResult = writeEditorConfigs(editors, result.api_key);
+
+    if (writeResult.written.length > 0) {
+      clack.log.message(
+        `${bold("Updated configs with new API key")}\n${writeResult.written.map((f) => `  ${success("\u2713")} ${muted(f)}`).join("\n")}`,
+      );
+    }
+  } catch (err) {
+    spin.stop(themeError("Reset failed"));
+    clack.log.error(err instanceof Error ? err.message : "Unknown error");
+  }
+
+  clack.outro(muted("synapsesync.app"));
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  upgrade — open checkout or show sub info
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
