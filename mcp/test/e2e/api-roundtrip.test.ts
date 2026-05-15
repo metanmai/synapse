@@ -419,18 +419,6 @@ suite("Full User Journey", () => {
   });
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  //  ACTIVITY LOG
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  describe("Activity Log", () => {
-    it("records insight events", async () => {
-      const { data } = await api("GET", `/api/projects/${PROJECT_ID}/activity?limit=50`, KEY);
-      const actions = (data as R[]).map((a) => a.action);
-      expect(actions).toContain("insight_created");
-    });
-  });
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  INSIGHTS — CRUD
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -488,6 +476,22 @@ suite("Full User Journey", () => {
       });
       const { status } = await api("DELETE", `/api/insights/${created.id}`, KEY);
       expect(status).toBe(200);
+    });
+  });
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  ACTIVITY LOG
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //
+  // Runs AFTER Insights: CRUD so the activity feed has both
+  // `project_created` (from Projects) and `insight_created` (from this
+  // block) entries to assert on.
+
+  describe("Activity Log", () => {
+    it("records insight events", async () => {
+      const { data } = await api("GET", `/api/projects/${PROJECT_ID}/activity?limit=50`, KEY);
+      const actions = (data as R[]).map((a) => a.action);
+      expect(actions).toContain("insight_created");
     });
   });
 
