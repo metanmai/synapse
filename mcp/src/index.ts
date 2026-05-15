@@ -751,7 +751,7 @@ if (!isMcpServerMode(args)) {
     },
   );
 
-  // --- Conversation tools (Plus tier) ---
+  // --- Conversation tools ---
 
   /** Resolve a project name to its ID using fuzzy matching: exact → starts-with → includes. */
   async function resolveProjectId(projectName: string, autoCreate = false): Promise<string | null> {
@@ -786,7 +786,7 @@ if (!isMcpServerMode(args)) {
   // --- list_conversations: list conversations for a project ---
   server.tool(
     "list_conversations",
-    "List conversations synced to a project. Returns titles, message counts, status, and IDs. Plus only.",
+    "List conversations synced to a project. Returns titles, message counts, status, and IDs.",
     {
       project: z.string().describe("Project name"),
       status: z.enum(["active", "archived"]).optional().describe("Filter by status (default: all non-deleted)"),
@@ -808,9 +808,7 @@ if (!isMcpServerMode(args)) {
         result = (await api("GET", `/api/conversations?${params}`)) as ListConversationsResponse;
       } catch (_e) {
         return {
-          content: [
-            { type: "text" as const, text: "Failed to list conversations. This feature requires a Plus subscription." },
-          ],
+          content: [{ type: "text" as const, text: "Failed to list conversations." }],
           isError: true,
         };
       }
@@ -839,7 +837,7 @@ if (!isMcpServerMode(args)) {
   // --- load_conversation: load a conversation to resume it ---
   server.tool(
     "load_conversation",
-    "Load a conversation to resume it in another agent. Returns the system prompt, working context, and full message transcript. Plus only.",
+    "Load a conversation to resume it in another agent. Returns the system prompt, working context, and full message transcript.",
     {
       project: z.string().describe("Project name"),
       conversationId: z.string().describe("Conversation ID to load"),
@@ -867,7 +865,7 @@ if (!isMcpServerMode(args)) {
           content: [
             {
               type: "text" as const,
-              text: `Conversation "${conversationId}" not found or access denied. This feature requires a Plus subscription.`,
+              text: `Conversation "${conversationId}" not found or access denied.`,
             },
           ],
           isError: true,
@@ -1026,7 +1024,7 @@ if (!isMcpServerMode(args)) {
   // --- sync_conversation: push messages to a conversation ---
   server.tool(
     "sync_conversation",
-    "Push messages to a conversation. Creates a new conversation if no conversationId is provided, otherwise appends. Plus only.",
+    "Push messages to a conversation. Creates a new conversation if no conversationId is provided, otherwise appends.",
     {
       project: z.string().describe("Project name"),
       conversationId: z
@@ -1081,7 +1079,7 @@ if (!isMcpServerMode(args)) {
             content: [
               {
                 type: "text" as const,
-                text: "Failed to create conversation. This feature requires a Plus subscription.",
+                text: "Failed to create conversation.",
               },
             ],
             isError: true,
