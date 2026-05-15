@@ -1,98 +1,93 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../lib/auth";
-import { createStripeClient } from "../lib/stripe";
+import { creemRequest, verifyCreemWebhook } from "../lib/creem";
 import { createSupabaseClient } from "../db/client";
-import { getSubscriptionByUserId, upsertSubscription, getSubscriptionByStripeId, getActiveSubscription } from "../db/queries";
-import { updateStripeCustomerId } from "../db/queries";
+import { getSubscriptionByUserId, upsertSubscription, getSubscriptionByProviderId, getActiveSubscription } from "../db/queries";
 import { AppError } from "../lib/errors";
 import { envOr } from "../lib/env";
 import type { Env } from "../lib/env";
-import type Stripe from "stripe";
-
-/** In Stripe API v2025+ (SDK v20), current_period_end moved from Subscription to SubscriptionItem. */
-function getSubscriptionPeriodEnd(sub: Stripe.Subscription): string | null {
-  const item = sub.items?.data?.[0];
-  if (item?.current_period_end) {
-    return new Date(item.current_period_end * 1000).toISOString();
-  }
-  return null;
-}
 
 const billing = new Hono<{ Bindings: Env }>();
 
-// Webhook must be BEFORE auth middleware (Stripe signs requests, no Bearer token)
+// Webhook must be BEFORE auth middleware (Creem signs requests, no Bearer token)
 billing.post("/webhook", async (c) => {
-  const stripe = createStripeClient(c.env);
   const body = await c.req.text();
-  const signature = c.req.header("stripe-signature");
+  const signature = c.req.header("creem-signature");
 
   if (!signature) {
-    throw new AppError("Missing stripe-signature header", 400, "VALIDATION_ERROR");
+    throw new AppError("Missing creem-signature header", 400, "VALIDATION_ERROR");
   }
 
-  let event;
-  try {
-    event = await stripe.webhooks.constructEventAsync(body, signature, c.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    console.error("[billing] Webhook signature verification failed:", err);
+  const valid = await verifyCreemWebhook(body, signature, c.env.CREEM_WEBHOOK_SECRET);
+  if (!valid) {
+    console.error("[billing] Webhook signature verification failed");
     throw new AppError("Invalid webhook signature", 400, "VALIDATION_ERROR");
   }
 
+  const event = JSON.parse(body);
+  const eventType = event.event_type as string;
+  const obj = event.object;
+
   const db = createSupabaseClient(c.env);
 
-  switch (event.type) {
-    case "checkout.session.completed": {
-      const session = event.data.object;
-      const userId = session.client_reference_id;
-      if (!userId || !session.subscription) break;
-
-      // Ensure stripe_customer_id is persisted on the user row
-      if (session.customer) {
-        await updateStripeCustomerId(db, userId, session.customer as string);
+  switch (eventType) {
+    case "checkout.completed": {
+      const userId = obj.metadata?.synapse_user_id;
+      if (!userId) {
+        console.warn("[billing] checkout.completed missing synapse_user_id in metadata");
+        break;
       }
-
-      const subscription = await stripe.subscriptions.retrieve(
-        session.subscription as string
-      );
 
       await upsertSubscription(db, {
         user_id: userId,
-        stripe_subscription_id: subscription.id,
+        provider: "creem",
+        provider_subscription_id: obj.subscription?.id ?? obj.id,
+        provider_customer_id: obj.customer?.id ?? null,
         status: "active",
-        current_period_end: getSubscriptionPeriodEnd(subscription),
-        cancel_at_period_end: subscription.cancel_at_period_end,
+        current_period_end: obj.subscription?.current_period_end ?? null,
+        cancel_at_period_end: false,
       });
       break;
     }
 
-    case "customer.subscription.updated": {
-      const subscription = event.data.object;
-      const existing = await getSubscriptionByStripeId(db, subscription.id);
+    case "subscription.active":
+    case "subscription.paid": {
+      const existing = await getSubscriptionByProviderId(db, obj.id);
       if (!existing) break;
-
-      const status = subscription.status === "active" ? "active"
-        : subscription.status === "past_due" ? "past_due"
-        : subscription.status === "canceled" ? "canceled"
-        : "inactive";
 
       await upsertSubscription(db, {
         user_id: existing.user_id,
-        stripe_subscription_id: subscription.id,
-        status,
-        current_period_end: getSubscriptionPeriodEnd(subscription),
-        cancel_at_period_end: subscription.cancel_at_period_end,
+        provider_subscription_id: obj.id,
+        provider_customer_id: obj.customer?.id ?? existing.provider_customer_id,
+        status: "active",
+        current_period_end: obj.current_period_end ?? existing.current_period_end,
+        cancel_at_period_end: false,
       });
       break;
     }
 
-    case "customer.subscription.deleted": {
-      const subscription = event.data.object;
-      const existing = await getSubscriptionByStripeId(db, subscription.id);
+    case "subscription.scheduled_cancel": {
+      const existing = await getSubscriptionByProviderId(db, obj.id);
       if (!existing) break;
 
       await upsertSubscription(db, {
         user_id: existing.user_id,
-        stripe_subscription_id: subscription.id,
+        provider_subscription_id: obj.id,
+        status: existing.status,
+        current_period_end: obj.current_period_end ?? existing.current_period_end,
+        cancel_at_period_end: true,
+      });
+      break;
+    }
+
+    case "subscription.canceled":
+    case "subscription.expired": {
+      const existing = await getSubscriptionByProviderId(db, obj.id);
+      if (!existing) break;
+
+      await upsertSubscription(db, {
+        user_id: existing.user_id,
+        provider_subscription_id: obj.id,
         status: "inactive",
         current_period_end: null,
         cancel_at_period_end: false,
@@ -100,21 +95,15 @@ billing.post("/webhook", async (c) => {
       break;
     }
 
-    case "invoice.payment_failed": {
-      const invoice = event.data.object;
-      // In Stripe API v2025+, subscription moved to invoice.parent.subscription_details.subscription
-      const subRef = invoice.parent?.subscription_details?.subscription;
-      const subscriptionId = typeof subRef === "string" ? subRef : subRef?.id ?? null;
-      if (!subscriptionId) break;
-
-      const existing = await getSubscriptionByStripeId(db, subscriptionId);
+    case "subscription.past_due": {
+      const existing = await getSubscriptionByProviderId(db, obj.id);
       if (!existing) break;
 
       await upsertSubscription(db, {
         user_id: existing.user_id,
-        stripe_subscription_id: subscriptionId,
+        provider_subscription_id: obj.id,
         status: "past_due",
-        current_period_end: existing.current_period_end,
+        current_period_end: obj.current_period_end ?? existing.current_period_end,
         cancel_at_period_end: existing.cancel_at_period_end,
       });
       break;
@@ -130,7 +119,6 @@ billing.use("/*", authMiddleware);
 // POST /api/billing/checkout
 billing.post("/checkout", async (c) => {
   const user = c.get("user");
-  const stripe = createStripeClient(c.env);
   const db = createSupabaseClient(c.env);
   const appUrl = envOr(c.env, "APP_URL", "https://synapsesync.app");
 
@@ -140,49 +128,36 @@ billing.post("/checkout", async (c) => {
     throw new AppError("You already have an active subscription. Manage it from the billing portal.", 400, "VALIDATION_ERROR");
   }
 
-  // Lazily create Stripe customer
-  let customerId = user.stripe_customer_id;
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: user.email,
-      metadata: { synapse_user_id: user.id },
-    });
-    customerId = customer.id;
-    await updateStripeCustomerId(db, user.id, customerId);
-  }
-
-  const session = await stripe.checkout.sessions.create({
-    customer: customerId,
-    client_reference_id: user.id,
-    mode: "subscription",
-    line_items: [{ price: c.env.STRIPE_PRO_PRICE_ID, quantity: 1 }],
+  const result = await creemRequest<{ checkout_url: string }>(c.env, "POST", "/checkouts", {
+    product_id: c.env.CREEM_PRO_PRODUCT_ID,
     success_url: `${appUrl}/account?upgraded=true`,
-    cancel_url: `${appUrl}/account`,
+    request_url: `${appUrl}/account`,
+    customer_email: user.email,
+    metadata: { synapse_user_id: user.id },
   });
 
-  if (!session.url) {
-    throw new AppError("Failed to create checkout session", 500, "STRIPE_ERROR");
+  if (!result.checkout_url) {
+    throw new AppError("Failed to create checkout session", 500, "CREEM_ERROR");
   }
 
-  return c.json({ url: session.url });
+  return c.json({ url: result.checkout_url });
 });
 
 // POST /api/billing/portal
 billing.post("/portal", async (c) => {
   const user = c.get("user");
-  const stripe = createStripeClient(c.env);
-  const appUrl = envOr(c.env, "APP_URL", "https://synapsesync.app");
+  const db = createSupabaseClient(c.env);
 
-  if (!user.stripe_customer_id) {
+  const sub = await getSubscriptionByUserId(db, user.id);
+  if (!sub?.provider_customer_id) {
     throw new AppError("No billing account found. Subscribe to Pro first.", 400, "VALIDATION_ERROR");
   }
 
-  const session = await stripe.billingPortal.sessions.create({
-    customer: user.stripe_customer_id,
-    return_url: `${appUrl}/account`,
+  const result = await creemRequest<{ customer_portal_url: string }>(c.env, "POST", "/customers/billing", {
+    customer_id: sub.provider_customer_id,
   });
 
-  return c.json({ url: session.url });
+  return c.json({ url: result.customer_portal_url });
 });
 
 // GET /api/billing/status
