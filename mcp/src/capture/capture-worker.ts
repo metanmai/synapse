@@ -3,9 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { AdapterRegistry } from "./adapter-registry.js";
 import { ClaudeCodeAdapter } from "./adapters/claude-code.js";
+import { ClineAdapter } from "./adapters/cline.js";
 import { CodexAdapter } from "./adapters/codex.js";
+import { CopilotCliAdapter } from "./adapters/copilot-cli.js";
 import { CursorAdapter } from "./adapters/cursor.js";
 import { GeminiAdapter } from "./adapters/gemini.js";
+import { RooCodeAdapter } from "./adapters/roo-code.js";
 import { CloudSyncer } from "./cloud-sync.js";
 import { SessionStore } from "./store.js";
 import { CaptureWatcher } from "./watcher.js";
@@ -22,9 +25,12 @@ async function main(): Promise<void> {
 
   const registry = new AdapterRegistry();
   registry.register(new ClaudeCodeAdapter());
-  registry.register(new CursorAdapter());
+  registry.register(new ClineAdapter());
   registry.register(new CodexAdapter());
+  registry.register(new CopilotCliAdapter());
+  registry.register(new CursorAdapter());
   registry.register(new GeminiAdapter());
+  registry.register(new RooCodeAdapter());
 
   log(`Registered adapters: ${registry.tools().join(", ")}`);
 
