@@ -101,9 +101,18 @@ export function detectEditors(scope: SetupScope): EditorInfo[] {
   ];
 }
 
+export type LocationStatus = "has_key" | "no_key" | "instructions_only";
+
+export interface ConfigLocation {
+  label: string;
+  filePath: string;
+  status: LocationStatus;
+  apiKey: string | null;
+}
+
 export interface ExistingSetup {
   configured: boolean;
-  locations: string[];
+  locations: ConfigLocation[];
   /** All unique API keys found across config files (first = local, last = global). */
   apiKeys: string[];
 }
@@ -124,7 +133,7 @@ function extractApiKey(filePath: string): string | null {
 export function detectExistingSetup(): ExistingSetup {
   const home = os.homedir();
   const cwd = process.cwd();
-  const locations: string[] = [];
+  const locations: ConfigLocation[] = [];
   const apiKeySet = new Set<string>();
 
   // Check MCP JSON files — collect ALL unique API keys (local first, global last)
@@ -142,10 +151,15 @@ export function detectExistingSetup(): ExistingSetup {
     if (fs.existsSync(filePath)) {
       try {
         const content = fs.readFileSync(filePath, "utf-8");
-        if (content.includes("synapsesync-mcp")) {
-          locations.push(label);
+        if (content.includes("synapsesync-mcp") || content.includes("synapse")) {
           const key = extractApiKey(filePath);
           if (key) apiKeySet.add(key);
+          locations.push({
+            label,
+            filePath,
+            status: key ? "has_key" : "no_key",
+            apiKey: key,
+          });
         }
       } catch {
         /* ignore */
@@ -158,7 +172,14 @@ export function detectExistingSetup(): ExistingSetup {
   if (fs.existsSync(claudeMd)) {
     try {
       const content = fs.readFileSync(claudeMd, "utf-8");
-      if (content.includes("Synapse")) locations.push("~/.claude/CLAUDE.md");
+      if (content.includes("Synapse")) {
+        locations.push({
+          label: "~/.claude/CLAUDE.md",
+          filePath: claudeMd,
+          status: "instructions_only",
+          apiKey: null,
+        });
+      }
     } catch {
       /* ignore */
     }

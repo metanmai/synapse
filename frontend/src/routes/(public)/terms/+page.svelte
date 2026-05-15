@@ -72,7 +72,7 @@
     <p>We may update these terms from time to time. Continued use of the Service after changes constitutes acceptance of the new terms. Material changes will be communicated via the email on your account.</p>
 
     <h2>Contact</h2>
-    <p>Questions about these terms? Email <a href="mailto:metanmai@gmail.com">metanmai@gmail.com</a>.</p>
+    <p>Questions about these terms? Email <a href="mailto:metanmai@gmail.com">metanmai@gmail.com</a> or reach out on <a href="https://linkedin.com/in/tanmai-niranjan" target="_blank" rel="noopener noreferrer">LinkedIn</a>.</p>
   </div>
 </div>
 

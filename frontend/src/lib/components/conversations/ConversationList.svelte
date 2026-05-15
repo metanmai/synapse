@@ -6,10 +6,12 @@ let {
   conversations,
   projectName,
   emptyLabel = null,
+  loadingConversationId = null,
 } = $props<{
   conversations: ConversationListItem[];
   projectName: string;
   emptyLabel?: string | null;
+  loadingConversationId?: string | null;
 }>();
 
 const encodedProject = $derived(encodeURIComponent(projectName));
@@ -39,15 +41,22 @@ const encodedProject = $derived(encodeURIComponent(projectName));
   <div class="conversation-list">
     {#each conversations as convo (convo.id)}
       {@const badge = statusColors[convo.status] ?? { bg: "rgba(0,0,0,0.08)", text: "inherit" }}
+      {@const isLoading = loadingConversationId === convo.id}
       <a
         href="/projects/{encodedProject}/conversations/{convo.id}"
         class="conversation-card"
+        class:card-loading={isLoading}
       >
         <div class="card-header">
           <span class="card-title">{convo.title || "Untitled conversation"}</span>
-          <span class="status-badge" style="background: {badge.bg}; color: {badge.text};">
-            {convo.status}
-          </span>
+          <div class="card-header-right">
+            {#if isLoading}
+              <div class="spinner spinner-sm"></div>
+            {/if}
+            <span class="status-badge" style="background: {badge.bg}; color: {badge.text};">
+              {convo.status}
+            </span>
+          </div>
         </div>
         <div class="card-meta">
           <span class="meta-item">
@@ -88,12 +97,25 @@ const encodedProject = $derived(encodeURIComponent(projectName));
     border-color: var(--color-pink);
   }
 
+  .card-loading {
+    border-color: var(--color-pink);
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
   .card-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
     margin-bottom: 0.375rem;
+  }
+
+  .card-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
   }
 
   .card-title {
