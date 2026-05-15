@@ -13,7 +13,10 @@ projectsResolve.post("/resolve", async (c) => {
   const db = c.get("db");
 
   // Collaboration-aware: include projects where the user is either owner OR a member.
-  const { data: memberRows, error: memberErr } = await db.from("project_members").select("project_id").eq("user_id", user.id);
+  const { data: memberRows, error: memberErr } = await db
+    .from("project_members")
+    .select("project_id")
+    .eq("user_id", user.id);
   if (memberErr) throw memberErr;
   const memberIds = (memberRows ?? []).map((r: { project_id: string }) => r.project_id);
   const accessibleIds = new Set<string>([...memberIds]);
