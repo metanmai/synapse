@@ -3,12 +3,14 @@ import { cors } from "hono/cors";
 import { admin } from "./api/admin";
 import { account, auth } from "./api/auth";
 import { billing } from "./api/billing";
+import { compaction } from "./api/compaction";
 import { context } from "./api/context";
 import { conversations } from "./api/conversations";
 import { insights } from "./api/insights";
 import { projects } from "./api/projects";
 import { share } from "./api/share";
 import { sync } from "./api/sync";
+import { runDailyAggregation } from "./cron/aggregate";
 import { CompactionScheduler } from "./durable-objects/compaction-scheduler";
 import type { Env } from "./lib/env";
 import { envList } from "./lib/env";
@@ -72,6 +74,7 @@ app.route("/api/admin", admin);
 app.route("/api/billing", billing);
 app.route("/api/insights", insights);
 app.route("/api/conversations", conversations);
+app.route("/api", compaction);
 
 // Mount MCP server (Streamable HTTP transport)
 app.mount("/mcp", SynapseAgent.serve("/mcp").fetch);
@@ -82,7 +85,11 @@ export { SynapseAgent, CompactionScheduler };
 // Default export for Cloudflare Workers
 export default {
   fetch: app.fetch,
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runScheduledGoogleSync(env));
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    if (event.cron === "0 3 * * *") {
+      ctx.waitUntil(runDailyAggregation(env));
+    } else {
+      ctx.waitUntil(runScheduledGoogleSync(env));
+    }
   },
 };
