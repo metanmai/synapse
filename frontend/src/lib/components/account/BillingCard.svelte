@@ -26,17 +26,15 @@ const renewalDate = $derived(
 );
 </script>
 
-<div
-  class="p-4 rounded-xl"
-  style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border);"
->
+<div class="glass rounded-xl" style="padding: 2rem;">
   <div class="flex items-center gap-2 mb-2">
-    <h3 class="font-medium" style="color: var(--color-accent);">Subscription</h3>
-    {#if billing.tier === "plus"}
-      <span
-        class="text-xs font-semibold px-2 py-0.5 rounded-full"
-        style="background-color: var(--color-pink); color: white;"
-      >
+    <h3 style="font-size: 18px; font-weight: 700; color: var(--color-accent);">Billing</h3>
+    {#if billing.tier === "free"}
+      <span style="border-radius: 9999px; padding: 4px 14px; font-size: 12px; font-weight: 600; background-color: var(--color-bg-muted); color: var(--color-text-muted);">
+        FREE
+      </span>
+    {:else}
+      <span style="border-radius: 9999px; padding: 4px 14px; font-size: 12px; font-weight: 600; background-color: var(--color-pink); color: white;">
         PLUS
       </span>
     {/if}
@@ -57,11 +55,7 @@ const renewalDate = $derived(
       connections, and version history.
     </p>
     <form method="POST" action="?/checkout" use:enhance>
-      <button
-        type="submit"
-        class="rounded-lg px-4 py-2 text-sm font-medium cursor-pointer"
-        style="background-color: var(--color-pink); color: white; border: none;"
-      >
+      <button type="submit" class="btn-primary cursor-pointer">
         Upgrade to Plus — $5.99/mo
       </button>
     </form>
@@ -70,11 +64,7 @@ const renewalDate = $derived(
       Your Plus subscription is active until <strong>{renewalDate}</strong>. It will not renew.
     </p>
     <form method="POST" action="?/portal" use:enhance>
-      <button
-        type="submit"
-        class="rounded-lg px-3 py-2 text-sm cursor-pointer"
-        style="border: 1px solid var(--color-pink); color: var(--color-pink-dark);"
-      >
+      <button type="submit" class="btn-secondary cursor-pointer">
         Manage Subscription
       </button>
     </form>
@@ -83,11 +73,7 @@ const renewalDate = $derived(
       Plus plan — renews <strong>{renewalDate}</strong>.
     </p>
     <form method="POST" action="?/portal" use:enhance>
-      <button
-        type="submit"
-        class="rounded-lg px-3 py-2 text-sm cursor-pointer"
-        style="border: 1px solid var(--color-pink); color: var(--color-pink-dark);"
-      >
+      <button type="submit" class="btn-secondary cursor-pointer">
         Manage Subscription
       </button>
     </form>
