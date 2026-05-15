@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Project, ProjectMember } from "../types";
+import { singleOrNull } from "../query-helpers";
 
 export async function createProject(
   db: SupabaseClient,
@@ -39,15 +40,14 @@ export async function getProjectByName(
   name: string,
   userId: string
 ): Promise<Project | null> {
-  const { data, error } = await db
-    .from("projects")
-    .select("*, project_members!inner(user_id)")
-    .eq("name", name)
-    .eq("project_members.user_id", userId)
-    .single();
-  if (error && error.code === "PGRST116") return null;
-  if (error) throw error;
-  return data as Project;
+  return singleOrNull<Project>(
+    await db
+      .from("projects")
+      .select("*, project_members!inner(user_id)")
+      .eq("name", name)
+      .eq("project_members.user_id", userId)
+      .single()
+  );
 }
 
 export async function getMemberRole(
@@ -55,15 +55,15 @@ export async function getMemberRole(
   projectId: string,
   userId: string
 ): Promise<string | null> {
-  const { data, error } = await db
-    .from("project_members")
-    .select("role")
-    .eq("project_id", projectId)
-    .eq("user_id", userId)
-    .single();
-  if (error && error.code === "PGRST116") return null;
-  if (error) throw error;
-  return data?.role ?? null;
+  const result = singleOrNull<{ role: string }>(
+    await db
+      .from("project_members")
+      .select("role")
+      .eq("project_id", projectId)
+      .eq("user_id", userId)
+      .single()
+  );
+  return result?.role ?? null;
 }
 
 export async function addMember(
