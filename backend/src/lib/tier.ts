@@ -73,7 +73,3 @@ export function enforceConnectionLimit(currentConnections: number, _source: stri
     );
   }
 }
-
-export function requireConversationSync(c: Context<{ Bindings: Env }>) {
-  requirePlus(c, "Conversation sync");
-}
