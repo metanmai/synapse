@@ -1,13 +1,11 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import * as clack from "@clack/prompts";
 import { validateApiKey } from "./api.js";
 import { browserAuth } from "./browser-auth.js";
 import type { ConfigLocation, SetupScope } from "./editors/index.js";
 import { detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors/index.js";
+import { runInit } from "./init.js";
 import { createGlyphSpinner } from "./spinner.js";
 import { accent, bold, muted, success, error as themeError } from "./theme.js";
 import { showWelcome } from "./welcome.js";
@@ -324,40 +322,45 @@ async function runEditorSetup(apiKey: string): Promise<void> {
     }
   }
 
-  // Offer to start session capture
+  // Offer to start session capture. Capture is Claude Code-specific \u2014 it
+  // requires hooks (SessionStart, PostToolUse, etc.) that only Claude Code
+  // surfaces. For Cursor / Windsurf the MCP server is sufficient on its own.
+  // If Claude Code wasn't selected, skip the question \u2014 there's nothing to
+  // capture from.
+  const hasClaudeCode = selectedEditors.some((e) => e.id === "claude-code");
+  if (!hasClaudeCode) {
+    clack.outro(
+      `Restart your editor to connect. ${muted("Session capture requires Claude Code \u2014 pick it in the wizard to enable.")}`,
+    );
+    return;
+  }
+
   const startCapture = await clack.confirm({
-    message: "Start capturing AI sessions automatically?",
+    message: "Start capturing Claude Code sessions automatically?",
     initialValue: true,
   });
 
   if (!clack.isCancel(startCapture) && startCapture) {
     const captureSpin = createGlyphSpinner();
-    captureSpin.start("Starting capture daemon\u2026");
+    captureSpin.start("Installing hooks and starting capture daemon\u2026");
 
     try {
-      const workerPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "capture", "capture-worker.js");
-      const child = spawn(process.execPath, [workerPath], {
-        detached: true,
-        stdio: ["ignore", "ignore", "ignore"],
-      });
-      child.unref();
-
-      if (child.pid) {
-        // Write PID file
-        const pidDir = path.join(process.env.HOME ?? "~", ".synapse");
-        fs.mkdirSync(pidDir, { recursive: true });
-        fs.writeFileSync(path.join(pidDir, "capture.pid"), String(child.pid));
-        captureSpin.stop(`Capture daemon started (PID ${child.pid})`);
-      } else {
-        captureSpin.stop("Capture daemon started");
-      }
-    } catch {
-      captureSpin.stop("Could not start capture daemon");
-      clack.log.info(`Start it manually: ${muted("synapsesync capture start")}`);
+      // runInit does the full Claude Code capture setup:
+      //   - writes ~/.claude/settings.json hooks (SessionStart + 5 others)
+      //   - writes ~/.claude/commands/synapse/{handoff,focus,issue,status,doctor,invite}.md
+      //   - writes ~/.synapse/config.json with the api key
+      //   - writes ~/Library/LaunchAgents/app.synapsesync.daemon.plist (or systemd unit)
+      //     AND `launchctl load`s it so the daemon is running before this returns.
+      await runInit({ api_key: apiKey });
+      captureSpin.stop("Capture installed: 6 hooks, daemon registered, service running");
+    } catch (err) {
+      captureSpin.stop("Could not install capture");
+      clack.log.warn(`${themeError("\u2717")} ${(err as Error).message}`);
+      clack.log.info(`Install manually: ${muted("synapsesync init --api-key <key>")}`);
     }
   }
 
   clack.outro(
-    `Restart your editor to connect. ${muted("Your sessions will be captured and distilled automatically.")}`,
+    `Restart Claude Code to pick up the new hooks and MCP server. ${muted("Your sessions will then be captured automatically.")}`,
   );
 }
