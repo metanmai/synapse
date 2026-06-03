@@ -36,9 +36,10 @@ async function api(method: string, path: string, token?: string, body?: unknown)
   return { status: res.status, data: data as R };
 }
 
-/** Create a test user via Supabase admin + backend signup/verify, return API key. */
+/** Create a test user via Supabase admin, then use signup+verify or direct key creation. */
 async function createTestUser(email: string): Promise<{ apiKey: string; userId: string }> {
-  // 1. Create Supabase auth user (auto-confirmed, no email sent)
+  // 1. Create auto-confirmed Supabase auth user with a password (no email sent)
+  const password = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const authRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
     method: "POST",
     headers: {
@@ -48,40 +49,18 @@ async function createTestUser(email: string): Promise<{ apiKey: string; userId: 
     },
     body: JSON.stringify({
       email,
+      password,
       email_confirm: true,
-      app_metadata: { provider: "email" },
     }),
   });
   if (!authRes.ok) {
     throw new Error(`Failed to create Supabase auth user: ${authRes.status} ${await authRes.text()}`);
   }
 
-  // 2. Generate a magiclink token via admin (no email sent)
-  const linkRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      apikey: SUPABASE_KEY,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ type: "magiclink", email }),
-  });
-  if (!linkRes.ok) {
-    throw new Error(`Failed to generate link: ${linkRes.status} ${await linkRes.text()}`);
-  }
-
-  const linkData = (await linkRes.json()) as R;
-  const actionLink: string = linkData.properties?.action_link || linkData.action_link || "";
-  const tokenMatch = actionLink.match(/token=([^&]+)/);
-  const otp = tokenMatch?.[1];
-  if (!otp) {
-    throw new Error(`Could not extract token from generate_link response: ${JSON.stringify(linkData)}`);
-  }
-
-  // 3. Call our verify-email endpoint with the token to create public.users + API key
-  const { status, data } = await api("POST", "/auth/verify-email", undefined, { email, code: otp });
-  if (status !== 201 || !data.api_key) {
-    throw new Error(`verify-email failed: ${status} ${JSON.stringify(data)}`);
+  // 2. Login via the backend's /auth/login endpoint — this creates the public.users row + API key
+  const { status, data } = await api("POST", "/auth/login", undefined, { email, password, label: "default" });
+  if (status !== 200 || !data.api_key) {
+    throw new Error(`Login failed: ${status} ${JSON.stringify(data)}`);
   }
 
   return { apiKey: data.api_key, userId: data.id };
