@@ -85,21 +85,41 @@ jobs:
         run: supabase db push --include-all
 
   e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Cross-OS e2e matrix. Both Linux and Windows must pass before we
+    # call Synapse Windows-ready. Per Phase 3 of the Windows-readiness
+    # plan: enable Windows early in a probably-red state so CI surfaces
+    # every remaining platform-specific bug automatically, then fix what
+    # surfaces.
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: prod
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        # `bash` on windows-latest is Git Bash (always installed). Keeping
+        # one shell across both runners means the `if [ -z ... ]` checks
+        # and `cp` / `npx` invocations below work identically without
+        # per-OS branches.
+        shell: bash
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Node 24 needed on Windows because @synapse/shared ships .ts
+          # only (relies on Node's native type-stripping in v24+). Linux
+          # already proven on v24 via the proxy-linux-e2e matrix. Keep
+          # both runners on the same major.
+          node-version: 24
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
 
       - name: Check secrets are set
         run: |
@@ -117,9 +137,18 @@ jobs:
       - name: Frontend env for e2e
         run: cp frontend/.env.example frontend/.env
 
-      - name: Install Playwright browsers
+      - name: Install Playwright browsers (Linux — includes system deps)
+        if: matrix.os == 'ubuntu-latest'
         working-directory: frontend
         run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright browsers (Windows — no system deps needed)
+        # `--with-deps` runs apt-get; on Windows it's a no-op-ish but
+        # explicitly omitting it surfaces a clearer error if browsers
+        # can't be downloaded.
+        if: matrix.os == 'windows-latest'
+        working-directory: frontend
+        run: npx playwright install chromium
 
       - name: Playwright e2e (UI)
         working-directory: frontend
@@ -140,7 +169,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.os }}
           path: frontend/playwright-report/
           retention-days: 7
 
