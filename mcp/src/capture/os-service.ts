@@ -5,11 +5,20 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export interface ServiceTemplate {
-  bin: string;
+  /** Absolute path to the node executable that will run the daemon. */
+  node: string;
+  /** Absolute path to the synapse CLI entry script (commands.js). */
+  script: string;
+  /** Path to the daemon's combined stdout/stderr log file. */
   log: string;
 }
 
 export function renderLaunchdPlist(a: ServiceTemplate): string {
+  // launchd parses each <string> in ProgramArguments as a separate argv
+  // entry — the first one MUST be the executable path, not a shell command.
+  // Combining `node` + script into a single string makes launchd try to
+  // exec a literal file named "node /path/to/script.js" and fail with
+  // status 127 << 8 = 19968. Each token gets its own <string>.
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyLists-1.0.dtd">
 <plist version="1.0">
@@ -17,7 +26,9 @@ export function renderLaunchdPlist(a: ServiceTemplate): string {
   <key>Label</key><string>app.synapsesync.daemon</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${a.bin}</string><string>daemon</string>
+    <string>${a.node}</string>
+    <string>${a.script}</string>
+    <string>daemon</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
@@ -28,12 +39,14 @@ export function renderLaunchdPlist(a: ServiceTemplate): string {
 }
 
 export function renderSystemdUnit(a: ServiceTemplate): string {
+  // systemd parses ExecStart as a shell-style command line where the first
+  // token is the absolute executable and subsequent tokens are args.
   return `[Unit]
 Description=Synapse capture and handoff daemon
 After=network.target
 
 [Service]
-ExecStart=${a.bin} daemon
+ExecStart=${a.node} ${a.script} daemon
 Restart=always
 RestartSec=5
 StandardOutput=append:${a.log}
@@ -84,22 +97,45 @@ function loadServiceFile(p: string): void {
   }
 }
 
+/**
+ * Resolve the absolute path to the CLI entry script that the daemon will run.
+ *
+ * Must point to dist/index.js (which registers the dispatcher + handlers and
+ * dispatches the `daemon` subcommand to its handler), NOT dist/cli/commands.js
+ * (which is a helper module with no top-level main — exec'ing it with `daemon`
+ * as argv would just load the module and exit cleanly with no daemon). After
+ * build, os-service.js lives at dist/capture/os-service.js, so ../index.js
+ * resolves up one level to dist/index.js.
+ *
+ * Exported so the regression test can pin the resolution without invoking
+ * writeServiceFile (which would touch ~/Library/LaunchAgents).
+ */
+export function resolveDaemonScriptPath(moduleUrl: string): string {
+  const here = path.dirname(fileURLToPath(moduleUrl));
+  return path.resolve(here, "../index.js");
+}
+
 export function writeServiceFile(): { platform: string; path: string } {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const synapseBin = `node ${path.resolve(here, "../cli/commands.js")}`;
+  // process.execPath is the absolute path to the node binary that's running
+  // this install. Pinning to that exact node ensures the daemon runs with
+  // the same node version, even if the user's PATH changes later or
+  // multiple node installs coexist.
+  const nodeBin = process.execPath;
+  const script = resolveDaemonScriptPath(import.meta.url);
   const log = path.join(os.homedir(), ".synapse", "daemon.log");
+  const tmpl = { node: nodeBin, script, log };
 
   if (process.platform === "darwin") {
     const p = path.join(os.homedir(), "Library/LaunchAgents/app.synapsesync.daemon.plist");
     fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(p, renderLaunchdPlist({ bin: synapseBin, log }));
+    fs.writeFileSync(p, renderLaunchdPlist(tmpl));
     loadServiceFile(p);
     return { platform: "darwin", path: p };
   }
   if (process.platform === "linux") {
     const p = path.join(os.homedir(), ".config/systemd/user/synapsesync.service");
     fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(p, renderSystemdUnit({ bin: synapseBin, log }));
+    fs.writeFileSync(p, renderSystemdUnit(tmpl));
     loadServiceFile(p);
     return { platform: "linux", path: p };
   }
