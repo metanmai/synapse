@@ -26,28 +26,71 @@ export async function createProject(
 export async function listProjectsForUser(
   db: SupabaseClient,
   userId: string
-): Promise<Project[]> {
+): Promise<(Project & { owner_email: string; role: string })[]> {
   const { data, error } = await db
-    .from("projects")
-    .select("*, project_members!inner(user_id)")
-    .eq("project_members.user_id", userId);
+    .from("project_members")
+    .select("role, projects(*, users!projects_owner_id_fkey(email))")
+    .eq("user_id", userId)
+    .order("role", { ascending: true }); // owner first (alphabetically before editor/viewer)
+
   if (error) throw error;
-  return (data ?? []) as Project[];
+  if (!data) return [];
+
+  return data.map((row: any) => ({
+    ...row.projects,
+    owner_email: row.projects.users?.email ?? "",
+    role: row.role,
+  }));
 }
 
 export async function getProjectByName(
   db: SupabaseClient,
-  name: string,
+  nameOrQualified: string,
   userId: string
 ): Promise<Project | null> {
-  return singleOrNull<Project>(
-    await db
+  // Check for qualified name format: owner-email~project-name
+  if (nameOrQualified.includes("~")) {
+    const tildeIdx = nameOrQualified.indexOf("~");
+    const ownerEmail = nameOrQualified.slice(0, tildeIdx);
+    const name = nameOrQualified.slice(tildeIdx + 1);
+
+    const { data, error } = await db
       .from("projects")
-      .select("*, project_members!inner(user_id)")
+      .select("*, project_members!inner(user_id), users!projects_owner_id_fkey(email)")
       .eq("name", name)
+      .eq("users.email", ownerEmail)
       .eq("project_members.user_id", userId)
-      .single()
-  );
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data as Project | null;
+  }
+
+  // Unqualified name — try owned project first, then fall back to any membership
+  const { data: owned, error: ownedErr } = await db
+    .from("projects")
+    .select("*, project_members!inner(user_id, role)")
+    .eq("name", nameOrQualified)
+    .eq("project_members.user_id", userId)
+    .eq("project_members.role", "owner")
+    .limit(1)
+    .maybeSingle();
+
+  if (ownedErr) throw ownedErr;
+  if (owned) return owned as Project;
+
+  // Fall back to any project the user is a member of with this name
+  const { data: shared, error: sharedErr } = await db
+    .from("projects")
+    .select("*, project_members!inner(user_id)")
+    .eq("name", nameOrQualified)
+    .eq("project_members.user_id", userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (sharedErr) throw sharedErr;
+  return shared as Project | null;
 }
 
 export async function getMemberRole(
