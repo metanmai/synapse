@@ -10,6 +10,7 @@ import {
   addMember,
   countMembers,
   createProject,
+  findOrCreateProjectByGit,
   getMemberRole,
   getProjectByName,
   removeMember,
@@ -411,6 +412,72 @@ describe("projects queries", () => {
       expect(db.chainable.delete).toHaveBeenCalled();
       expect(db.chainable.eq).toHaveBeenCalledWith("project_id", "proj1");
       expect(db.chainable.eq).toHaveBeenCalledWith("user_id", "u2");
+    });
+  });
+
+  // ── findOrCreateProjectByGit ───────────────────────────────
+  //
+  // Regression guard for the bug class "Tier 2 name match throws when 2+
+  // rows share a name." Postgres `.maybeSingle()` raises a PostgrestError
+  // when multiple rows match; that's reachable in production whenever a
+  // user has two same-named projects with different git_remote_urls (e.g.,
+  // two unrelated `scratch` dirs). Both the URL match (Tier 1) and the
+  // name match (Tier 2) must use `.order(updated_at desc).limit(1)` before
+  // `.maybeSingle()` so the query can never see more than one row.
+  describe("findOrCreateProjectByGit", () => {
+    it("Tier 1 URL match chain calls .order().limit(1) before .maybeSingle()", async () => {
+      // Membership lookup: 1 project. Tier 1 hit: returns the existing id.
+      const db = createSequentialMockDb({ data: [{ project_id: "proj_a" }], error: null }, { data: { id: "proj_a" }, error: null });
+
+      const result = await findOrCreateProjectByGit(db as unknown as SupabaseClient, "u1", {
+        git_remote_url: "https://github.com/me/foo.git",
+        git_basename: "foo",
+      });
+
+      expect(result).toBe("proj_a");
+      // chains[1] is the Tier 1 SELECT. Walking the calls verifies that the
+      // chain went .eq() → .in() → .order() → .limit() → .maybeSingle().
+      const tier1 = db.chains[1];
+      expect(tier1.order).toHaveBeenCalledWith("updated_at", { ascending: false });
+      expect(tier1.limit).toHaveBeenCalledWith(1);
+      expect(tier1.maybeSingle).toHaveBeenCalled();
+    });
+
+    it("Tier 2 name match chain calls .order().limit(1) before .maybeSingle()", async () => {
+      // Membership lookup → 1 proj. Tier 1 miss (no URL). Tier 2 returns a row.
+      const db = createSequentialMockDb(
+        { data: [{ project_id: "proj_b" }], error: null }, // memberships
+        { data: { id: "proj_b", git_remote_url: null }, error: null }, // Tier 2 name match
+      );
+
+      const result = await findOrCreateProjectByGit(db as unknown as SupabaseClient, "u1", {
+        git_remote_url: null,
+        git_basename: "scratch",
+      });
+
+      expect(result).toBe("proj_b");
+      const tier2 = db.chains[1];
+      expect(tier2.eq).toHaveBeenCalledWith("name", "scratch");
+      expect(tier2.order).toHaveBeenCalledWith("updated_at", { ascending: false });
+      expect(tier2.limit).toHaveBeenCalledWith(1);
+      expect(tier2.maybeSingle).toHaveBeenCalled();
+    });
+
+    it("falls through to INSERT when both tiers miss", async () => {
+      const db = createSequentialMockDb(
+        { data: [{ project_id: "proj_z" }], error: null }, // memberships
+        { data: null, error: null }, // Tier 1 miss
+        { data: null, error: null }, // Tier 2 miss
+        { data: { id: "proj_new" }, error: null }, // INSERT
+        { data: null, error: null }, // member INSERT
+      );
+
+      const result = await findOrCreateProjectByGit(db as unknown as SupabaseClient, "u1", {
+        git_remote_url: "https://github.com/me/never-seen.git",
+        git_basename: "never-seen",
+      });
+
+      expect(result).toBe("proj_new");
     });
   });
 });
