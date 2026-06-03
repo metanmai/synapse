@@ -29,10 +29,70 @@ const HOOK_DEFS: Record<string, { command: string; matcher?: string }> = {
 
 export async function runInit(a: InitArgs): Promise<void> {
   installHooks();
+  installSlashCommands();
   writeConfig(a.api_key);
   if (!a.skip_service) {
     const svc = writeServiceFile();
     console.log(`[synapse init] OS service registered: ${svc.path}`);
+  }
+}
+
+const SLASH_COMMANDS: Record<string, string> = {
+  "handoff.md": `---
+name: synapse-handoff
+description: Record an explicit next-step handoff for whoever picks up this work next.
+---
+
+Run \`synapse handoff "$ARGUMENTS"\` via the Bash tool. After it completes, briefly confirm what you recorded.
+`,
+  "focus.md": `---
+name: synapse-focus
+description: Set the current focus for this work session.
+---
+
+Run \`synapse set-focus "$ARGUMENTS"\` via the Bash tool. Confirm what was set.
+`,
+  "issue.md": `---
+name: synapse-issue
+description: Create, resolve, or supersede an issue. Args: create|resolve|supersede [kind] <title|id> [extra]
+---
+
+Parse \`$ARGUMENTS\` to determine the action:
+- "create <kind?> <title>" — run \`synapse issue create --kind <decision|question> --title "<title>"\`. If kind is missing, ask the user which kind it should be.
+- "resolve <id> <resolution>" — run \`synapse issue resolve <id> "<resolution>"\`.
+- "supersede <id> --by <new_id>" — run \`synapse issue supersede <id> --by <new_id>\`.
+
+Confirm the action taken.
+`,
+  "status.md": `---
+name: synapse-status
+description: One-line health check of the Synapse daemon.
+---
+
+Run \`synapse status\` via the Bash tool and report the output.
+`,
+  "doctor.md": `---
+name: synapse-doctor
+description: Detailed Synapse daemon diagnostics.
+---
+
+Run \`synapse doctor\` via the Bash tool and report the output.
+`,
+  "invite.md": `---
+name: synapse-invite
+description: Invite a teammate to this project. Args: <email>
+---
+
+Run \`synapse invite "$ARGUMENTS"\` via the Bash tool. Report the join URL.
+`,
+};
+
+function installSlashCommands(): void {
+  const dir = path.join(os.homedir(), ".claude/commands/synapse");
+  fs.mkdirSync(dir, { recursive: true });
+  for (const [filename, content] of Object.entries(SLASH_COMMANDS)) {
+    const p = path.join(dir, filename);
+    if (!fs.existsSync(p)) fs.writeFileSync(p, content);
   }
 }
 
