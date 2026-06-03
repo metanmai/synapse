@@ -934,6 +934,7 @@ suite("Full User Journey", () => {
       expect((projectsBefore as R[]).length).toBeGreaterThan(0);
 
       const { status, data } = await api("POST", "/api/account/reset", KEY);
+      if (status !== 200) console.error("[reset] unexpected status:", status, JSON.stringify(data));
       expect(status).toBe(200);
       expect(data.ok).toBe(true);
       expect(data.api_key).toBeTruthy();
