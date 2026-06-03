@@ -76,6 +76,17 @@ export interface HandoffLoopArgs {
   pull_ms?: number;
   flush_ms?: number;
   healthcheck_ms?: number;
+  /**
+   * Absolute path to `~/.synapse/projects/`. When set, the loop re-scans this
+   * directory on every cycle to pick up project dirs created AFTER the daemon
+   * started — e.g., the typical install flow (daemon starts → user opens AI
+   * tool → hook creates project dir). Without this, projects created
+   * post-startup are invisible until daemon restart.
+   *
+   * Optional for test backwards-compat: tests that pass an explicit
+   * `projects` array can omit this to keep the snapshot-only semantics.
+   */
+  projects_dir?: string;
 }
 
 interface FireArgs {
@@ -140,6 +151,19 @@ export function startHandoffLoop(a: HandoffLoopArgs): () => void {
 
   async function cycle(): Promise<boolean> {
     if (stopped) return true;
+    // Re-scan the projects dir each cycle so dirs created after daemon
+    // startup become visible without requiring a restart. Additive only —
+    // we never remove entries from a.projects here, because the cycle's
+    // canonical-id rename pattern (a.projects[i] = canonicalId) relies on
+    // mutating the slot in place. Removing from disk + re-scanning would
+    // wipe that progress.
+    if (a.projects_dir && fs.existsSync(a.projects_dir)) {
+      const known = new Set(a.projects);
+      for (const name of fs.readdirSync(a.projects_dir)) {
+        if (name.startsWith(".")) continue;
+        if (!known.has(name)) a.projects.push(name);
+      }
+    }
     let ok = true;
     for (let i = 0; i < a.projects.length; i++) {
       const project_id = a.projects[i];
