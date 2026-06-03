@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { API_URL } from "../cli/config.js";
-import { readProjectMap, removeProjectMapping } from "../cli/project-map.js";
+import { readProjectMap, removeProjectMapping, upsertProjectMapping } from "../cli/project-map.js";
+import { type BackendResolveFn, type BackendResolveResponse, resolveProject } from "../cli/resolve-project.js";
 import type { AdapterRegistry } from "./adapter-registry.js";
 import { resolveApiKey } from "./cloud-sync.js";
 import { defaultRegistry } from "./default-registry.js";
@@ -61,18 +62,45 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
     /* path gone — use raw */
   }
 
-  // The hook hands us cwd_<hash>; only the cloud syncer knows the
-  // canonical project UUID, and it stashes that mapping in project-map.json
-  // as a side-effect of the first successful sync.
-  const map = readProjectMap();
-  const mapping = map[canonicalCwd] ?? map[opts.cwd];
-  if (!mapping) {
-    log(`pull-compact: no project-map entry for cwd=${canonicalCwd}`);
-    return null;
-  }
-  const projectUuid = mapping.project_id;
-
   const auth = { Authorization: `Bearer ${apiKey}` };
+
+  // Resolve cwd → project. Local map first (fast, offline); on miss we
+  // ask the backend's resolver. This is the cross-device cold-start path:
+  // on a freshly installed machine the project-map is empty, and without
+  // backend resolution every "first session" on a new device would silently
+  // lose the handoff. The resolver only matches existing projects the user
+  // can already see — it never creates one — so a true no-match still
+  // returns null (caller treats null as "render the brief without handoff").
+  const map = readProjectMap();
+  const localMapping = map[canonicalCwd] ?? map[opts.cwd];
+  let projectUuid: string;
+  if (localMapping) {
+    projectUuid = localMapping.project_id;
+  } else {
+    const resolveBackend: BackendResolveFn = async (signals) => {
+      const res = await fetch(`${apiUrl}/api/projects/resolve`, {
+        method: "POST",
+        headers: { ...auth, "Content-Type": "application/json" },
+        body: JSON.stringify(signals),
+      });
+      if (!res.ok) throw new Error(`resolve ${res.status}`);
+      return (await res.json()) as BackendResolveResponse;
+    };
+    const resolved = await resolveProject(canonicalCwd, resolveBackend);
+    if (!resolved.project_id || !resolved.name) {
+      log(`pull-compact: could not resolve project for cwd=${canonicalCwd} (source=${resolved.source})`);
+      return null;
+    }
+    projectUuid = resolved.project_id;
+    // Write-through so the next session on this device is local-fast and
+    // doesn't repeat the backend round-trip.
+    try {
+      upsertProjectMapping(canonicalCwd, { project_id: projectUuid, project_name: resolved.name });
+      log(`pull-compact: cached resolved project ${projectUuid} for cwd=${canonicalCwd}`);
+    } catch {
+      /* best-effort cache; never fail the pull for it */
+    }
+  }
 
   // 1. Most recent conversation (listConversations orders by updated_at desc).
   let listed: ConversationListItem[];

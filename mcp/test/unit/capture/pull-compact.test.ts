@@ -69,11 +69,108 @@ describe("pullHandoff", () => {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
-  it("returns null when there is no project-map entry for the cwd", async () => {
-    // No project-map.json written.
+  // Bug class: cold-start with no known mapping AND backend doesn't know
+  // either → return null (caller emits brief without handoff). The bug
+  // BEFORE this fix was "skip the backend call entirely and always return
+  // null on cold map" — that's why we now expect a resolver fetch.
+  it("returns null when project-map is empty AND backend resolver finds no match", async () => {
+    // No project-map.json written — simulates a fresh device.
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({ project_id: null, name: null, confidence: null, signal: "no_match" }), {
+        status: 200,
+      }),
+    );
     const result = await pullHandoff({ cwd: CWD });
     expect(result).toBeNull();
-    expect(fetchSpy).not.toHaveBeenCalled();
+    // We DID call the resolver — that's the whole point of the fix.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0][0])).toContain("/api/projects/resolve");
+  });
+
+  // Regression guard for Fix #6 — bug class "fresh device has no
+  // project-map entry, so SessionStart silently emits a brief WITHOUT the
+  // handoff even though the backend knows which project this cwd belongs
+  // to." Fix: ask the backend's resolver on cold map; proceed if it knows.
+  it("pulls handoff via backend resolver when project-map is cold and backend identifies the project", async () => {
+    // No project-map.json — simulates a fresh device.
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            project_id: PROJECT_UUID,
+            name: "synapse",
+            confidence: "high",
+            signal: "name",
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversations: [
+              {
+                id: "conv_fresh",
+                updated_at: "2026-05-24T03:00:00Z",
+                metadata: {
+                  handoff_markdown: "## from a fresh device",
+                  handoff_at: "2026-05-24T03:00:01Z",
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+    const result = await pullHandoff({ cwd: CWD });
+    expect(result).toBe("## from a fresh device");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(String(fetchSpy.mock.calls[0][0])).toContain("/api/projects/resolve");
+    expect(String(fetchSpy.mock.calls[1][0])).toContain(`project_id=${PROJECT_UUID}`);
+  });
+
+  // Bug class: backend resolver succeeds on cold start → write-through to
+  // project-map so the NEXT session on this device hits the local fast
+  // path and doesn't pay the resolver round-trip again.
+  it("writes the resolved project to project-map after a successful backend resolve (write-through cache)", async () => {
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            project_id: PROJECT_UUID,
+            name: "synapse",
+            confidence: "high",
+            signal: "name",
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ conversations: [] }), { status: 200 }));
+    await pullHandoff({ cwd: CWD });
+    // The next session on this machine MUST find the entry locally.
+    const map = JSON.parse(fs.readFileSync(getProjectMapPath(), "utf-8"));
+    expect(map[CWD]).toBeDefined();
+    expect(map[CWD].project_id).toBe(PROJECT_UUID);
+    expect(map[CWD].project_name).toBe("synapse");
+  });
+
+  // Bug class: backend resolver itself fails (network down, auth error,
+  // 5xx) on cold start → must degrade to null, not hang or throw upward.
+  it("returns null when project-map is empty AND backend resolver throws", async () => {
+    fetchSpy.mockRejectedValueOnce(new Error("network down"));
+    const result = await pullHandoff({ cwd: CWD });
+    expect(result).toBeNull();
+    // The resolver was attempted, but no follow-up calls.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Bug class: backend resolver returns non-2xx on cold start → degrade
+  // to null. The resolveProject client converts this into a workspace_fallback
+  // internally; pull-compact just sees the null-typed result and bails.
+  it("returns null when project-map is empty AND backend resolver returns 5xx", async () => {
+    fetchSpy.mockResolvedValueOnce(new Response("internal", { status: 500 }));
+    const result = await pullHandoff({ cwd: CWD });
+    expect(result).toBeNull();
   });
 
   it("returns null when there is no API key", async () => {
