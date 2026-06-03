@@ -34,5 +34,11 @@ export default defineConfig({
     port: 4173,
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
+    // Unlock the Playwright-only `/__e2e/*` fixture routes. The fixtures
+    // 404 in `vite preview` (production-shaped bundle) without this flag —
+    // see frontend/src/routes/__e2e/link-picker/+page.server.ts. Real
+    // production deployments never pass this env, so the routes stay
+    // closed there.
+    env: { ENABLE_E2E_FIXTURES: "1" },
   },
 });

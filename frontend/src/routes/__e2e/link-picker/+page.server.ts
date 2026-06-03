@@ -1,14 +1,24 @@
 import { dev } from "$app/environment";
+import { env } from "$env/dynamic/private";
 import { error, fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
 // This route is a Playwright test fixture — it exposes mocked scenarios and
 // arbitrary fail() responses. NEVER expose in production: search engines
 // will index a non-product URL and visitors will hit fake error messages
-// styled like real ones. The dev() check fails fast at the load + action
-// boundaries so even a crafted POST gets a 404, not a fixture response.
+// styled like real ones.
+//
+// Two ways through the gate:
+//   1. SvelteKit dev mode (`vite dev`) — local development.
+//   2. Explicit ENABLE_E2E_FIXTURES=1 env var — set ONLY by Playwright's
+//      webServer config (frontend/playwright.config.ts), which builds the
+//      app in production mode and serves it via `vite preview`. CI must
+//      reach a production-shaped bundle to validate it, so `dev` is false
+//      there; gating purely on `dev` blocked the entire LinkPicker E2E
+//      suite. Real production deployments (Cloudflare Pages / Vercel)
+//      don't set ENABLE_E2E_FIXTURES, so the route still 404s for users.
 function assertDevOnly(): void {
-  if (!dev) throw error(404);
+  if (!dev && env.ENABLE_E2E_FIXTURES !== "1") throw error(404);
 }
 
 // Phase 2 Plan 02-06: Playwright fixture route — mounts LinkPicker with
