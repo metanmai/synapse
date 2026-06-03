@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { CloudSyncer } from "./cloud-sync.js";
 import { defaultRegistry } from "./default-registry.js";
+import { effectiveProxyEnabled } from "./proxy/proxy-config.js";
 import { ProxySource } from "./proxy/proxy-source.js";
 import { SessionStore } from "./store.js";
 import { CaptureWatcher } from "./watcher.js";
@@ -60,11 +61,13 @@ async function main(): Promise<void> {
     log(`Watcher error: ${err}`);
   });
 
-  // Optional: spawn the LLM API proxy alongside the file watcher. Opt-in
-  // via SYNAPSE_PROXY_ENABLE=1 because the proxy requires the user to
-  // install our CA + point HTTPS_PROXY at us — onboarding flow not yet
-  // automated, so default off until it is.
-  const proxyEnabled = process.env.SYNAPSE_PROXY_ENABLE === "1";
+  // Optional: spawn the LLM API proxy alongside the file watcher.
+  // Enablement resolution (env wins over config — kubectl/git convention):
+  //   SYNAPSE_PROXY_ENABLE="1"          → ON (operator override)
+  //   SYNAPSE_PROXY_ENABLE="0"          → OFF (operator override)
+  //   unset + proxy-config.json enabled → ON  (from `synapsesync capture proxy enable`)
+  //   unset + no config / disabled      → OFF (default)
+  const proxyEnabled = effectiveProxyEnabled(process.env);
   let proxySource: ProxySource | null = null;
   if (proxyEnabled) {
     // Default 7727 — stable, so users can hard-code HTTPS_PROXY in their

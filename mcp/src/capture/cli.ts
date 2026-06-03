@@ -5,6 +5,13 @@ import * as clack from "@clack/prompts";
 import { accent, bold, muted, success } from "../cli/theme.js";
 import { DaemonManager } from "./daemon.js";
 import { caStatus, installCa, uninstallCa } from "./proxy/onboarding.js";
+import {
+  deleteProxyConfig,
+  effectiveProxyEnabled,
+  proxyConfigPath,
+  readProxyConfig,
+  writeProxyConfig,
+} from "./proxy/proxy-config.js";
 import { SessionStore } from "./store.js";
 
 const daemon = new DaemonManager();
@@ -162,6 +169,10 @@ async function runProxy(args: string[]): Promise<void> {
       return proxyStatus();
     case "uninstall":
       return proxyUninstall();
+    case "enable":
+      return proxyEnable();
+    case "disable":
+      return proxyDisable();
     default:
       proxyHelp();
   }
@@ -172,7 +183,9 @@ function proxyHelp(): void {
   clack.log.message(
     [
       `  ${accent("install")}     Install proxy CA into login keychain + print env snippet`,
-      `  ${accent("status")}      Show CA path, fingerprint, keychain trust state`,
+      `  ${accent("enable")}      Turn on proxy capture (writes config + restarts daemon)`,
+      `  ${accent("disable")}     Turn off proxy capture (removes config + restarts daemon)`,
+      `  ${accent("status")}      Show CA path, fingerprint, keychain trust state, enable state`,
       `  ${accent("uninstall")}   Remove proxy CA from login keychain`,
     ].join("\n"),
   );
@@ -198,9 +211,8 @@ function proxyInstall(): void {
       bold("Add to your shell rc (~/.zshrc or ~/.bashrc):"),
       muted(r.envSnippet),
       "",
-      bold("Then enable the daemon's proxy + restart:"),
-      muted("  export SYNAPSE_PROXY_ENABLE=1"),
-      muted("  synapsesync capture stop && synapsesync capture start"),
+      bold("Then turn on proxy capture (writes config + restarts daemon):"),
+      muted("  synapsesync capture proxy enable"),
     ].join("\n"),
   );
   if (!r.installedInKeychain) {
@@ -212,6 +224,8 @@ function proxyInstall(): void {
 function proxyStatus(): void {
   clack.intro(`${accent("◆")} ${bold("Synapse Proxy")} — status`);
   const r = caStatus();
+  const cfg = readProxyConfig();
+  const enabled = effectiveProxyEnabled(process.env);
 
   const lines: string[] = [];
   if (r.caExists) {
@@ -225,11 +239,20 @@ function proxyStatus(): void {
   } else {
     lines.push(`  ${muted("○")} ${bold("Keychain")}    ${muted("not trusted")}`);
   }
+  if (enabled) {
+    lines.push(
+      `  ${success("●")} ${bold("Enabled")}     ${success("on")} ${muted(`(${cfg.enabledAt ? `since ${cfg.enabledAt}` : "via env override"})`)}`,
+    );
+  } else {
+    lines.push(`  ${muted("○")} ${bold("Enabled")}     ${muted("off")}`);
+  }
   lines.push(`  ${muted("●")} ${bold("Proxy port")}  ${accent(String(r.proxyPort))}`);
   clack.log.message(lines.join("\n"));
 
   if (!r.caExists || !r.inKeychain) {
     clack.log.message(`\n${bold("To complete onboarding:")}\n${muted("  synapsesync capture proxy install")}`);
+  } else if (!enabled) {
+    clack.log.message(`\n${bold("To turn on proxy capture:")}\n${muted("  synapsesync capture proxy enable")}`);
   } else {
     clack.log.message(`\n${bold("Env snippet (paste into shell rc if not already set):")}\n${muted(r.envSnippet)}`);
   }
@@ -248,4 +271,100 @@ function proxyUninstall(): void {
   }
   clack.log.message(muted("  The CA pem file on disk is preserved — reinstall with `proxy install`."));
   clack.outro(muted("synapsesync.app"));
+}
+
+async function proxyEnable(): Promise<void> {
+  clack.intro(`${accent("◆")} ${bold("Synapse Proxy")} — enable`);
+  writeProxyConfig({ enabled: true, enabledAt: new Date().toISOString() });
+  clack.log.success(`Proxy enabled (config: ${muted(proxyConfigPath())})`);
+
+  const r = await restartDaemon();
+  if (r.stoppedPid) clack.log.message(muted(`  Stopped previous daemon (PID ${r.stoppedPid})`));
+  if (r.startedPid) {
+    clack.log.success(`Daemon running with proxy active ${muted(`(PID ${r.startedPid})`)}`);
+  } else {
+    clack.log.warn("Failed to spawn daemon — run `synapsesync capture start` manually.");
+  }
+  clack.outro(muted("Point tools at http://127.0.0.1:7727 (HTTPS_PROXY env)"));
+}
+
+async function proxyDisable(): Promise<void> {
+  clack.intro(`${accent("◆")} ${bold("Synapse Proxy")} — disable`);
+  deleteProxyConfig();
+  clack.log.success("Proxy disabled (config removed)");
+
+  const r = await restartDaemon();
+  if (r.stoppedPid) clack.log.message(muted(`  Stopped previous daemon (PID ${r.stoppedPid})`));
+  if (r.startedPid) {
+    clack.log.success(`Daemon running without proxy ${muted(`(PID ${r.startedPid})`)}`);
+  } else {
+    clack.log.warn("Failed to spawn daemon — run `synapsesync capture start` manually.");
+  }
+  clack.outro(muted("synapsesync.app"));
+}
+
+/**
+ * Stop the daemon (if running), wait for it to actually exit, then
+ * spawn a fresh one. Returns the old + new PIDs for logging.
+ *
+ * Critical race: if we don't wait for the old process to exit, the
+ * new daemon may try to bind port 7727 while the old one still owns
+ * it, causing EADDRINUSE. Polling `kill -0 pid` (via `process.kill(pid, 0)`)
+ * is the standard portable way to wait for process death without
+ * needing wait()/waitpid().
+ */
+async function restartDaemon(): Promise<{ stoppedPid?: number; startedPid?: number }> {
+  let stoppedPid: number | undefined;
+  if (daemon.isRunning()) {
+    const pid = daemon.readPid();
+    if (pid) {
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {
+        /* already dead */
+      }
+      daemon.cleanup();
+      const exited = await waitForProcessExit(pid, 5000);
+      if (!exited) {
+        // Hung in shutdown (e.g., openssl spawn mid-CONNECT). Escalate
+        // so we don't leak a daemon — better to lose an in-flight
+        // capture than to fail the restart and leave the user in a
+        // half-broken state.
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          /* */
+        }
+        await waitForProcessExit(pid, 2000);
+      }
+      stoppedPid = pid;
+    }
+  }
+
+  const entry = path.join(path.dirname(fileURLToPath(import.meta.url)), "capture-worker.js");
+  const child = spawn(process.execPath, [entry], {
+    detached: true,
+    stdio: ["ignore", "ignore", "ignore"],
+  });
+  child.unref();
+
+  let startedPid: number | undefined;
+  if (child.pid) {
+    daemon.writePid(child.pid);
+    startedPid = child.pid;
+  }
+  return { stoppedPid, startedPid };
+}
+
+async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0); // signal 0 = existence check, never delivers a signal
+      await new Promise((r) => setTimeout(r, 100));
+    } catch {
+      return true; // process is gone
+    }
+  }
+  return false; // still alive past deadline
 }
