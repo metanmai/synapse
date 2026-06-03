@@ -2,7 +2,7 @@
 import ScrollReveal from "./ScrollReveal.svelte";
 
 let copied = $state(false);
-const command = "npx synapsesync-mcp && npx synapsesync-mcp capture start";
+const command = "npm install -g synapsesync-mcp && synapsesync-mcp wizard && synapsesync-mcp capture start";
 
 async function copyCommand() {
   await navigator.clipboard.writeText(command);

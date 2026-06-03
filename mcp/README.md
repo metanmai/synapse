@@ -13,24 +13,27 @@ The published package talks to the public API at **`https://api.synapsesync.app`
 
 ## Quick start
 
-### 1. Commands & help
+### 1. Install
+
+```bash
+npm install -g synapsesync-mcp
+```
+
+### 2. Commands & help
 
 From your project directory:
 
 ```bash
-npx synapsesync-mcp           # lists commands (interactive terminal)
-npx synapsesync-mcp --help
+synapsesync-mcp               # lists commands (interactive terminal)
+synapsesync-mcp --help
 ```
 
-### 2. Interactive setup (recommended)
+### 3. Interactive setup (recommended)
 
 Use **arrow keys** and **Enter** in menus (powered by [@clack/prompts](https://github.com/bombshell-dev/clack)).
 
 ```bash
-npx synapsesync-mcp login     # sign in → writes .mcp.json + editor configs
-npx synapsesync-mcp signup    # new account (email) → writes configs
-npx synapsesync-mcp init      # paste an API key → writes configs
-npx synapsesync-mcp wizard    # menu: sign up, log in, or API key
+synapsesync-mcp wizard        # menu: sign up, log in, or paste API key
 ```
 
 These write **`.mcp.json`** and, when detected, editor-specific files for Claude Code, Cursor, Windsurf, or VS Code. **Editors** launch the same package **without a TTY** and **`SYNAPSE_API_KEY` set** — that starts the MCP server, not the setup UI.
