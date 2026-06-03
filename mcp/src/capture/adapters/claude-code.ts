@@ -1,9 +1,47 @@
 import child_process from "node:child_process";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { safeReadFile } from "../safe-read.js";
 import type { CapturedSession, CompactResult, SessionMessage, ToolAdapter } from "../types.js";
 import { SYNAPSE_INTERNAL_MARKER, sessionIdFromNative } from "../types.js";
+
+/**
+ * Enumerate every plausible Claude Code session-storage directory on this
+ * machine. Different platforms / Claude Code versions / install methods
+ * land sessions in different places:
+ *
+ *   - `~/.claude/projects/` — the de-facto location on macOS and the
+ *     legacy location everywhere.
+ *   - `${XDG_CONFIG_HOME}/claude/projects/` — Linux's XDG Base Directory
+ *     convention. Set explicitly by some distros.
+ *   - `~/.config/claude/projects/` — Linux XDG default when
+ *     XDG_CONFIG_HOME isn't set. User reports `claude -p` on Linux/WSL2
+ *     doesn't write to ~/.claude/projects/; this is the most likely
+ *     alternate landing zone, hence checking defensively.
+ *
+ * The watcher filters out non-existent dirs so we don't spam ENOENT.
+ */
+export function claudeCodeWatchCandidates(opts?: { home?: string; env?: NodeJS.ProcessEnv }): string[] {
+  const home = opts?.home ?? os.homedir();
+  const env = opts?.env ?? process.env;
+  const xdgConfig = env.XDG_CONFIG_HOME && env.XDG_CONFIG_HOME.trim() !== "" ? env.XDG_CONFIG_HOME : null;
+  const candidates = [
+    path.join(home, ".claude", "projects"),
+    xdgConfig ? path.join(xdgConfig, "claude", "projects") : null,
+    path.join(home, ".config", "claude", "projects"),
+  ];
+  // De-dupe (xdgConfig may resolve to ~/.config) and drop nulls.
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const c of candidates) {
+    if (c && !seen.has(c)) {
+      seen.add(c);
+      result.push(c);
+    }
+  }
+  return result;
+}
 
 interface ContentBlock {
   type: string;
@@ -49,7 +87,20 @@ export class ClaudeCodeAdapter implements ToolAdapter {
   tool = "claude-code";
 
   watchPaths(): string[] {
-    return [path.join(os.homedir(), ".claude", "projects")];
+    // Defensive multi-path: check macOS legacy + XDG + ~/.config variants.
+    // Filter to only the dirs that exist on disk so the watcher doesn't
+    // emit ENOENT for absent candidates. If NONE exist, we still return
+    // the legacy path so the watcher logs it (helpful for diagnostics);
+    // capture won't fire but no event spam either.
+    const candidates = claudeCodeWatchCandidates();
+    const existing = candidates.filter((p) => {
+      try {
+        return fs.statSync(p).isDirectory();
+      } catch {
+        return false;
+      }
+    });
+    return existing.length > 0 ? existing : [candidates[0]];
   }
 
   parse(filePath: string): CapturedSession | null {
