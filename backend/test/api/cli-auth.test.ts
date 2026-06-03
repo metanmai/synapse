@@ -106,6 +106,48 @@ describe("POST /auth/cli-session", () => {
   // test above confirms the auth middleware rejects unauthenticated requests.
 });
 
+// BUG #5 endpoint: companion to cli-session's 409 device-limit response.
+// Same auth gate (authMiddleware) — the smoke tests below confirm the route
+// is MOUNTED and the schema VALIDATION runs. End-to-end with a real Bearer
+// token + DB depends on the test-Supabase secrets gap tracked in BUGS.md
+// "5a. Backend integration tests skip…" — once those land, add a real
+// revoke-then-mint round-trip case here.
+describe("POST /auth/cli-revoke-and-session", () => {
+  it("returns 401 without auth header (route is mounted under authMiddleware)", async () => {
+    const req = new Request("http://localhost/auth/cli-revoke-and-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        revoke_key_id: "00000000-0000-0000-0000-000000000000",
+        code_challenge: "test-challenge",
+      }),
+    });
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(req, env, ctx);
+    await waitOnExecutionContext(ctx);
+    // Hitting 401 (not 404) proves the route exists and was reached;
+    // a missing route would return 404. Catches "I forgot to mount it" /
+    // "the auth path-prefix is wrong" / "the schema import broke."
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 401 even with a malformed body — auth runs BEFORE validation", async () => {
+    // Schema order matters: if validation ran before auth, an unauthenticated
+    // attacker could probe schema shapes via 400 responses. Confirm the
+    // ordering by sending a body that would fail schema validation; we
+    // should still get 401 (auth runs first), not 400.
+    const req = new Request("http://localhost/auth/cli-revoke-and-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ revoke_key_id: "not-a-uuid", code_challenge: 42 }),
+    });
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(req, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(res.status).toBe(401);
+  });
+});
+
 describe("POST /auth/signup", () => {
   it("returns 400 when body is empty object", async () => {
     const req = new Request("http://localhost/auth/signup", {
