@@ -1,8 +1,8 @@
-# MCP-Sync Frontend: Collaborative Context Workspace
+# Synapse Frontend: Collaborative Context Workspace
 
 ## Overview
 
-A React SPA that provides a full workspace UI for MCP-Sync — browse and edit shared context, manage projects and team members, share via links, and track activity. Deployed to Railway, authenticated via Supabase Auth, talks to the existing Cloudflare Worker REST API.
+A React SPA that provides a full workspace UI for Synapse — browse and edit shared context, manage projects and team members, share via links, and track activity. Deployed to Railway, authenticated via Supabase Auth, talks to the existing Cloudflare Worker REST API.
 
 ## Goals
 
@@ -95,7 +95,7 @@ create index share_links_project_idx on share_links(project_id);
 
 ### Share Link Flow
 
-1. Owner/editor creates a link via project settings → gets URL like `https://app.mcp-sync.dev/share/<token>`
+1. Owner/editor creates a link via project settings → gets URL like `https://app.synapse.dev/share/<token>`
 2. Recipient opens the link in the frontend
 3. If not logged in → redirected to login, then back to the share link
 4. Frontend calls `POST /api/share/:token/join` → backend validates token, checks expiry, adds user as member with the link's role
@@ -280,7 +280,7 @@ Two services in the same Railway project:
 ### Environment Variables (Frontend)
 
 ```
-VITE_API_URL=https://mcp-sync.<domain>.workers.dev
+VITE_API_URL=https://synapse.<domain>.workers.dev
 VITE_SUPABASE_URL=https://<project>.supabase.co
 VITE_SUPABASE_ANON_KEY=<anon-key>
 ```
@@ -290,5 +290,5 @@ VITE_SUPABASE_ANON_KEY=<anon-key>
 The Worker needs CORS headers to accept requests from the Railway frontend domain. Add Hono CORS middleware:
 ```typescript
 import { cors } from "hono/cors";
-app.use("*", cors({ origin: ["https://app.mcp-sync.dev", "http://localhost:5173"] }));
+app.use("*", cors({ origin: ["https://app.synapse.dev", "http://localhost:5173"] }));
 ```
