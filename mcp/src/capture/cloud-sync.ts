@@ -5,7 +5,7 @@ import path from "node:path";
 import { API_URL } from "../cli/config.js";
 import { upsertProjectMapping } from "../cli/project-map.js";
 import { type SyncState, loadSyncStates, saveSyncStates } from "./sync-state-store.js";
-import type { CapturedSession, SessionMessage, ToolAdapter } from "./types.js";
+import type { CapturedSession, SessionMessage } from "./types.js";
 
 interface Project {
   id: string;
@@ -93,20 +93,10 @@ export class CloudSyncer {
   }
 
   /**
-   * Sync a session to the cloud, optionally compacting it via the tool's
-   * local CLI on first creation.
-   *
-   * @param session — parsed transcript from an adapter
-   * @param adapter — the same adapter that parsed the session. When the
-   *                  adapter exposes `compact()`, we call it after the first
-   *                  successful sync and POST the resulting summary to the
-   *                  backend's `/compact` endpoint. The transcript never
-   *                  leaves the user's machine for a hosted LLM.
-   *                  Passing `undefined` (or an adapter without `compact`)
-   *                  skips local compaction and falls back to whatever the
-   *                  user / dashboard triggers server-side.
+   * Sync a session to the cloud. Just pushes messages — compaction is owned
+   * by the pull path (handoff-brief / SessionStart), not by this hot loop.
    */
-  async sync(session: CapturedSession, adapter?: ToolAdapter): Promise<boolean> {
+  async sync(session: CapturedSession): Promise<boolean> {
     if (!this.apiKey) return false;
 
     try {
@@ -141,58 +131,10 @@ export class CloudSyncer {
         });
         saveSyncStates(this.syncStates, this.log);
         this.updateProjectMap(session.projectPath, projectId);
-
-        // Local-CLI compaction (non-blocking for sync success). If the
-        // adapter supports compaction via its tool's one-shot mode, fire it
-        // and POST the result. Failure here does NOT fail the overall sync —
-        // the conversation already landed on the backend and the dashboard
-        // can fall back to the hosted compaction path.
-        if (adapter?.compact) {
-          try {
-            this.log(`Local-CLI compaction starting for ${conversationId} (${session.messages.length} msgs)`);
-            const result = await adapter.compact(session);
-            const posted = await this.uploadCompactionSummary(
-              conversationId,
-              result.summary,
-              result.model,
-              result.handoff,
-            );
-            this.log(
-              `Local-CLI compaction ${posted ? "stored" : "POST failed"} for ${conversationId} (handoff=${result.handoff ? "yes" : "no"})`,
-            );
-          } catch (err) {
-            this.log(`Local-CLI compaction failed for ${conversationId}: ${err instanceof Error ? err.message : err}`);
-          }
-        }
       }
       return ok;
     } catch (err) {
       this.log(`Cloud sync error for ${session.id}: ${err}`);
-      return false;
-    }
-  }
-
-  private async uploadCompactionSummary(
-    conversationId: string,
-    summary: string,
-    model: string,
-    handoff?: string,
-  ): Promise<boolean> {
-    try {
-      const body: Record<string, string> = { summary, model };
-      if (handoff && handoff.length > 0) body.handoff = handoff;
-      const res = await fetch(`${API_URL}/api/conversations/${conversationId}/compact`, {
-        method: "POST",
-        headers: this.authHeaders(),
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        this.log(`Compact-summary POST returned ${res.status}: ${(await res.text()).slice(0, 200)}`);
-        return false;
-      }
-      return true;
-    } catch (err) {
-      this.log(`Compact-summary POST exception: ${err instanceof Error ? err.message : err}`);
       return false;
     }
   }
