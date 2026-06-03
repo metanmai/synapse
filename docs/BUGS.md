@@ -63,6 +63,20 @@ The wizard fix in `d3cd771` partially closes this — `wizard` now calls `runIni
 
 ---
 
+## P2 — Coverage gaps
+
+### 5a. Backend integration tests skip the actual handler logic for events-batch + 6 other endpoints
+
+10+ `.skip`'d tests in `backend/test/api/` are gated on "requires valid auth token + DB". They cover the happy paths for `events-batch`, `events-batch-auto-create`, `project-status`, `project-events`, and `invites` — exactly the endpoints we'd want to regression-test against the actual reducer + DB schema. The active tests only verify auth enforcement (401 without bearer), not the handler logic itself.
+
+**Why it matters:** The Cloudflare 1101 in P0 #1 was never caught by tests precisely because the handler-with-real-DB path is skipped. We have no signal short of production traffic.
+
+**Fix sketch:** Either (a) stand up a test Supabase instance (free tier is enough for CI) and inject creds via repo secrets so the skipped tests run on metanmai CI, or (b) refactor the handler to take db + user as injectable args so we can mock them and test the pure logic.
+
+**Code locations:** `backend/test/api/events-batch.test.ts:44-55`, `backend/test/api/events-batch-auto-create.test.ts:64`, `backend/test/api/project-status.test.ts:27-34`, `backend/test/api/project-events.test.ts:35-44`, `backend/test/api/invites.test.ts:43-51`
+
+---
+
 ## P2 — Per-device CLI keys (a8ecf98 scope completion)
 
 ### 5. 409 `DEVICE_LIMIT_REACHED` has no UI in frontend
@@ -107,7 +121,46 @@ Frontend auto-deploys via Vercel/Cloudflare Pages. Backend Worker requires manua
 
 ---
 
+### 12. Daemon flush has no retry/backoff or circuit-breaker
+
+`mcp/src/capture/handoff-sync.ts:42` just throws on any non-2xx, and the daemon's interval timer (`startHandoffLoop` at `mcp/src/capture/daemon.ts:164`) calls `cycle()` every `min(pull_ms, flush_ms)` = 10 seconds unconditionally. When the backend is broken (as it is right now with the 1101), the daemon hammers the dead endpoint indefinitely — once per 10s forever.
+
+**Consequences:**
+- Wasted bandwidth + Cloudflare invocations on the user side
+- `~/.synapse/daemon.log` fills with the same error every 10s (currently growing at ~6 lines/minute)
+- When the backend recovers, the daemon will burst-flush 4 projects simultaneously without any throttling — could trip rate limits
+
+**Fix sketch:** Exponential backoff with jitter on consecutive failures (10s → 20s → 40s → cap at ~5min). Reset on first successful flush. Could be implemented in `runFlushCycle` or in the loop wrapper at `startHandoffLoop`.
+
+### 13. Frontend has 12 svelte-check warnings (4 a11y, 8 unused-CSS)
+
+Not blocking CI, but worth addressing:
+
+**A11y (real issues):**
+- `src/lib/components/layout/AppShell.svelte:60` — `<div>` with click handler missing keyboard handler + ARIA role (2 warnings against the same line)
+- `src/routes/(app)/home/+page.svelte:77` — autofocus
+- `src/routes/(app)/settings/+page.svelte:192` — autofocus
+
+**Unused CSS selectors (dead styles or HTML mismatch):**
+- `src/lib/components/landing/CliSetupWizard.svelte:154` — `.wizard-alt`
+- `src/lib/components/landing/Hero.svelte:262, 275, 568` — `.hero-cta`, `.hero-cta:hover`, `.mockup-sidebar`
+- `src/lib/components/landing/ProblemSection.svelte:86, 93, 99, 112` — `.problem-headline`, `.pain-points`, `.pain-point` (twice)
+
+**Fix:** for each unused CSS selector, decide whether to (a) delete the rule (selector is dead), or (b) restore the missing class name to the HTML (selector targets a stale element name).
+
+---
+
 ## P4 — Performance / correctness, no user impact yet
+
+### 14. Orphan `handoff_sessions` and `handoff_issues` tables in production DB
+
+Migration `015_handoff_layer.sql` created `handoff_sessions` and `handoff_issues` tables. Migration `016_drop_handoff_session_fks.sql` dropped the FK constraints but kept the tables. **No code anywhere in `backend/src` or `packages/shared/src` reads or writes either table.** They sit empty in production, accumulating only an empty schema with RLS overhead.
+
+`016`'s comment notes this: *"The reducer materializes session and actor state purely from events — the tables were redundant in v1's design. v1.1 drops the FKs; the columns remain as loose text references … The tables themselves stay (RLS preserved) in case a future version wants to denormalize for query performance."*
+
+**Decision needed:** Either commit to the denormalization plan and start writing to these tables, or drop them entirely. As-is, they're a constant invitation for someone to query the wrong table and get nothing back.
+
+---
 
 ### 11. `recomputeProjectStatus` reads all events per batch
 
