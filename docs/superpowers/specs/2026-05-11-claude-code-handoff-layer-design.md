@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-11
 **Author:** Tanmai (with Claude)
-**Status:** Draft — pending review
+**Status:** Implemented (v1.0.0) — see plan 2026-05-11
 **Scope:** v1 of Synapse repositioned as a collaboration layer for Claude Code, primary scenario *handoff* (B2).
 
 ---
