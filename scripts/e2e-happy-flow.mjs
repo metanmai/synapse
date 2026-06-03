@@ -46,7 +46,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { removeLocalProjectState, sweepArtifacts } from "./e2e-cleanup.mjs";
+import { removeLocalProjectState, removeLocalProjectsByBasename, sweepArtifacts } from "./e2e-cleanup.mjs";
 
 // ── Configuration ────────────────────────────────────────────────────────
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -170,6 +170,12 @@ async function cleanup() {
     // the backend (different UUID, same name from git_remote_url).
     removeLocalProjectState(testProjectId, { log });
   }
+  // Also remove any cwd_<hash> PLACEHOLDER dirs that the daemon wrote BEFORE
+  // backend assigned canonical UUIDs. testProjectId only knows the canonical
+  // one; placeholders linger in ~/.synapse/projects/cwd_* with the test's
+  // events.jsonl, and the daemon retries them post-cleanup → backend creates
+  // a fresh project (same name, new UUID) → silent leak hours later.
+  removeLocalProjectsByBasename(`synapse-e2e-${RUN_ID}`, { log });
   // Belt-and-suspenders sweep: the auto-router can land additional projects
   // during stage 3 if the remote URL parses ambiguously; this catches them.
   await sweepArtifacts({

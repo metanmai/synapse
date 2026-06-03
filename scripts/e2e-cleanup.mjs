@@ -28,7 +28,7 @@
  * test mess.
  */
 
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -55,6 +55,69 @@ export function removeLocalProjectState(
     log(`  · cleanup: removed local daemon state ${dir}`);
   } catch (e) {
     log(`  · cleanup: WARN failed to rm ${dir}: ${e.message}`);
+  }
+}
+
+/**
+ * Scan ALL daemon project dirs and remove any whose events.jsonl references
+ * this test's git_basename. Catches the leak class where the daemon writes
+ * events to a `cwd_<hash>` placeholder dir BEFORE backend resolves a canonical
+ * UUID — `removeLocalProjectState(testProjectId)` misses those because the
+ * test doesn't know the placeholder hash.
+ *
+ * Match is on the JSON field `"git_basename":"<basename>` (note: no
+ * closing quote) — exact match for fixed basenames, prefix match for
+ * random-suffix basenames like `f1-2-cwd-${RUN_ID}-Xy3Abc`. Either way
+ * far more specific than substring-on-RUN_ID, which would falsely match
+ * the user's real project's events.jsonl when it logs chat messages
+ * mentioning the test (which it often does).
+ *
+ * Safe: only inspects events.jsonl content; only rms dirs that match the
+ * unique-per-test basename pattern. Non-throwing.
+ */
+export function removeLocalProjectsByBasename(
+  basename,
+  { synapseHome = DEFAULT_SYNAPSE_HOME, log = (m) => console.log(m) } = {},
+) {
+  if (!basename) return;
+  const projectsDir = path.join(synapseHome, "projects");
+  if (!existsSync(projectsDir)) return;
+
+  // No closing quote — catches both exact basenames and random-suffix prefix
+  // basenames (e.g. `f1-2-cwd-${RUN_ID}-Xy3Abc`).
+  const needle = `"git_basename":"${basename}`;
+  let removed = 0;
+
+  let entries;
+  try {
+    entries = readdirSync(projectsDir);
+  } catch (e) {
+    log(`  · cleanup: WARN cannot read ${projectsDir}: ${e.message}`);
+    return;
+  }
+
+  for (const name of entries) {
+    const dir = path.join(projectsDir, name);
+    const eventsPath = path.join(dir, "events.jsonl");
+    if (!existsSync(eventsPath)) continue;
+    let content;
+    try {
+      content = readFileSync(eventsPath, "utf-8");
+    } catch {
+      continue;
+    }
+    if (!content.includes(needle)) continue;
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      removed += 1;
+      log(`  · cleanup: removed local dir matching git_basename=${basename} (${name})`);
+    } catch (e) {
+      log(`  · cleanup: WARN failed to rm ${dir}: ${e.message}`);
+    }
+  }
+
+  if (removed === 0) {
+    log(`  · cleanup: 0 local dirs matched git_basename=${basename}`);
   }
 }
 
