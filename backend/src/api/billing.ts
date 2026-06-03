@@ -181,7 +181,7 @@ billing.post("/verify", async (c) => {
   const subId = typeof checkout.subscription === "string" ? checkout.subscription : checkout.subscription?.id;
   const custId = typeof checkout.customer === "string" ? checkout.customer : checkout.customer?.id;
   const periodEnd =
-    typeof checkout.subscription === "object" ? checkout.subscription?.current_period_end_date ?? null : null;
+    typeof checkout.subscription === "object" ? (checkout.subscription?.current_period_end_date ?? null) : null;
 
   await upsertSubscription(db, {
     user_id: user.id,
