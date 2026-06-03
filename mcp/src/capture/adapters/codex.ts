@@ -22,6 +22,8 @@ export class CodexAdapter implements ToolAdapter {
   tool = "codex";
 
   watchPaths(): string[] {
+    const override = process.env.SYNAPSE_TEST_CODEX_PATH;
+    if (override) return [override];
     return [path.join(os.homedir(), ".codex", "sessions")];
   }
 

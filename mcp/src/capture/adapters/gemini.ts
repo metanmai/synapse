@@ -31,6 +31,8 @@ export class GeminiAdapter implements ToolAdapter {
   tool = "gemini";
 
   watchPaths(): string[] {
+    const override = process.env.SYNAPSE_TEST_GEMINI_PATH;
+    if (override) return [override];
     return [path.join(os.homedir(), ".gemini", "tmp")];
   }
 
