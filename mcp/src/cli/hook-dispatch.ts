@@ -107,12 +107,6 @@ export async function readHookPayloadFromStdin(): Promise<AnyHookPayload | null>
  */
 export interface SkipDispatchOpts {
   homeDir?: string;
-  tmpDir?: string;
-  // Full override of the (b)-branch prefix list. When set, `tmpDir` is ignored
-  // for the purposes of building the default list. Pass `[]` to disable the
-  // (b) check entirely (useful in tests whose sandbox lives under a real
-  // tmp prefix).
-  tmpPrefixes?: string[];
   markerFile?: string;
   fileExists?: (p: string) => boolean;
 }
@@ -137,7 +131,6 @@ export function shouldSkipDispatch(
   }
 
   const homeDir = opts.homeDir ?? os.homedir();
-  const tmpDir = opts.tmpDir ?? env.TMPDIR ?? "/tmp";
   const markerFile = opts.markerFile ?? ".synapse-skip";
   const fileExists = opts.fileExists ?? ((p) => fs.existsSync(p));
 
@@ -149,24 +142,7 @@ export function shouldSkipDispatch(
     return { skip: true, reason: `cwd under ${worktreesDir}` };
   }
 
-  // (b) tmpdir / /tmp / /private/tmp. Check all of these because $TMPDIR
-  // resolves to /var/folders/... on macOS while /tmp is a separate symlink
-  // target — we want to catch any of them. `tmpPrefixes` is overridable
-  // for testability.
-  const tmpPrefixes = opts.tmpPrefixes ?? [
-    path.resolve(tmpDir),
-    "/tmp",
-    "/private/tmp",
-    "/private/var/folders",
-    "/var/folders",
-  ];
-  for (const prefix of tmpPrefixes) {
-    if (isPathStrictlyUnder(normCwd, prefix)) {
-      return { skip: true, reason: `cwd under ${prefix}` };
-    }
-  }
-
-  // (c) Marker file walk: cwd → parent → ... → home (inclusive). Stop at
+  // (b) Marker file walk: cwd → parent → ... → home (inclusive). Stop at
   // home so a stray marker in `/` or `/Users` doesn't silently disable
   // everything for the entire user.
   const stopAt = path.resolve(homeDir);
