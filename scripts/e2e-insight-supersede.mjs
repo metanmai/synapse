@@ -46,6 +46,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { removeLocalProjectState, sweepArtifacts } from "./e2e-cleanup.mjs";
 
 // ── Configuration ────────────────────────────────────────────────────────
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -201,7 +202,17 @@ async function cleanup() {
     });
     if (res.ok) log(`  · cleanup: deleted project ${testProjectId}`);
     else log(`  · cleanup: WARN failed to delete project (HTTP ${res.status})`);
+    removeLocalProjectState(testProjectId, { log });
   }
+  // Belt-and-suspenders sweep: if anything created additional projects
+  // tagged with this RUN_ID (auto-route side-effects, retried daemon syncs),
+  // force-delete them too. Catches the single-ID-tracking miss class.
+  await sweepArtifacts({
+    apiKey,
+    apiUrl: API_BASE,
+    patterns: [`-${RUN_ID}`],
+    log,
+  });
   if (testDir && existsSync(testDir)) {
     try {
       rmSync(testDir, { recursive: true, force: true });

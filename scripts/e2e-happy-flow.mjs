@@ -46,16 +46,22 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { removeLocalProjectState, sweepArtifacts } from "./e2e-cleanup.mjs";
 
 // ── Configuration ────────────────────────────────────────────────────────
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const MCP_DIST = path.join(REPO_ROOT, "mcp", "dist", "index.js");
 const API_BASE = process.env.SYNAPSE_API_BASE ?? "https://api.synapsesync.app";
 
+// Single per-run timestamp embedded in TEST_ID, testDir, and the synthetic
+// git remote — so cleanup can sweep every artifact by matching `-${RUN_ID}`.
+// Was Date.now() inline at every use site; that made it impossible to find
+// all this-run's projects from cleanup without tracking each one explicitly.
+const RUN_ID = Date.now();
 // Test facts — kept unique so the recall test can't be answered without
 // reading the brief. If a model can guess "butterfly mountain seven"
 // from cold, change these.
-const TEST_ID = `HAPPY-FLOW-${Date.now()}`;
+const TEST_ID = `HAPPY-FLOW-${RUN_ID}`;
 const TEST_PHRASE = "butterfly mountain seven";
 
 // Timing knobs. Generous enough to absorb daemon/cloud latency without
@@ -159,7 +165,19 @@ async function cleanup() {
     } else {
       log(`  · cleanup: WARN failed to delete project (HTTP ${res.status})`);
     }
+    // Remove daemon's local state for this project so it stops retrying
+    // queued events that would otherwise auto-recreate the project on
+    // the backend (different UUID, same name from git_remote_url).
+    removeLocalProjectState(testProjectId, { log });
   }
+  // Belt-and-suspenders sweep: the auto-router can land additional projects
+  // during stage 3 if the remote URL parses ambiguously; this catches them.
+  await sweepArtifacts({
+    apiKey,
+    apiUrl: API_BASE,
+    patterns: [`-${RUN_ID}`],
+    log,
+  });
   // rm the temp dir
   if (testDir && existsSync(testDir)) {
     try {
@@ -237,13 +255,13 @@ async function stage1_install() {
 async function stage2_cold_cwd() {
   header("STAGE 2 · SessionStart on a cold cwd");
 
-  testDir = path.join(tmpdir(), `synapse-e2e-${Date.now()}`);
+  testDir = path.join(tmpdir(), `synapse-e2e-${RUN_ID}`);
   mkdirSync(testDir, { recursive: true });
 
   spawnSync("git", ["init", "-q"], { cwd: testDir });
   spawnSync("git", ["config", "user.email", "e2e@happy-flow.local"], { cwd: testDir });
   spawnSync("git", ["config", "user.name", "e2e-test"], { cwd: testDir });
-  const remote = `https://github.com/synapse-e2e/test-${Date.now()}.git`;
+  const remote = `https://github.com/synapse-e2e/test-${RUN_ID}.git`;
   spawnSync("git", ["remote", "add", "origin", remote], { cwd: testDir });
   writeFileSync(path.join(testDir, "README.md"), "# E2E test\n");
   spawnSync("git", ["add", "-A"], { cwd: testDir });
