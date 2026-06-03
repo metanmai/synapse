@@ -1,11 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+
+import { createSupabaseClient } from "../../db/client";
+import { getProjectByName, upsertEntry } from "../../db/queries";
+import { logActivity } from "../../db/activity-logger";
+
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
-import { createSupabaseClient } from "../../db/client";
-import { getProjectByName } from "../../db/queries/projects";
-import { upsertEntry } from "../../db/queries/entries";
-import { logActivity } from "../../db/activity-logger";
 
 export function registerContextCaptureTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   server.tool(

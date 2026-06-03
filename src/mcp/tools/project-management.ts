@@ -1,19 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+
+import { createSupabaseClient } from "../../db/client";
+import { createProject, listProjectsForUser, getProjectByName, getMemberRole, addMember, removeMember, findUserByEmail, setPreference } from "../../db/queries";
+import { logActivity } from "../../db/activity-logger";
+
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
-import { createSupabaseClient } from "../../db/client";
-import {
-  createProject,
-  listProjectsForUser,
-  getProjectByName,
-  getMemberRole,
-  addMember,
-  removeMember,
-} from "../../db/queries/projects";
-import { findUserByEmail } from "../../db/queries/users";
-import { setPreference } from "../../db/queries/preferences";
-import { logActivity } from "../../db/activity-logger";
 
 export function registerProjectManagementTools(server: McpServer, env: Env, getContext: GetMcpContext) {
   server.tool(
