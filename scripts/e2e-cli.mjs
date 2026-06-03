@@ -606,9 +606,15 @@ function section_setup_and_capture() {
 
   // pull-handoff: missing --cwd → unique exit 2
   r = runCli(["pull-handoff"], { home: sb.empty });
+  // Guards the bug class "CLI does not print usage on missing args" — not
+  // the exact wording. The previous assertion hard-coded the substring
+  // "usage: synapsesync pull-handoff --cwd"; adding `--project-id` as an
+  // alternative entrypoint reformatted the message to "...pull-handoff
+  // (--cwd <path> | --project-id <uuid>)" and silently red the test even
+  // though the contract (exit 2 + usage line) was honored.
   expect(
     "pullHandoff.usage",
-    r.code === 2 && r.all.includes("usage: synapsesync pull-handoff --cwd"),
+    r.code === 2 && /usage:\s+synapsesync\s+pull-handoff/.test(r.all),
     `pull-handoff (no --cwd) → exit 2 + usage (got exit ${r.code})`,
   );
 
