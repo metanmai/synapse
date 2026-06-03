@@ -33,6 +33,24 @@ Write-Host "== e2e-proxy-install (Windows) =="
 Write-Host "  repo_root=$RepoRoot"
 Write-Host "  cli=$Cli"
 
+# Preflight diagnostics: surface what's on PATH BEFORE the daemon runs.
+# The daemon's TlsManager spawns `openssl` via execFileSync — if it's
+# missing or broken, knowing that here is more useful than a 15-min
+# silent hang later.
+Write-Host ""
+Write-Host "-- preflight diagnostics --"
+$OpensslSrc = (Get-Command openssl -ErrorAction SilentlyContinue).Source
+Write-Host "  openssl on PATH: $OpensslSrc"
+if (-not $OpensslSrc) {
+    Write-Host "FAIL preflight: openssl is NOT on PATH; the daemon will crash when ensureCa() runs"
+    exit 1
+}
+$OpensslVer = & openssl version 2>&1
+Write-Host "  openssl version: $OpensslVer"
+Write-Host "  node version:    $(& node --version)"
+Write-Host "  certutil:        $((Get-Command certutil).Source)"
+Write-Host ""
+
 function Assert-CertInStore {
     param([string]$Stage)
     $output = & certutil -store -user Root $CN 2>&1
