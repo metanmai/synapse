@@ -28,7 +28,7 @@ async function fetchLocal(port: number, urlPath: string): Promise<Response> {
 // Helper: start browserAuth, wait for URL, and return both the promise and parsed URL info.
 // Attaches a no-op .catch() to prevent unhandled rejection warnings for tests that
 // expect the promise to reject.
-async function startAuth(): Promise<{
+async function startAuth(opts?: { deviceName?: string }): Promise<{
   promise: Promise<unknown>;
   port: number;
   state: string;
@@ -39,6 +39,7 @@ async function startAuth(): Promise<{
   let authUrl = "";
   let autoOpened = false;
   const promise = browserAuth({
+    deviceName: opts?.deviceName,
     onUrl: (url, opened) => {
       authUrl = url;
       autoOpened = opened;
@@ -273,6 +274,46 @@ describe("browser-auth", () => {
 
       const { promise, port, state, autoOpened } = await startAuth();
       expect(autoOpened).toBe(false);
+
+      await completeFlow(port, state);
+      await promise;
+    });
+  });
+
+  // ─── Device name ───────────────────────────────────────────────────
+
+  describe("device name", () => {
+    it("omits ?device= when deviceName is not provided (backwards-compat with old frontend)", async () => {
+      const { promise, port, state, url } = await startAuth();
+      expect(new URL(url).searchParams.has("device")).toBe(false);
+
+      await completeFlow(port, state);
+      await promise;
+    });
+
+    it("includes ?device=<name> in the auth URL when provided", async () => {
+      const { promise, port, state, url } = await startAuth({ deviceName: "tanmais-macbook-pro" });
+      expect(new URL(url).searchParams.get("device")).toBe("tanmais-macbook-pro");
+
+      await completeFlow(port, state);
+      await promise;
+    });
+
+    it("url-encodes the device name (spaces, special chars)", async () => {
+      const { promise, port, state, url } = await startAuth({ deviceName: "Tanmai's MacBook Pro" });
+      // searchParams.get() returns the decoded value
+      expect(new URL(url).searchParams.get("device")).toBe("Tanmai's MacBook Pro");
+      // raw URL should be percent-encoded
+      expect(url).toContain("device=");
+      expect(url).not.toContain("device=Tanmai's MacBook Pro");
+
+      await completeFlow(port, state);
+      await promise;
+    });
+
+    it("empty deviceName is treated as absent (no ?device= in URL)", async () => {
+      const { promise, port, state, url } = await startAuth({ deviceName: "" });
+      expect(new URL(url).searchParams.has("device")).toBe(false);
 
       await completeFlow(port, state);
       await promise;

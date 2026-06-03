@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as clack from "@clack/prompts";
@@ -156,6 +157,7 @@ export async function runWizard(version: string): Promise<void> {
 
     try {
       const result = await browserAuth({
+        deviceName: os.hostname(),
         onUrl: (url, autoOpened) => {
           if (autoOpened) {
             spin.start("Waiting for browser login\u2026");
