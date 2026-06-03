@@ -136,11 +136,16 @@ export function startHandoffLoop(a: HandoffLoopArgs): () => void {
 
   async function cycle() {
     if (stopped) return;
-    for (const project_id of a.projects) {
+    for (let i = 0; i < a.projects.length; i++) {
+      const project_id = a.projects[i];
       try {
-        await runFlushCycle({ project_id, api_key: a.api_key, api_url: a.api_url });
-        await runPullCycle({ project_id, api_key: a.api_key, api_url: a.api_url });
-        if (a.user_id) writeBrief(project_id, a.user_id);
+        const flush = await runFlushCycle({ project_id, api_key: a.api_key, api_url: a.api_url });
+        const effectiveId = flush.canonical_project_id ?? project_id;
+        if (flush.canonical_project_id) {
+          a.projects[i] = flush.canonical_project_id;
+        }
+        await runPullCycle({ project_id: effectiveId, api_key: a.api_key, api_url: a.api_url });
+        if (a.user_id) writeBrief(effectiveId, a.user_id);
       } catch (err) {
         console.error("[handoff] cycle error", project_id, err);
       }
