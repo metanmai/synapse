@@ -1,4 +1,5 @@
 <script>
+import LinkPicker from "$lib/components/project-link/LinkPicker.svelte";
 import InviteDialog from "$lib/components/sharing/InviteDialog.svelte";
 import MemberList from "$lib/components/sharing/MemberList.svelte";
 
@@ -14,5 +15,15 @@ let { data, form } = $props();
     <div class="mt-4">
       <MemberList members={data.project.project_members ?? []} projectId={data.project.id} />
     </div>
+  </section>
+
+  <section class="mb-8">
+    <LinkPicker
+      sourceProjectId={data.project.id}
+      sourceProjectName={data.project.name}
+      candidates={data.linkCandidates ?? []}
+      allOtherProjects={data.otherProjects ?? []}
+      linkError={form?.linkError}
+    />
   </section>
 </div>

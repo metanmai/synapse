@@ -23,6 +23,7 @@ import { authMiddleware } from "../lib/auth";
 import { DEFAULT_PAGE_LIMIT } from "../lib/constants";
 import { AppError, NotFoundError } from "../lib/errors";
 import { buildProjectZip } from "../lib/export";
+import { recomputeProjectStatus } from "../lib/handoff-reducer";
 import { idempotency } from "../lib/idempotency";
 import { importEntries, parseZipEntries } from "../lib/import";
 import { enforceMemberLimit, enforceProjectQuota, requirePlus } from "../lib/tier";
@@ -308,6 +309,47 @@ projects.post("/:id/import", async (c) => {
   const result = await importEntries(db, projectId, parsed.entries, user.id);
 
   return c.json(result);
+});
+
+// POST /api/projects/:id/merge-into/:target_id
+// Phase 2 (IDENT-02, D-07): manual cross-device link / merge UI. Frontend
+// LinkPicker.svelte → SvelteKit linkProject action → this endpoint → SQL
+// merge_projects RPC. Owner-check ×2 here is defense-in-depth alongside the
+// in-SQL re-check; the RPC is atomic (plpgsql transaction).
+projects.post("/:id/merge-into/:target_id", async (c) => {
+  const user = c.get("user");
+  const sourceId = c.req.param("id");
+  const targetId = c.req.param("target_id");
+  const db = c.get("db");
+
+  if (sourceId === targetId) {
+    return c.json({ error: "Cannot link a project to itself", code: "SELF_LINK_ERROR" }, 409);
+  }
+
+  await requireRole(db, sourceId, user.id, "owner");
+  await requireRole(db, targetId, user.id, "owner");
+
+  const { error } = await db.rpc("merge_projects", {
+    p_source_id: sourceId,
+    p_target_id: targetId,
+    p_user_id: user.id,
+  });
+  if (error) {
+    console.error("[projects/merge] rpc error:", JSON.stringify(error));
+    return c.json({ error: `Merge failed: ${error.message}`, code: "MERGE_ERROR" }, 500);
+  }
+
+  await logActivity(db, {
+    project_id: targetId,
+    user_id: user.id,
+    action: "project_merged",
+    source: "human",
+    metadata: { source_project_id: sourceId },
+  });
+
+  await recomputeProjectStatus(db, targetId);
+
+  return c.json({ ok: true, project_id: targetId });
 });
 
 export { projects };
