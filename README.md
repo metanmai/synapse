@@ -25,20 +25,22 @@ Synapse makes that work by recording Claude Code session events to a local log, 
 
 ```bash
 npm install -g synapsesync
-synapse init            # sign in, write hook entries, install the LaunchAgent / systemd daemon
-synapse status          # daemon healthy, hook installed, brief cache fresh
-synapse handoff "next: finish auth flow"  # leave a baton for the next session
+synapsesync wizard          # sign in, write hook entries, install the LaunchAgent / systemd daemon
+synapsesync status          # daemon healthy, hook installed, brief cache fresh
+synapsesync handoff "next: finish auth flow"  # leave a baton for the next session
 ```
 
-`synapse init` writes the SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd, and SubagentStop hook entries into `~/.claude/settings.json`, drops slash command files into `~/.claude/commands/synapse/`, and installs a launchd / systemd unit that runs the capture daemon in the background. Projects are auto-created on the backend the first time the daemon syncs from a new working directory — there is no manual `project create` step.
+`synapsesync wizard` writes the SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd, and SubagentStop hook entries into `~/.claude/settings.json`, drops slash command files into `~/.claude/commands/synapse/`, and installs a launchd / systemd unit that runs the capture daemon in the background. Projects are auto-created on the backend the first time the daemon syncs from a new working directory — there is no manual `project create` step.
 
-**Daemon-fired Claude Code:** the daemon can also spawn its own Claude Code sessions (e.g. to compact context, extract decisions, refresh the brief). This is **opt-in** — set `daemon.ai_enabled = true` in `~/.synapse/config.json` to turn it on.
+**Scripted / CI alternative:** `synapsesync init --api-key "<key>" [--skip-service]` is the non-interactive equivalent of the wizard. Useful for headless installs where the browser-based sign-in flow isn't an option.
+
+**Cross-device:** sign in on a second machine inside a clone of the same git repo and the daemon auto-links to your existing project via the remote URL — the brief on machine B includes machine A's activity tagged with the originating hostname (e.g. "Your last activity (on laptop-A): ..."). If the auto-link picks the wrong target, the project Settings page has a manual **Linked Projects** picker for explicit merges.
 
 ---
 
 ## Slash commands
 
-`synapse init` installs the following slash commands into `~/.claude/commands/synapse/`. Type them inside Claude Code; the command body invokes the matching `synapse <cmd>` CLI under the hood.
+`synapsesync wizard` installs the following slash commands into `~/.claude/commands/synapse/`. Type them inside Claude Code; the command body invokes the matching `synapsesync <cmd>` CLI under the hood.
 
 | Command | What it does | Example |
 |---------|--------------|---------|
@@ -49,30 +51,33 @@ synapse handoff "next: finish auth flow"  # leave a baton for the next session
 | `/synapse:doctor` | Detailed daemon diagnostics — paths, last sync, queued events. | `/synapse:doctor` |
 | `/synapse:invite` | Invite a teammate to this project by email. | `/synapse:invite alex@example.com` |
 
-Each command is also a plain CLI invocation: `synapse handoff "..."`, `synapse set-focus "..."`, `synapse issue create ...`, `synapse status`, `synapse doctor`, `synapse invite <email>`.
+Each command is also a plain CLI invocation: `synapsesync handoff "..."`, `synapsesync set-focus "..."`, `synapsesync issue create ...`, `synapsesync status`, `synapsesync doctor`, `synapsesync invite <email>`.
 
 ---
 
 ## Invite a teammate
 
-Run `synapse invite <email>` (or `/synapse:invite <email>` inside Claude Code) from inside the project directory. The CLI prints a **join URL**; share it with the recipient. When they open it and sign in, the backend redeems the token, adds them to the project, and their next Claude Code session in any clone of the repo will see the same `<synapse-brief>` you do.
+Run `synapsesync invite <email>` (or `/synapse:invite <email>` inside Claude Code) from inside the project directory. The CLI prints a **join URL**; share it with the recipient. When they open it and sign in, the backend redeems the token, adds them to the project, and their next Claude Code session in any clone of the repo will see the same `<synapse-brief>` you do.
 
 Under the hood: `POST /api/projects/:id/invites { email }` mints a crypto-random base64url token and returns the join URL; `POST /api/invites/:token/accept` redeems it and inserts the new `project_members` row.
 
-### Legacy: for other MCP hosts (Cursor, Windsurf, VS Code)
+### Other tools: Cursor, Codex, Gemini, VS Code, Windsurf
 
-The same package ships an MCP server that any MCP client can use. Hosts other than Claude Code don't get the hook-driven handoff layer; they get the same workspace via tools.
+Synapse captures from non-Claude-Code tools via **adapter-based file watchers** rather than hooks. Each adapter (`mcp/src/capture/adapters/{cursor,codex,gemini}.ts`) watches the tool's local transcript storage and replays new sessions into the same workspace + brief pipeline Claude Code uses. The same `synapsesync wizard` setup picks up whichever supported tools are installed and wires their config automatically.
 
-The legacy MCP surface has been trimmed: `ls`, `read`, `search`, `history`, `tree`, `list_conversations`, and `load_conversation` have been removed. Only **`save_insight`** and **`list_insights`** remain for backward compatibility with existing MCP installs; for everything else use the handoff CLI or the REST API. The MCP server itself is deprecated and is scheduled for removal in v2.0.
+Any MCP-capable client (ChatGPT, Windsurf, VS Code Copilot, etc.) can also read the workspace via the bundled MCP server — same data, different surface.
+
+**Legacy MCP tool surface (deprecated, slated for removal in v2.0):**
+The MCP server's filesystem-style tools (`ls`, `read`, `search`, `history`, `tree`, `list_conversations`, `load_conversation`) were removed in v1.1. Only **`save_insight`** and **`list_insights`** remain for back-compat with existing installs. For everything else, use the handoff CLI or the REST API.
 
 1. **Get an API key** — Sign up at **[synapsesync.app](https://synapsesync.app)**, open **Account → API keys**, and create a key (or create the account from the CLI).
-2. **Run the wizard:**
+2. **Run the wizard** (interactive sign-in → writes `.mcp.json` + editor configs):
 
    ```bash
-   synapsesync wizard        # interactive sign-in → writes .mcp.json + editor configs
+   synapsesync wizard
    ```
 
-3. **Or register the server yourself** — Add the published **`synapsesync`** package to your MCP config:
+3. **Or register the MCP server manually** — add this to your MCP host's config:
 
 ```json
 {
@@ -88,7 +93,7 @@ The legacy MCP surface has been trimmed: `ls`, `read`, `search`, `history`, `tre
 }
 ```
 
-4. **Scripted / CI** — `login --email … --password …` or `signup --email …` print JSON snippets; run `init --key <key>` to write config files.
+4. **Scripted / CI** — `synapsesync login --email … --password …` or `synapsesync signup --email …` print JSON snippets; `synapsesync init --api-key <key>` writes config files non-interactively.
 
 Your assistant gets the legacy **`save_insight`** and **`list_insights`** tools for capturing decisions/learnings into your project.
 
