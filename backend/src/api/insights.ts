@@ -2,10 +2,13 @@ import { Hono } from "hono";
 
 import { logActivity } from "../db/activity-logger";
 import { createInsight, deleteInsight, getInsight, listInsights, updateInsight } from "../db/queries";
+import { countActiveInsightsForProject, evictOldestInsightForProject } from "../db/queries/insights";
 import { authMiddleware } from "../lib/auth";
 import type { Env } from "../lib/env";
 import { ForbiddenError, NotFoundError } from "../lib/errors";
 import { idempotency } from "../lib/idempotency";
+import { consolidateOldestInsights } from "../lib/llm/insight-consolidate";
+import { type Tier, getInsightCapForTier } from "../lib/tier";
 import { parseBody, schemas } from "../lib/validate";
 import { requireRole } from "../middleware/project-auth";
 
@@ -55,6 +58,38 @@ insights.post("/", async (c) => {
 
   // Verify the user is at least an editor on the project
   await requireRole(db, body.project_id, user.id, "editor");
+
+  // Phase 03-04: per-project insight cap.
+  //  - Free (cap=10): silently evict the oldest active insight before insert.
+  //  - Plus (cap=50): insert succeeds; fire ctx.waitUntil() to consolidate
+  //    the oldest 10 via Haiku in the background. The user is transiently
+  //    over-cap until consolidation completes (~5-15s). LLM failures log
+  //    + drop; daily cron (runDailyConsolidationRetry) catches up.
+  const tier = (c.get("tier") ?? "free") as Tier;
+  const cap = getInsightCapForTier(tier);
+  let activeCount: number;
+  try {
+    activeCount = await countActiveInsightsForProject(db, body.project_id);
+  } catch {
+    activeCount = 0; // already logged; treat as "below cap" so the insert proceeds
+  }
+  if (activeCount >= cap) {
+    if (tier === "free") {
+      await evictOldestInsightForProject(db, body.project_id);
+    } else {
+      // Plus: defer to ctx.waitUntil so the response isn't blocked on Haiku.
+      const apiKey = c.env.COMPACTION_LLM_KEY;
+      if (apiKey) {
+        c.executionCtx.waitUntil(
+          consolidateOldestInsights(db, body.project_id, apiKey).catch((e) => {
+            console.error(
+              `[insights/post] consolidate waitUntil rejected for ${body.project_id}: ${e instanceof Error ? e.message : e}`,
+            );
+          }),
+        );
+      }
+    }
+  }
 
   const insight = await createInsight(db, {
     project_id: body.project_id,

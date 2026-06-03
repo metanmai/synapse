@@ -174,3 +174,74 @@ export async function searchInsights(db: SupabaseClient, projectId: string, quer
   // Deduplicate, keeping highest-scored results first (fulltext > ilike)
   return mergeSearchTiers<Insight>(fulltext, ilike);
 }
+
+// --- Phase 03-04: per-project insight cap (Free LRU + Plus LLM-consolidate) ---
+
+/**
+ * Count active (non-superseded) insights for a project. Used by the per-tier
+ * cap path: Free at 10, Plus at 50. Counts WHERE superseded_by IS NULL so
+ * already-curated rows don't push the user over.
+ */
+export async function countActiveInsightsForProject(db: SupabaseClient, projectId: string): Promise<number> {
+  const { count, error } = await db
+    .from("insights")
+    .select("*", { count: "exact", head: true })
+    .eq("project_id", projectId)
+    .is("superseded_by", null);
+  if (error) {
+    console.error(`[db] countActiveInsightsForProject ${projectId} failed: ${error.message}`);
+    throw error;
+  }
+  return count ?? 0;
+}
+
+/**
+ * Fetch the N oldest ACTIVE insights for a project, ordered by updated_at ASC.
+ * Used by Plus LLM consolidation (oldest 10 → 3-5 merged replacements with
+ * supersedes) and indirectly by Free LRU eviction (n=1).
+ *
+ * Returns full rows so consolidation has the user_id and summary/detail
+ * payload for the prompt.
+ */
+export async function getOldestActiveInsights(db: SupabaseClient, projectId: string, n: number): Promise<Insight[]> {
+  const { data, error } = await db
+    .from("insights")
+    .select(INSIGHT_COLUMNS)
+    .eq("project_id", projectId)
+    .is("superseded_by", null)
+    .order("updated_at", { ascending: true })
+    .limit(n);
+  if (error) {
+    console.error(`[db] getOldestActiveInsights ${projectId} (n=${n}) failed: ${error.message}`);
+    throw error;
+  }
+  return (data ?? []) as Insight[];
+}
+
+/**
+ * Evict (HARD DELETE) the single oldest active insight in a project (Free
+ * LRU path). NOT supersession — supersession preserves history for audit;
+ * eviction is for capacity and the row is gone forever. This is intentional
+ * per .planning/phases/03-free-plus-tier-redesign/03-CONTEXT.md.
+ *
+ * Best-effort: returns the evicted ID or null on no-op / error. Errors are
+ * LOGGED, never thrown — the subsequent createInsight must not be blocked
+ * by an eviction failure (user would just go over-cap by 1 until next
+ * eviction attempt).
+ */
+export async function evictOldestInsightForProject(db: SupabaseClient, projectId: string): Promise<string | null> {
+  let oldest: Insight[];
+  try {
+    oldest = await getOldestActiveInsights(db, projectId, 1);
+  } catch {
+    return null; // already logged in getOldestActiveInsights
+  }
+  if (oldest.length === 0) return null;
+  const id = oldest[0].id;
+  const { error } = await db.from("insights").delete().eq("id", id);
+  if (error) {
+    console.error(`[db] evictOldestInsightForProject delete ${id} failed: ${error.message}`);
+    return null;
+  }
+  return id;
+}
