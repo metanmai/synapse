@@ -6,6 +6,7 @@
  */
 
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 import {
   type BackendOptions,
@@ -44,7 +45,10 @@ function resolveRunSecurity(opts: BackendOptions): CommandRunner {
 }
 
 function resolveHome(opts: BackendOptions): string {
-  return opts.home ?? process.env.HOME ?? "~";
+  // `os.homedir()` works on every platform; MacBackend only runs on
+  // darwin (where HOME is also always set), but the consistent pattern
+  // avoids the literal `"~"` footgun seen on Windows in store.ts.
+  return opts.home ?? os.homedir();
 }
 
 export const MacBackend: PlatformBackend = {
