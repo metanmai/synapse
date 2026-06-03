@@ -145,6 +145,15 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
     }
   },
   refresh: async () => runRefresh(),
+  // Phase 03-05: `sync` is Free-tier's manual flush+pull command (the
+  // daemon's 5-min auto-cycle is gated off on Free). Streams progress
+  // per step + final summary. Plus users can also use it as a debug
+  // tool to force a sync without waiting for the next cron tick.
+  sync: async () => {
+    const { runSync } = await import("./sync.js");
+    const code = await runSync();
+    if (code !== 0) process.exit(code);
+  },
   upgrade: async () => runUpgrade(),
   whoami: async () => runWhoami(),
   capture: async (args) => runCapture(args),

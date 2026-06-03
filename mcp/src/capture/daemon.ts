@@ -103,6 +103,16 @@ export interface HandoffLoopArgs {
    * `projects` array can omit this to keep the snapshot-only semantics.
    */
   projects_dir?: string;
+  /**
+   * Phase 03-05: tier override. When set, the daemon SKIPS the
+   * /api/billing/status fetch and uses this value directly. Used by:
+   *  - tests, which don't have a billing endpoint to call
+   *  - hypothetical "force Plus for debugging" flows
+   * Production omits this; the daemon fetches + caches the tier itself.
+   * `"free"` → cycle returns immediately (no flush/pull/prewarm).
+   * `"plus"` → cycle runs the full loop.
+   */
+  tier_override?: "free" | "plus";
 }
 
 interface FireArgs {
@@ -230,6 +240,54 @@ export function spawnPrewarm(
   }
 }
 
+/**
+ * Phase 03-05: tier cache for the daemon's cycle gate.
+ *
+ * Free users have manual sync only — `synapsesync sync` triggers a one-shot
+ * flush+pull, but the daemon's 5-min auto-loop is gated off. Plus users get
+ * the full auto-sync cycle. We cache the tier for 5 minutes so we're not
+ * hitting /api/billing/status every cycle (which would itself become a
+ * cycle of its own).
+ *
+ * Upgrade latency on tier flip: up to 5 min for the daemon to pick up the
+ * Plus tier. A follow-up commit will add tier_revision header piggyback
+ * on existing endpoints to invalidate this cache near-instantly.
+ */
+const TIER_CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface CachedTier {
+  tier: "free" | "plus";
+  fetchedAt: number;
+}
+
+async function getTierCached(
+  apiKey: string,
+  apiUrl: string,
+  state: { cached: CachedTier | null },
+): Promise<"free" | "plus"> {
+  const now = Date.now();
+  if (state.cached && now - state.cached.fetchedAt < TIER_CACHE_TTL_MS) {
+    return state.cached.tier;
+  }
+  try {
+    const r = await fetch(`${apiUrl}/api/billing/status`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!r.ok) {
+      // Network blip or backend issue — return cached value if we have one,
+      // else assume "free" (the more restrictive default, so a free user
+      // isn't accidentally auto-syncing during a backend outage).
+      return state.cached?.tier ?? "free";
+    }
+    const body = (await r.json()) as { tier?: string };
+    const tier = body.tier === "plus" ? "plus" : "free";
+    state.cached = { tier, fetchedAt: now };
+    return tier;
+  } catch {
+    return state.cached?.tier ?? "free";
+  }
+}
+
 export function startHandoffLoop(a: HandoffLoopArgs): () => void {
   const hc_ms = a.healthcheck_ms ?? 10000;
   let stopped = false;
@@ -241,9 +299,25 @@ export function startHandoffLoop(a: HandoffLoopArgs): () => void {
   // restart we want a fresh pre-warm to confirm the cache is current, even
   // though the previous process may have pre-warmed seconds ago.
   const lastPrewarmAt = new Map<string, number>();
+  // Phase 03-05: tier cache for cycle-gating. Free skips the auto-loop;
+  // Plus runs the full cycle.
+  const tierState: { cached: CachedTier | null } = { cached: null };
 
   async function cycle(): Promise<boolean> {
     if (stopped) return true;
+
+    // Phase 03-05: tier-gate. Free users get MANUAL sync via `synapsesync
+    // sync` only — the auto-loop is gated off here. Hook-driven syncs
+    // (SessionEnd, PreCompact) STILL push inline (they don't go through
+    // this loop), so single-device brief continuity works for Free.
+    //
+    // Tests pass `tier_override` to skip the billing fetch (no endpoint
+    // available in test env); production omits it and we fetch + cache.
+    const tier = a.tier_override ?? (await getTierCached(a.api_key, a.api_url, tierState));
+    if (tier === "free") {
+      return true;
+    }
+
     // Re-scan the projects dir each cycle so dirs created after daemon
     // startup become visible without requiring a restart.
     //
