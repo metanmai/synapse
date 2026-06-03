@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { enforceMemberLimitForTier, enforceProjectQuotaForTier } from "../../src/lib/tier";
+import {
+  enforceMemberLimitForTier,
+  enforceProjectQuotaForTier,
+  getConversationCapForTier,
+  getDeviceCapForTier,
+  getInsightCapForTier,
+  isAutoSyncEnabledForTier,
+} from "../../src/lib/tier";
 
 /**
  * Bug class under test: "tier-quota enforcement only works when called
@@ -85,5 +92,40 @@ describe("enforceMemberLimitForTier", () => {
       expect(e.code).toBe("TIER_LIMIT");
       expect(e.status).toBe(403);
     }
+  });
+});
+
+/**
+ * Bug class under test: "per-tier capacity helpers leak through the wrong
+ * tier — Free user gets Plus caps or vice versa". These accessors are the
+ * inputs to slice 03-03 (conversation LRU), 03-04 (insight cap), and 03-05
+ * (device cap). Pinning the contract here prevents silent drift if the
+ * underlying constants are reorganized.
+ *
+ * The assertions are deliberately contract-shaped ("plus > free", "free
+ * is nonzero", "auto-sync gated on plus") rather than magic-number locked
+ * for the two caps that still change in later slices. The two locked
+ * caps (insights, conversations) ship with this slice and can be pinned
+ * to their specific values.
+ */
+describe("per-tier capacity accessors (Phase 03-01)", () => {
+  it("getInsightCapForTier: free=10, plus=50", () => {
+    expect(getInsightCapForTier("free")).toBe(10);
+    expect(getInsightCapForTier("plus")).toBe(50);
+  });
+
+  it("getConversationCapForTier: free=10, plus=50", () => {
+    expect(getConversationCapForTier("free")).toBe(10);
+    expect(getConversationCapForTier("plus")).toBe(50);
+  });
+
+  it("getDeviceCapForTier: free=3, plus>free (specific Plus value changes in slice 03-05)", () => {
+    expect(getDeviceCapForTier("free")).toBe(3);
+    expect(getDeviceCapForTier("plus")).toBeGreaterThan(getDeviceCapForTier("free"));
+  });
+
+  it("isAutoSyncEnabledForTier: free=false, plus=true", () => {
+    expect(isAutoSyncEnabledForTier("free")).toBe(false);
+    expect(isAutoSyncEnabledForTier("plus")).toBe(true);
   });
 });
