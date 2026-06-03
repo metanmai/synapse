@@ -2,9 +2,10 @@ import { Hono } from "hono";
 
 import { authMiddleware } from "../lib/auth";
 import { createSupabaseClient } from "../db/client";
-import { createProject, listProjectsForUser, getProjectByName, getMemberRole, addMember, removeMember, findUserByEmail, setPreference, getPreferences, createShareLink, listShareLinks, deleteShareLink, getActivityLog, getAllEntries, countEntries } from "../db/queries";
+import { createProject, listProjectsForUser, getProjectByName, getMemberRole, addMember, removeMember, countMembers, findUserByEmail, setPreference, getPreferences, createShareLink, listShareLinks, deleteShareLink, getActivityLog, getAllEntries, countEntries } from "../db/queries";
 import { logActivity } from "../db/activity-logger";
 import { AppError, NotFoundError, ForbiddenError } from "../lib/errors";
+import { enforceMemberLimit } from "../lib/tier";
 import { buildProjectZip } from "../lib/export";
 import { parseZipEntries, importEntries } from "../lib/import";
 import { getTierLimits } from "../lib/tier";
@@ -51,6 +52,10 @@ projects.post("/:id/members", async (c) => {
   const db = createSupabaseClient(c.env);
   const callerRole = await getMemberRole(db, projectId, user.id);
   if (callerRole !== "owner") throw new ForbiddenError("Only project owners can invite members");
+
+  // Enforce member limit based on the project owner's tier
+  const memberCount = await countMembers(db, projectId);
+  enforceMemberLimit(memberCount, c);
 
   const invitee = await findUserByEmail(db, email);
   if (!invitee) throw new NotFoundError(`No user found with email ${email}`);

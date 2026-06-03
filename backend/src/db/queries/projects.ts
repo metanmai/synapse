@@ -124,6 +124,19 @@ export async function addMember(
   return data as ProjectMember;
 }
 
+export async function countMembers(
+  db: SupabaseClient,
+  projectId: string
+): Promise<number> {
+  const { count, error } = await db
+    .from("project_members")
+    .select("*", { count: "exact", head: true })
+    .eq("project_id", projectId)
+    .neq("role", "owner"); // don't count the owner
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export async function removeMember(
   db: SupabaseClient,
   projectId: string,
