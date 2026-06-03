@@ -113,6 +113,14 @@ export interface HandoffLoopArgs {
    * `"plus"` → cycle runs the full loop.
    */
   tier_override?: "free" | "plus";
+  /**
+   * Optional override for the pull-handoff pre-warm spawn. Production
+   * omits this and the loop spawns a detached child via `spawnPrewarm`.
+   * Tests inject a no-op so vitest workers don't leak detached children
+   * (which on Windows can cause the worker to be reported as "exited
+   * unexpectedly" during teardown even when all tests pass).
+   */
+  _spawnPrewarmFn?: (projectId: string, apiKey: string, apiUrl: string) => void;
 }
 
 interface FireArgs {
@@ -375,7 +383,7 @@ export function startHandoffLoop(a: HandoffLoopArgs): () => void {
         // "lose everything since the last graceful shutdown."
         if (flush.flushed > 0 && shouldPrewarm(lastPrewarmAt, effectiveId, Date.now(), PREWARM_MIN_INTERVAL_MS)) {
           lastPrewarmAt.set(effectiveId, Date.now());
-          spawnPrewarm(effectiveId, a.api_key, a.api_url);
+          (a._spawnPrewarmFn ?? spawnPrewarm)(effectiveId, a.api_key, a.api_url);
         }
       } catch (err) {
         console.error("[handoff] cycle error", project_id, err);
