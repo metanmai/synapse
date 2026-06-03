@@ -2,10 +2,14 @@
 import ScrollReveal from "./ScrollReveal.svelte";
 
 let copied = $state(false);
-const command = "npm install -g synapsesync && synapsesync wizard && synapsesync capture start";
+// Single-line form for clipboard — pastes as one executable command.
+const clipboardCommand = "npm install -g synapsesync && synapsesync wizard && synapsesync capture start";
+// Multi-line form for display — bash line-continuation lets it wrap cleanly
+// across visual lines without horizontal scroll. Identical behavior when pasted.
+const displayCommand = "npm install -g synapsesync \\\n  && synapsesync wizard \\\n  && synapsesync capture start";
 
 async function copyCommand() {
-  await navigator.clipboard.writeText(command);
+  await navigator.clipboard.writeText(clipboardCommand);
   copied = true;
   setTimeout(() => (copied = false), 2000);
 }
@@ -25,10 +29,10 @@ async function copyCommand() {
     <ScrollReveal delay={100} direction="up">
       <div class="setup-card">
         <div class="code-block">
-          <button class="copy-btn" onclick={copyCommand}>
+          <pre><code>$ {displayCommand}</code></pre>
+          <button class="copy-btn" onclick={copyCommand} aria-label="Copy command">
             {copied ? "Copied!" : "Copy"}
           </button>
-          <pre><code>$ {command}</code></pre>
         </div>
         <p class="card-hint">Works with Claude Code, Cursor, VS Code, Windsurf, and any MCP client.</p>
       </div>
@@ -132,41 +136,40 @@ async function copyCommand() {
   }
 
   .code-block {
-    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
     background: rgba(0, 0, 0, 0.3);
     border-radius: 10px;
     margin-bottom: 0.75rem;
-    overflow: hidden;
+    padding: 1.25rem 1.5rem;
   }
 
   .code-block pre {
     margin: 0;
+    flex: 1;
+    min-width: 0;
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 1rem;
     line-height: 1.6;
     color: var(--color-cream);
-    white-space: pre;
-    overflow-x: auto;
-    padding: 1.25rem 1.5rem;
-    padding-right: 5rem;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   .copy-btn {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    padding: 0.25rem 0.75rem;
+    flex-shrink: 0;
+    padding: 0.5rem 1rem;
     background: rgba(199, 183, 163, 0.3);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border: 1px solid rgba(199, 183, 163, 0.3);
     border-radius: 6px;
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     font-weight: 600;
     color: var(--color-cream);
     cursor: pointer;
     transition: background 0.2s;
-    z-index: 2;
   }
 
   .copy-btn:hover {
@@ -234,6 +237,23 @@ async function copyCommand() {
 
     .setup {
       padding: 4rem 1.5rem;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .code-block {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.75rem;
+      padding: 1rem 1.25rem;
+    }
+
+    .copy-btn {
+      align-self: flex-end;
+    }
+
+    .code-block pre {
+      font-size: 0.875rem;
     }
   }
 </style>
