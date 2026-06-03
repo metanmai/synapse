@@ -75,7 +75,7 @@ export const SYNAPSE_COMMAND_DEFS: Record<string, CommandDef> = {
   },
   "synapse-insights": {
     description: "List or save insights for the current project",
-    body: "List or save insights for the current project.\n\nUsage: $ARGUMENTS can be empty (list all), a type filter (e.g. \"decisions\"), or a new insight to save.\n\n1. Determine the current project name from the repo/codebase\n2. If $ARGUMENTS is empty or a type name (decision/learning/preference/architecture/action_item), use the Synapse MCP `list_insights` tool to show existing insights, optionally filtered by type\n3. If $ARGUMENTS describes something to save, use the Synapse MCP `save_insight` tool with the appropriate type, a concise summary, and optional detail\n4. Display results clearly — for listings show type badges, summaries, and dates",
+    body: 'List or save insights for the current project.\n\nUsage: $ARGUMENTS can be empty (list all), a type filter (e.g. "decisions"), or a new insight to save.\n\n1. Determine the current project name from the repo/codebase\n2. If $ARGUMENTS is empty or a type name (decision/learning/preference/architecture/action_item), use the Synapse MCP `list_insights` tool to show existing insights, optionally filtered by type\n3. If $ARGUMENTS describes something to save, use the Synapse MCP `save_insight` tool with the appropriate type, a concise summary, and optional detail\n4. Display results clearly — for listings show type badges, summaries, and dates',
   },
   "synapse-conversations": {
     description: "List synced conversations in the current project",

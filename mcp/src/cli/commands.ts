@@ -152,23 +152,25 @@ export async function runStatus(): Promise<void> {
 
   // Show per-location status
   const LW = 24;
-  const statusLines = existing.locations.map((loc) => {
-    const label = loc.label.padEnd(42);
-    if (loc.status === "instructions_only") {
-      return `  ${muted("\u25CB")} ${muted(label)} ${muted("instructions only")}`;
-    }
-    if (loc.status === "no_key") {
-      return `  ${themeError("\u2717")} ${muted(label)} ${themeError("missing API key")}`;
-    }
-    const isValid = loc.apiKey ? keyResults.get(loc.apiKey) : undefined;
-    if (isValid === true) {
-      return `  ${success("\u2713")} ${muted(label)} ${success("connected")}`;
-    }
-    if (isValid === false) {
-      return `  ${themeError("\u2717")} ${muted(label)} ${themeError("invalid key")}`;
-    }
-    return `  ${muted("?")} ${muted(label)} ${muted("unchecked")}`;
-  }).join("\n");
+  const statusLines = existing.locations
+    .map((loc) => {
+      const label = loc.label.padEnd(42);
+      if (loc.status === "instructions_only") {
+        return `  ${muted("\u25CB")} ${muted(label)} ${muted("instructions only")}`;
+      }
+      if (loc.status === "no_key") {
+        return `  ${themeError("\u2717")} ${muted(label)} ${themeError("missing API key")}`;
+      }
+      const isValid = loc.apiKey ? keyResults.get(loc.apiKey) : undefined;
+      if (isValid === true) {
+        return `  ${success("\u2713")} ${muted(label)} ${success("connected")}`;
+      }
+      if (isValid === false) {
+        return `  ${themeError("\u2717")} ${muted(label)} ${themeError("invalid key")}`;
+      }
+      return `  ${muted("?")} ${muted(label)} ${muted("unchecked")}`;
+    })
+    .join("\n");
 
   clack.log.message(`${bold("Configured in")}\n${statusLines}`);
 
