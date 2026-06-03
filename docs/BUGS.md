@@ -39,6 +39,10 @@ Phase 2 added a `migrate` job to `.github/workflows/ci.yml` that runs `supabase 
 
 ### Creem webhook silently drops renewal events — `subscriptions` rows go stale after initial signup
 
+**Defensive patch shipped 2026-05-30 in commit `57d475a`** — switch was extracted into a pure `dispatchCreemWebhookEvent` function with a `default:` branch that logs `unhandled Creem webhook event_type` to `wrangler tail` with event_type + sub_id + customer_id breadcrumbs. The **proper fix** (add a case for the actual renewal event_type Creem fires) still needs the Creem dashboard data described below.
+
+The defensive patch alone makes the silent drop diagnostic-able; the next missed renewal event will now show up immediately in the worker logs instead of returning a silent 200.
+
 Every active `provider='creem'` row in production has `updated_at == created_at`, meaning the row has never been touched since the original `checkout.completed` webhook landed. Confirmed via SQL on 2026-05-23:
 
 | user_id | sub_id | status | created_at | current_period_end | updated_at |
@@ -82,20 +86,6 @@ The churned row (`bd5be0f2`) updated once — almost certainly on the `subscript
 ---
 
 ## P2 — Per-device CLI keys (a8ecf98 scope completion)
-
-### 5. 409 `DEVICE_LIMIT_REACHED` has no UI in frontend
-
-Free-tier users at the 3-device limit get a generic 500 from the wizard's "Continue as…" button, with no path to revoke an old device.
-
-**Backend:** returns 409 with JSON body containing the device list (id, name, last_used_at, created_at) — fully implemented at `backend/src/api/auth.ts:277-293`. Endpoint that wraps the picker action: `POST /auth/cli-revoke-and-session` (also implemented, untested in production since Plus tier doesn't trigger the picker).
-
-**Frontend gap:** `frontend/src/routes/cli-auth/+page.server.ts` `continueAs` action treats any non-OK as `fail(500, "Failed to create CLI session")`. Needs to branch on 409, parse the device list, set form state to render a picker.
-
-**Picker UI:** new code in `cli-auth/+page.svelte` — list devices with radio buttons, show last_used relative time, on submit call a new `revokeAndContinue` action that POSTs to `/auth/cli-revoke-and-session`.
-
-### 6. Dashboard rename UI for `cli-*` keys not built
-
-Account page lists keys but doesn't let users rename them. Backend endpoint exists: `PATCH /api/account/keys/:id` at `backend/src/api/auth.ts:508` (strips `cli-` prefix for display, re-adds on save). Frontend account page needs inline-edit on key labels for keys whose label starts with `cli-`.
 
 ### 7. Legacy `cli`-labeled keys never get migrated to `cli-<device>` shape
 
@@ -162,6 +152,8 @@ Fixed in the 2026-05-18 session:
 
 Fixed in the 2026-05-30 session (post-Windows-readiness backlog sweep):
 
+- **#5 409 `DEVICE_LIMIT_REACHED` has no UI in frontend** — added `POST /auth/cli-revoke-and-session` backend endpoint + `revokeAndContinue` frontend action + picker UI in `cli-auth/+page.svelte`. Free-tier users hitting the 3-device cap now see a list of their devices (with last-used relative time) and can revoke one to make room for the new sign-in. Commit `89e2a69`.
+- **#6 Dashboard rename UI for `cli-*` keys not built** — Added `PATCH /api/account/keys/:id` backend endpoint with pure `computeRenamedLabel` helper that preserves the `cli-` prefix invariant, plus inline-edit UI in `ApiKeysCard.svelte` (Rename button next to Revoke). Works for ALL keys, not just cli-prefixed ones. Commit `76aa43f`.
 - **#13 Frontend svelte-check warnings (4 a11y + 8 unused-CSS)** — unused-CSS already cleared in an earlier commit; the 4 a11y warnings (AppShell switcher-wrapper div, two `autofocus` inputs) fixed with role="presentation" + svelte-ignore directives that document the intent inline. svelte-check now reports 0 warnings.
 
 Fixed in the 2026-05-19 to 2026-05-20 sessions (Phase 1, slice 1a-prime + 1b):
