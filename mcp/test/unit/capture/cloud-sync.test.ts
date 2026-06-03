@@ -22,11 +22,15 @@ function makeSession(overrides?: Partial<CapturedSession>): CapturedSession {
 
 describe("CloudSyncer", () => {
   const originalEnv = process.env.SYNAPSE_API_KEY;
+  const originalSynapseHome = process.env.SYNAPSE_HOME;
   let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cloud-sync-test-"));
     process.env.SYNAPSE_API_KEY = undefined;
+    // Redirect ~/.synapse to tmpDir so sync-state persistence doesn't touch
+    // the developer's real home directory during tests.
+    process.env.SYNAPSE_HOME = tmpDir;
     vi.restoreAllMocks();
   });
 
@@ -35,6 +39,11 @@ describe("CloudSyncer", () => {
       process.env.SYNAPSE_API_KEY = originalEnv;
     } else {
       process.env.SYNAPSE_API_KEY = undefined;
+    }
+    if (originalSynapseHome) {
+      process.env.SYNAPSE_HOME = originalSynapseHome;
+    } else {
+      process.env.SYNAPSE_HOME = undefined;
     }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -416,6 +425,98 @@ describe("CloudSyncer", () => {
       expect(ok).toBe(true);
       expect(adapter.compact).toHaveBeenCalledTimes(1);
       expect(logs.some((l) => l.includes("compaction failed"))).toBe(true);
+    });
+
+    // Regression guard: bug class "daemon restart creates duplicate
+    // conversations." Before persistence, every CloudSyncer instance started
+    // with an empty syncStates Map; the next sync of an existing local
+    // session would re-hit POST /api/conversations and create a fresh row on
+    // the backend. The persisted sync-state.json file is what keeps the
+    // cloudConversationId mapping alive across restarts.
+    describe("syncStates persistence (restart-duplication guard)", () => {
+      it("does NOT recreate the conversation when a new CloudSyncer restarts and re-syncs", async () => {
+        // First instance: full first-sync sequence (GET projects, POST conv, POST messages).
+        fetchSpy
+          .mockResolvedValueOnce(
+            new Response(JSON.stringify([{ id: "proj_1", name: "P" }]), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }),
+          )
+          .mockResolvedValueOnce(
+            new Response(JSON.stringify({ id: "conv_persist_1" }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }),
+          )
+          .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+          // Second instance: only GET projects + POST messages (NO conv create).
+          .mockResolvedValueOnce(
+            new Response(JSON.stringify([{ id: "proj_1", name: "P" }]), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }),
+          )
+          .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+        const session = makeSession();
+        const first = new CloudSyncer();
+        await first.sync(session);
+
+        // Simulate daemon restart by constructing a fresh instance. With
+        // persistence, it must read sync-state.json and recognize the session.
+        const second = new CloudSyncer();
+        const updated = makeSession({
+          messages: [
+            ...session.messages,
+            { role: "user", content: "After restart", timestamp: "2026-03-31T10:02:00Z" },
+          ],
+        });
+        await second.sync(updated);
+
+        // 5 fetches total, NOT 6. A 6th call would mean second instance
+        // POSTed to /api/conversations again — the regression we're guarding.
+        expect(fetchSpy).toHaveBeenCalledTimes(5);
+        const allUrls = fetchSpy.mock.calls.map((c) => String(c[0]));
+        const conversationPosts = allUrls.filter(
+          (u) => u.endsWith("/api/conversations") && !u.includes("/api/conversations/"),
+        );
+        expect(conversationPosts).toHaveLength(1);
+
+        // Verify the second instance's append went to the SAME cloud id.
+        const lastBody = JSON.parse(fetchSpy.mock.calls[4][1]?.body as string);
+        expect(lastBody.messages).toHaveLength(1);
+        expect(lastBody.messages[0].content).toBe("After restart");
+        expect(String(fetchSpy.mock.calls[4][0])).toContain("/api/conversations/conv_persist_1/messages");
+      });
+
+      it("starts fresh and does not crash when sync-state.json is corrupt", async () => {
+        // Land garbage at the file the next CloudSyncer is about to read.
+        fs.writeFileSync(path.join(tmpDir, "sync-state.json"), "{not valid json");
+
+        fetchSpy
+          .mockResolvedValueOnce(
+            new Response(JSON.stringify([{ id: "proj_1", name: "P" }]), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }),
+          )
+          .mockResolvedValueOnce(
+            new Response(JSON.stringify({ id: "conv_after_corrupt" }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }),
+          )
+          .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+        const logs: string[] = [];
+        const syncer = new CloudSyncer((m) => logs.push(m));
+        const ok = await syncer.sync(makeSession());
+
+        expect(ok).toBe(true);
+        // A warning should have been logged about the corrupt file.
+        expect(logs.some((l) => l.toLowerCase().includes("sync-state.json"))).toBe(true);
+      });
     });
 
     it("maps tool calls to tool_interaction", async () => {
