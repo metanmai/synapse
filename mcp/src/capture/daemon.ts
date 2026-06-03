@@ -152,17 +152,20 @@ export function startHandoffLoop(a: HandoffLoopArgs): () => void {
   async function cycle(): Promise<boolean> {
     if (stopped) return true;
     // Re-scan the projects dir each cycle so dirs created after daemon
-    // startup become visible without requiring a restart. Additive only —
-    // we never remove entries from a.projects here, because the cycle's
-    // canonical-id rename pattern (a.projects[i] = canonicalId) relies on
-    // mutating the slot in place. Removing from disk + re-scanning would
-    // wipe that progress.
+    // startup become visible without requiring a restart.
+    //
+    // (1) Drop stale entries whose dir has been deleted (e.g. after a
+    //     canonical-id remap deleted the cwd_<hash> pseudo-dir). Without
+    //     this prune step, every subsequent cycle threw
+    //       ENOENT: ... cwd_<hash>/.watermark
+    //     and the daemon log filled up with per-cycle error spam. The
+    //     canonical-rename bookkeeping (a.projects[i] = canonicalId) is
+    //     preserved because the canonical dir IS still present on disk
+    //     and the additive scan below re-adds it as a fresh entry — so
+    //     this prune doesn't lose any work.
+    // (2) Additive scan: pick up any new dirs created since last cycle.
     if (a.projects_dir && fs.existsSync(a.projects_dir)) {
-      const known = new Set(a.projects);
-      for (const name of fs.readdirSync(a.projects_dir)) {
-        if (name.startsWith(".")) continue;
-        if (!known.has(name)) a.projects.push(name);
-      }
+      reconcileProjects(a.projects, a.projects_dir);
     }
     let ok = true;
     for (let i = 0; i < a.projects.length; i++) {
@@ -221,4 +224,51 @@ export function startHandoffLoop(a: HandoffLoopArgs): () => void {
     if (nextTimer) clearTimeout(nextTimer);
     clearInterval(hcTimer);
   };
+}
+
+/**
+ * Reconcile the in-memory `projects` array against the on-disk projects
+ * dir. Mutates `projects` in place — pure function aside from that
+ * (the dir read is what makes it not 100% pure; tests pass a tmpdir).
+ *
+ * Two operations, in this order:
+ *   1. Prune: drop entries whose dir no longer exists. This is what
+ *      happens after a canonical-id remap deletes the cwd_<hash>
+ *      pseudo-dir — without the prune step, every subsequent cycle
+ *      threw `ENOENT: ... cwd_<hash>/.watermark` and the daemon log
+ *      filled with per-cycle error spam.
+ *   2. Additive: pick up any on-disk dirs that aren't tracked yet.
+ *      Used so projects created after daemon startup (e.g. a fresh
+ *      `cd` into a new repo + first SessionStart hook) become visible
+ *      without restarting the daemon.
+ *
+ * Exported so it can be unit-tested without spinning up the full
+ * handoff loop.
+ */
+export function reconcileProjects(projects: string[], projectsDir: string): void {
+  const onDisk = new Set<string>();
+  for (const name of fs.readdirSync(projectsDir)) {
+    if (name.startsWith(".")) continue;
+    try {
+      if (fs.statSync(path.join(projectsDir, name)).isDirectory()) {
+        onDisk.add(name);
+      }
+    } catch {
+      // Race with another process deleting the dir between readdir
+      // and stat — treat as gone.
+    }
+  }
+
+  // Prune: keep only entries whose dir still exists.
+  for (let i = projects.length - 1; i >= 0; i--) {
+    if (!onDisk.has(projects[i])) {
+      projects.splice(i, 1);
+    }
+  }
+
+  // Additive: add any on-disk dirs that aren't tracked yet.
+  const known = new Set(projects);
+  for (const name of onDisk) {
+    if (!known.has(name)) projects.push(name);
+  }
 }
