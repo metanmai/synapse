@@ -10,6 +10,7 @@ export default defineConfig({
       "test/e2e/**/*.test.ts",
       "test/capture/**/*.test.ts",
       "test/hooks/**/*.test.ts",
+      "test/cli/**/*.test.ts",
     ],
     testTimeout: 30000,
   },
