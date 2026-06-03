@@ -1,5 +1,6 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
+import Markdown from "$lib/components/Markdown.svelte";
 import {
   formatMessageTime,
   getToolBadge,
@@ -375,7 +376,9 @@ function handleActionResult(label: string) {
                   </div>
 
                   {#if msg.content}
-                    <pre class="chat-content">{msg.content}</pre>
+                    <div class="chat-content">
+                      <Markdown text={msg.content} />
+                    </div>
                   {/if}
 
                   {#if msg.tool_interaction}
@@ -789,13 +792,9 @@ function handleActionResult(label: string) {
     font-size: 0.875rem;
     line-height: 1.65;
     color: var(--color-text);
-    white-space: pre-wrap;
     word-wrap: break-word;
-    font-family: inherit;
+    overflow-wrap: anywhere;
     margin: 0;
-    background: none;
-    border: none;
-    padding: 0;
   }
 
   /* ---------- Tool card ---------- */
