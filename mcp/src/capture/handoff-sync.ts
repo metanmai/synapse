@@ -1,7 +1,47 @@
 import fs from "node:fs";
 import path from "node:path";
 import { readEvents } from "./events-log.js";
-import { projectDir } from "./handoff-paths.js";
+import { projectDir, synapseRoot } from "./handoff-paths.js";
+
+interface SyncErrorEntry {
+  code: string;
+  at: string;
+  detail?: string;
+}
+
+const MAX_CACHED_ERRORS = 10;
+
+/**
+ * Persist a structured sync error to ~/.synapse/sync-errors.json so the
+ * SessionStart brief can render a `## Sync error` section on the next
+ * session. FIFO-pruned at MAX_CACHED_ERRORS to bound growth.
+ *
+ * Wrapped in try/catch — a filesystem error here MUST NOT kill the daemon
+ * cycle. The error message is already logged before this is called; the
+ * cache is a "nice to have" for brief surfacing.
+ */
+function cacheSyncError(entry: Omit<SyncErrorEntry, "at">): void {
+  try {
+    const file = path.join(synapseRoot(), "sync-errors.json");
+    let data: { errors: SyncErrorEntry[] } = { errors: [] };
+    if (fs.existsSync(file)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(file, "utf-8")) as { errors?: SyncErrorEntry[] };
+        data = { errors: raw.errors ?? [] };
+      } catch {
+        // Corrupted file — overwrite with fresh
+      }
+    }
+    data.errors.push({ ...entry, at: new Date().toISOString() });
+    if (data.errors.length > MAX_CACHED_ERRORS) {
+      data.errors = data.errors.slice(-MAX_CACHED_ERRORS);
+    }
+    fs.mkdirSync(synapseRoot(), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  } catch (err) {
+    console.error(`[sync] cacheSyncError failed (non-fatal): ${err instanceof Error ? err.message : err}`);
+  }
+}
 
 export interface FlushArgs {
   project_id: string;
@@ -51,7 +91,29 @@ export async function runFlushCycle(a: FlushArgs): Promise<FlushResult> {
     headers: { Authorization: `Bearer ${a.api_key}`, "content-type": "application/json" },
     body: JSON.stringify({ events: flushable }),
   });
-  if (!res.ok) throw new Error(`batch failed: ${res.status}`);
+  if (!res.ok) {
+    // Phase 03-02: surface PROJECT_QUOTA_EXCEEDED specially so the brief can
+    // render a `## Sync error` section on the next SessionStart. Other failures
+    // remain throws (transient — retried on next cycle).
+    if (res.status === 402) {
+      try {
+        const body = (await res.clone().json()) as { code?: string; error?: string };
+        if (body.code === "PROJECT_QUOTA_EXCEEDED") {
+          console.error(
+            `[sync] events/batch rejected: 50/50 project limit reached. Delete a project in the dashboard to continue capturing new repos.`,
+          );
+          cacheSyncError({ code: "PROJECT_QUOTA_EXCEEDED", detail: body.error });
+          // Do NOT advance the watermark — events stay queued for retry after
+          // the user frees a slot. Return zero-flushed so the daemon cycle
+          // continues with other projects.
+          return { flushed: 0 };
+        }
+      } catch {
+        // Body wasn't JSON — fall through to throw
+      }
+    }
+    throw new Error(`batch failed: ${res.status}`);
+  }
 
   let canonicalId: string | undefined;
   try {
