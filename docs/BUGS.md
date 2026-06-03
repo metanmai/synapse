@@ -124,14 +124,6 @@ Migration `015_handoff_layer.sql` created `handoff_sessions` and `handoff_issues
 
 ---
 
-### 11. `recomputeProjectStatus` reads all events per batch
-
-`backend/src/lib/handoff-reducer.ts:6-19` — on every `/api/events/batch` POST, for every distinct `project_id` in the batch, the full event history is fetched and reduced. O(events_per_project) cost per flush cycle (every 10 seconds via the daemon).
-
-**Fix sketch:** Maintain `ProjectStatus` incrementally — apply only the new events to the existing materialized status. The reducer is structured as a left fold, so this is feasible.
-
----
-
 ## Closed
 
 Fixed in the 2026-05-18 session:
@@ -143,6 +135,8 @@ Fixed in the 2026-05-18 session:
 - **Service file pointed at `dist/cli/commands.js`** (a helper module with no main) **instead of `dist/index.js`** (the dispatcher entry) — fixed in `025a814`
 
 Fixed in the 2026-05-30 session (post-Windows-readiness backlog sweep):
+
+- **#11 `recomputeProjectStatus` reads all events per batch** — refactored to an incremental fast path. Added `applyEvents(currentStatus, newEvents, opts) → ProjectStatus | null` in `packages/shared/src/handoff/reducer.ts` (returns `null` on out-of-order arrival or `IssueStateChanged` on a non-open issue not also created in same batch — signals caller to fall back to full reduce). Extended `ProjectStatus` with optional `_meta.last_full_recompute_at` JSONB bookkeeping (no schema migration needed). Backend wrapper (`backend/src/lib/handoff-reducer.ts`) tries the incremental path when the last full recompute was within 5 min and a watermark exists; otherwise re-folds from DB truth. Caller signature unchanged. Property-style equivalence test pins the bug class — `reduce(allEvents)` deep-equals `applyEvents(reduce(events[0..K]), events[K..])` across every split point. Commit `<pending>`.
 
 - **#5 409 `DEVICE_LIMIT_REACHED` has no UI in frontend** — added `POST /auth/cli-revoke-and-session` backend endpoint + `revokeAndContinue` frontend action + picker UI in `cli-auth/+page.svelte`. Free-tier users hitting the 3-device cap now see a list of their devices (with last-used relative time) and can revoke one to make room for the new sign-in. Commit `89e2a69`.
 - **#6 Dashboard rename UI for `cli-*` keys not built** — Added `PATCH /api/account/keys/:id` backend endpoint with pure `computeRenamedLabel` helper that preserves the `cli-` prefix invariant, plus inline-edit UI in `ApiKeysCard.svelte` (Rename button next to Revoke). Works for ALL keys, not just cli-prefixed ones. Commit `76aa43f`.
