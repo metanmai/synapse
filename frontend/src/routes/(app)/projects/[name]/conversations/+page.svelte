@@ -3,7 +3,12 @@ import { formatRelativeDate } from "$lib/components/conversations/conversation-h
 
 let { data } = $props();
 
-const encodedProject = $derived(encodeURIComponent(data.project.name));
+// Shared projects use `<owner_email>~<name>` as the URL slug; bare name only
+// works for owner-role projects. See +layout.svelte for the same derivation.
+const projectSlug = $derived(
+  data.project.role === "owner" ? data.project.name : `${data.project.owner_email}~${data.project.name}`,
+);
+const encodedProject = $derived(encodeURIComponent(projectSlug));
 
 function pageUrl(page: number): string {
   const params = new URLSearchParams();

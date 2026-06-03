@@ -276,8 +276,13 @@ onMount(() => {
       display: none;
     }
 
+    /* Keep the CTA visible on mobile — the Hero CTA is below the fold for
+       most phones, so the nav CTA is the only signup button on first paint
+       until the user scrolls. Compressed padding/font keeps it next to the
+       hamburger without crowding. */
     .nav-actions .nav-cta {
-      display: none;
+      padding: 0.5rem 0.9rem;
+      font-size: 0.85rem;
     }
 
     .nav-hamburger {

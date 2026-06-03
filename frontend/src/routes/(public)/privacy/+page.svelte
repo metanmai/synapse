@@ -54,9 +54,9 @@
 
     <h2>Your Rights</h2>
     <ul>
-      <li><strong>Export</strong> — You can export your entire workspace as a ZIP file at any time.</li>
-      <li><strong>Delete</strong> — You can delete individual files, or delete your entire account from the account settings page. Account deletion is permanent and irreversible.</li>
-      <li><strong>Access</strong> — All your data is visible to you in the application.</li>
+      <li><strong>Access</strong> — All your data is visible to you in the application and via the MCP server / REST API.</li>
+      <li><strong>Delete</strong> — You can delete individual conversations, insights, or your entire account from the account settings page. Account deletion is permanent and irreversible.</li>
+      <li><strong>Portability</strong> — Contact us to request a copy of your data.</li>
     </ul>
 
     <h2>Security</h2>

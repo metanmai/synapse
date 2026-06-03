@@ -1,11 +1,12 @@
 import { getSupabase } from "$lib/server/auth";
+import { safeRedirectTarget } from "$lib/server/safe-redirect";
 import { redirect } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = async ({ url, cookies }) => {
   const code = url.searchParams.get("code");
   const type = url.searchParams.get("type");
-  const redirectTo = url.searchParams.get("redirect") || "/dashboard";
+  const redirectTo = safeRedirectTarget(url.searchParams.get("redirect"));
 
   if (!code) redirect(303, "/login?error=missing_code");
 

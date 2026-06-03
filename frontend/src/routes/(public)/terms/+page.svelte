@@ -24,8 +24,8 @@
 
     <h2>Subscriptions & Billing</h2>
     <ul>
-      <li><strong>Free plan</strong> — Up to 50 files, 3 connections, 2 project members. No payment required.</li>
-      <li><strong>Plus plan</strong> — Expanded limits and additional features including conversation sync. Billed monthly via Creem.</li>
+      <li><strong>Free plan</strong> — Up to 5 projects with all capture features. No payment required.</li>
+      <li><strong>Plus plan</strong> — Up to 50 projects, unlimited team members per project, priority support. Billed monthly via Creem.</li>
       <li>You can cancel your subscription at any time from the account settings page. Access continues until the end of the current billing period.</li>
       <li>Refunds are handled on a case-by-case basis. Contact us if you believe you were charged in error.</li>
     </ul>
@@ -35,7 +35,7 @@
       <li>You own everything you store in Synapse. We do not claim any rights to your content.</li>
       <li>You grant us the limited right to store, process, and transmit your content solely to provide the Service.</li>
       <li>If you enable end-to-end encryption, your content is encrypted before reaching our servers and we cannot access it.</li>
-      <li>You can export or delete your content at any time.</li>
+      <li>You can delete your content at any time from the account settings page.</li>
     </ul>
 
     <h2>Acceptable Use</h2>

@@ -30,7 +30,7 @@ const faqs: FaqItem[] = [
   {
     question: "What does it cost?",
     answer:
-      "Free tier: 50 files, 3 connected devices. Capture and local storage are free with no limits. Plus at $5.99/mo for cloud sync, team sharing, and more projects. You provide your own LLM API key for distillation.",
+      "Free tier: up to 5 projects with all capture features, MCP access, and team sharing. Plus at $5.99/mo for up to 50 projects and unlimited team members per project. You provide your own LLM API key for distillation.",
   },
 ];
 

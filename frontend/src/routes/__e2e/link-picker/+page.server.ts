@@ -1,5 +1,15 @@
-import { fail, redirect } from "@sveltejs/kit";
+import { dev } from "$app/environment";
+import { error, fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
+
+// This route is a Playwright test fixture — it exposes mocked scenarios and
+// arbitrary fail() responses. NEVER expose in production: search engines
+// will index a non-product URL and visitors will hit fake error messages
+// styled like real ones. The dev() check fails fast at the load + action
+// boundaries so even a crafted POST gets a 404, not a fixture response.
+function assertDevOnly(): void {
+  if (!dev) throw error(404);
+}
 
 // Phase 2 Plan 02-06: Playwright fixture route — mounts LinkPicker with
 // scenario-driven mock props, parameterized by URL search params.
@@ -86,6 +96,7 @@ function scenarioFor(name: string | null): Scenario {
 }
 
 export const load: PageServerLoad = ({ url }) => {
+  assertDevOnly();
   const scenario = scenarioFor(url.searchParams.get("scenario"));
   return scenario;
 };
@@ -108,6 +119,7 @@ function readNextFromReferer(referer: string | null): string {
 
 export const actions: Actions = {
   linkProject: async ({ request }) => {
+    assertDevOnly();
     const next = readNextFromReferer(request.headers.get("referer"));
     const data = await request.formData();
     const sourceProjectId = data.get("sourceProjectId") as string;
