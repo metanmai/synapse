@@ -1,6 +1,6 @@
 {
   "name": "synapsesync-mcp",
-  "version": "0.7.4",
+  "version": "0.8.0",
   "description": "MCP server for Synapse — capture AI sessions, distill knowledge, remember everything",
   "main": "dist/index.js",
   "bin": {
