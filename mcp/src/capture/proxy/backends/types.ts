@@ -27,11 +27,18 @@ export type SudoRunner = (args: string[]) => CommandResult;
 
 export interface BackendOptions {
   home?: string;
+  /** macOS — `security` CLI (login keychain ops). */
   runSecurity?: CommandRunner;
+  /** All platforms — `openssl` (fingerprint computation; will retire when tls.ts ports to node-forge). */
   runOpenssl?: CommandRunner;
+  /** Linux — `sudo` with stdio:"inherit" by default so password prompts reach the user's TTY. */
   runSudo?: SudoRunner;
+  /** Linux — `cp`, `test`, etc. piped subprocesses so tests can intercept. */
   runCp?: CommandRunner;
+  /** Linux — reads /etc/os-release. Null when file is absent (Linux runtime on macOS or unsupported distros). */
   readOsRelease?: () => string | null;
+  /** Windows — `certutil` CLI (CurrentUser Root store ops). Builtin since Windows Vista. */
+  runCertutil?: CommandRunner;
   proxyPort?: number;
 }
 

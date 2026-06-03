@@ -4,9 +4,9 @@
  * Cross-platform proxy CA onboarding (spec §3.1). Adding a new platform
  * means writing a new backend file and adding one switch branch here.
  *
- * Slice A: mac (real), linux (stub → Task 2 real), everything else →
- * UnknownBackend that soft-skips with a `skippedReason` mentioning the
- * platform (and "Slice B" for win32 specifically).
+ * Current backends: mac (real), linux (real), windows (real). Anything
+ * else (freebsd, aix, sunos, etc.) falls through to UnknownBackend that
+ * soft-skips with a clear `skippedReason`.
  */
 
 import { LinuxBackend } from "./linux.js";
@@ -19,6 +19,7 @@ import {
   type UninstallResult,
   buildSharedEnvSnippet,
 } from "./types.js";
+import { WindowsBackend } from "./windows.js";
 
 export function detectBackend(platform: NodeJS.Platform): PlatformBackend {
   switch (platform) {
@@ -26,14 +27,14 @@ export function detectBackend(platform: NodeJS.Platform): PlatformBackend {
       return MacBackend;
     case "linux":
       return LinuxBackend;
+    case "win32":
+      return WindowsBackend;
     default:
       return makeUnknownBackend(platform);
   }
 }
 
 function makeUnknownBackend(platform: NodeJS.Platform): PlatformBackend {
-  const sliceBNote = platform === "win32" ? "; Windows arrives in Slice B" : "";
-
   return {
     name: "unknown",
 
@@ -46,14 +47,14 @@ function makeUnknownBackend(platform: NodeJS.Platform): PlatformBackend {
         envSnippet: buildSharedEnvSnippet(caPath, proxyPort),
         manualInstallInstructions: this.buildManualInstructions(caPath, proxyPort),
         proxyPort,
-        skippedReason: `keychain install skipped on platform=${platform}${sliceBNote}; follow manual instructions to install in your OS trust store`,
+        skippedReason: `keychain install skipped on platform=${platform}; follow manual instructions to install in your OS trust store`,
       };
     },
 
     uninstallCa(_caPath, _opts): UninstallResult {
       return {
         removed: false,
-        skippedReason: `keychain uninstall skipped on platform=${platform}${sliceBNote}`,
+        skippedReason: `keychain uninstall skipped on platform=${platform}`,
       };
     },
 
@@ -67,7 +68,7 @@ function makeUnknownBackend(platform: NodeJS.Platform): PlatformBackend {
 
     buildManualInstructions(caPath, proxyPort) {
       return [
-        `Native install for platform=${platform} is not yet implemented${sliceBNote}.`,
+        `Native install for platform=${platform} is not yet implemented.`,
         "Consult your OS's documentation for adding a trusted root certificate.",
         "",
         "Then add to your shell rc:",

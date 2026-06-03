@@ -117,11 +117,12 @@ describe("dispatcher routing", () => {
     expect(sudo.calls.length).toBeGreaterThan(0);
   });
 
-  it("platform=win32 invokes UnknownBackend — no runners called, soft-skip with 'Slice B' note", () => {
+  it("platform=win32 invokes WindowsBackend (runCertutil called, no posix runners touched)", () => {
     const sec = makeRunner([okExit]);
     const osl = makeRunner([okFingerprint]);
     const sudo = makeRunner([okExit]);
     const cp = makeRunner([okExit]);
+    const certutil = makeRunner([okExit, okExit]); // addstore + verify
 
     const r = installCa({
       tlsManager,
@@ -131,15 +132,47 @@ describe("dispatcher routing", () => {
       runOpenssl: osl.runner,
       runSudo: sudo.runner,
       runCp: cp.runner,
+      runCertutil: certutil.runner,
+      readOsRelease: () => null,
+    });
+
+    // Windows backend uses certutil exclusively for the trust-store path.
+    expect(certutil.calls.length).toBeGreaterThan(0);
+    expect(certutil.calls[0][0]).toBe("-addstore");
+    // POSIX runners must not be touched on win32.
+    expect(sec.calls).toHaveLength(0);
+    expect(sudo.calls).toHaveLength(0);
+    expect(cp.calls).toHaveLength(0);
+    // Real install path returns installed=true on certutil success — no soft-skip.
+    expect(r.installedInKeychain).toBe(true);
+    expect(r.skippedReason).toBeUndefined();
+  });
+
+  it("platform=freebsd (truly unknown) routes to UnknownBackend — no runners called, soft-skip", () => {
+    const sec = makeRunner([okExit]);
+    const osl = makeRunner([okFingerprint]);
+    const sudo = makeRunner([okExit]);
+    const cp = makeRunner([okExit]);
+    const certutil = makeRunner([okExit]);
+
+    const r = installCa({
+      tlsManager,
+      platform: "freebsd",
+      home: fakeHome,
+      runSecurity: sec.runner,
+      runOpenssl: osl.runner,
+      runSudo: sudo.runner,
+      runCp: cp.runner,
+      runCertutil: certutil.runner,
       readOsRelease: () => null,
     });
 
     expect(sec.calls).toHaveLength(0);
     expect(sudo.calls).toHaveLength(0);
     expect(cp.calls).toHaveLength(0);
+    expect(certutil.calls).toHaveLength(0);
     expect(r.installedInKeychain).toBe(false);
-    expect(r.skippedReason).toContain("platform=win32");
-    expect(r.skippedReason).toContain("Slice B");
+    expect(r.skippedReason).toContain("platform=freebsd");
   });
 
   it("platform=linux + unknown distro (readOsRelease returns null): no runners called, soft-skip", () => {
@@ -221,18 +254,18 @@ describe("legacy skipReason bridge", () => {
     expect(r.skippedReason).toContain("unsupported distro");
   });
 
-  it("non-darwin: passes through unchanged if backend reason already contains 'platform=X'", () => {
-    // UnknownBackend (win32) already produces "...platform=win32; Windows arrives in Slice B"
+  it("non-darwin: passes through unchanged if backend reason already contains 'platform=X' (e.g. UnknownBackend on freebsd)", () => {
+    // UnknownBackend produces "...platform=freebsd; follow manual instructions..."
     const r = installCa({
       tlsManager,
-      platform: "win32",
+      platform: "freebsd",
       home: fakeHome,
       runSecurity: makeRunner([okExit]).runner,
       runOpenssl: makeRunner([okFingerprint]).runner,
       readOsRelease: () => null,
     });
-    // No double-prefix: "keychain install skipped on platform=win32; keychain install skipped on platform=win32; ..."
-    const occurrences = (r.skippedReason ?? "").split("platform=win32").length - 1;
+    // No double-prefix: "keychain install skipped on platform=freebsd; keychain install skipped on platform=freebsd; ..."
+    const occurrences = (r.skippedReason ?? "").split("platform=freebsd").length - 1;
     expect(occurrences).toBe(1);
   });
 
