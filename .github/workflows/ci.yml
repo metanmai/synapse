@@ -135,24 +135,36 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Check secrets are set
-        run: |
-          if [ -z "$TEST_SUPABASE_URL" ]; then echo "::error::TEST_SUPABASE_URL is not set"; exit 1; fi
-          if [ -z "$TEST_SUPABASE_SERVICE_KEY" ]; then echo "::error::TEST_SUPABASE_SERVICE_KEY is not set"; exit 1; fi
-          echo "Secrets are configured"
+      - name: Check secrets are configured
+        # Mirrors the `migrate` job's graceful-skip pattern. The TEST_SUPABASE_*
+        # secrets live on metanmai/synapse (where the bot mirrors and the
+        # canonical CI run lives). When this workflow fires on tanmain/synapse
+        # (the push target with no secrets), e2e gracefully skips so the job
+        # stays GREEN — the metanmai run still validates e2e end-to-end with
+        # real secrets. Hard-failing here would block every push to tanmain.
+        id: check
         env:
           TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
           TEST_SUPABASE_SERVICE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_KEY }}
+        run: |
+          if [ -z "$TEST_SUPABASE_URL" ] || [ -z "$TEST_SUPABASE_SERVICE_KEY" ]; then
+            echo "::notice::e2e skipped — TEST_SUPABASE_URL / TEST_SUPABASE_SERVICE_KEY not configured on this repo. Mirror to metanmai/synapse for the validated run."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build MCP CLI
+        if: steps.check.outputs.configured == 'true'
         working-directory: mcp
         run: npm run build
 
       - name: Frontend env for e2e
+        if: steps.check.outputs.configured == 'true'
         run: cp frontend/.env.example frontend/.env
 
       - name: Install Playwright browsers (Linux — includes system deps)
-        if: matrix.os == 'ubuntu-latest'
+        if: steps.check.outputs.configured == 'true' && matrix.os == 'ubuntu-latest'
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
@@ -160,17 +172,19 @@ jobs:
         # `--with-deps` runs apt-get; on Windows it's a no-op-ish but
         # explicitly omitting it surfaces a clearer error if browsers
         # can't be downloaded.
-        if: matrix.os == 'windows-latest'
+        if: steps.check.outputs.configured == 'true' && matrix.os == 'windows-latest'
         working-directory: frontend
         run: npx playwright install chromium
 
       - name: Playwright e2e (UI)
+        if: steps.check.outputs.configured == 'true'
         working-directory: frontend
         run: npx playwright test
         env:
           CI: "true"
 
       - name: E2E tests
+        if: steps.check.outputs.configured == 'true'
         working-directory: mcp
         run: npx vitest run test/e2e/
         env:
@@ -180,7 +194,7 @@ jobs:
           TEST_SUPABASE_SERVICE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_KEY }}
 
       - name: Upload Playwright report
-        if: failure()
+        if: failure() && steps.check.outputs.configured == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ matrix.os }}
