@@ -115,6 +115,28 @@ describe("CloudSyncer", () => {
       cwdSpy.mockRestore();
       homedirSpy.mockRestore();
     });
+
+    // Regression guard for the bug class "hooks fire from project dirs that
+    // have no .mcp.json and yet are expected to reach the API." The hook is
+    // invoked from arbitrary cwds (random project repos), so .mcp.json / env
+    // are unreliable. `~/.synapse/config.json` (written by `synapse init`)
+    // is the canonical key location — resolveApiKey must fall through to it.
+    it("falls back to ~/.synapse/config.json when no .mcp.json is reachable", () => {
+      // Wipe env and point cwd + homedir at dirs without any .mcp.json.
+      const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+      const fakeHome = path.join(tmpDir, "fakehome");
+      fs.mkdirSync(fakeHome);
+      const homedirSpy = vi.spyOn(os, "homedir").mockReturnValue(fakeHome);
+      // tmpDir IS already SYNAPSE_HOME via the outer beforeEach. Place a
+      // config.json there as if `synapse init` had written it.
+      fs.writeFileSync(path.join(tmpDir, "config.json"), JSON.stringify({ api_key: "config-json-key-xyz" }));
+
+      const syncer = new CloudSyncer();
+      expect(syncer.isEnabled()).toBe(true);
+
+      cwdSpy.mockRestore();
+      homedirSpy.mockRestore();
+    });
   });
 
   describe("sync", () => {
