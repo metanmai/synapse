@@ -113,10 +113,7 @@ function extractApiKey(filePath: string): string | null {
   try {
     const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
     // Claude Code / Cursor / Windsurf use mcpServers, VS Code uses mcp.servers or servers
-    const synapse =
-      parsed?.mcpServers?.synapse ??
-      parsed?.mcp?.servers?.synapse ??
-      parsed?.servers?.synapse;
+    const synapse = parsed?.mcpServers?.synapse ?? parsed?.mcp?.servers?.synapse ?? parsed?.servers?.synapse;
     return synapse?.env?.SYNAPSE_API_KEY ?? null;
   } catch {
     return null;
