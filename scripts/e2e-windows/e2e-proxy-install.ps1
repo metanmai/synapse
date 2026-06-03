@@ -153,27 +153,33 @@ function Assert-CertNotInStore {
 & certutil -delstore -user Root $CN > $null 2>&1
 Assert-CertNotInStore -Stage "pre-state"
 
-# STAGE 1: install
-# Wrap in Start-Job + Wait-Job so a hang doesn't burn the full 15-min
-# CI timeout. Anything > 90s is a real bug worth diagnosing fast.
-Write-Host "  [install] node $Cli capture proxy install  (90s timeout)"
+# STAGE 1: install (with SYNAPSE_PROXY_DEBUG=1 so daemon prints timing
+# markers via [tls-debug] / [onboarding-debug] / [windows-debug] tags).
+# Also: the daemon's certutil spawn now has a 30s internal timeout, so
+# if certutil hangs we get a clear throw with stack trace from Node
+# instead of a silent script-level hang.
+$env:SYNAPSE_PROXY_DEBUG = "1"
+Write-Host "  [install] node $Cli capture proxy install  (60s outer timeout, SYNAPSE_PROXY_DEBUG=1)"
 $installJob = Start-Job -ScriptBlock {
     param($CliPath)
+    $env:SYNAPSE_PROXY_DEBUG = "1"
     & node $CliPath capture proxy install 2>&1
     return $LASTEXITCODE
 } -ArgumentList $Cli
 
-$completed = Wait-Job $installJob -Timeout 90
+$completed = Wait-Job $installJob -Timeout 60
 if (-not $completed) {
-    Write-Host "FAIL install: 'capture proxy install' hung > 90s — killing"
-    Stop-Job $installJob -PassThru | Receive-Job
+    Write-Host "FAIL install: 'capture proxy install' hung > 60s — killing job and dumping any captured output"
+    $partialOut = Receive-Job $installJob
+    $partialOut | ForEach-Object { Write-Host "    $_" }
+    Stop-Job $installJob | Out-Null
     Remove-Job $installJob -Force
     exit 1
 }
 $installOutput = Receive-Job $installJob
 $installExit = $installJob.ChildJobs[0].Output[-1]
 Remove-Job $installJob
-Write-Host "  [install] stdout/stderr from job:"
+Write-Host "  [install] stdout/stderr from daemon (debug-enabled):"
 $installOutput | ForEach-Object { Write-Host "    $_" }
 if ($installExit -ne 0) {
     Write-Host "FAIL install: 'capture proxy install' exited $installExit"

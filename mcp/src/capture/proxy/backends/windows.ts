@@ -33,8 +33,19 @@ import type {
 /** Common Name on the generated CA — lookup key for certutil queries. */
 const CA_COMMON_NAME = "Synapse Proxy CA";
 
+const DEBUG = process.env.SYNAPSE_PROXY_DEBUG;
+const dlog = DEBUG
+  ? (msg: string) => process.stderr.write(`[windows-debug ${Date.now()}] ${msg}\n`)
+  : (_msg: string) => {};
+
 function defaultRunCertutil(args: string[]): CommandResult {
-  const r: SpawnSyncReturns<Buffer> = spawnSync("certutil", args, { stdio: "pipe" });
+  dlog(`certutil ${args.join(" ")} START`);
+  const r: SpawnSyncReturns<Buffer> = spawnSync("certutil", args, {
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+    timeout: 30000,
+  });
+  dlog(`certutil ${args[0]} DONE status=${r.status}`);
   return {
     status: r.status ?? -1,
     stdout: (r.stdout ?? Buffer.from("")).toString("utf-8"),

@@ -22,6 +22,11 @@ import { detectBackend } from "./backends/index.js";
 import type { BackendOptions, CommandRunner } from "./backends/types.js";
 import { TlsManager } from "./tls.js";
 
+const DEBUG = process.env.SYNAPSE_PROXY_DEBUG;
+const dlog = DEBUG
+  ? (msg: string) => process.stderr.write(`[onboarding-debug ${Date.now()}] ${msg}\n`)
+  : (_msg: string) => {};
+
 /** The daemon's default proxy port — also used to compose the HTTPS_PROXY env snippet. */
 export const DEFAULT_PROXY_PORT = 7727;
 
@@ -106,17 +111,26 @@ export interface CaStatusResult {
  * snippet + manual fallback instructions either way.
  */
 export function installCa(opts: OnboardingOptions = {}): InstallCaResult {
+  dlog("installCa: enter");
   const tlsManager = opts.tlsManager ?? new TlsManager();
   const runOpenssl = opts.runOpenssl ?? defaultRunOpenssl;
   const platform = opts.platform ?? process.platform;
   const proxyPort = opts.proxyPort ?? DEFAULT_PROXY_PORT;
+  dlog(`installCa: platform=${platform} proxyPort=${proxyPort}`);
 
+  dlog("installCa: tlsManager.ensureCa START");
   tlsManager.ensureCa();
+  dlog("installCa: tlsManager.ensureCa DONE");
   const caPath = tlsManager.caCertPath();
+  dlog(`installCa: caPath=${caPath}`);
+  dlog("installCa: computeFingerprint START");
   const fingerprint = computeFingerprint(caPath, runOpenssl);
+  dlog("installCa: computeFingerprint DONE");
 
+  dlog("installCa: detectBackend + backend.installCa START");
   const backend = detectBackend(platform);
   const result = backend.installCa(caPath, buildBackendOptions(opts, proxyPort));
+  dlog(`installCa: backend.installCa DONE installed=${result.installed}`);
 
   return {
     caPath: result.caPath,
