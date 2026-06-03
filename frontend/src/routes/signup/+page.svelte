@@ -70,7 +70,7 @@ onMount(() => {
           <div class="w-full" style="border-top: 1px solid var(--color-border);"></div>
         </div>
         <div class="relative flex justify-center text-xs">
-          <span class="px-2" style="background-color: transparent; color: var(--color-text-muted);">or</span>
+          <span class="px-2" style="background-color: var(--color-bg); color: var(--color-text-muted);">or</span>
         </div>
       </div>
 
