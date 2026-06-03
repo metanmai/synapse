@@ -68,6 +68,15 @@ export interface BrowserAuthOptions {
    * backend falls back to a synthetic `cli-device-<ts>` label.
    */
   deviceName?: string;
+  /**
+   * Phase 03-05: per-machine UUID (from getOrCreateMachineId in
+   * device-id.ts). Passed to the frontend as `?machine_id=…` query
+   * param, forwarded to /auth/cli-session. When the backend sees an
+   * existing api_keys row for (user_id, machine_id), it ROTATES the
+   * hash instead of creating a duplicate — preventing accidental
+   * device-cap consumption on re-init.
+   */
+  machineId?: string;
 }
 
 /**
@@ -171,6 +180,9 @@ export async function browserAuth(options?: BrowserAuthOptions): Promise<Browser
       });
       if (options?.deviceName) {
         params.set("device", options.deviceName);
+      }
+      if (options?.machineId) {
+        params.set("machine_id", options.machineId);
       }
       const authUrl = `${APP_URL}/cli-auth?${params.toString()}`;
 

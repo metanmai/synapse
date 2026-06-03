@@ -3,6 +3,7 @@ import os from "node:os";
 import * as clack from "@clack/prompts";
 import { validateApiKey } from "./api.js";
 import { browserAuth } from "./browser-auth.js";
+import { getOrCreateMachineId } from "./device-id.js";
 import type { ConfigLocation, SetupScope } from "./editors/index.js";
 import { detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors/index.js";
 import { runInit } from "./init.js";
@@ -157,6 +158,12 @@ export async function runWizard(version: string): Promise<void> {
     try {
       const result = await browserAuth({
         deviceName: os.hostname(),
+        // Phase 03-05: stable per-machine UUID. Persisted at
+        // ~/.synapse/device.json on first call. Backend matches on
+        // (user_id, machine_id) so re-running wizard from the same
+        // machine ROTATES the existing key instead of creating a
+        // duplicate that burns a device-cap slot.
+        machineId: getOrCreateMachineId(),
         onUrl: (url, autoOpened) => {
           if (autoOpened) {
             spin.start("Waiting for browser login\u2026");
