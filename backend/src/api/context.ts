@@ -2,7 +2,7 @@ import { Hono } from "hono";
 
 import { authMiddleware } from "../lib/auth";
 import { createSupabaseClient } from "../db/client";
-import { getProjectByName, upsertEntry, getEntry, listEntries, searchEntries, getRecentEntries, getAllEntries, getEntryHistory, restoreEntry, getPreferences } from "../db/queries";
+import { getProjectByName, upsertEntry, getEntry, listEntries, searchEntries, getRecentEntries, getAllEntries, getEntryHistory, restoreEntry, getPreferences, deleteEntry } from "../db/queries";
 import { logActivity } from "../db/activity-logger";
 import { NotFoundError, AppError } from "../lib/errors";
 
@@ -205,6 +205,31 @@ context.post("/:project/restore", async (c) => {
   });
 
   return c.json(entry);
+});
+
+// DELETE /api/context/:project/:path{.+}
+context.delete("/:project/:path{.+}", async (c) => {
+  const user = c.get("user");
+  const projectName = c.req.param("project");
+  const path = c.req.param("path") ?? "";
+
+  const db = createSupabaseClient(c.env);
+  const proj = await getProjectByName(db, projectName, user.id);
+  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
+
+  const entry = await getEntry(db, proj.id, path);
+  if (!entry) throw new NotFoundError(`Entry "${path}" not found in project "${projectName}"`);
+
+  await deleteEntry(db, proj.id, path);
+  await logActivity(db, {
+    project_id: proj.id,
+    user_id: user.id,
+    action: "entry_deleted",
+    target_path: path,
+    source: "human",
+  });
+
+  return c.json({ ok: true });
 });
 
 // GET /api/context/:project/:path{.+} — must be last (catch-all)
