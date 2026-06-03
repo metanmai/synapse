@@ -1,11 +1,19 @@
 /**
  * Fake LLM upstream server for proxy-daemon tests.
  *
- * Provides a real Node `http.Server` listening on a random port that
- * serves canned responses shaped after Anthropic / OpenAI / Google
- * chat-completion APIs. The proxy daemon's tests route their traffic
- * here instead of hitting the real `api.anthropic.com` etc., so we
- * get deterministic + free + fast test runs.
+ * Provides a real Node `http.Server` (or `https.Server`, see
+ * `createFakeTlsLLMServer`) listening on a random port that serves
+ * canned responses shaped after Anthropic / OpenAI / Google chat-
+ * completion APIs. The proxy daemon's tests route their traffic here
+ * instead of hitting the real `api.anthropic.com` etc., so we get
+ * deterministic + free + fast test runs.
+ *
+ * Two factories:
+ *   • createFakeLLMServer    — HTTP, used by Layer 2 forward-proxy tests
+ *   • createFakeTlsLLMServer — HTTPS, used by Layer 3b CONNECT/MITM tests
+ *
+ * Both share the same request-handling logic (path matching, body
+ * parsing, request history) — only the transport differs.
  *
  * Usage:
  *   const fake = await createFakeLLMServer({
@@ -20,6 +28,7 @@
  */
 
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
+import { type ServerOptions as HttpsServerOptions, createServer as createHttpsServer } from "node:https";
 import type { AddressInfo } from "node:net";
 
 export interface ReceivedRequest {
@@ -41,7 +50,7 @@ export interface HandlerResponse {
 export type FakeLLMHandler = (req: ReceivedRequest) => Promise<HandlerResponse> | HandlerResponse;
 
 export interface FakeLLMServer {
-  /** Full base URL — `http://127.0.0.1:<port>`. */
+  /** Full base URL — `http://127.0.0.1:<port>` or `https://127.0.0.1:<port>`. */
   url: string;
   /** Bound port (useful when caller passed port=0 for OS-assigned). */
   port: number;
@@ -61,11 +70,68 @@ export interface CreateFakeLLMServerOpts {
   port?: number;
 }
 
+export interface CreateFakeTlsLLMServerOpts extends CreateFakeLLMServerOpts {
+  /** PEM-encoded private key for the server's TLS cert. */
+  key: string;
+  /** PEM-encoded certificate the server presents to TLS clients. */
+  cert: string;
+}
+
 export async function createFakeLLMServer(opts: CreateFakeLLMServerOpts = {}): Promise<FakeLLMServer> {
   const handlers = new Map<string, FakeLLMHandler>(Object.entries(opts.handlers ?? {}));
   const received: ReceivedRequest[] = [];
+  const server: Server = createServer(buildRequestListener(handlers, received));
 
-  const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+  await new Promise<void>((resolve) => server.listen(opts.port ?? 0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+
+  return {
+    url: `http://127.0.0.1:${port}`,
+    port,
+    received,
+    setHandler(path, handler) {
+      handlers.set(path, handler);
+    },
+    async stop() {
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()));
+      });
+    },
+  };
+}
+
+export async function createFakeTlsLLMServer(opts: CreateFakeTlsLLMServerOpts): Promise<FakeLLMServer> {
+  const handlers = new Map<string, FakeLLMHandler>(Object.entries(opts.handlers ?? {}));
+  const received: ReceivedRequest[] = [];
+  const tlsOpts: HttpsServerOptions = { key: opts.key, cert: opts.cert };
+  const server = createHttpsServer(tlsOpts, buildRequestListener(handlers, received));
+
+  await new Promise<void>((resolve) => server.listen(opts.port ?? 0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+
+  return {
+    url: `https://127.0.0.1:${port}`,
+    port,
+    received,
+    setHandler(path, handler) {
+      handlers.set(path, handler);
+    },
+    async stop() {
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()));
+      });
+    },
+  };
+}
+
+/**
+ * Shared per-request listener used by both factories. Captures the
+ * request body + headers into `received[]`, routes to a configured
+ * handler by path, returns 404 for unknown paths and 500 on internal
+ * exceptions.
+ */
+function buildRequestListener(handlers: Map<string, FakeLLMHandler>, received: ReceivedRequest[]) {
+  return async (req: IncomingMessage, res: ServerResponse) => {
     try {
       const body = await readBody(req);
       const fullPath = req.url ?? "/";
@@ -97,23 +163,6 @@ export async function createFakeLLMServer(opts: CreateFakeLLMServerOpts = {}): P
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: `fake-llm-server internal: ${(err as Error).message}` }));
     }
-  });
-
-  await new Promise<void>((resolve) => server.listen(opts.port ?? 0, "127.0.0.1", resolve));
-  const port = (server.address() as AddressInfo).port;
-
-  return {
-    url: `http://127.0.0.1:${port}`,
-    port,
-    received,
-    setHandler(path, handler) {
-      handlers.set(path, handler);
-    },
-    async stop() {
-      await new Promise<void>((resolve, reject) => {
-        server.close((err) => (err ? reject(err) : resolve()));
-      });
-    },
   };
 }
 
