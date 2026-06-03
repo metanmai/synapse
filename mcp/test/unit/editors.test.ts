@@ -167,8 +167,15 @@ describe("editors", () => {
       const mcpJson = JSON.parse(fs.readFileSync(path.join(tmpDir, ".mcp.json"), "utf-8"));
       expect(mcpJson.mcpServers).toBeDefined();
       expect(mcpJson.mcpServers.synapse).toBeDefined();
-      expect(mcpJson.mcpServers.synapse.command).toBe("npx");
-      expect(mcpJson.mcpServers.synapse.args).toEqual(["synapsesync"]);
+      // BUG-03 (Plan 01-03): command is resolved at write time — one of
+      // an absolute synapsesync binary (tier 1), `<node> <abs>/dist/index.js`
+      // (tier 2), or `npx synapsesync` (tier 3). Assert the structural
+      // invariant (string command + array args + correct env) rather than
+      // pinning to one tier — pinning is brittle and depends on whether
+      // the dev machine has the binary installed.
+      expect(typeof mcpJson.mcpServers.synapse.command).toBe("string");
+      expect(mcpJson.mcpServers.synapse.command.length).toBeGreaterThan(0);
+      expect(Array.isArray(mcpJson.mcpServers.synapse.args)).toBe(true);
       expect(mcpJson.mcpServers.synapse.env.SYNAPSE_API_KEY).toBe("sk-test-key");
     });
 
@@ -234,8 +241,12 @@ describe("editors", () => {
       const filePath = path.join(tmpDir, ".mcp.json");
       expect(fs.existsSync(filePath)).toBe(true);
       const content = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-      expect(content.mcpServers.synapse.command).toBe("npx");
-      expect(content.mcpServers.synapse.args).toEqual(["synapsesync"]);
+      // BUG-03 (Plan 01-03): resolved command varies by tier — structural
+      // invariant check (command is string, args is array, env has key)
+      // catches the JSON-shape bug class without pinning to one tier.
+      expect(typeof content.mcpServers.synapse.command).toBe("string");
+      expect(content.mcpServers.synapse.command.length).toBeGreaterThan(0);
+      expect(Array.isArray(content.mcpServers.synapse.args)).toBe(true);
       expect(content.mcpServers.synapse.env.SYNAPSE_API_KEY).toBe("sk-new-key");
     });
 
