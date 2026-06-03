@@ -80,7 +80,11 @@ describe("synapse init", () => {
     await runInit({ api_key: "k", skip_service: true });
     const dir = path.join(tmp, ".claude/commands/synapse");
     const files = fs.readdirSync(dir);
-    expect(files).toHaveLength(6);
+    // 8 CLI-shelling slash commands installed by installSlashCommands():
+    // handoff, focus, issue, status, doctor, invite (the original 6) +
+    // whoami, tree (added when their MCP-tool counterparts were purged from
+    // claude-code.ts — see commit history).
+    expect(files).toHaveLength(8);
   });
 });
 

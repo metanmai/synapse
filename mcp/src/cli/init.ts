@@ -144,6 +144,20 @@ description: Invite a teammate to this project. Args: <email>
 
 Run \`${bin} invite "$ARGUMENTS"\` via the Bash tool. Report the join URL.
 `,
+    "whoami.md": `---
+name: synapse-whoami
+description: Show current Synapse account info.
+---
+
+Run \`${bin} whoami\` via the Bash tool and report the output.
+`,
+    "tree.md": `---
+name: synapse-tree
+description: Show the Synapse workspace file tree for the first project.
+---
+
+Run \`${bin} tree\` via the Bash tool and report the output.
+`,
   };
 }
 

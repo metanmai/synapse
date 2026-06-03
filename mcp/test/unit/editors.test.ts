@@ -800,16 +800,28 @@ describe("editors", () => {
       const cmdDir = path.join(tmpHomeDir, ".claude", "commands", "synapse");
       expect(fs.existsSync(cmdDir)).toBe(true);
       const files = fs.readdirSync(cmdDir);
-      expect(files.length).toBe(9);
-      expect(files).toContain("search.md");
-      expect(files).toContain("tree.md");
-      expect(files).toContain("sync.md");
-      expect(files).toContain("whoami.md");
-      expect(files).toContain("clean.md");
-      expect(files).toContain("list-convos.md");
-      expect(files).toContain("load-convo.md");
-      expect(files).toContain("sync-convo.md");
+      // Only `insights.md` survives in the editor-config Records. The other
+      // 8 slash commands (search/tree/sync/whoami/clean/list-convos/
+      // load-convo/sync-convo) called MCP filesystem-style tools that were
+      // removed in mcp v1.1 and were purged from claude-code.ts. The
+      // CLI-shelling replacements (whoami.md/tree.md plus handoff/focus/
+      // issue/status/doctor/invite) are installed by installSlashCommands()
+      // in init.ts, not by this writer.
+      expect(files.length).toBe(1);
       expect(files).toContain("insights.md");
+      // Regression guard: the purged set must NOT come back to claude-code.ts.
+      for (const dead of [
+        "search.md",
+        "tree.md",
+        "sync.md",
+        "whoami.md",
+        "clean.md",
+        "list-convos.md",
+        "load-convo.md",
+        "sync-convo.md",
+      ]) {
+        expect(files).not.toContain(dead);
+      }
     });
 
     it("command files are idempotent (skip existing)", () => {
@@ -817,11 +829,14 @@ describe("editors", () => {
       const claude = findEditor(editors, "claude-code");
       claude.write("sk-test");
 
-      const target = path.join(tmpHomeDir, ".claude", "commands", "synapse", "search.md");
-      fs.writeFileSync(target, "custom search command");
+      // Retarget at insights.md — the only file this writer still manages
+      // after the v1.1 MCP-tool purge — so the idempotency check actually
+      // exercises the skip-existing branch in claude-code.ts.
+      const target = path.join(tmpHomeDir, ".claude", "commands", "synapse", "insights.md");
+      fs.writeFileSync(target, "custom insights command");
 
       claude.write("sk-test");
-      expect(fs.readFileSync(target, "utf-8")).toBe("custom search command");
+      expect(fs.readFileSync(target, "utf-8")).toBe("custom insights command");
     });
   });
 
