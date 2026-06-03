@@ -181,6 +181,33 @@ export async function reassignConversation(
 
 // --- Messages ---
 
+// Concurrent-write retry parameters for appendMessages. Bug class:
+// `select max(sequence)` → `insert at max+1` is a classic read-modify-
+// write race. Two parallel POSTs to /api/conversations/:id/messages both
+// read max=N, both try to INSERT at N+1, the unique(conversation_id,
+// sequence) index rejects the loser with Postgres error 23505, and the
+// loser previously surfaced as HTTP 500. Earlier E2E (2026-05-24): 10
+// concurrent POSTs → 2 succeed, 8 return 500.
+//
+// MAX_APPEND_ATTEMPTS is generous enough to handle ~N concurrent writers
+// without falling off (since each round only loses N-1, N-2, … times),
+// while still bounding worst-case work if something pathological happens.
+// Base backoff is ~10ms with jitter; doubles per attempt. Total max wait
+// at 8 attempts ≈ 1.5s — well within request-budget territory.
+const MAX_APPEND_ATTEMPTS = 8;
+const APPEND_BACKOFF_BASE_MS = 10;
+
+function isUniqueSequenceViolation(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { code?: string; message?: string };
+  if (e.code !== "23505") return false;
+  // Be conservative: only treat sequence-index violations as retryable,
+  // not arbitrary 23505s. Index name comes from migration 007:
+  //   create unique index ... on conversation_messages(conversation_id, sequence)
+  const m = e.message ?? "";
+  return m.includes("sequence") || m.includes("conversation_messages");
+}
+
 export async function appendMessages(
   db: SupabaseClient,
   conversationId: string,
@@ -199,36 +226,76 @@ export async function appendMessages(
 ): Promise<ConversationMessage[]> {
   if (messages.length === 0) return [];
 
-  // Get current max sequence for this conversation
-  const { data: maxRow, error: maxError } = await db
-    .from("conversation_messages")
-    .select("sequence")
-    .eq("conversation_id", conversationId)
-    .order("sequence", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (maxError) throw maxError;
+  // Retry loop for concurrent-write race. The whole select-max + insert
+  // pair is re-run on 23505. A 23505 from one INSERT row aborts the
+  // whole batch (Postgres rolls back the multi-row INSERT atomically),
+  // so re-reading max() once gets us a fresh starting point that
+  // includes whoever just won the race.
+  let data: unknown[] | null = null;
+  let lastInsertCount = 0;
+  let maxBase = 0;
+  for (let attempt = 0; attempt < MAX_APPEND_ATTEMPTS; attempt++) {
+    // Get current max sequence for this conversation
+    const { data: maxRow, error: maxError } = await db
+      .from("conversation_messages")
+      .select("sequence")
+      .eq("conversation_id", conversationId)
+      .order("sequence", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (maxError) throw maxError;
 
-  let nextSequence = (maxRow?.sequence ?? 0) + 1;
+    maxBase = maxRow?.sequence ?? 0;
+    let nextSequence = maxBase + 1;
 
-  // Build insert rows with auto-incremented sequences
-  const rows = messages.map((msg) => ({
-    conversation_id: conversationId,
-    sequence: nextSequence++,
-    role: msg.role,
-    content: msg.content ?? null,
-    tool_interaction: msg.tool_interaction ?? null,
-    source_agent: msg.source_agent,
-    source_model: msg.source_model ?? null,
-    token_count: msg.token_count ?? null,
-    cost: msg.cost ?? null,
-    attachments_summary: msg.attachments_summary ?? null,
-    parent_message_id: msg.parent_message_id ?? null,
-    encrypted: msg.encrypted ?? false,
-  }));
+    // Build insert rows with auto-incremented sequences
+    const rows = messages.map((msg) => ({
+      conversation_id: conversationId,
+      sequence: nextSequence++,
+      role: msg.role,
+      content: msg.content ?? null,
+      tool_interaction: msg.tool_interaction ?? null,
+      source_agent: msg.source_agent,
+      source_model: msg.source_model ?? null,
+      token_count: msg.token_count ?? null,
+      cost: msg.cost ?? null,
+      attachments_summary: msg.attachments_summary ?? null,
+      parent_message_id: msg.parent_message_id ?? null,
+      encrypted: msg.encrypted ?? false,
+    }));
 
-  const { data, error } = await db.from("conversation_messages").insert(rows).select(MESSAGE_COLUMNS);
-  if (error) throw error;
+    const { data: insertData, error: insertError } = await db
+      .from("conversation_messages")
+      .insert(rows)
+      .select(MESSAGE_COLUMNS);
+
+    if (!insertError) {
+      data = insertData;
+      lastInsertCount = messages.length;
+      break;
+    }
+
+    if (!isUniqueSequenceViolation(insertError) || attempt === MAX_APPEND_ATTEMPTS - 1) {
+      // Non-retryable error, OR we've exhausted retries. Bubble up so the
+      // caller can return a 5xx — better than silently dropping messages.
+      throw insertError;
+    }
+
+    // Race detected — another writer beat us to these sequence numbers.
+    // Wait with exponential backoff + jitter, then re-read max and retry.
+    // Jitter spreads the retry storm so 10 concurrent losers don't all
+    // re-attempt at the same instant and collide again.
+    const backoff = APPEND_BACKOFF_BASE_MS * 2 ** attempt + Math.floor(Math.random() * APPEND_BACKOFF_BASE_MS);
+    await new Promise((r) => setTimeout(r, backoff));
+  }
+
+  if (!data) {
+    // Defensive — should be unreachable, the throw inside the loop covers
+    // the exhaustion case. Keeping this prevents a stray TS narrowing
+    // error and a silent return of empty array if anyone ever reorders
+    // the loop.
+    throw new Error("appendMessages: exhausted retries without resolution");
+  }
 
   // Update message_count + bump updated_at so listConversations (which
   // orders by updated_at desc) ranks this conversation as most-recent
@@ -241,7 +308,11 @@ export async function appendMessages(
   const { error: updateError } = await db
     .from("conversations")
     .update({
-      message_count: (maxRow?.sequence ?? 0) + messages.length,
+      // maxBase is the max(sequence) reading from the FINAL successful
+      // attempt — i.e. it already accounts for any concurrent appenders
+      // that won earlier rounds. Adding `messages.length` (which is also
+      // lastInsertCount) gives the new total.
+      message_count: maxBase + lastInsertCount,
       updated_at: new Date().toISOString(),
     })
     .eq("id", conversationId);
