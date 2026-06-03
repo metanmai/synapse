@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -63,4 +64,49 @@ export function writeServiceFile(): { platform: string; path: string } {
   throw new Error(
     `Unsupported platform: ${process.platform}. Run \`synapse daemon\` manually until Windows service support lands.`,
   );
+}
+
+/**
+ * Path to the installed service file for the current platform, or null on
+ * unsupported platforms. Pure function — does not touch disk.
+ */
+export function serviceFilePath(): string | null {
+  if (process.platform === "darwin") {
+    return path.join(os.homedir(), "Library/LaunchAgents/app.synapsesync.daemon.plist");
+  }
+  if (process.platform === "linux") {
+    return path.join(os.homedir(), ".config/systemd/user/synapsesync.service");
+  }
+  return null;
+}
+
+/**
+ * Unload the daemon from the OS service supervisor (launchd on macOS, systemd
+ * on Linux) and delete the unit file. Returns true if anything was removed.
+ * Best-effort: a service that's already unloaded or a missing file is a no-op.
+ */
+export function removeServiceFile(): boolean {
+  const p = serviceFilePath();
+  if (!p || !fs.existsSync(p)) return false;
+
+  if (process.platform === "darwin") {
+    try {
+      execSync(`launchctl unload "${p}"`, { stdio: "ignore" });
+    } catch {
+      // Service may not be loaded (e.g. user manually unloaded it).
+    }
+  } else if (process.platform === "linux") {
+    try {
+      execSync(`systemctl --user disable --now synapsesync.service`, { stdio: "ignore" });
+    } catch {
+      // Unit may not be enabled.
+    }
+  }
+
+  try {
+    fs.unlinkSync(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
