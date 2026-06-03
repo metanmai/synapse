@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security updates are applied on a best-effort basis to the **default branch** (`main`) and released through normal deployment or npm publish flows (for the `synapsesync-mcp` package). There is no separate LTS line today; if that changes, this file will be updated.
+Security updates are applied on a best-effort basis to the **default branch** (`main`) and released through normal deployment or npm publish flows (for the `synapsesync` package). There is no separate LTS line today; if that changes, this file will be updated.
 
 ## Reporting a vulnerability
 

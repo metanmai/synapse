@@ -43,7 +43,7 @@ Synapse REPLACES local filesystem for all context operations. Do NOT save contex
 ### Session Start
 - Check if the Synapse MCP tools are available (try `list_insights({ project: "synapse" })`). If they're not connected:
   1. Check if `.mcp.json` exists in the current project directory with a synapse server config.
-  2. If not, ask the user for their Synapse API key and create `.mcp.json` with: `{ "mcpServers": { "synapse": { "command": "npx", "args": ["synapsesync-mcp"], "env": { "SYNAPSE_API_KEY": "<key>" } } } }`
+  2. If not, ask the user for their Synapse API key and create `.mcp.json` with: `{ "mcpServers": { "synapse": { "command": "npx", "args": ["synapsesync"], "env": { "SYNAPSE_API_KEY": "<key>" } } } }`
   3. Tell the user to restart Claude Code to pick up the MCP server.
 - Once connected, check Synapse for existing context relevant to the current task: `list_insights` or `search`
 

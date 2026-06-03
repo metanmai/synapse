@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/runtime-Cloudflare%20Workers-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 [![MCP](https://img.shields.io/badge/protocol-MCP-5C2D91?style=for-the-badge)](https://modelcontextprotocol.io/)
-[![npm](https://img.shields.io/npm/v/synapsesync-mcp?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/synapsesync-mcp)
+[![npm](https://img.shields.io/npm/v/synapsesync?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/synapsesync)
 
 [Claude Code handoff](#claude-code-handoff) · [Slash commands](#slash-commands) · [Invite a teammate](#invite-a-teammate) · [Web dashboard](#web-dashboard) · [REST API](#rest-api) · [Why Synapse](#why-synapse) · [How it works](#how-it-works) · [This repo](#this-repository)
 
@@ -24,7 +24,7 @@ Synapse makes that work by recording Claude Code session events to a local log, 
 ### Setup (Claude Code, recommended)
 
 ```bash
-npm install -g synapsesync-mcp
+npm install -g synapsesync
 synapse init            # sign in, write hook entries, install the LaunchAgent / systemd daemon
 synapse status          # daemon healthy, hook installed, brief cache fresh
 synapse handoff "next: finish auth flow"  # leave a baton for the next session
@@ -69,17 +69,17 @@ The legacy MCP surface has been trimmed: `ls`, `read`, `search`, `history`, `tre
 2. **Run the wizard:**
 
    ```bash
-   synapsesync-mcp wizard        # interactive sign-in → writes .mcp.json + editor configs
+   synapsesync wizard        # interactive sign-in → writes .mcp.json + editor configs
    ```
 
-3. **Or register the server yourself** — Add the published **`synapsesync-mcp`** package to your MCP config:
+3. **Or register the server yourself** — Add the published **`synapsesync`** package to your MCP config:
 
 ```json
 {
   "mcpServers": {
     "synapse": {
       "command": "npx",
-      "args": ["synapsesync-mcp"],
+      "args": ["synapsesync"],
       "env": {
         "SYNAPSE_API_KEY": "<paste-your-api-key-here>"
       }
@@ -92,7 +92,7 @@ The legacy MCP surface has been trimmed: `ls`, `read`, `search`, `history`, `tre
 
 Your assistant gets the legacy **`save_insight`** and **`list_insights`** tools for capturing decisions/learnings into your project.
 
-The MCP always talks to the public API at `https://api.synapsesync.app`. Self-hosting your own API requires building `synapsesync-mcp` from source and changing the `API_URL` constant in `mcp/src/index.ts`.
+The MCP always talks to the public API at `https://api.synapsesync.app`. Self-hosting your own API requires building `synapsesync` from source and changing the `API_URL` constant in `mcp/src/index.ts`.
 
 Restart the editor or MCP host after changing config.
 
@@ -134,7 +134,7 @@ Automation, scripts, or non-MCP clients can call the same backend as the web app
 
 1. **Workspace** — Knowledge lives as **entries** (usually markdown) at paths inside a **project**.
 2. **Cloud API** — A **Cloudflare Worker** (**Hono**) serves auth, projects, context CRUD, search, sharing, and optional integrations.
-3. **MCP** — **`synapsesync-mcp`** maps that API to MCP tools your assistant can call.
+3. **MCP** — **`synapsesync`** maps that API to MCP tools your assistant can call.
 4. **Data** — **Supabase** (Postgres + **pgvector**) stores content and auth; search blends semantic and text retrieval.
 
 ```text
@@ -154,7 +154,7 @@ This monorepo is the **implementation** of Synapse: **Worker** (`backend/`), **w
 synapse/
 ├── backend/          # API (Cloudflare Worker)
 ├── frontend/         # Dashboard (SvelteKit)
-├── mcp/              # synapsesync-mcp (npm)
+├── mcp/              # synapsesync (npm)
 ├── packages/shared/  # Shared TypeScript types
 └── supabase/         # Database migrations
 ```

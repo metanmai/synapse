@@ -9,7 +9,7 @@ High-level map of the monorepo. For setup, see [SELF_HOSTING.md](SELF_HOSTING.md
 | `@synapse/backend` | `backend/` | Cloudflare Worker: Hono HTTP API, auth, context CRUD, search, sharing, billing hooks, Google sync, MCP-related Durable Object code |
 | `@synapse/frontend` | `frontend/` | SvelteKit 5 app: dashboard, projects, entries, account, server-side API proxy via `API_URL` |
 | `@synapse/shared` | `packages/shared/` | Shared TypeScript types for API-shaped data |
-| `synapsesync-mcp` | `mcp/` | Node CLI + capture/handoff daemon; ships a deprecated MCP server exposing only `save_insight` and `list_insights`. CLI subcommands: `init`, `handoff`, `set-focus`, `note`, `issue`, `invite`, `status`, `doctor`, plus the `hook <kind>` dispatcher |
+| `synapsesync` | `mcp/` | Node CLI + capture/handoff daemon; ships a deprecated MCP server exposing only `save_insight` and `list_insights`. CLI subcommands: `init`, `handoff`, `set-focus`, `note`, `issue`, `invite`, `status`, `doctor`, plus the `hook <kind>` dispatcher |
 
 ## Request flow (simplified)
 

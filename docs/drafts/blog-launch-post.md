@@ -30,7 +30,7 @@ It works in three stages:
 **1. Capture.** A background daemon silently records your sessions from Claude Code, Cursor, Codex, and Gemini as you work. You don't do anything -- it just watches.
 
 ```bash
-synapsesync-mcp capture start
+synapsesync capture start
 # That's it. Go back to work.
 ```
 
@@ -78,9 +78,9 @@ When your AI tool starts a new session, it searches Synapse and immediately has 
 ## Setup
 
 ```bash
-npm install -g synapsesync-mcp    # one-time install
-synapsesync-mcp wizard            # interactive setup
-synapsesync-mcp capture start     # start capturing sessions
+npm install -g synapsesync    # one-time install
+synapsesync wizard            # interactive setup
+synapsesync capture start     # start capturing sessions
 ```
 
 The wizard detects your editor, walks you through signup, and writes config files. The daemon runs in the background until you stop it.
@@ -88,7 +88,7 @@ The wizard detects your editor, walks you through signup, and writes config file
 To distill a captured session:
 ```bash
 export SYNAPSE_DISTILL_API_KEY=sk-ant-...  # your LLM provider key
-synapsesync-mcp distill --latest
+synapsesync distill --latest
 ```
 
 Or let it happen automatically when sessions go idle.
@@ -126,14 +126,14 @@ I'm launching publicly because it's reached a point where the full pipeline work
 
 **Quick start:**
 ```bash
-npm install -g synapsesync-mcp
-synapsesync-mcp wizard
-synapsesync-mcp capture start
+npm install -g synapsesync
+synapsesync wizard
+synapsesync capture start
 ```
 
 **Source:** [github.com/metanmai/synapse](https://github.com/metanmai/synapse) (MIT)
 
-**npm:** [synapsesync-mcp](https://www.npmjs.com/package/synapsesync-mcp)
+**npm:** [synapsesync](https://www.npmjs.com/package/synapsesync)
 
 Free tier: 50 files, 3 devices. Plus: $5.99/mo for teams and power users.
 
