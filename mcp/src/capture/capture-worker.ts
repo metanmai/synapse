@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { CloudSyncer } from "./cloud-sync.js";
 import { defaultRegistry } from "./default-registry.js";
+import { ProxySource } from "./proxy/proxy-source.js";
 import { SessionStore } from "./store.js";
 import { CaptureWatcher } from "./watcher.js";
 
@@ -59,14 +60,47 @@ async function main(): Promise<void> {
     log(`Watcher error: ${err}`);
   });
 
+  // Optional: spawn the LLM API proxy alongside the file watcher. Opt-in
+  // via SYNAPSE_PROXY_ENABLE=1 because the proxy requires the user to
+  // install our CA + point HTTPS_PROXY at us — onboarding flow not yet
+  // automated, so default off until it is.
+  const proxyEnabled = process.env.SYNAPSE_PROXY_ENABLE === "1";
+  let proxySource: ProxySource | null = null;
+  if (proxyEnabled) {
+    const proxyPort = process.env.SYNAPSE_PROXY_PORT ? Number.parseInt(process.env.SYNAPSE_PROXY_PORT, 10) : undefined;
+    const proxyIdleMs = process.env.SYNAPSE_PROXY_IDLE_MS
+      ? Number.parseInt(process.env.SYNAPSE_PROXY_IDLE_MS, 10)
+      : undefined;
+    proxySource = new ProxySource({
+      port: proxyPort,
+      idleMs: proxyIdleMs,
+    });
+    // Same sink as the file-watcher 'idle' path: save then push to cloud.
+    // The proxy buffer is flushed on idle window, so each emitted session
+    // is already the "complete enough to push" snapshot — no separate
+    // store-then-idle dance like the file adapters need.
+    proxySource.on("session", async (session) => {
+      log(`Captured proxy session ${session.id} from ${session.tool} (${session.messages.length} messages)`);
+      store.save(session);
+      const ok = await syncer.sync(session);
+      if (ok) log(`Synced proxy session ${session.id} to cloud`);
+    });
+    proxySource.on("error", (err) => log(`Proxy source error: ${err}`));
+    const { port: boundPort, caCertPath } = await proxySource.start();
+    log(`Proxy listening on 127.0.0.1:${boundPort}`);
+    log(`Proxy CA at ${caCertPath} (install in your trust store before pointing tools at the proxy)`);
+  }
+
   process.on("SIGTERM", async () => {
     log("Received SIGTERM, shutting down");
+    if (proxySource) await proxySource.stop();
     await watcher.stop();
     process.exit(0);
   });
 
   process.on("SIGINT", async () => {
     log("Received SIGINT, shutting down");
+    if (proxySource) await proxySource.stop();
     await watcher.stop();
     process.exit(0);
   });
