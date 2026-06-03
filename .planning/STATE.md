@@ -1,6 +1,6 @@
 # State — Stabilize-for-Launch Milestone
 
-*Last updated: 2026-05-20 — BUG-01 fully closed (migration restore + defensive swap deployed); OPS-01 + Plan 05 remain for slice 1b*
+*Last updated: 2026-05-20 — BUG-01 fully closed (migration restore + defensive swap deployed); SessionStart hook learns STATE.md fallback (`d61857b`); OPS-01 + Plan 05 remain for slice 1b*
 
 ## Project Reference
 
@@ -58,7 +58,8 @@ None right now. Phase 1 ready to plan.
 ### Recent activity
 
 - 2026-05-18: Shipped per-device CLI keys end-to-end (`a8ecf98` + `34de058`) and fixed 5 install-pipeline bugs (`d3cd771` + `025a814`). Daemon alive locally via launchd; cloud sync blocked by BUG-01.
-- 2026-05-19 (today): Scope re-expansion (COLLAB + TOKEN added). 4-agent research consolidated into `research/SUMMARY.md`. Requirements rewritten. Roadmap created (this artifact).
+- 2026-05-19: Scope re-expansion (COLLAB + TOKEN added). 4-agent research consolidated into `research/SUMMARY.md`. Requirements rewritten. Roadmap created. Slice 1a-prime executed: BUG-02, BUG-03, BUG-04, BUGS.md #12 all closed inline (17 RED → GREEN; commits `19e3f8e` → `9a0db69`).
+- 2026-05-20 (today): BUG-01 closed on two layers — functional (migrations 015/016/017 re-applied to restore `handoff_events`) + defensive (Promise.allSettled swap deployed via CF git auto-integration, `16a4de1` + `2eb158b`). Account reset performed; one fresh project on dashboard. SessionStart hook learned STATE.md fallback so cold-start briefs surface the repo's hand-curated context instead of the apologetic "no cached context" string (`d61857b`).
 
 ## Session Continuity
 
