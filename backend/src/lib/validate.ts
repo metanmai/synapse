@@ -142,6 +142,13 @@ export const schemas = {
     fidelity_mode: z.enum(["summary", "full"]).optional(),
   }),
 
+  // Reassign a conversation to a different project. Used by `synapse move`
+  // to undo misrouting (e.g., a Tier 2 name collision that dropped a
+  // session into the wrong project, or legacy projects[0] dumps).
+  reassignConversation: z.object({
+    project_id: z.string().uuid("Valid project ID is required"),
+  }),
+
   appendMessages: z.object({
     messages: z.array(
       z.object({

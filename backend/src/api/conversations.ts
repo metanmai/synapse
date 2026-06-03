@@ -10,6 +10,7 @@ import {
   getMessages,
   insertMedia,
   listConversations,
+  reassignConversation,
   saveConversationContext,
   updateConversation,
 } from "../db/queries";
@@ -223,6 +224,55 @@ conversations.patch("/:id", async (c) => {
     action: body.status === "deleted" ? "conversation_deleted" : "conversation_updated",
     source: "human",
     metadata: { conversation_id: conversationId },
+  });
+
+  return c.json(updated);
+});
+
+// POST /api/conversations/:id/reassign — move a conversation to a different project.
+//
+// Used by `synapse move <conv> <project>` to fix misrouted captures. Auth
+// requires editor-or-higher on BOTH the source and target project — moving
+// a conversation TO a project the user doesn't have write access to would
+// be a privilege escalation; moving it FROM a project the user can't write
+// would silently drop data the source's owner expected.
+conversations.post("/:id/reassign", async (c) => {
+  const user = c.get("user");
+  const conversationId = c.req.param("id");
+  const body = await parseBody(c, schemas.reassignConversation);
+
+  const db = c.get("db");
+
+  const existing = await getConversation(db, conversationId);
+  if (!existing) throw new NotFoundError("Conversation not found");
+
+  // Source-project write check: caller must be at least editor.
+  await requireRole(db, existing.project_id, user.id, "editor");
+  // Target-project write check: same.
+  await requireRole(db, body.project_id, user.id, "editor");
+
+  // No-op if already in the target project — return the row as-is so
+  // callers can be idempotent without conditional logic.
+  if (existing.project_id === body.project_id) {
+    return c.json(existing);
+  }
+
+  const updated = await reassignConversation(db, conversationId, body.project_id);
+
+  // Log on BOTH projects so each project's activity feed reflects the move.
+  await logActivity(db, {
+    project_id: existing.project_id,
+    user_id: user.id,
+    action: "conversation_moved_out",
+    source: "human",
+    metadata: { conversation_id: conversationId, target_project_id: body.project_id },
+  });
+  await logActivity(db, {
+    project_id: body.project_id,
+    user_id: user.id,
+    action: "conversation_moved_in",
+    source: "human",
+    metadata: { conversation_id: conversationId, source_project_id: existing.project_id },
   });
 
   return c.json(updated);
