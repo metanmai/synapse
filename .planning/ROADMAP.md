@@ -33,7 +33,13 @@
   3. A fresh `synapse init` / wizard run on a proxy-restricted (Netskope) network produces a `.mcp.json` whose MCP server starts when Claude Code opens
   4. A deliberately-thrown unhandled rejection in `events-batch.ts` appears in Sentry within one minute with the real stack trace
   5. Production Worker is verified on the Paid tier before any further launch work begins (`wrangler whoami` + dashboard screenshot)
-**Plans**: TBD
+**Plans:** 5 plans (slice 1a — wrangler-free; slice 1b BUG-01 / OBS-01 verify / OPS-01 deferred to CF-enabled machine)
+- [ ] 01-01-wave0-scaffolding-PLAN.md — Wave 0 test scaffolding + production stubs (Wave 1)
+- [ ] 01-02-daemon-supervisor-backoff-PLAN.md — BUG-02 + BUGS.md #12 daemon supervisor + exponential backoff (Wave 2)
+- [ ] 01-03-mcp-command-resolver-PLAN.md — BUG-03 proxy-resilient MCP command resolver (Wave 2)
+- [ ] 01-04-init-writes-mcp-json-PLAN.md — BUG-04 `runInit` writes `.mcp.json` + ensures gitignore (Wave 2)
+- [ ] 01-05-sentry-observability-PLAN.md — OBS-01 Sentry SDK + Hono middleware + scrubPayload (Wave 2; has package-legitimacy checkpoint)
+
 **Research status:** covered by `research/SUMMARY.md` (D1, D2, D9, D10, D11)
 **UI hint**: no
 
@@ -124,7 +130,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Stabilize Backend & Observability | 0/0 | Not started | - |
+| 1. Stabilize Backend & Observability | 0/5 | Planned (slice 1a) | - |
 | 2. Real User Identity | 0/0 | Not started | - |
 | 3. Telemetry — Quality & Speed Signals | 0/0 | Not started | - |
 | 4. Cross-User Collaboration | 0/0 | Not started | - |
