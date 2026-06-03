@@ -1,271 +1,230 @@
 <script lang="ts">
-import { enhance } from "$app/forms";
-import PassphrasePrompt from "$lib/components/PassphrasePrompt.svelte";
-import EntryEditor from "$lib/components/workspace/EntryEditor.svelte";
-import EntryViewer from "$lib/components/workspace/EntryViewer.svelte";
-import FolderTree from "$lib/components/workspace/FolderTree.svelte";
-import PathActivityPanel from "$lib/components/workspace/PathActivityPanel.svelte";
-import PathSharePanel from "$lib/components/workspace/PathSharePanel.svelte";
-import { decrypt, encrypt, hasPassphrase, isEncrypted } from "$lib/crypto";
-import type { Entry } from "$lib/types";
+let { data } = $props();
 
-let { data, form } = $props();
-const projectSlug: string =
-  data.project.role === "owner" ? data.project.name : `${data.project.owner_email}~${data.project.name}`;
-const canEdit = data.project.role !== "viewer";
-let needsPassphrase = $state(false);
-let importInput: HTMLInputElement;
-let importForm: HTMLFormElement;
+const projectSlug = $derived(
+  data.project.role === "owner" ? data.project.name : `${data.project.owner_email}~${data.project.name}`,
+);
 
-let mode = $state<"view" | "edit" | "new" | "activity" | "share" | "empty">("empty");
-let selectedPath = $state<string | null>(null);
-let entry = $state<Entry | null>(null);
-let loading = $state(false);
+function relativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = now - then;
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
 
-// Context menu state
-let contextPath = $state<string | null>(null);
-let contextIsFolder = $state(false);
-
-// Client-side entry cache — invalidate when entries list changes (project switch, save, etc.)
-const entryCache = new Map<string, Entry>();
-let prevEntriesRef: typeof data.entries | undefined;
-$effect(() => {
-  const current = data.entries;
-  if (prevEntriesRef !== undefined && current !== prevEntriesRef) {
-    entryCache.clear();
-  }
-  prevEntriesRef = current;
-});
-
-// Resizable sidebar
-let sidebarWidth = $state(220);
-let dragging = $state(false);
-
-function onDragStart(e: MouseEvent) {
-  e.preventDefault();
-  dragging = true;
-  const onMove = (e: MouseEvent) => {
-    sidebarWidth = Math.min(Math.max(e.clientX, 140), 500);
+function insightTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    decision: "Decision",
+    architecture: "Architecture",
+    preference: "Preference",
+    learning: "Learning",
+    bug: "Bug",
+    pattern: "Pattern",
   };
-  const onUp = () => {
-    dragging = false;
-    window.removeEventListener("mousemove", onMove);
-    window.removeEventListener("mouseup", onUp);
-  };
-  window.addEventListener("mousemove", onMove);
-  window.addEventListener("mouseup", onUp);
-}
-
-async function selectEntry(path: string) {
-  selectedPath = path;
-  mode = "view";
-
-  // Return cached entry instantly if available
-  const cached = entryCache.get(path);
-  if (cached) {
-    entry = cached;
-    return;
-  }
-
-  loading = true;
-  try {
-    const res = await fetch(`/projects/${encodeURIComponent(projectSlug)}/api/entry?path=${encodeURIComponent(path)}`);
-    if (res.ok) {
-      const fetched: Entry = await res.json();
-      // Decrypt content if encrypted
-      if (isEncrypted(fetched.content)) {
-        if (!hasPassphrase()) {
-          needsPassphrase = true;
-          loading = false;
-          return;
-        }
-        fetched.content = await decrypt(fetched.content, data.user.email);
-      }
-      entryCache.set(path, fetched);
-      entry = fetched;
-    } else {
-      entry = null;
-    }
-  } catch (err) {
-    console.error("[selectEntry] failed for", path, err);
-    entry = null;
-  }
-  loading = false;
-}
-
-let newFolderPrefix = $state("");
-
-function startNew() {
-  mode = "new";
-  entry = null;
-  selectedPath = null;
-  newFolderPrefix = "";
-}
-
-function startNewInFolder(folderPath: string) {
-  mode = "new";
-  entry = null;
-  selectedPath = null;
-  newFolderPrefix = folderPath + "/";
-}
-
-function startEdit() {
-  mode = "edit";
-}
-
-function handleAction(action: "activity" | "share" | "delete" | "export", path: string, isFolder: boolean) {
-  contextPath = path;
-  contextIsFolder = isFolder;
-  if (action === "activity") {
-    mode = "activity";
-  } else if (action === "share") {
-    mode = "share";
-  } else if (action === "export") {
-    // Export is triggered from FolderTree via `<a download>`; no-op if routed here.
-  } else if (action === "delete") {
-    if (confirm(`Delete ${path}?`)) {
-      // TODO: wire up delete API
-    }
-  }
-}
-
-function closePanel() {
-  mode = selectedPath ? "view" : "empty";
-  if (selectedPath && mode === "view") selectEntry(selectedPath);
+  return labels[type] || type;
 }
 </script>
 
-{#if needsPassphrase}
-  <PassphrasePrompt onUnlock={() => {
-    needsPassphrase = false;
-    entryCache.clear();
-    if (selectedPath) selectEntry(selectedPath);
-  }} />
-{/if}
-
-<div class="workspace-layout" style={dragging ? "user-select: none; cursor: col-resize;" : ""}>
-  <!-- File tree sidebar -->
-  <div class="glass p-3 overflow-y-auto file-tree-sidebar"
-    style="width: {sidebarWidth}px; border-radius: 0;">
-    <div class="flex items-center justify-between mb-2 px-1">
-      <span class="font-medium uppercase tracking-wide"
-        style="color: var(--color-text-muted); font-size: 10px;">Files</span>
-      {#if canEdit}
-        <div class="flex items-center gap-2">
-          <button onclick={() => startNew()}
-            aria-label="New file"
-            class="cursor-pointer"
-            style="font-size: 14px; width: 24px; height: 24px; border-radius: 6px; border: none; background: transparent; color: var(--color-text-muted); cursor: pointer; transition: all 150ms ease; display: flex; align-items: center; justify-content: center; line-height: 1;"
-            onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
-            onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
-            title="New file">+</button>
-          <button onclick={() => importInput?.click()}
-            aria-label="Import zip"
-            class="cursor-pointer"
-            style="font-size: 12px; width: 24px; height: 24px; border-radius: 6px; border: none; background: transparent; color: var(--color-text-muted); cursor: pointer; transition: all 150ms ease; display: flex; align-items: center; justify-content: center; line-height: 1;"
-            onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
-            onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
-            title="Import zip">↑</button>
-        </div>
+<div class="overview-container">
+  <!-- Insights section -->
+  <section class="overview-section">
+    <div class="section-header">
+      <h2 class="section-title">Insights ({data.insightTotal})</h2>
+      {#if data.insightTotal > data.insights.length}
+        <a href="/projects/{encodeURIComponent(projectSlug)}/insights" class="section-link">
+          Show all {data.insightTotal} &rarr;
+        </a>
       {/if}
     </div>
-    <FolderTree entries={data.entries} {selectedPath}
-      projectName={projectSlug} onSelect={selectEntry} onAction={handleAction}
-      onNewInFolder={canEdit ? startNewInFolder : undefined} {canEdit} />
-  </div>
 
-  <!-- Resize handle -->
-  <div
-    role="separator"
-    aria-label="Resize sidebar"
-    aria-orientation="vertical"
-    tabindex="0"
-    onmousedown={onDragStart}
-    onkeydown={(e) => {
-      if (e.key === 'ArrowLeft') { e.preventDefault(); sidebarWidth = Math.max(sidebarWidth - 10, 140); }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); sidebarWidth = Math.min(sidebarWidth + 10, 500); }
-    }}
-    class="w-1.5 rounded-full shrink-0 cursor-col-resize hover:opacity-100 transition-opacity"
-    style="background-color: {dragging ? 'var(--color-pink)' : 'transparent'}; opacity: {dragging ? 1 : 0.5};"
-    onmouseenter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-pink)'}
-    onmouseleave={(e) => { if (!dragging) e.currentTarget.style.backgroundColor = 'transparent'; }}>
-  </div>
-
-  <!-- Main content -->
-  <div class="flex-1 p-8 overflow-y-auto min-w-0 relative">
-    {#if loading}
-      <div class="loading-text" style="color: var(--color-text-muted); font-size: 13px;">Loading...</div>
-    {/if}
-    {#if mode === "activity" && contextPath}
-      <PathActivityPanel
-        path={contextPath}
-        isFolder={contextIsFolder}
-        activity={data.activity}
-        onClose={closePanel}
-      />
-    {:else if mode === "share" && contextPath}
-      <PathSharePanel
-        path={contextPath}
-        isFolder={contextIsFolder}
-        projectId={data.project.id}
-        shareLinks={data.shareLinks}
-        onClose={closePanel}
-      />
-    {:else if mode === "new"}
-      <EntryEditor projectName={projectSlug} isNew onCancel={closePanel} pathPrefix={newFolderPrefix} />
-    {:else if mode === "edit" && entry}
-      <EntryEditor {entry} projectName={projectSlug} onCancel={closePanel} />
-    {:else if mode === "view" && entry}
-      <EntryViewer {entry} projectName={projectSlug} onEdit={canEdit ? startEdit : undefined} />
+    {#if data.insights.length === 0}
+      <p class="empty-text">No insights yet. Insights are extracted automatically from your conversations.</p>
     {:else}
-      <div class="text-center mt-20" style="color: var(--color-text-muted); font-size: 14px;">
-        Select a file or create a new one
+      <div class="insight-list">
+        {#each data.insights as insight (insight.id)}
+          <div class="insight-card">
+            <span class="insight-type">{insightTypeLabel(insight.type)}</span>
+            <p class="insight-summary">{insight.summary}</p>
+          </div>
+        {/each}
       </div>
     {/if}
+  </section>
 
-    {#if form?.error}
-      <p class="mt-4 text-sm" role="alert" style="color: var(--color-danger);">{form.error}</p>
-    {/if}
+  <hr class="divider" />
 
-    {#if form?.importResult}
-      <div class="rounded-lg p-3 text-sm mt-4" role="status"
-        style="background-color: var(--color-success-bg); color: var(--color-success);">
-        Import complete: {form.importResult.imported} new, {form.importResult.updated} updated, {form.importResult.skipped} skipped
+  <!-- Recent Conversations section -->
+  <section class="overview-section">
+    <div class="section-header">
+      <h2 class="section-title">Recent Conversations ({data.conversationTotal})</h2>
+      {#if data.conversationTotal > 0}
+        <a href="/projects/{encodeURIComponent(projectSlug)}/conversations" class="section-link">
+          View all conversations &rarr;
+        </a>
+      {/if}
+    </div>
+
+    {#if data.conversations.length === 0}
+      <p class="empty-text">No conversations yet. Sync a conversation from your AI coding tool to get started.</p>
+    {:else}
+      <div class="conversation-list">
+        {#each data.conversations as conversation (conversation.id)}
+          <a
+            href="/projects/{encodeURIComponent(projectSlug)}/conversations/{conversation.id}"
+            class="conversation-card"
+          >
+            <div class="conversation-header">
+              <span class="conversation-title">{conversation.title || "Untitled conversation"}</span>
+              <span class="conversation-time">{relativeTime(conversation.updated_at)}</span>
+            </div>
+            <div class="conversation-meta">
+              {conversation.message_count} message{conversation.message_count === 1 ? "" : "s"}
+            </div>
+          </a>
+        {/each}
       </div>
     {/if}
-  </div>
+  </section>
 </div>
 
-<!-- Hidden import form -->
-<form method="POST" action="?/importProject" enctype="multipart/form-data" use:enhance
-  class="hidden" bind:this={importForm}>
-  <input type="hidden" name="projectId" value={data.project.id} />
-  <input type="file" name="file" accept=".zip" bind:this={importInput}
-    onchange={() => importForm?.requestSubmit()} />
-</form>
-
 <style>
-  .workspace-layout {
-    display: flex;
-    height: 100%;
+  .overview-container {
+    padding: 1.5rem;
+    max-width: 720px;
   }
 
-  .file-tree-sidebar {
-    flex-shrink: 0;
+  .overview-section {
+    margin-bottom: 1rem;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+
+  .section-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+    margin: 0;
+  }
+
+  .section-link {
+    color: var(--color-link);
+    font-weight: 600;
+    font-size: 13px;
+    text-decoration: none;
+  }
+
+  .section-link:hover {
+    text-decoration: underline;
+  }
+
+  .empty-text {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    margin: 0;
+    padding: 1rem 0;
+  }
+
+  .divider {
+    border: none;
+    border-top: 1px solid rgba(199, 183, 163, 0.25);
+    margin: 1.25rem 0;
+  }
+
+  /* Insight cards */
+  .insight-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .insight-card {
+    background: rgba(255, 253, 248, 0.5);
+    border: 1px solid rgba(199, 183, 163, 0.25);
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+  }
+
+  .insight-type {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+  }
+
+  .insight-summary {
+    font-size: 13px;
+    color: var(--color-text);
+    margin: 0.25rem 0 0;
+    line-height: 1.5;
+  }
+
+  /* Conversation cards */
+  .conversation-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .conversation-card {
+    display: block;
+    background: rgba(255, 253, 248, 0.5);
+    border: 1px solid rgba(199, 183, 163, 0.25);
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    text-decoration: none;
+    color: inherit;
+    transition:
+      transform 150ms ease,
+      border-color 150ms ease;
+  }
+
+  .conversation-card:hover {
+    transform: translateY(-1px);
+    border-color: rgba(199, 183, 163, 0.5);
+  }
+
+  .conversation-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .conversation-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     min-width: 0;
   }
 
+  .conversation-time {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+  }
 
-  @media (max-width: 768px) {
-    .workspace-layout {
-      flex-direction: column;
-    }
-
-    .file-tree-sidebar {
-      width: 100% !important;
-      max-height: 40vh;
-      border-right: none !important;
-      border-bottom: 1px solid var(--color-border);
-    }
+  .conversation-meta {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-top: 0.25rem;
   }
 </style>
