@@ -1,0 +1,56 @@
+-- 026_rename_legacy_cli_keys.sql
+-- BUG #7: legacy `cli`-labeled keys never got migrated to the per-device
+-- `cli-<device>` shape introduced in Phase 03-05.
+--
+-- Background
+--   Before per-device CLI keys shipped, `synapsesync wizard` created keys
+--   with the bare label "cli". After the per-device feature (migration
+--   025 + the device-cap codepath), every new CLI key gets the shape
+--   `cli-<sanitized-device-name>` so listCliKeys can list them individually
+--   and countCliKeys can enforce the device cap.
+--
+--   Pre-Phase-03-05 rows are still labeled "cli" — they aggregate into a
+--   single indistinguishable line on the dashboard and the user has no way
+--   to tell which of their machines that key was used on.
+--
+-- What this migration does
+--   For every row whose label is exactly "cli" (no prefix, no suffix), set
+--   the label to `cli-legacy-YYYY-MM-DD` derived from created_at. The new
+--   shape:
+--     - still matches the `LIKE 'cli-%'` filter in countCliKeys/listCliKeys
+--       (so device-cap accounting is unchanged — these rows still count
+--       toward the user's 3 free / 10 plus limit)
+--     - carries the creation date so users can identify which device key
+--       this was even without a name
+--     - is renameable from the dashboard (commit 76aa43f added inline-edit
+--       in ApiKeysCard.svelte) so users can replace the auto-name with a
+--       human one
+--
+-- What this migration does NOT do
+--   - Touch any other labels. Ad-hoc names like "M4 Pro" or "production"
+--     are indistinguishable from intentional non-CLI keys; renaming them
+--     could break user intent.
+--   - Affect rows already shaped `cli-*`. Those came from the per-device
+--     flow; they're already correct.
+--   - Set machine_id. Legacy rows keep `machine_id IS NULL` (matches the
+--     migration 025 invariant). They can't participate in same-machine
+--     re-init dedup, but the user can rename + revoke via the dashboard.
+--
+-- Safety
+--   - Idempotent: re-running this migration on a row already shaped
+--     `cli-legacy-YYYY-MM-DD` is a no-op (the WHERE clause requires the
+--     exact string "cli"). A row created today with label "cli" would be
+--     renamed; a row created today and re-renamed back to "cli" by a user
+--     would also be caught on the next migration run — but the dashboard
+--     UI strips the cli- prefix on display and re-adds it on save, so a
+--     user can never produce a bare "cli" label from the dashboard.
+--   - Atomic: one UPDATE statement.
+--   - Same-day collisions: two legacy rows for the same user with the
+--     same created_at::date will produce identical labels (e.g. both
+--     "cli-legacy-2025-11-04"). The api_keys table has no UNIQUE
+--     constraint on (user_id, label), so this is allowed. The user can
+--     disambiguate via the dashboard's inline rename.
+
+UPDATE api_keys
+SET label = 'cli-legacy-' || to_char(created_at, 'YYYY-MM-DD')
+WHERE label = 'cli';
