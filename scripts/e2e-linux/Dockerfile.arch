@@ -1,0 +1,25 @@
+# Synapse proxy Layer 8 E2E — Arch Linux trust-store install test.
+# Spec §4.2: Arch is the "trap distro" — its `ID=arch` does NOT match
+# either debian-family or rhel-family, so the LinuxBackend MUST soft-skip
+# with manual-install instructions naming Arch's trust path
+# (/etc/ca-certificates/trust-source/anchors/ + sudo trust extract-compat).
+# This test asserts the soft-skip behavior — NO file written, exit 0.
+FROM archlinux:latest
+
+RUN pacman -Sy --noconfirm \
+      ca-certificates \
+      ca-certificates-utils \
+      sudo \
+      openssl \
+      nodejs \
+      npm
+
+WORKDIR /repo
+COPY . /repo
+
+RUN npm install --workspace=mcp --include-workspace-root=false --no-audit --no-fund
+
+WORKDIR /repo/mcp
+RUN npm run build
+
+ENTRYPOINT ["/bin/sh", "/repo/scripts/e2e-linux/e2e-proxy-install.sh"]
