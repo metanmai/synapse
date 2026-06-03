@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appendEvent } from "../../src/capture/events-log.js";
@@ -6,7 +7,7 @@ import { runFlushCycle } from "../../src/capture/handoff-sync.js";
 
 let tmp: string;
 beforeEach(() => {
-  tmp = fs.mkdtempSync("/tmp/syn-crash-");
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "syn-crash-"));
   process.env.SYNAPSE_HOME = tmp;
 });
 afterEach(() => {

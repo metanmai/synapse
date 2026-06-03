@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -10,7 +12,7 @@ import {
 
 let tmp: string;
 beforeEach(() => {
-  tmp = fs.mkdtempSync("/tmp/synapse-os-");
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-os-"));
 });
 afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
