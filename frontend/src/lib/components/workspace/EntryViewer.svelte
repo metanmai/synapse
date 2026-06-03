@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { marked } from "marked";
   import type { Entry } from "$lib/types";
 
   let { entry, projectName, onEdit } = $props<{
@@ -6,6 +7,8 @@
     projectName: string;
     onEdit: () => void;
   }>();
+
+  let html = $derived(marked.parse(entry.content, { async: false }) as string);
 </script>
 
 <div>
@@ -37,8 +40,8 @@
       </button>
     </div>
   </div>
-  <div class="rounded-xl p-4 whitespace-pre-wrap font-mono text-sm"
-    style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border); line-height: 1.6;">
-    {entry.content}
+  <div class="prose rounded-xl p-5 text-sm"
+    style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border); line-height: 1.7;">
+    {@html html}
   </div>
 </div>
