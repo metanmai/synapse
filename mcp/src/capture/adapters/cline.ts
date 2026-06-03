@@ -40,26 +40,33 @@ function isToolResultOnly(msg: ClineMessage): boolean {
   return msg.role === "user" && msg.content.every((c) => c.type === "tool_result");
 }
 
+/**
+ * Resolve the per-platform Cline extension storage path.
+ * Cline (vscode-extension `saoudrizwan.claude-dev`) writes task data
+ * under VS Code's globalStorage, which lives at a platform-specific
+ * root. Exported for unit testing.
+ */
+export function clineTasksDir(platform: NodeJS.Platform = process.platform): string {
+  const ext = path.join("Code", "User", "globalStorage", "saoudrizwan.claude-dev", "tasks");
+  if (platform === "darwin") {
+    return path.join(os.homedir(), "Library", "Application Support", ext);
+  }
+  if (platform === "win32") {
+    // VS Code on Windows stores user data under %APPDATA%\Code\...
+    const appData = process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming");
+    return path.join(appData, ext);
+  }
+  // Linux: ~/.config/Code/...
+  return path.join(os.homedir(), ".config", ext);
+}
+
 export class ClineAdapter implements ToolAdapter {
   tool = "cline";
 
   watchPaths(): string[] {
     const override = process.env.SYNAPSE_TEST_CLINE_PATH;
     if (override) return [override];
-    const base =
-      process.platform === "darwin"
-        ? path.join(
-            os.homedir(),
-            "Library",
-            "Application Support",
-            "Code",
-            "User",
-            "globalStorage",
-            "saoudrizwan.claude-dev",
-            "tasks",
-          )
-        : path.join(os.homedir(), ".config", "Code", "User", "globalStorage", "saoudrizwan.claude-dev", "tasks");
-    return [base];
+    return [clineTasksDir()];
   }
 
   parse(filePath: string): CapturedSession | null {

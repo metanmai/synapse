@@ -2,7 +2,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { ClineAdapter } from "../../../src/capture/adapters/cline.js";
+import { ClineAdapter, clineTasksDir } from "../../../src/capture/adapters/cline.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Cline derives the task id from the PARENT DIRECTORY name and requires
@@ -66,5 +66,44 @@ describe("ClineAdapter", () => {
 
   it("returns null for non-JSON files", () => {
     expect(adapter.parse("/some/file.txt")).toBeNull();
+  });
+});
+
+// Bug class: "the adapter's watchPaths() returns a path that doesn't
+// match the actual location Cline writes task data, so chokidar watches
+// nothing and we silently fail to capture any tasks."
+//
+// Pre-fix: cline.ts had a darwin/non-darwin branch where the non-darwin
+// path was `~/.config/Code/...` (correct on Linux, WRONG on Windows
+// where VS Code stores user data under %APPDATA%\Code\...).
+describe("clineTasksDir() per-platform paths", () => {
+  const ext = "Code/User/globalStorage/saoudrizwan.claude-dev/tasks";
+
+  it("darwin → ~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/tasks", () => {
+    const p = clineTasksDir("darwin");
+    expect(p).toContain(`Library/Application Support/${ext}`);
+  });
+
+  it("win32 → %APPDATA%\\Code\\User\\globalStorage\\saoudrizwan.claude-dev\\tasks", () => {
+    const prev = process.env.APPDATA;
+    // biome-ignore lint/performance/noDelete: `process.env.X = undefined` coerces to string "undefined" (truthy), poisoning subsequent tests
+    delete process.env.APPDATA;
+    try {
+      const p = clineTasksDir("win32");
+      expect(p).toMatch(
+        /AppData[\\/]Roaming[\\/]Code[\\/]User[\\/]globalStorage[\\/]saoudrizwan\.claude-dev[\\/]tasks/,
+      );
+      expect(p).not.toContain("Library/Application Support");
+      expect(p).not.toContain(".config");
+    } finally {
+      if (prev !== undefined) process.env.APPDATA = prev;
+    }
+  });
+
+  it("linux → ~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/tasks", () => {
+    const p = clineTasksDir("linux");
+    expect(p).toContain(`.config/${ext}`);
+    expect(p).not.toContain("Library/Application Support");
+    expect(p).not.toContain("AppData");
   });
 });

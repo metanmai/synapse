@@ -2,7 +2,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { CursorAdapter } from "../../../src/capture/adapters/cursor.js";
+import { CursorAdapter, cursorWorkspaceStorageDir } from "../../../src/capture/adapters/cursor.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = path.join(__dirname, "../../fixtures/capture/cursor/sample-chat.json");
@@ -54,5 +54,71 @@ describe("CursorAdapter", () => {
 
   it("returns null for non-JSON files", () => {
     expect(adapter.parse("/some/file.txt")).toBeNull();
+  });
+});
+
+// Bug class: "the adapter's watchPaths() returns a path that doesn't
+// match the actual location Cursor stores chat data on this OS, so
+// chokidar watches nothing and we silently fail to capture any chats."
+//
+// Pre-fix: cursor.ts hardcoded the macOS "Library/Application Support"
+// path with NO branching for win32/linux. On Windows + Linux the adapter
+// resolved a path that doesn't exist on disk (~/Library on Windows = no
+// such directory), so the daemon would watch a never-existing dir and
+// capture zero chats. Now branches by process.platform.
+describe("cursorWorkspaceStorageDir() per-platform paths", () => {
+  it("darwin → ~/Library/Application Support/Cursor/User/workspaceStorage", () => {
+    const p = cursorWorkspaceStorageDir("darwin");
+    expect(p).toContain("Library/Application Support/Cursor/User/workspaceStorage");
+    expect(p).not.toContain(".config");
+    expect(p).not.toContain("AppData");
+  });
+
+  it("win32 → %APPDATA%\\Cursor\\User\\workspaceStorage (or ~/AppData/Roaming/Cursor/...)", () => {
+    const prev = process.env.APPDATA;
+    // biome-ignore lint/performance/noDelete: see test #2 in this file — `process.env.X = undefined` coerces to string "undefined" (truthy), poisoning subsequent tests
+    delete process.env.APPDATA;
+    try {
+      const p = cursorWorkspaceStorageDir("win32");
+      // Should land under AppData\Roaming (the standard Windows location)
+      // since APPDATA env wasn't set in this test.
+      expect(p).toMatch(/AppData[\\/]Roaming[\\/]Cursor[\\/]User[\\/]workspaceStorage/);
+      // Must NOT have the macOS path.
+      expect(p).not.toContain("Library/Application Support");
+      // Must NOT have the Linux XDG path.
+      expect(p).not.toContain(".config");
+    } finally {
+      if (prev !== undefined) process.env.APPDATA = prev;
+    }
+  });
+
+  it("win32 with APPDATA env set → uses APPDATA value", () => {
+    const prev = process.env.APPDATA;
+    process.env.APPDATA = "D:\\Users\\customappdata";
+    try {
+      const p = cursorWorkspaceStorageDir("win32");
+      expect(p.startsWith("D:\\Users\\customappdata")).toBe(true);
+      expect(p).toContain("Cursor");
+      expect(p).toContain("workspaceStorage");
+    } finally {
+      if (prev === undefined) {
+        // biome-ignore lint/performance/noDelete: see other override-cleanup blocks in this file
+        delete process.env.APPDATA;
+      } else {
+        process.env.APPDATA = prev;
+      }
+    }
+  });
+
+  it("linux → ~/.config/Cursor/User/workspaceStorage (XDG layout)", () => {
+    const p = cursorWorkspaceStorageDir("linux");
+    expect(p).toContain(".config/Cursor/User/workspaceStorage");
+    expect(p).not.toContain("Library/Application Support");
+    expect(p).not.toContain("AppData");
+  });
+
+  it("freebsd → falls through to Linux/XDG layout (sensible default)", () => {
+    const p = cursorWorkspaceStorageDir("freebsd");
+    expect(p).toContain(".config/Cursor/User/workspaceStorage");
   });
 });

@@ -2,7 +2,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { RooCodeAdapter } from "../../../src/capture/adapters/roo-code.js";
+import { RooCodeAdapter, rooCodeTasksDir } from "../../../src/capture/adapters/roo-code.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Roo Code is a fork of Cline — same file shape (api_conversation_history.json),
@@ -61,5 +61,39 @@ describe("RooCodeAdapter", () => {
 
   it("returns null for non-JSON files", () => {
     expect(adapter.parse("/some/file.txt")).toBeNull();
+  });
+});
+
+// Bug class: same as cursor/cline — pre-fix the non-darwin branch used
+// `~/.config/Code/...` which is wrong on Windows. Now branches by platform.
+describe("rooCodeTasksDir() per-platform paths", () => {
+  const ext = "Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks";
+
+  it("darwin → ~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks", () => {
+    const p = rooCodeTasksDir("darwin");
+    expect(p).toContain(`Library/Application Support/${ext}`);
+  });
+
+  it("win32 → %APPDATA%\\Code\\User\\globalStorage\\rooveterinaryinc.roo-cline\\tasks", () => {
+    const prev = process.env.APPDATA;
+    // biome-ignore lint/performance/noDelete: `process.env.X = undefined` coerces to string "undefined" (truthy), poisoning subsequent tests
+    delete process.env.APPDATA;
+    try {
+      const p = rooCodeTasksDir("win32");
+      expect(p).toMatch(
+        /AppData[\\/]Roaming[\\/]Code[\\/]User[\\/]globalStorage[\\/]rooveterinaryinc\.roo-cline[\\/]tasks/,
+      );
+      expect(p).not.toContain("Library/Application Support");
+      expect(p).not.toContain(".config");
+    } finally {
+      if (prev !== undefined) process.env.APPDATA = prev;
+    }
+  });
+
+  it("linux → ~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks", () => {
+    const p = rooCodeTasksDir("linux");
+    expect(p).toContain(`.config/${ext}`);
+    expect(p).not.toContain("Library/Application Support");
+    expect(p).not.toContain("AppData");
   });
 });
