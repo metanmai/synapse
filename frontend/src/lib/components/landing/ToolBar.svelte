@@ -6,7 +6,14 @@
     "ChatGPT",
     "Cursor",
     "Windsurf",
-    "Copilot",
+    "GitHub Copilot",
+    "VS Code",
+    "Zed",
+    "JetBrains",
+    "Neovim",
+    "Warp",
+    "iTerm",
+    "Any MCP Client",
   ];
 
   // Duplicate for seamless infinite scroll
@@ -85,7 +92,7 @@
     display: flex;
     gap: 1.25rem;
     width: max-content;
-    animation: scroll-left 25s linear infinite;
+    animation: scroll-left 45s linear infinite;
   }
 
   .tool-pill {
