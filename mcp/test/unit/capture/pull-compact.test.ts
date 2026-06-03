@@ -283,6 +283,41 @@ describe("pullHandoff", () => {
     expect(await pullHandoff({ cwd: CWD })).toBeNull();
   });
 
+  // Regression guard for Fix #4 — bug class "stale project-map entry
+  // points at a project deleted server-side (synapse reset / dashboard
+  // delete), and every subsequent SessionStart silently 404s without
+  // recovery." Fix: on 404 from list, drop the project-map entry so the
+  // NEXT capture-sync from this cwd auto-creates a fresh project.
+  it("clears the stale project-map entry when the list endpoint returns 404", async () => {
+    writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
+    // Project was deleted server-side → requireRole throws NotFoundError → 404.
+    fetchSpy.mockResolvedValueOnce(new Response("project gone", { status: 404 }));
+
+    const logs: string[] = [];
+    const result = await pullHandoff({ cwd: CWD, log: (m) => logs.push(m) });
+
+    expect(result).toBeNull();
+    // The stale entry MUST be gone from disk so the next capture-sync
+    // from this cwd doesn't keep using the dead UUID.
+    const map = JSON.parse(fs.readFileSync(getProjectMapPath(), "utf-8"));
+    expect(map[CWD]).toBeUndefined();
+    // And the daemon log should announce the invalidation.
+    expect(logs.some((l) => l.toLowerCase().includes("invalidated"))).toBe(true);
+  });
+
+  // 5xx is transient — must NOT wipe the cache. Otherwise a flappy
+  // backend would cause endless re-routing on the next session.
+  it("does NOT clear project-map on 5xx (transient) — only on 404", async () => {
+    writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
+    fetchSpy.mockResolvedValueOnce(new Response("upstream sad", { status: 503 }));
+
+    await pullHandoff({ cwd: CWD });
+
+    const map = JSON.parse(fs.readFileSync(getProjectMapPath(), "utf-8"));
+    expect(map[CWD]).toBeDefined();
+    expect(map[CWD].project_id).toBe(PROJECT_UUID);
+  });
+
   // Regression guard for the bug class "a slow compact() blocks SessionStart
   // for tens of seconds, visibly stalling Claude Code." The wall-clock cap
   // must win over the inner async work, even when fetch hangs forever.

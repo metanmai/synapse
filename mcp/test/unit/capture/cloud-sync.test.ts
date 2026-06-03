@@ -354,6 +354,94 @@ describe("CloudSyncer", () => {
         expect(String(fetchSpy.mock.calls[2][0])).toContain("/api/conversations/conv_persist_1/messages");
       });
 
+      // Regression guard for Fix #4 — bug class "after `synapse reset` (or
+      // a dashboard delete), the local sync-state.json + project-map.json
+      // still point at the dead cloud conversation, and every subsequent
+      // sync silently 404s forever." Fix: 404 on append → wipe cache, fall
+      // through to first-sync auto-create.
+      it("recovers from 404 by clearing cached state and re-creating the conversation", async () => {
+        // Seed sync-state.json as if a previous run completed against a
+        // conversation that has since been deleted server-side.
+        const seededState = {
+          version: 1,
+          states: {
+            ses_test1234567890: {
+              cloudConversationId: "conv_deleted",
+              lastSyncedMessageCount: 1, // already synced 1 of the 2 messages
+              projectId: "proj_deleted",
+              projectName: "DeadProject",
+            },
+          },
+        };
+        fs.writeFileSync(path.join(tmpDir, "sync-state.json"), JSON.stringify(seededState));
+
+        fetchSpy
+          // 1. POST /api/conversations/conv_deleted/messages → 404 (dead conv)
+          .mockResolvedValueOnce(new Response("conv gone", { status: 404 }))
+          // 2. Recovery: POST /api/conversations (createConversation, no project_id)
+          .mockResolvedValueOnce(
+            new Response(JSON.stringify({ id: "conv_fresh", project_id: "proj_fresh", project_name: "FreshProject" }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }),
+          )
+          // 3. POST /api/conversations/conv_fresh/messages
+          .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+        const logs: string[] = [];
+        const syncer = new CloudSyncer((m) => logs.push(m));
+        // Session has 2 messages, lastSyncedMessageCount was 1 — there's
+        // exactly 1 new message to send, so sync() takes the "subsequent"
+        // branch which is where the 404 fires.
+        const session = makeSession();
+        const ok = await syncer.sync(session);
+
+        expect(ok).toBe(true);
+        // Three fetches: dead-append, fresh-create, fresh-append.
+        expect(fetchSpy).toHaveBeenCalledTimes(3);
+        // The first fetch hit the dead conv id (proving we DID try the
+        // stale cache once — important to not skip directly to re-create).
+        expect(String(fetchSpy.mock.calls[0][0])).toContain("/api/conversations/conv_deleted/messages");
+        // The second fetch was the recreation POST (no project_id in body).
+        const createBody = JSON.parse(fetchSpy.mock.calls[1][1]?.body as string);
+        expect("project_id" in createBody).toBe(false);
+        // The third fetch went to the FRESH conv id.
+        expect(String(fetchSpy.mock.calls[2][0])).toContain("/api/conversations/conv_fresh/messages");
+        // A log line should announce the invalidation so the user can see
+        // recovery happened (not silent retry).
+        expect(logs.some((l) => l.toLowerCase().includes("stale") || l.toLowerCase().includes("404"))).toBe(true);
+      });
+
+      // Defense against over-eager invalidation: a transient 5xx must NOT
+      // wipe the cache — otherwise a flappy backend would cause endless
+      // re-create churn and duplicate conversations on the next recovery.
+      it("does NOT clear cache on transient 5xx — only on 404", async () => {
+        const seededState = {
+          version: 1,
+          states: {
+            ses_test1234567890: {
+              cloudConversationId: "conv_live",
+              lastSyncedMessageCount: 1,
+              projectId: "proj_live",
+              projectName: "Live",
+            },
+          },
+        };
+        fs.writeFileSync(path.join(tmpDir, "sync-state.json"), JSON.stringify(seededState));
+
+        fetchSpy.mockResolvedValueOnce(new Response("upstream sad", { status: 503 }));
+
+        const syncer = new CloudSyncer();
+        const ok = await syncer.sync(makeSession());
+
+        expect(ok).toBe(false);
+        // Only the failed append — no recovery createConversation should fire.
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        // sync-state.json should still hold the original mapping.
+        const after = JSON.parse(fs.readFileSync(path.join(tmpDir, "sync-state.json"), "utf-8"));
+        expect(after.states.ses_test1234567890.cloudConversationId).toBe("conv_live");
+      });
+
       it("starts fresh and does not crash when sync-state.json is corrupt", async () => {
         // Land garbage at the file the next CloudSyncer is about to read.
         fs.writeFileSync(path.join(tmpDir, "sync-state.json"), "{not valid json");
