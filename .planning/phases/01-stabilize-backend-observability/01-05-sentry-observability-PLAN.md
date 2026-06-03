@@ -3,7 +3,9 @@ phase: 01-stabilize-backend-observability
 plan: 05
 type: execute
 wave: 2
-slice: 1a
+slice: 1b
+status: deferred-to-cf-machine
+defer_reason: "Plan 05 needs `npm install @sentry/cloudflare @sentry/hono` against the npm registry, which Netskope blocks on this device. Decided in pre-execution risk audit (2026-05-19). The Wave 0 scaffolding for OBS-01 (observability.ts stub, observability.test.ts, observability-wiring.test.ts) is ALSO deferred — Plan 01-01 in slice 1a-prime no longer creates those files. Plan 05 must run its own Wave 0 scaffolding step on the CF-enabled machine before continuing to Tasks 1b/2/3."
 depends_on: [01-01]
 files_modified:
   - backend/package.json

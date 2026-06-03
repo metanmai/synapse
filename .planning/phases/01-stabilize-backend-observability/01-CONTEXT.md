@@ -8,16 +8,15 @@
 
 Phase 1's roadmap goal is unchanged: *a user running the daemon can see their events reach the backend, and the operator can see future failures before users do.* This discussion **carves Phase 1 into two slices** because the current device cannot run wrangler (Netskope egress block + intentional CF/non-CF machine separation).
 
-**Slice 1a — wrangler-free (THIS slice, plan + execute here):**
+**Slice 1a-prime — wrangler-free + npm-registry-free (THIS slice, plan + execute here):**
 - **BUG-02** — `synapse capture status` reports daemon state honestly under launchd / systemd
 - **BUG-03** — wizard's MCP configs work on proxy-restricted networks (Netskope) without `npx`
 - **BUG-04** — `synapse init` writes `.mcp.json` to cwd (project-local MCP server config)
-- **OBS-01 (code-only)** — Sentry SDK init, Hono `app.onError` wiring, `wrangler.jsonc` `SENTRY_DSN` binding. Deploy + SC#4 deliberate-throw verification deferred to slice 1b.
 - **BUGS.md #12** — daemon flush exponential backoff (pulled in: colocated with BUG-02 in `mcp/src/capture/daemon.ts`)
 
-**Slice 1b — wrangler-bound (DEFERRED to the CF-enabled machine):**
+**Slice 1b — wrangler-bound OR npm-install-bound (DEFERRED to the CF-enabled machine):**
 - **BUG-01** — 1101 root-cause via `wrangler tail`, then fix (likely `Promise.allSettled` swap at `events-batch.ts:132`, per research D1)
-- **OBS-01 (deploy + verify)** — `wrangler deploy` the Sentry code authored in 1a, then SC#4 verification
+- **OBS-01 (full — code + deploy + verify)** — Originally planned as code-in-1a + deploy-verify-in-1b. **Further deferred entirely to 1b on 2026-05-19 pre-execution risk audit:** Plan 05 Task 1b requires `npm install @sentry/cloudflare @sentry/hono` against the npm registry, which Netskope blocks on this device. The whole Sentry pipeline — install, code, wiring, deploy, SC#4 verification — happens on the CF-enabled machine.
 - **OPS-01** — `wrangler whoami` + dashboard screenshot to confirm Workers Paid tier
 
 Phase 1 is only COMPLETE when both slices land. This CONTEXT.md governs slice 1a; slice 1b will pick up the same CONTEXT.md on the CF machine.

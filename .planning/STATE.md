@@ -1,6 +1,6 @@
 # State — Stabilize-for-Launch Milestone
 
-*Last updated: 2026-05-19 — Phase 1 plans verified (5 plans, 3 waves); ready to execute slice 1a*
+*Last updated: 2026-05-19 — pre-execution audit further carved Plan 05 to slice 1b; slice 1a-prime ready to execute (4 plans)*
 
 ## Project Reference
 
@@ -14,12 +14,12 @@
 
 ## Current Position
 
-- **Phase:** Phase 1 — Stabilize Backend & Observability (**slice 1a — wrangler-free subset**)
-- **Plan:** 5 PLAN.md files (Wave 1: 01-01 scaffolding; Wave 2: 01-02, 01-03, 01-05 parallel; Wave 3: 01-04)
-- **Status:** Plans verified (plan-checker VERIFICATION PASSED on iter 3); ready to execute
+- **Phase:** Phase 1 — Stabilize Backend & Observability (**slice 1a-prime — 4 plans, npm-install-free**)
+- **Plan:** 4 PLAN.md files in scope on this device — Wave 1: 01-01 scaffolding (trimmed; no OBS-01 stubs); Wave 2: 01-02, 01-03 parallel; Wave 3: 01-04. Plan 05 deferred to slice 1b.
+- **Status:** Plans verified (plan-checker VERIFICATION PASSED on iter 3); Plan 01-01 trimmed + Plan 05 marked slice 1b in pre-execution audit; ready to execute
 - **Roadmap progress:** 0/7 phases complete
 
-**Slice routing (2026-05-19):** Phase 1 split into 1a (BUG-02/03/04 + Sentry code + daemon backoff; lands on this device) and 1b (BUG-01 + OBS-01 deploy + OPS-01; lands on the CF-enabled machine). Both slices share `01-CONTEXT.md`. Phase is complete only when both ship.
+**Slice routing (2026-05-19, updated):** Phase 1 originally split into 1a (wrangler-free) + 1b (CF machine). Pre-execution audit revealed Plan 05's `npm install @sentry/*` is also Netskope-blocked here. So slice 1a was further narrowed to "1a-prime": BUG-02, BUG-03, BUG-04, BUGS.md #12 land here; OBS-01 (full — code + deploy + verify) consolidated into slice 1b alongside BUG-01 + OPS-01. Phase is complete only when both slices ship.
 
 ```
 [░░░░░░░░░░░░░░░░░░░░] 0% — 0 of 7 phases shipped
