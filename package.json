@@ -7,6 +7,7 @@
     "dev:frontend": "npm run dev -w frontend",
     "build": "npm run lint && npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:e2e": "node scripts/e2e-happy-flow.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "biome check .",
     "verify": "npm run lint && npm run typecheck && npm run test",
