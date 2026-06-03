@@ -1,8 +1,9 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readUserIdFromConfig } from "../../src/capture/identity.js";
-import { dispatchHook, hashCwd } from "../../src/cli/hook-dispatch.js";
+import { canonicalCwd, dispatchHook, hashCwd } from "../../src/cli/hook-dispatch.js";
 
 describe("hook dispatch", () => {
   let tmp: string;
@@ -182,5 +183,49 @@ describe("hook dispatch — user_id resolution chain (Phase 2 IDENT-01)", () => 
     expect(typeof resolved).toBe("string");
     expect(resolved.length).toBeGreaterThan(0);
     expect(resolved).not.toBe("default"); // explicit regression against the legacy placeholder
+  });
+});
+
+// Regression guard for Fix #3 — bug class "two paths that point at the
+// same on-disk location route to two different backend projects." We must
+// canonicalize cwd via realpathSync before hashing, so that
+// hashCwd(symlink) === hashCwd(target).
+describe("canonicalCwd", () => {
+  let workTmp: string;
+  beforeEach(() => {
+    workTmp = fs.mkdtempSync(path.join(os.tmpdir(), "canonical-cwd-test-"));
+  });
+  afterEach(() => {
+    fs.rmSync(workTmp, { recursive: true, force: true });
+  });
+
+  it("resolves a symlink to its real target so hashCwd is stable", () => {
+    const target = fs.mkdtempSync(path.join(workTmp, "target-"));
+    const link = path.join(workTmp, "link");
+    fs.symlinkSync(target, link, "dir");
+
+    const canonicalFromTarget = canonicalCwd(target);
+    const canonicalFromLink = canonicalCwd(link);
+
+    // Both must resolve to the SAME on-disk path.
+    expect(canonicalFromLink).toBe(canonicalFromTarget);
+    // And therefore hash to the SAME cwd_<id> placeholder — which is the
+    // actual contract we care about (routing key stability).
+    expect(hashCwd(canonicalFromLink)).toBe(hashCwd(canonicalFromTarget));
+  });
+
+  it("returns the input unchanged when the path doesn't exist", () => {
+    const ghost = path.join(workTmp, "does-not-exist");
+    // realpathSync would throw here; canonicalCwd must absorb that and
+    // hand back the input so callers never crash on missing dirs.
+    expect(canonicalCwd(ghost)).toBe(ghost);
+  });
+
+  it("resolves /tmp ↔ /private/tmp on macOS (sanity check)", () => {
+    // On macOS /tmp is a symlink to /private/tmp. Skip on platforms where
+    // this assumption doesn't hold so the test doesn't false-fail.
+    if (process.platform !== "darwin") return;
+    if (!fs.existsSync("/private/tmp")) return;
+    expect(canonicalCwd("/tmp")).toBe("/private/tmp");
   });
 });

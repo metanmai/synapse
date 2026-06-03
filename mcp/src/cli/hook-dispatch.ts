@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 import { readUserIdFromConfig } from "../capture/identity.js";
 import { runPostToolUseHook } from "../hooks/post-tool-use.js";
@@ -50,7 +51,7 @@ export async function readHookPayloadFromStdin(): Promise<AnyHookPayload> {
   let raw = "";
   for await (const chunk of process.stdin) raw += chunk;
   const parsed = JSON.parse(raw);
-  const cwd: string = parsed.cwd ?? process.cwd();
+  const cwd: string = canonicalCwd(parsed.cwd ?? process.cwd());
   // Derive a cwd-hash placeholder; the backend's auto-create flow rewrites
   // it to a canonical UUID using `git_basename` as the project name.
   const project_id = hashCwd(cwd);
@@ -65,10 +66,30 @@ export async function readHookPayloadFromStdin(): Promise<AnyHookPayload> {
     output: parsed.tool_response,
     prompt: parsed.prompt,
     subagent: parsed.subagent_type,
+    cwd,
     git_basename,
     git_remote_url,
     stdout: process.stdout,
   };
+}
+
+/**
+ * Resolve symlinks + normalize the cwd so that two paths that point at the
+ * same on-disk location (e.g. `/Users/me/work/proj` symlinked to
+ * `/Users/me/Documents/proj`, or `/tmp` → `/private/tmp` on macOS) hash to
+ * the same `cwd_<...>` placeholder and route to the same backend project.
+ *
+ * Falls back to the input path when the file no longer exists at resolve
+ * time (e.g. dir was deleted between SessionStart and now). Callers must
+ * never depend on the post-canonical path being readable — it's only used
+ * as a routing key.
+ */
+export function canonicalCwd(cwd: string): string {
+  try {
+    return fs.realpathSync(cwd);
+  } catch {
+    return cwd;
+  }
 }
 
 /** First 12 hex chars of cwd's sha1, prefixed with `cwd_`. */

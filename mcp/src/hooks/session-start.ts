@@ -5,6 +5,7 @@ import { resolveActor } from "../capture/actor.js";
 import { appendEvent } from "../capture/events-log.js";
 import { briefCachePath, currentSessionPath, projectDir } from "../capture/handoff-paths.js";
 import { pullHandoffWithTimeout } from "../capture/pull-compact.js";
+import { canonicalCwd } from "../cli/hook-dispatch.js";
 
 const PULL_HANDOFF_TIMEOUT_MS = 10_000;
 
@@ -27,7 +28,11 @@ export async function runSessionStartHook(args: SessionStartArgs): Promise<void>
 
   let brief = "";
   const bp = briefCachePath(args.project_id);
-  const cwd = args.cwd ?? process.cwd();
+  // canonicalCwd resolves symlinks (e.g. /tmp → /private/tmp on macOS,
+  // or a user-created `~/work/proj → ~/Documents/proj` symlink) so the
+  // routing key matches what the dispatcher computed at hook entry. If
+  // the dispatcher already canonicalized, this is a no-op.
+  const cwd = canonicalCwd(args.cwd ?? process.cwd());
   if (shouldPreferStateMd(bp, cwd)) {
     // STATE.md is the canonical project-state artifact (GSD convention).
     // When the daemon's brief cache is missing or older than STATE.md, the repo
