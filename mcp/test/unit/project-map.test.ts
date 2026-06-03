@@ -12,10 +12,12 @@ describe("project-map", () => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-pm-"));
     originalHome = process.env.HOME;
     process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome; // Windows: os.homedir() reads USERPROFILE, not HOME
   });
 
   afterEach(() => {
     process.env.HOME = originalHome;
+    process.env.USERPROFILE = originalHome; // Windows: os.homedir() reads USERPROFILE, not HOME
     fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 

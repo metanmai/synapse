@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runDaemon } from "../../src/cli/run-daemon.js";
@@ -6,7 +7,7 @@ import { runDaemon } from "../../src/cli/run-daemon.js";
 let tmp: string;
 
 beforeEach(() => {
-  tmp = fs.mkdtempSync("/tmp/synapse-daemon-cli-");
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-daemon-cli-"));
   process.env.SYNAPSE_HOME = tmp;
   fs.writeFileSync(path.join(tmp, "config.json"), JSON.stringify({ api_key: "k" }));
   fs.mkdirSync(path.join(tmp, "projects/p1"), { recursive: true });

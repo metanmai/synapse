@@ -1,5 +1,6 @@
 import child_process from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DaemonManager } from "../../src/capture/daemon.js";
@@ -8,7 +9,7 @@ import { checkSupervisor } from "../../src/cli/util/daemon-supervisor.js";
 
 let tmp: string;
 beforeEach(() => {
-  tmp = fs.mkdtempSync("/tmp/synapse-status-");
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-status-"));
   process.env.SYNAPSE_HOME = tmp;
 });
 afterEach(() => {

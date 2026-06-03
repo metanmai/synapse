@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runFlushCycle } from "../../src/capture/handoff-sync.js";
@@ -10,7 +11,7 @@ import { runFlushCycle } from "../../src/capture/handoff-sync.js";
 
 let tmp: string;
 beforeEach(() => {
-  tmp = fs.mkdtempSync("/tmp/synapse-autocreate-");
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-autocreate-"));
   process.env.SYNAPSE_HOME = tmp;
 });
 afterEach(() => {

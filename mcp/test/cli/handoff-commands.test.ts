@@ -1,11 +1,12 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runHandoffCmd, runNoteCmd, runSetFocusCmd } from "../../src/cli/handoff-commands.js";
 
 let tmp: string;
 beforeEach(() => {
-  tmp = fs.mkdtempSync("/tmp/synapse-hc-");
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-hc-"));
   process.env.SYNAPSE_HOME = tmp;
 });
 afterEach(() => {

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as editorIo from "../../src/cli/editors/io.js";
@@ -8,10 +9,11 @@ let tmp: string;
 let originalHome: string | undefined;
 let originalCwd: string;
 beforeEach(() => {
-  tmp = fs.mkdtempSync("/tmp/synapse-init-");
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-init-"));
   originalHome = process.env.HOME;
   originalCwd = process.cwd();
   process.env.HOME = tmp;
+  process.env.USERPROFILE = tmp; // Windows: os.homedir() reads USERPROFILE, not HOME
   process.env.SYNAPSE_HOME = path.join(tmp, ".synapse");
   // Plan 01-04: runInit now writes `.mcp.json` and `.gitignore` to
   // process.cwd(). Isolate every test in the tmpdir so those files don't

@@ -12,6 +12,7 @@
  */
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -84,7 +85,7 @@ async function runCli(...argv: string[]): Promise<DispatchResult> {
 }
 
 beforeEach(() => {
-  tmp = fs.mkdtempSync("/tmp/synapse-dispatch-");
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-dispatch-"));
   process.env.SYNAPSE_HOME = tmp;
   process.env.SYNAPSE_TEST_PROJECT_ID = TEST_PROJECT_ID;
   originalCwd = process.cwd();
@@ -226,9 +227,10 @@ describe("CLI dispatcher — handoff layer subcommands", () => {
     let initHome: string;
 
     beforeEach(() => {
-      initHome = fs.mkdtempSync("/tmp/synapse-init-home-");
+      initHome = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-init-home-"));
       originalHome = process.env.HOME;
       process.env.HOME = initHome;
+      process.env.USERPROFILE = initHome; // Windows: os.homedir() reads USERPROFILE, not HOME
       // Phase 2 (Plan 02-02): runInit calls fetchMe() before any disk write.
       // Default-mock fetch so init-argument-parsing tests don't hit the network.
       // Use mockImplementation so each fetch call gets a fresh Response (single-use bodies).
@@ -248,6 +250,7 @@ describe("CLI dispatcher — handoff layer subcommands", () => {
         delete process.env.HOME;
       } else {
         process.env.HOME = originalHome;
+        process.env.USERPROFILE = originalHome; // Windows: os.homedir() reads USERPROFILE, not HOME
       }
       fs.rmSync(initHome, { recursive: true, force: true });
       vi.restoreAllMocks();

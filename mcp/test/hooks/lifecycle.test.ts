@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runPreCompactHook } from "../../src/hooks/pre-compact.js";
@@ -7,7 +8,7 @@ import { runSubagentStopHook } from "../../src/hooks/subagent-stop.js";
 
 let tmp: string;
 beforeEach(() => {
-  tmp = fs.mkdtempSync("/tmp/synapse-lc-");
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-lc-"));
   process.env.SYNAPSE_HOME = tmp;
 });
 afterEach(() => {

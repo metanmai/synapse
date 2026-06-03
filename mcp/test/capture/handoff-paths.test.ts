@@ -29,8 +29,13 @@ describe("handoff-paths", () => {
   });
 
   it("respects SYNAPSE_HOME env var override", () => {
-    process.env.SYNAPSE_HOME = "/tmp/synapse-test-root";
-    expect(synapseRoot()).toBe("/tmp/synapse-test-root");
-    expect(projectDir("p1")).toBe("/tmp/synapse-test-root/projects/p1");
+    // Use a fake-but-platform-shaped root so the test asserts cross-OS:
+    // on Linux/macOS this is `/tmp/synapse-test-root`, on Windows it's
+    // `<tmp>\synapse-test-root`. The assertion uses path.join so the
+    // separator matches whatever the OS produces.
+    const fakeRoot = path.join(os.tmpdir(), "synapse-test-root");
+    process.env.SYNAPSE_HOME = fakeRoot;
+    expect(synapseRoot()).toBe(fakeRoot);
+    expect(projectDir("p1")).toBe(path.join(fakeRoot, "projects", "p1"));
   });
 });
