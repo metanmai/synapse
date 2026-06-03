@@ -8,6 +8,28 @@ and produce captures via the proxy.
 > `codex`) via `scripts/e2e-proxy-layer5.mjs`. Desktop apps need manual
 > execution because they're GUI Electron processes — no headless harness.
 
+## Pre-check (2 min — run this first)
+
+Before launching anything, run the static cert-pinning probe:
+
+```bash
+node scripts/desktop-apps-tls-probe.mjs
+```
+
+The probe inspects each app's `Info.plist` (`NSAppTransportSecurity`,
+`NSPinnedDomains`) and walks `Contents/Resources/` for bundled CA stores.
+It outputs a per-app verdict — `cert-pinned`, `likely-cert-pinned`,
+`proxy-friendly`, or `ambiguous` — plus a recommendation on whether the
+manual checklist below is worth running for that app.
+
+If an app comes back `cert-pinned` (high or medium confidence), skip the
+per-app section below for it and record the finding directly as a Synapse
+insight: "(app-name) through proxy: cert-pinned (static signal), MITM not
+viable." That's the answer; no manual launch needed.
+
+Use `--json` for machine-readable output if scripting around the probe.
+The probe is read-only — it never launches the apps or touches the network.
+
 ## Prerequisites
 
 Run these once before the per-app sections.
