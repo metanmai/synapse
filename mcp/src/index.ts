@@ -8,7 +8,7 @@ import { z } from "zod";
 
 import * as clack from "@clack/prompts";
 import { runCapture } from "./capture/cli.js";
-import { runRefresh, runStatus, runTree, runUpgrade, runWhoami } from "./cli/commands.js";
+import { runRefresh, runReset, runStatus, runTree, runUpgrade, runWhoami } from "./cli/commands.js";
 import { API_URL } from "./cli/config.js";
 import { runStats } from "./cli/stats.js";
 import { accent, bold, muted } from "./cli/theme.js";
@@ -240,6 +240,10 @@ async function handleCli(raw: string[]): Promise<void> {
   }
   if (cmd === "whoami") {
     await runWhoami();
+    process.exit(0);
+  }
+  if (cmd === "reset") {
+    await runReset();
     process.exit(0);
   }
 
