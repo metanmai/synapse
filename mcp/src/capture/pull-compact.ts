@@ -149,6 +149,37 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
   }
 }
 
+/**
+ * Race pullHandoff against a wall-clock timer. Returns whichever resolves
+ * first — null if the timer wins. The in-flight pullHandoff keeps running
+ * after the timer fires so that whatever recompute work it kicked off can
+ * still land on the backend (the next session will see it on its list
+ * call). The timer is unref'd so it doesn't keep the process alive.
+ *
+ * SessionStart hooks must NOT block on a slow compact() — the hook's
+ * stdout is consumed by Claude Code as part of session setup, so a 30s
+ * compaction would visibly stall the user. 10s is the production budget.
+ */
+export async function pullHandoffWithTimeout(opts: PullHandoffOptions, timeoutMs: number): Promise<string | null> {
+  const log = opts.log ?? (() => {});
+  // Defensive: pullHandoff is designed not to throw, but if it ever does
+  // we don't want an unhandled rejection scribbled on the daemon log.
+  const work = pullHandoff(opts).catch((err) => {
+    log(`pull-compact: background pull errored: ${err instanceof Error ? err.message : err}`);
+    return null;
+  });
+  const timer = new Promise<null>((resolve) => {
+    const t = setTimeout(() => {
+      log(`pull-compact: timed out after ${timeoutMs}ms — emitting brief without handoff`);
+      resolve(null);
+    }, timeoutMs);
+    // Don't keep the event loop alive for this timer; if the hook is
+    // about to exit, let it exit.
+    t.unref();
+  });
+  return Promise.race([work, timer]);
+}
+
 interface LocalSessionMatch {
   adapter: ToolAdapter;
   path: string;

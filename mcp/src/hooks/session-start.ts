@@ -4,7 +4,9 @@ import { EventKind } from "@synapse/shared/handoff/events.js";
 import { resolveActor } from "../capture/actor.js";
 import { appendEvent } from "../capture/events-log.js";
 import { briefCachePath, currentSessionPath, projectDir } from "../capture/handoff-paths.js";
-import { pullHandoff } from "../capture/pull-compact.js";
+import { pullHandoffWithTimeout } from "../capture/pull-compact.js";
+
+const PULL_HANDOFF_TIMEOUT_MS = 10_000;
 
 const MAX_BRIEF_LINES = 30;
 
@@ -38,12 +40,13 @@ export async function runSessionStartHook(args: SessionStartArgs): Promise<void>
   }
 
   // Pull the most-recent conversation's "where I left off" handoff so the
-  // new agent inherits the previous one's working memory. Best-effort: any
-  // failure (no API key, no project mapping, network error) leaves the
-  // brief unchanged. Commit 4 adds a hard timeout around this call.
+  // new agent inherits the previous one's working memory. Capped at a
+  // 10s wall-clock — if compaction would take longer than that we'd
+  // visibly stall the hook stdout, so we let the slow path complete in
+  // background and the next session picks it up from the backend cache.
   let handoff: string | null = null;
   try {
-    handoff = await pullHandoff({ cwd });
+    handoff = await pullHandoffWithTimeout({ cwd }, PULL_HANDOFF_TIMEOUT_MS);
   } catch {
     handoff = null;
   }
