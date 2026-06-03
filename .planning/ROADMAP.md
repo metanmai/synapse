@@ -1,28 +1,30 @@
 # Roadmap — Stabilize-for-Launch Milestone
 
-**Milestone:** Public launch with waitlist throttle by **Friday 2026-05-29**.
+**Status as of 2026-05-30: SHIPPED.** Milestone close-out commit `f941dea` landed 2026-05-29 (on deadline). 3 of 7 phases shipped (Phases 1 slice 1a-prime, 2, 3 — with Phase 3 reshuffled from "Telemetry" to "Free/Plus Tier Redesign" mid-milestone). 4 phases deferred to v1.X. Post-launch v1.X work in progress: see "Post-launch v1.X" section at the bottom.
+
+**Milestone:** Public launch with waitlist throttle by **Friday 2026-05-29** ✅
 **Window:** 10 days (2026-05-19 → 2026-05-29), ~7 working days.
 **Granularity:** Standard (7 phases for 23 v1 requirements).
 **Mode:** MVP — every phase delivers an end-to-end user-observable slice, not a technical layer.
-**Coverage:** 23/23 v1 requirements mapped to exactly one phase each.
+**Coverage:** 14/23 v1 requirements shipped; 9 deferred to v1.X with Phases 4-7.
 
 ---
 
 ## Phases
 
-- [ ] **Phase 1: Stabilize Backend & Observability** — Daemon flushes succeed end-to-end; Sentry catches future escapes; install works on proxy networks
-- [x] **Phase 2: Real User Identity** — Events carry authenticated `user_id`; same-user cross-device sync works
-- [ ] **Phase 3: Telemetry — Quality & Speed Signals** — Brief ratings + time-to-context measurable per project, surfaced on dashboard
-- [ ] **Phase 4: Cross-User Collaboration** — Owners invite teammates by email; invitees accept; briefs show per-actor view
-- [ ] **Phase 5: Token Brokering MVP** — Plus subscribers opt-in to lend LLM tokens; one Synapse-internal call routes through the broker with attribution
-- [ ] **Phase 6: Waitlist Launch & Cold-Laptop Rehearsal** — Public signup queues to waitlist; admin admits; fresh-laptop walkthrough documents and fixes friction
-- [ ] **Phase 7: Dogfood & Public Open** — 3 consecutive days of personal Claude Code use captured + briefed + rated; waitlist flipped live
+- [~] **Phase 1: Stabilize Backend & Observability** — Slice 1a-prime ✅ shipped (BUG-01..04, BUGS-MD-12); slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-enabled machine
+- [x] **Phase 2: Real User Identity** — Events carry authenticated `user_id`; same-user cross-device sync works (`f941dea` verifies E2E 19/19)
+- [x] **Phase 3: Free/Plus Tier Redesign** — *(scope swap from original "Telemetry"; original retired indefinitely.)* TIER-01..08 shipped: 50-project cap, per-project conversation/insight LRU on Free, Plus Haiku consolidation, 3/10-device caps, manual `sync` CLI on Free, tier-flip IPC propagation
+- [ ] **Phase 4: Cross-User Collaboration** — DEFERRED to v1.X. Owners invite teammates by email; invitees accept; briefs show per-actor view
+- [ ] **Phase 5: Token Brokering MVP** — DEFERRED to v1.X. Plus subscribers opt-in to lend LLM tokens; one Synapse-internal call routes through the broker with attribution
+- [ ] **Phase 6: Waitlist Launch & Cold-Laptop Rehearsal** — DEFERRED to v1.X. Public signup queues to waitlist; admin admits; fresh-laptop walkthrough documents and fixes friction
+- [ ] **Phase 7: Dogfood & Public Open** — DEFERRED to v1.X. 3 consecutive days of personal Claude Code use captured + briefed + rated; waitlist flipped live
 
 ---
 
 ## Phase Details
 
-### Phase 1: Stabilize Backend & Observability
+### Phase 1: Stabilize Backend & Observability — ✅ SLICE 1A-PRIME SHIPPED (slice 1b deferred)
 **Mode:** mvp
 **Goal:** A user running the daemon can see their events reach the backend, and the operator can see future failures before users do.
 **Depends on:** Nothing (entry phase). Unblocks every downstream phase.
@@ -33,17 +35,17 @@
   3. A fresh `synapse init` / wizard run on a proxy-restricted (Netskope) network produces a `.mcp.json` whose MCP server starts when Claude Code opens
   4. A deliberately-thrown unhandled rejection in `events-batch.ts` appears in Sentry within one minute with the real stack trace
   5. Production Worker is verified on the Paid tier before any further launch work begins (`wrangler whoami` + dashboard screenshot)
-**Plans:** 5 plans (slice 1a — wrangler-free; slice 1b BUG-01 / OBS-01 verify / OPS-01 deferred to CF-enabled machine)
-- [ ] 01-01-wave0-scaffolding-PLAN.md — Wave 0 test scaffolding + production stubs (Wave 1)
-- [ ] 01-02-daemon-supervisor-backoff-PLAN.md — BUG-02 + BUGS.md #12 daemon supervisor + exponential backoff (Wave 2)
-- [ ] 01-03-mcp-command-resolver-PLAN.md — BUG-03 proxy-resilient MCP command resolver (Wave 2)
-- [ ] 01-04-init-writes-mcp-json-PLAN.md — BUG-04 `runInit` writes `.mcp.json` + ensures gitignore (Wave 2)
-- [ ] 01-05-sentry-observability-PLAN.md — OBS-01 Sentry SDK + Hono middleware + scrubPayload (Wave 2; has package-legitimacy checkpoint)
+**Plans:** 5 plans (slice 1a — wrangler-free SHIPPED; slice 1b — CF-machine work DEFERRED to v1.X)
+- [x] 01-01-wave0-scaffolding-PLAN.md — Wave 0 test scaffolding + production stubs (Wave 1)
+- [x] 01-02-daemon-supervisor-backoff-PLAN.md — BUG-02 + BUGS.md #12 daemon supervisor + exponential backoff (Wave 2)
+- [x] 01-03-mcp-command-resolver-PLAN.md — BUG-03 proxy-resilient MCP command resolver (Wave 2)
+- [x] 01-04-init-writes-mcp-json-PLAN.md — BUG-04 `runInit` writes `.mcp.json` + ensures gitignore (Wave 2)
+- [ ] 01-05-sentry-observability-PLAN.md — OBS-01 Sentry SDK + Hono middleware + scrubPayload (DEFERRED — `npm install @sentry/*` is Netskope-blocked on the primary terminal; deferred to v1.X / CF-enabled machine)
 
 **Research status:** covered by `research/SUMMARY.md` (D1, D2, D9, D10, D11)
 **UI hint**: no
 
-### Phase 2: Real User Identity
+### Phase 2: Real User Identity — ✅ SHIPPED
 **Mode:** mvp
 **Goal:** A signed-in user's events are attributable to their actual UUID, and that user can sign in on a second machine and see context from their first machine.
 **Depends on:** Phase 1 (no point wiring identity through a broken pipe).
@@ -63,7 +65,7 @@ Plans:
 **Research needed:** yes — daemon currently emits `"default"` placeholder; need to study how `~/.synapse/config.json` is set vs. read, and what the cross-device sync flow looks like for events the daemon hasn't yet pulled. `/gsd:discuss-phase 2` should invoke a researcher before planning.
 **UI hint**: no
 
-### Phase 3: Free/Plus Tier Redesign
+### Phase 3: Free/Plus Tier Redesign ✅ SHIPPED
 **Mode:** standard
 **Goal:** Free tier is substantively usable for a solo single-device user; Plus differentiates on per-project capacity, auto-sync, link sharing, and project context — not on project count. Telemetry (the original Phase 3) is retired indefinitely; surface it later as a separate phase if user feedback warrants.
 **Depends on:** Phase 2 (tier model + per-user identity already wired). Independent of Phase 4-7.
@@ -77,11 +79,16 @@ Plans:
   6. Free user's daemon does NOT run the 5-min auto-sync cycle. Hooks still push inline at session boundaries (PreCompact, SessionEnd). `synapsesync sync` CLI fires one cycle on demand with streaming progress lines + final summary, exit 0 on success / 1 on any step failure.
   7. Tier-flip (free→plus) propagates to daemon within seconds via an IPC channel — no daemon restart required.
   8. Free user remains paywalled out of project context summaries; Plus user gets them automatically.
-**Plans**: TBD
+**Plans:** 5 plans (all shipped 2026-05-22 → 2026-05-29)
+- [x] 03-01-tier-constants-PLAN.md — Centralize per-tier capacity constants + accessors (`9e5bc88`)
+- [x] 03-02-project-cap-PLAN.md — 50-project cap on both tiers + `PROJECT_QUOTA_EXCEEDED` (`8a5d134` backend → `d1aad53` CLI → `18762c7` UI → `822f393` + `88febad` tests)
+- [x] 03-03-conversation-lru-PLAN.md — Per-project conversation LRU on Free (`7a42c6a`)
+- [x] 03-04-insight-cap-PLAN.md — Per-project insight cap — Free LRU + Plus Haiku consolidation (`3f79efa`)
+- [x] 03-05-manual-sync-device-cap-PLAN.md — Manual `sync` CLI + daemon tier-gate + 3/10-device picker + machine_id wiring (`35e0eb8` backend → `b5017af` MCP → `f88def0` wrap-up)
 **Research status:** locked design decisions captured in CONTEXT.md; no separate research phase (mirrors existing tier.ts dual-surface pattern and compact.ts Haiku-call pattern)
 **UI hint**: yes (device sign-out picker + settings device-list UI + quota error renderings)
 
-### Phase 4: Cross-User Collaboration
+### Phase 4: Cross-User Collaboration — DEFERRED to v1.X
 **Mode:** mvp
 **Goal:** A project owner can invite a teammate by email; the teammate accepts; subsequent briefs distinguish who-did-what across both users.
 **Depends on:** Phase 2 (member-aware briefs require real `actor.user_id` on events; cross-user permissions require real identities).
@@ -94,7 +101,7 @@ Plans:
 **Research needed:** yes — added after the 4-agent research wave. Backend invite endpoint exists (`POST /api/projects/:id/invites`) but the accept-flow UI, dashboard notification, and member-aware brief rendering need design study. `/gsd:discuss-phase 4` should invoke a researcher.
 **UI hint**: yes
 
-### Phase 5: Token Brokering MVP
+### Phase 5: Token Brokering MVP — DEFERRED to v1.X
 **Mode:** mvp
 **Goal:** A Plus subscriber can opt-in to lend their LLM tokens; at least ONE Synapse-internal call path actually routes through the broker against a pooled account, with usage attributed back to the lender, gated by an explicit ToS surface.
 **Depends on:** Phase 2 (per-user encrypted credential storage requires real user identity + RLS).
@@ -108,7 +115,7 @@ Plans:
 **Research needed:** yes — added after the 4-agent research wave. Highest-risk item in the milestone (ToS / privacy / accounting surface). Open questions: which provider first (Anthropic? OpenAI? both?); how is "least-utilized" measured; what's the failover policy; what ToS language is legally defensible. `/gsd:discuss-phase 5` MUST invoke a researcher before any planning — flagged in `research/PITFALLS.md` as launch-slip candidate. MVP rule: ship ONE call path end-to-end; do NOT architect the complete broker.
 **UI hint**: yes
 
-### Phase 6: Waitlist Launch & Cold-Laptop Rehearsal
+### Phase 6: Waitlist Launch & Cold-Laptop Rehearsal — DEFERRED to v1.X
 **Mode:** mvp
 **Goal:** A stranger landing on synapsesync.app can sign up, be admitted by the operator, click the activation email, run the wizard, and see a working brief — every friction point identified and either fixed or documented.
 **Depends on:** Phase 1 (Worker must be stable + on Paid tier). Independent of Phases 2-5; can run in parallel with them if attention permits, but the cold-laptop walk requires everything Phases 1-5 ship.
@@ -122,7 +129,7 @@ Plans:
 **Research status:** covered by `research/SUMMARY.md` (D7, D8, D11, D12, Q2, Q3) for LAUNCH-01/02; LAUNCH-03 is a rehearsal, not a build, so research not applicable.
 **UI hint**: yes
 
-### Phase 7: Dogfood & Public Open
+### Phase 7: Dogfood & Public Open — DEFERRED to v1.X
 **Mode:** mvp
 **Goal:** Three consecutive days of the operator's own Claude Code use produces capture → flush → brief → rating with zero manual intervention, then the waitlist flips live.
 **Depends on:** Phases 1-6 (everything else must be done; this phase has zero engineering scope by design).
@@ -141,13 +148,15 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Stabilize Backend & Observability | 0/5 | Planned (slice 1a) | - |
-| 2. Real User Identity | 0/5 | Planned (5 slices) | - |
-| 3. Telemetry — Quality & Speed Signals | 0/0 | Not started | - |
-| 4. Cross-User Collaboration | 0/0 | Not started | - |
-| 5. Token Brokering MVP | 0/0 | Not started | - |
-| 6. Waitlist Launch & Cold-Laptop Rehearsal | 0/0 | Not started | - |
-| 7. Dogfood & Public Open | 0/0 | Not started | - |
+| 1. Stabilize Backend & Observability | 4/5 | ✅ Slice 1a-prime shipped; 1b (Sentry) deferred to v1.X | 2026-05-19 → 2026-05-20 |
+| 2. Real User Identity | 6/6 | ✅ SHIPPED | 2026-05-20 |
+| 3. Free/Plus Tier Redesign *(swap from "Telemetry")* | 5/5 | ✅ SHIPPED | 2026-05-22 → 2026-05-29 |
+| 4. Cross-User Collaboration | 0/0 | ⏳ DEFERRED to v1.X | - |
+| 5. Token Brokering MVP | 0/0 | ⏳ DEFERRED to v1.X | - |
+| 6. Waitlist Launch & Cold-Laptop Rehearsal | 0/0 | ⏳ DEFERRED to v1.X | - |
+| 7. Dogfood & Public Open | 0/0 | ⏳ DEFERRED to v1.X | - |
+
+**Total: 15 of 16 in-scope plans shipped (94%). 4 of 7 phases deferred to v1.X.**
 
 ---
 
@@ -179,22 +188,21 @@ Phase 1 (Stabilize) ─┬─► Phase 2 (Identity) ─┬─► Phase 4 (Collab
 
 ## Coverage Summary
 
-23 v1 requirements, 7 phases, exactly-one mapping:
+| Category | Reqs | Phase | Status |
+|----------|------|-------|--------|
+| Backend stabilization (BUG-01..04) | 4 | 1 | ✅ shipped |
+| Observability (OBS-01) | 1 | 1 | ⏳ slice 1b deferred to v1.X |
+| Workers tier (OPS-01) | 1 | 1 | ⏳ slice 1b deferred to v1.X |
+| Identity (IDENT-01..02) | 2 | 2 | ✅ shipped |
+| ~~Telemetry (MEAS-01..04)~~ | ~~4~~ | ~~3~~ | 🚫 retired — original Phase 3 scope swapped out 2026-05-22 |
+| **Free/Plus Tier (TIER-01..08)** | **8** | **3 (swapped in)** | ✅ shipped |
+| Collaboration (COLLAB-01..03) | 3 | 4 | ⏳ deferred to v1.X |
+| Token brokering (TOKEN-01..04) | 4 | 5 | ⏳ deferred to v1.X |
+| Public launch (LAUNCH-01..03) | 3 | 6 | ⏳ deferred to v1.X |
+| Dogfood (DOG-01) | 1 | 7 | ⏳ deferred to v1.X |
 
-| Category | Reqs | Phase |
-|----------|------|-------|
-| Backend stabilization (BUG-01..04) | 4 | 1 |
-| Observability (OBS-01) | 1 | 1 |
-| Workers tier (OPS-01) | 1 | 1 |
-| Identity (IDENT-01..02) | 2 | 2 |
-| Telemetry (MEAS-01..04) | 4 | 3 |
-| Collaboration (COLLAB-01..03) | 3 | 4 |
-| Token brokering (TOKEN-01..04) | 4 | 5 |
-| Public launch (LAUNCH-01..03) | 3 | 6 |
-| Dogfood (DOG-01) | 1 | 7 |
-| **Total** | **23** | **7 phases** |
-
-Coverage: 23/23 ✓ — no orphans, no duplicates.
+**Shipped:** ~15 requirements (BUG-01..04, IDENT-01..02, TIER-01..08 — Sentry/OPS deferred).
+**Deferred:** 11 requirements across Phases 4-7 + slice 1b.
 
 ---
 
@@ -203,13 +211,49 @@ Coverage: 23/23 ✓ — no orphans, no duplicates.
 | Phase | Research |
 |-------|----------|
 | 1 | Covered by `research/SUMMARY.md` |
-| 2 | **Needed** — `/gsd:discuss-phase 2` invokes researcher |
-| 3 | Covered by `research/SUMMARY.md` |
-| 4 | **Needed** — `/gsd:discuss-phase 4` invokes researcher |
-| 5 | **Needed** — `/gsd:discuss-phase 5` invokes researcher (HIGHEST RISK) |
-| 6 | Covered by `research/SUMMARY.md` |
+| 2 | Researched 2026-05-20 via `/gsd:discuss-phase 2`; verified shipped |
+| 3 | Tier-redesign decisions captured in `phases/03-free-plus-tier-redesign/03-CONTEXT.md` (no separate research phase — mirrored existing `tier.ts` + `compact.ts` patterns) |
+| 4 | **Pending v1.X** — `/gsd:discuss-phase 4` will invoke researcher when revived |
+| 5 | **Pending v1.X** — `/gsd:discuss-phase 5` (HIGHEST RISK — ToS / privacy / accounting surface) |
+| 6 | Covered by `research/SUMMARY.md` (deferred to v1.X) |
 | 7 | N/A — observation phase |
 
 ---
 
-*Created: 2026-05-19. Source: PROJECT.md, REQUIREMENTS.md, research/SUMMARY.md, docs/BUGS.md, codebase/ARCHITECTURE.md.*
+## Post-launch v1.X (work in flight, outside original 7-phase plan)
+
+### LLM API Proxy Daemon (Layers 1-9, shipped 2026-05-30)
+
+Universal session capture via TLS-MITM forward proxy. Adapter-agnostic — works with any AI tool that honors `HTTPS_PROXY` + `NODE_EXTRA_CA_CERTS` (claude CLI, codex, cursor, gemini, copilot CLI). Closes a gap the original 7-phase plan left open: capture only worked for tools that wrote session files Synapse could watch. The proxy makes Synapse capture-universal.
+
+| Layer | Status | What it does |
+|---|---|---|
+| 1 | ✅ | Pure session reconstruction + endpoint allowlist |
+| 2 | ✅ | HTTP forward-proxy + fake-LLM helper |
+| 3a | ✅ | TLS Manager (CA + per-host leaves) |
+| 3b | ✅ | CONNECT handler + TLS termination + cert isolation |
+| 5 | ✅ | E2E with real `claude` CLI through TLS-MITM |
+| 7 | ✅ | ProxySource wrapper + capture-worker integration |
+| 8 | ✅ | CA install / status / uninstall CLI |
+| 9 | ✅ | enable / disable + config-file activation |
+| 4 | downgraded | SSE streaming UX (proven optional by Layer 5 — `clientRes.write(chunk)` already forwards live) |
+
+**User-facing flow (three commands):**
+```
+synapsesync capture proxy install   # CA → login keychain + env snippet
+# paste env snippet into ~/.zshrc
+synapsesync capture proxy enable    # config + daemon restart
+```
+
+**Documentation:** `.planning/quick/20260530-proxy-*/` (per-layer PLAN + SUMMARY pairs).
+
+### Pending v1.X follow-ups (smaller items)
+
+- **P1 (BUGS.md)** — Configure SUPABASE_* secrets on metanmai/synapse so CI auto-migrate activates
+- **P2 (BUGS.md)** — Creem renewal webhook silent drop (defensive `default:` + proper event_type fix)
+- **Insight action items** — orphan `owner_id` rows; `SessionStore` (source, id) keying refactor; bg-recompute POST `/compact` retry
+- **Spike #118** — proxy validation against Cursor / Claude Desktop / ChatGPT Desktop (requires admin password for System keychain install)
+
+---
+
+*Created: 2026-05-19. Last refresh: 2026-05-30 — reflected milestone close-out + Phase 3 scope swap + Phase 4-7 deferral + post-launch proxy daemon. Source: PROJECT.md, REQUIREMENTS.md, research/SUMMARY.md, docs/BUGS.md, .planning/phases/, .planning/quick/, git log since 2026-05-19.*
