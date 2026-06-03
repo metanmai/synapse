@@ -88,6 +88,9 @@ beforeEach(() => {
   process.env.SYNAPSE_HOME = tmp;
   process.env.SYNAPSE_TEST_PROJECT_ID = TEST_PROJECT_ID;
   originalCwd = process.cwd();
+  // Plan 01-04: runInit now writes `.mcp.json` and `.gitignore` to
+  // process.cwd(). Isolate every test in the tmpdir.
+  process.chdir(tmp);
 });
 
 afterEach(() => {

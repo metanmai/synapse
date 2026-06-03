@@ -44,16 +44,20 @@ export function checkSupervisor(): SupervisorStatus {
 
   if (platform === "linux") {
     try {
-      const active = child_process.execSync("systemctl --user is-active synapsesync.service", {
-        stdio: ["ignore", "pipe", "ignore"],
-        encoding: "utf-8",
-      }).trim();
-      if (active !== "active") return { running: false, pid: null, supervisor: null };
-      try {
-        const pidStr = child_process.execSync("systemctl --user show -p MainPID --value synapsesync.service", {
+      const active = child_process
+        .execSync("systemctl --user is-active synapsesync.service", {
           stdio: ["ignore", "pipe", "ignore"],
           encoding: "utf-8",
-        }).trim();
+        })
+        .trim();
+      if (active !== "active") return { running: false, pid: null, supervisor: null };
+      try {
+        const pidStr = child_process
+          .execSync("systemctl --user show -p MainPID --value synapsesync.service", {
+            stdio: ["ignore", "pipe", "ignore"],
+            encoding: "utf-8",
+          })
+          .trim();
         const pid = Number.parseInt(pidStr, 10);
         return {
           running: true,

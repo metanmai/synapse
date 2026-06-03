@@ -5,14 +5,20 @@ import { runInit } from "../../src/cli/init.js";
 
 let tmp: string;
 let origHome: string | undefined;
+let origCwd: string;
 
 beforeEach(() => {
   tmp = fs.mkdtempSync("/tmp/syn-init-perf-");
   origHome = process.env.HOME;
+  origCwd = process.cwd();
   process.env.HOME = tmp;
   process.env.SYNAPSE_HOME = path.join(tmp, ".synapse");
+  // Plan 01-04: runInit writes `.mcp.json` and `.gitignore` to process.cwd().
+  // Isolate in tmp so those files don't leak into the mcp/ workspace.
+  process.chdir(tmp);
 });
 afterEach(() => {
+  process.chdir(origCwd);
   fs.rmSync(tmp, { recursive: true, force: true });
   if (origHome !== undefined) {
     process.env.HOME = origHome;
