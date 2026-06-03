@@ -161,7 +161,11 @@ export async function findOrCreateProjectByGit(
   const gitBasename = opts.git_basename ?? "untitled";
   const gitRemoteUrl = opts.git_remote_url ?? null;
 
-  const { data: memberships } = await db.from("project_members").select("project_id").eq("user_id", userId);
+  const { data: memberships, error: memErr } = await db
+    .from("project_members")
+    .select("project_id")
+    .eq("user_id", userId);
+  if (memErr) console.error("findOrCreateProjectByGit memberships err:", memErr);
   const memberProjectIds = (memberships ?? []).map((m: { project_id: string }) => m.project_id);
 
   let existingId: string | null = null;
@@ -172,7 +176,7 @@ export async function findOrCreateProjectByGit(
   // most-recently-touched row defensively rather than letting Supabase's
   // .maybeSingle() throw on multi-row matches.
   if (gitRemoteUrl && memberProjectIds.length > 0) {
-    const { data } = await db
+    const { data, error: t1Err } = await db
       .from("projects")
       .select("id")
       .eq("git_remote_url", gitRemoteUrl)
@@ -180,6 +184,7 @@ export async function findOrCreateProjectByGit(
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (t1Err) console.error("findOrCreateProjectByGit Tier 1 err:", t1Err);
     existingId = (data as { id: string } | null)?.id ?? null;
   }
 
@@ -189,7 +194,7 @@ export async function findOrCreateProjectByGit(
   // Pick the most-recently-touched row so the routing is stable across
   // sessions.
   if (!existingId && memberProjectIds.length > 0) {
-    const { data: existing } = await db
+    const { data: existing, error: t2Err } = await db
       .from("projects")
       .select("id, git_remote_url")
       .eq("name", gitBasename)
@@ -197,16 +202,40 @@ export async function findOrCreateProjectByGit(
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (t2Err) console.error("findOrCreateProjectByGit Tier 2 err:", t2Err);
     const existingRow = existing as { id: string; git_remote_url: string | null } | null;
     existingId = existingRow?.id ?? null;
 
     if (existingId && gitRemoteUrl && !existingRow?.git_remote_url) {
-      await db
+      const { error: t2UpdErr } = await db
         .from("projects")
         .update({ git_remote_url: gitRemoteUrl })
         .eq("id", existingId)
         .is("git_remote_url", null);
+      if (t2UpdErr) console.error("findOrCreateProjectByGit Tier 2 backfill err:", t2UpdErr);
     }
+  }
+
+  // Tier 1b — Unscoped owner fallback. When the memberships SELECT above
+  // returns null (RLS, transient DB error, etc.), `memberProjectIds` is
+  // empty and Tiers 1+2 short-circuit on their `.length > 0` guards. Without
+  // this fallback we'd proceed to Tier 3 INSERT, which (post-migration-021)
+  // raises 23505 on every duplicate URL, surfacing as a 500 even though the
+  // user IS the owner of an existing matching project. owner_id+url is
+  // sufficient to find any project this user could have inserted; for
+  // projects shared with the user as editor/viewer, the memberships path
+  // above is still the primary — this is a safety net for the OWN case.
+  if (!existingId && gitRemoteUrl) {
+    const { data: owned, error: t1bErr } = await db
+      .from("projects")
+      .select("id")
+      .eq("owner_id", userId)
+      .eq("git_remote_url", gitRemoteUrl)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (t1bErr) console.error("findOrCreateProjectByGit Tier 1b err:", t1bErr);
+    existingId = (owned as { id: string } | null)?.id ?? null;
   }
 
   if (existingId) return existingId;
@@ -232,7 +261,7 @@ export async function findOrCreateProjectByGit(
 
     if (violatedUnique) {
       // The winner's row is now visible. Re-run Tier 1 to fetch it.
-      const { data: winner } = await db
+      const { data: winner, error: winnerErr } = await db
         .from("projects")
         .select("id")
         .eq("git_remote_url", gitRemoteUrl)
@@ -240,12 +269,13 @@ export async function findOrCreateProjectByGit(
         .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (winnerErr) console.error("findOrCreateProjectByGit recovery winner err:", winnerErr);
       const winnerId = (winner as { id: string } | null)?.id ?? null;
       // memberProjectIds was a snapshot from before the race — the winner
       // may have inserted a project_members row that wasn't in our list.
       // Fall back to an unscoped lookup if the scoped query missed.
       if (!winnerId) {
-        const { data: anyOwner } = await db
+        const { data: anyOwner, error: anyOwnerErr } = await db
           .from("projects")
           .select("id")
           .eq("owner_id", userId)
@@ -253,6 +283,7 @@ export async function findOrCreateProjectByGit(
           .order("updated_at", { ascending: false })
           .limit(1)
           .maybeSingle();
+        if (anyOwnerErr) console.error("findOrCreateProjectByGit recovery anyOwner err:", anyOwnerErr);
         const anyOwnerId = (anyOwner as { id: string } | null)?.id ?? null;
         if (anyOwnerId) return anyOwnerId;
       } else {
