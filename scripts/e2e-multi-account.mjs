@@ -45,6 +45,10 @@
 //   MA24  User A re-invites User B → access restored (idempotent re-add)
 //   MA25  User A creates share-link, User B (after revoke + cleanup) joins
 //         via POST /api/share/:token/join (parallel sharing path proven)
+//   MA26  Editor (User B) cannot PATCH another member's role → 403
+//   MA27  Editor (User B) cannot DELETE the project → 403
+//   MA28  Invite with non-existent email → 404
+//   MA29  Invite with invalid role → 4xx
 //
 // Cost per run: ~$0.05-0.10 in Anthropic tokens (one claude -p capture,
 // two background recomputes via claude-haiku).
@@ -900,6 +904,78 @@ async function ma25_share_link_flow() {
   }
 }
 
+// ── MA26: Editor cannot PATCH another member's role ─────────────────────
+async function ma26_editor_cannot_patch_roles() {
+  header("MA26 · Editor cannot change another member's role → 403");
+
+  const meA = await fetchJson("/api/account/me", {}, apiKeyA);
+  if (!meA.email) {
+    fail("MA26 owner email", "failed to discover User A email");
+    return;
+  }
+  const res = await fetchJson(
+    `/api/projects/${testProjectId}/members/${encodeURIComponent(meA.email)}`,
+    { method: "PATCH", body: JSON.stringify({ role: "viewer" }) },
+    apiKeyB,
+  );
+  if (res._err && (res._status === 403 || res._status === 404)) {
+    ok("MA26 editor patch blocked", `PATCH by editor returned ${res._status}`);
+  } else if (res._err) {
+    fail("MA26 editor patch blocked", `expected 403/404, got ${res._status}: ${res._err.slice(0, 150)}`);
+  } else {
+    fail("MA26 editor patch blocked", "SECURITY: editor successfully changed owner's role");
+  }
+}
+
+// ── MA27: Editor cannot DELETE the project ──────────────────────────────
+async function ma27_editor_cannot_delete_project() {
+  header("MA27 · Editor cannot DELETE the project → 403");
+
+  const res = await fetchJson(`/api/projects/${testProjectId}`, { method: "DELETE" }, apiKeyB);
+  if (res._err && (res._status === 403 || res._status === 404)) {
+    ok("MA27 editor delete blocked", `DELETE project by editor returned ${res._status}`);
+  } else if (res._err) {
+    fail("MA27 editor delete blocked", `expected 403/404, got ${res._status}: ${res._err.slice(0, 150)}`);
+  } else {
+    fail("MA27 editor delete blocked", "SECURITY: editor SUCCESSFULLY deleted the project");
+  }
+}
+
+// ── MA28: Invite a non-existent email → 404 ──────────────────────────────
+async function ma28_invite_nonexistent_email() {
+  header("MA28 · Invite a non-existent email → 404");
+
+  const fakeEmail = `ghost-${RUN_ID}@example.invalid`;
+  const res = await fetchJson(`/api/projects/${testProjectId}/members`, {
+    method: "POST",
+    body: JSON.stringify({ email: fakeEmail, role: "editor" }),
+  });
+  if (res._err && res._status === 404) {
+    ok("MA28 nonexistent invitee", "POST returned 404 — backend correctly rejects unknown email");
+  } else if (res._err) {
+    fail("MA28 nonexistent invitee", `expected 404, got ${res._status}: ${res._err.slice(0, 150)}`);
+  } else {
+    fail("MA28 nonexistent invitee", "expected 404 but invite succeeded — would create dead membership");
+  }
+}
+
+// ── MA29: Invite with invalid role string → 4xx ─────────────────────────
+async function ma29_invite_invalid_role() {
+  header("MA29 · Invite with invalid role string → 4xx");
+
+  const res = await fetchJson(`/api/projects/${testProjectId}/members`, {
+    method: "POST",
+    body: JSON.stringify({ email: userBEmail, role: "supreme-overlord" }),
+  });
+  if (res._err && res._status >= 400 && res._status < 500) {
+    ok("MA29 invalid role rejected", `POST returned ${res._status}`);
+  } else if (res._err) {
+    fail("MA29 invalid role rejected", `expected 4xx, got ${res._status}: ${res._err.slice(0, 150)}`);
+  } else {
+    fail("MA29 invalid role rejected", "accepted invalid role — schema validation broken");
+  }
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────
 async function main() {
   log("Synapse end-to-end MULTI-ACCOUNT sharing + revocation test");
@@ -938,6 +1014,12 @@ async function main() {
           await ma22_revoke_by_non_owner();
           await ma23_owner_self_revoke();
           await ma24_reinvite_b();
+          // MA26-MA29 need User B as member (editor) — run BEFORE MA25's
+          // share-link reshuffle so we don't have to re-set state.
+          await ma26_editor_cannot_patch_roles();
+          await ma27_editor_cannot_delete_project();
+          await ma28_invite_nonexistent_email();
+          await ma29_invite_invalid_role();
           await ma25_share_link_flow();
         }
       }
