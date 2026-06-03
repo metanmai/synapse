@@ -1,8 +1,11 @@
 import fs from "node:fs";
+import path from "node:path";
 import { EventKind } from "@synapse/shared/handoff/events.js";
 import { resolveActor } from "../capture/actor.js";
 import { appendEvent } from "../capture/events-log.js";
 import { briefCachePath, currentSessionPath, projectDir } from "../capture/handoff-paths.js";
+
+const MAX_BRIEF_LINES = 30;
 
 export interface SessionStartArgs {
   project_id: string;
@@ -10,6 +13,7 @@ export interface SessionStartArgs {
   stdout: NodeJS.WriteStream;
   skipFallback?: boolean;
   git_basename?: string;
+  cwd?: string;
 }
 
 export async function runSessionStartHook(args: SessionStartArgs): Promise<void> {
@@ -19,7 +23,13 @@ export async function runSessionStartHook(args: SessionStartArgs): Promise<void>
 
   let brief = "";
   const bp = briefCachePath(args.project_id);
-  if (fs.existsSync(bp)) {
+  const cwd = args.cwd ?? process.cwd();
+  if (shouldPreferStateMd(bp, cwd)) {
+    // STATE.md is the canonical project-state artifact (GSD convention).
+    // When the daemon's brief cache is missing or older than STATE.md, the repo
+    // already has fresher context than what the daemon would emit — surface it.
+    brief = readStateMdSlice(cwd) ?? "";
+  } else if (fs.existsSync(bp)) {
     brief = fs.readFileSync(bp, "utf-8");
   } else if (!args.skipFallback) {
     brief = `Project: ${args.project_id}\n(no cached context — daemon will populate on next sync)`;
@@ -41,4 +51,18 @@ export async function runSessionStartHook(args: SessionStartArgs): Promise<void>
     currentSessionPath(args.project_id),
     JSON.stringify({ session_id, started_at: new Date().toISOString() }),
   );
+}
+
+function shouldPreferStateMd(briefCache: string, cwd: string): boolean {
+  const stateMd = path.join(cwd, ".planning/STATE.md");
+  if (!fs.existsSync(stateMd)) return false;
+  if (!fs.existsSync(briefCache)) return true;
+  return fs.statSync(stateMd).mtimeMs > fs.statSync(briefCache).mtimeMs;
+}
+
+function readStateMdSlice(cwd: string): string | null {
+  const stateMd = path.join(cwd, ".planning/STATE.md");
+  if (!fs.existsSync(stateMd)) return null;
+  const lines = fs.readFileSync(stateMd, "utf-8").split("\n");
+  return lines.slice(0, MAX_BRIEF_LINES).join("\n");
 }
