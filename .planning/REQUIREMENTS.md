@@ -107,10 +107,18 @@ Each v1 requirement maps to exactly one phase. Coverage: 23/23 ✓.
 | OPS-01 | Phase 1: Stabilize Backend & Observability | Pending |
 | IDENT-01 | Phase 2: Real User Identity | Pending |
 | IDENT-02 | Phase 2: Real User Identity | Pending |
-| MEAS-01 | Phase 3: Telemetry — Quality & Speed Signals | Pending |
-| MEAS-02 | Phase 3: Telemetry — Quality & Speed Signals | Pending |
-| MEAS-03 | Phase 3: Telemetry — Quality & Speed Signals | Pending |
-| MEAS-04 | Phase 3: Telemetry — Quality & Speed Signals | Pending |
+| TIER-01 | Phase 3: Free/Plus Tier Redesign | Pending |
+| TIER-02 | Phase 3: Free/Plus Tier Redesign | Pending |
+| TIER-03 | Phase 3: Free/Plus Tier Redesign | Pending |
+| TIER-04 | Phase 3: Free/Plus Tier Redesign | Pending |
+| TIER-05 | Phase 3: Free/Plus Tier Redesign | Pending |
+| TIER-06 | Phase 3: Free/Plus Tier Redesign | Pending |
+| TIER-07 | Phase 3: Free/Plus Tier Redesign | Pending |
+| TIER-08 | Phase 3: Free/Plus Tier Redesign | Pending |
+| MEAS-01 | Phase 3 (retired post-launch) | Deferred |
+| MEAS-02 | Phase 3 (retired post-launch) | Deferred |
+| MEAS-03 | Phase 3 (retired post-launch) | Deferred |
+| MEAS-04 | Phase 3 (retired post-launch) | Deferred |
 | COLLAB-01 | Phase 4: Cross-User Collaboration | Pending |
 | COLLAB-02 | Phase 4: Cross-User Collaboration | Pending |
 | COLLAB-03 | Phase 4: Cross-User Collaboration | Pending |
