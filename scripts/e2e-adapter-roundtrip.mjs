@@ -305,7 +305,7 @@ async function main() {
 
   const logSlice = readDaemonLogSlice(startMarker);
   if (!logSlice) {
-    fail("log-slice", `capture.log empty or missing after run`);
+    fail("log-slice", "capture.log empty or missing after run");
   } else {
     info(`captured ${logSlice.length} bytes of daemon log`);
   }
@@ -354,7 +354,7 @@ async function main() {
       fail("backend-projects", `GET /api/projects → HTTP ${res.status}`);
     } else {
       const projects = await res.json();
-      const matched = projects.filter((p) => p.name && p.name.includes(RUN_TAG));
+      const matched = projects.filter((p) => p.name?.includes(RUN_TAG));
       if (matched.length >= 2) {
         ok("backend-projects", `backend has ${matched.length} project(s) tagged ${RUN_TAG}`);
       } else {
@@ -425,7 +425,7 @@ function summarize() {
     log(`  ${icon} ${r.id}: ${r.detail}`);
   }
   const passed = results.filter((r) => r.status === "PASS").length;
-  log(`────────────────────────────────────────────────────────────────────`);
+  log("────────────────────────────────────────────────────────────────────");
   log(`${passed}/${results.length} stages passed`);
 }
 
