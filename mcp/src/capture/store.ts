@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { CapturedSession } from "./types.js";
 
@@ -6,7 +7,12 @@ export class SessionStore {
   private dir: string;
 
   constructor(dir?: string) {
-    this.dir = dir ?? path.join(process.env.HOME ?? "~", ".synapse", "sessions");
+    // `os.homedir()` returns the user home on every platform — including
+    // Windows (`C:\Users\<user>`), where `process.env.HOME` is undefined
+    // by default (Windows uses `USERPROFILE`). The previous
+    // `process.env.HOME ?? "~"` fallback created a literal `~` directory
+    // in the current working directory on Windows.
+    this.dir = dir ?? path.join(os.homedir(), ".synapse", "sessions");
     fs.mkdirSync(this.dir, { recursive: true });
   }
 
