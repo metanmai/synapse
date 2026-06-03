@@ -81,6 +81,8 @@ The churned row (`bd5be0f2`) updated once — almost certainly on the `subscript
 
 **Fix sketch:** Either (a) stand up a test Supabase instance (free tier is enough for CI) and inject creds via repo secrets so the skipped tests run on metanmai CI, or (b) refactor the handler to take db + user as injectable args so we can mock them and test the pure logic.
 
+**Status (2026-05-30):** Path (b) proof-of-concept landed for `events-batch`. Pure helpers extracted into `backend/src/api/events-batch-pure.ts` (skew adjustment, cwd_<hash> regex, id remapping, body validation) — 28 unit tests in `backend/test/api/events-batch-pure.test.ts` cover the previously-uncovered bug classes without needing Supabase. Pattern for remaining endpoints: extract pure logic into a sibling `*-pure.ts` file, keep DB code in the handler, write pure-helper tests. Endpoints still on the to-do list: `events-batch-auto-create` (auto-create payload selection), `project-status` (response shape building), `project-events` (pagination + ordering), `invites` (token generation, validation), `projects-delete` (cascade ordering), `projects-merge` (owner-check sequencing), `auth-me` (response shape).
+
 **Code locations:** `backend/test/api/events-batch.test.ts:44-55`, `backend/test/api/events-batch-auto-create.test.ts:64`, `backend/test/api/project-status.test.ts:27-34`, `backend/test/api/project-events.test.ts:35-44`, `backend/test/api/invites.test.ts:43-51`
 
 ---

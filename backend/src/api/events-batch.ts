@@ -4,82 +4,38 @@ import { authMiddleware } from "../lib/auth";
 import type { Env } from "../lib/env";
 import { recomputeProjectStatus } from "../lib/handoff-reducer";
 import { enforceProjectQuota } from "../lib/tier";
-
-const SKEW_LIMIT_MS = 5 * 60 * 1000;
-const CWD_HASH_PATTERN = /^cwd_[a-f0-9]{12}$/;
+import {
+  type BatchEvent,
+  applyIdMapping,
+  extractCwdHashes,
+  prepareEventRows,
+  validateEventsBatchBody,
+} from "./events-batch-pure";
 
 const eventsBatch = new Hono<{ Bindings: Env }>();
 eventsBatch.use("*", authMiddleware);
 
-interface BatchEvent {
-  event_id: unknown;
-  project_id: unknown;
-  session_id: unknown;
-  actor: unknown;
-  attached_to?: unknown;
-  kind: unknown;
-  occurred_at: unknown;
-  payload?: unknown;
-}
-
-interface RowMutable {
-  event_id: string;
-  project_id: string;
-  session_id: string;
-  actor_user_id: string;
-  actor_kind: string;
-  actor_device_id: string;
-  attached_to: unknown;
-  kind: string;
-  occurred_at: string;
-  received_at: string;
-  payload: unknown;
-}
-
 eventsBatch.post("/batch", async (c) => {
-  const body = await c.req.json<{ events: BatchEvent[] }>();
-  if (!Array.isArray(body.events) || body.events.length === 0) {
-    return c.json({ error: "events array required" }, 400);
-  }
+  const body = await c.req.json<unknown>();
+  const v = validateEventsBatchBody(body);
+  if (!v.ok) return c.json({ error: v.reason }, 400);
+
   const user = c.get("user");
   const db = c.get("db");
   const now = Date.now();
-  const adjusted: string[] = [];
 
-  const rows: RowMutable[] = body.events.map((e) => {
-    const eventId = String(e.event_id);
-    const occMs = new Date(String(e.occurred_at)).getTime();
-    let occurred_at = String(e.occurred_at);
-    if (occMs - now > SKEW_LIMIT_MS) {
-      adjusted.push(eventId);
-      occurred_at = new Date(now).toISOString();
-    }
-    const actor = e.actor as { kind: string; device_id: string };
-    return {
-      event_id: eventId,
-      project_id: String(e.project_id),
-      session_id: String(e.session_id),
-      actor_user_id: user.id,
-      actor_kind: actor.kind,
-      actor_device_id: actor.device_id,
-      attached_to: e.attached_to ?? null,
-      kind: String(e.kind),
-      occurred_at,
-      received_at: new Date(now).toISOString(),
-      payload: e.payload ?? {},
-    };
-  });
+  const { rows, adjusted_event_ids: adjusted } = prepareEventRows(v.events, user.id, now);
 
   // Auto-create projects for `cwd_<hash>` placeholder project_ids.
   // The hook dispatcher writes `cwd_<sha1[0..12]>` when no project-map entry
   // exists; here we materialize that into a real project, owned by the caller.
   // The map is returned in the response so the daemon can rename its local dir.
-  const cwdHashIds = [...new Set(rows.filter((r) => CWD_HASH_PATTERN.test(r.project_id)).map((r) => r.project_id))];
+  const cwdHashIds = extractCwdHashes(rows);
   const idMapping = new Map<string, string>();
 
   if (cwdHashIds.length > 0) {
     for (const cwdHash of cwdHashIds) {
-      const sample = body.events.find((e) => String(e.project_id) === cwdHash);
+      const sample = v.events.find((e: BatchEvent) => String(e.project_id) === cwdHash);
       const payload = (sample?.payload ?? {}) as { git_basename?: string; git_remote_url?: string };
       // The daemon's primary new-project creation path. Free users come
       // through here every time they `cd` into a fresh repo and run their
@@ -101,10 +57,7 @@ eventsBatch.post("/batch", async (c) => {
       idMapping.set(cwdHash, resolvedId);
     }
 
-    for (const r of rows) {
-      const remapped = idMapping.get(r.project_id);
-      if (remapped) r.project_id = remapped;
-    }
+    applyIdMapping(rows, idMapping);
   }
 
   const { error, count } = await db
