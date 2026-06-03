@@ -22,35 +22,37 @@ import {
  */
 
 describe("enforceProjectQuotaForTier", () => {
-  it("allows a free user under the 5-project cap", () => {
+  // Phase 03-02: BOTH tiers cap at 50. Free expanded from 5→50; the
+  // differentiator moves to per-project capacity (insights, conversations)
+  // + auto-sync + link sharing, not project count.
+  it("allows a user under the 50-project cap (both tiers)", () => {
     expect(() => enforceProjectQuotaForTier(0, "free")).not.toThrow();
-    expect(() => enforceProjectQuotaForTier(4, "free")).not.toThrow();
-  });
-
-  it("rejects a free user AT the 5-project cap (>= semantics)", () => {
-    // The bug class "off-by-one in the comparison" would let a free user
-    // sneak in their 6th project. Pin >= on the boundary.
-    expect(() => enforceProjectQuotaForTier(5, "free")).toThrow(/Project limit reached/);
-    expect(() => enforceProjectQuotaForTier(6, "free")).toThrow(/Project limit reached/);
-  });
-
-  it("allows a plus user under the 50-project cap", () => {
+    expect(() => enforceProjectQuotaForTier(49, "free")).not.toThrow();
     expect(() => enforceProjectQuotaForTier(0, "plus")).not.toThrow();
     expect(() => enforceProjectQuotaForTier(49, "plus")).not.toThrow();
   });
 
-  it("rejects a plus user AT the 50-project cap", () => {
+  it("rejects a user AT the 50-project cap (>= semantics, both tiers)", () => {
+    // Bug class: off-by-one in the comparison would let a user sneak in
+    // their 51st project. Pin >= on the boundary, both tiers.
+    expect(() => enforceProjectQuotaForTier(50, "free")).toThrow(/Project limit reached/);
+    expect(() => enforceProjectQuotaForTier(51, "free")).toThrow(/Project limit reached/);
     expect(() => enforceProjectQuotaForTier(50, "plus")).toThrow(/Project limit reached/);
+    expect(() => enforceProjectQuotaForTier(51, "plus")).toThrow(/Project limit reached/);
   });
 
-  it("the thrown error is a TIER_LIMIT 403 (frontend depends on this code)", () => {
+  it("the thrown error is PROJECT_QUOTA_EXCEEDED 402 (CLI + frontend depend on this code)", () => {
+    // Phase 03-02: structured error replaces TIER_LIMIT/403. Status 402
+    // distinguishes capacity-cap from auth/permission (403). The CLI surface
+    // (mcp/src/capture/handoff-sync.ts) and frontend new-project UI both
+    // match on this exact code string — changing it is a breaking change.
     try {
-      enforceProjectQuotaForTier(5, "free");
+      enforceProjectQuotaForTier(50, "free");
       expect.unreachable("expected throw");
     } catch (err) {
       const e = err as { code?: string; status?: number };
-      expect(e.code).toBe("TIER_LIMIT");
-      expect(e.status).toBe(403);
+      expect(e.code).toBe("PROJECT_QUOTA_EXCEEDED");
+      expect(e.status).toBe(402);
     }
   });
 });

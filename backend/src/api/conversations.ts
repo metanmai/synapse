@@ -59,9 +59,9 @@ conversations.post("/", async (c) => {
       { git_remote_url: gitRemoteUrl, git_basename: gitBasename },
       {
         // Quota gate — only fires when we're about to create. Existing
-        // cwd/url matches bypass this entirely, so a free user at 5
-        // projects can keep opening sessions in their existing 5 — only
-        // attempts to materialize a 6th hit the 403.
+        // cwd/url matches bypass this entirely, so a user at the 50-cap
+        // can keep opening sessions in their existing projects — only
+        // attempts to materialize a 51st hit PROJECT_QUOTA_EXCEEDED (402).
         onWillCreate: async () => {
           const count = await countOwnedProjects(db, user.id);
           enforceProjectQuota(count, c);
