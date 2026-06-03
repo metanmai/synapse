@@ -1,17 +1,29 @@
 // mcp/test/capture/proxy/onboarding.test.ts
 //
-// Bug class: "the onboarding (a) silently reports success on a failed
-// install, (b) calls `security` with wrong arguments and sets the
-// wrong trust scope, (c) returns a caPath that drifts from what the
-// daemon actually uses, (d) crashes on non-macOS instead of degrading
-// to manual-instructions mode, OR (e) leaves stale trust settings
-// after uninstall."
+// Dispatcher-focused tests after the Slice A.5 split. Backend-level
+// install/uninstall behavior lives in backends/{mac,linux}.test.ts;
+// this file guards:
 //
-// The keychain (`security` binary) and fingerprint (`openssl`)
-// operations are injected as runners — tests pass fakes to avoid
-// touching the user's real login keychain.
+//   - Dispatcher ROUTING: platform=darwin → MacBackend, platform=linux
+//     → LinuxBackend, platform=win32 → UnknownBackend (proven by which
+//     injected runner gets called).
+//   - LEGACY FIELD-NAME preservation: `installedInKeychain` (not
+//     `installed`), `inKeychain` (not `inTrustStore`) — `cli.ts` reads
+//     these names, breaking them would break the CLI.
+//   - LEGACY skipReason bridge: non-darwin backend reasons get
+//     "platform=X" prefixed if absent so existing callers keep working.
+//   - Dispatcher INVARIANTS: caPath matches TlsManager (no drift), env
+//     snippet port plumbing flows through, CA-absent-on-disk short-circuits
+//     work BEFORE invoking the backend.
+//
+// Critical discipline: EVERY non-darwin test injects readOsRelease +
+// runSudo + runCp so the real `/etc/os-release` is never read and the
+// real `sudo` is never invoked. This is what makes the suite run
+// identically on macOS local + Ubuntu CI. (The pre-Slice-A.5 version
+// of this file exercised the real defaults on Linux CI, which mutated
+// the real system trust store — see commit 668ac01's CI failure.)
 
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -25,7 +37,7 @@ let fakeHome: string;
 beforeEach(() => {
   tmpRoot = mkdtempSync(path.join(tmpdir(), "synapse-onboarding-"));
   tlsManager = new TlsManager({ caDir: tmpRoot });
-  fakeHome = tmpRoot; // doesn't matter — runners are mocked
+  fakeHome = tmpRoot;
 });
 
 afterEach(() => {
@@ -36,8 +48,6 @@ afterEach(() => {
   }
 });
 
-/** Build a recorder/runner pair: records every invocation; returns
- *  canned results by call sequence. */
 function makeRunner(results: CommandResult[]): {
   runner: (args: string[]) => CommandResult;
   calls: string[][];
@@ -48,7 +58,6 @@ function makeRunner(results: CommandResult[]): {
     calls,
     runner: (args) => {
       calls.push(args);
-      // Last result repeats if calls exceed queue length.
       return queue.shift() ?? results[results.length - 1] ?? { status: 0, stdout: "", stderr: "" };
     },
   };
@@ -60,110 +69,205 @@ const okFingerprint: CommandResult = {
   stderr: "",
 };
 const okExit: CommandResult = { status: 0, stdout: "", stderr: "" };
-const errExit: CommandResult = { status: 44, stdout: "", stderr: "error" };
 
-describe("installCa", () => {
-  it("on darwin: invokes `security add-trusted-cert` with -r trustRoot -p ssl and the login keychain path", () => {
-    const sec = makeRunner([okExit, okExit]); // add-trusted-cert, find-certificate (verify)
+// ── Dispatcher routing (the central bug class for this file) ─────────────
+
+describe("dispatcher routing", () => {
+  it("platform=darwin invokes MacBackend (runSecurity called, no linux runners touched)", () => {
+    const sec = makeRunner([okExit, okExit]);
     const osl = makeRunner([okFingerprint]);
-    const r = installCa({
+    const sudo = makeRunner([okExit]);
+    const cp = makeRunner([okExit]);
+
+    installCa({
       tlsManager,
       platform: "darwin",
       home: fakeHome,
       runSecurity: sec.runner,
       runOpenssl: osl.runner,
+      runSudo: sudo.runner,
+      runCp: cp.runner,
+      readOsRelease: () => null, // belt-and-suspenders
     });
 
-    expect(sec.calls).toHaveLength(2);
-    const [installArgs, verifyArgs] = sec.calls;
-    // The install call: `add-trusted-cert -r trustRoot -p ssl -k <login.keychain-db> <caPath>`
-    expect(installArgs[0]).toBe("add-trusted-cert");
-    expect(installArgs).toContain("-r");
-    expect(installArgs).toContain("trustRoot");
-    expect(installArgs).toContain("-p");
-    expect(installArgs).toContain("ssl");
-    expect(installArgs).toContain(path.join(fakeHome, "Library/Keychains/login.keychain-db"));
-    expect(installArgs).toContain(r.caPath);
-    // The verify call: `find-certificate -c "Synapse Proxy CA" <login.keychain-db>`
-    expect(verifyArgs[0]).toBe("find-certificate");
-    expect(verifyArgs).toContain("-c");
-    expect(verifyArgs).toContain("Synapse Proxy CA");
-
-    expect(r.installedInKeychain).toBe(true);
-    expect(r.proxyPort).toBe(7727);
-    expect(r.skippedReason).toBeUndefined();
+    expect(sec.calls.length).toBeGreaterThan(0);
+    expect(sudo.calls).toHaveLength(0);
+    expect(cp.calls).toHaveLength(0);
   });
 
-  it("reports installedInKeychain=false when post-install verify fails (graceful degrade)", () => {
-    // Bug class: security exits 0 even when GUI prompt is dismissed —
-    // we must NOT trust its exit code; verify-via-find is the source
-    // of truth.
-    const sec = makeRunner([okExit, errExit]); // add succeeded, verify failed
+  it("platform=linux invokes LinuxBackend (runSudo/runCp called when family known, runSecurity NEVER called)", () => {
+    const sec = makeRunner([okExit, okExit]);
     const osl = makeRunner([okFingerprint]);
-    const r = installCa({
+    const sudo = makeRunner([okExit]);
+    const cp = makeRunner([okExit]);
+
+    installCa({
       tlsManager,
-      platform: "darwin",
+      platform: "linux",
       home: fakeHome,
       runSecurity: sec.runner,
       runOpenssl: osl.runner,
+      runSudo: sudo.runner,
+      runCp: cp.runner,
+      readOsRelease: () => "ID=ubuntu\nID_LIKE=debian\n",
     });
-    expect(r.installedInKeychain).toBe(false);
-    // Manual instructions still included — user has a fallback path.
-    expect(r.manualInstallInstructions).toContain("Keychain Access");
+
+    expect(sec.calls).toHaveLength(0);
+    expect(cp.calls.length).toBeGreaterThan(0);
+    expect(sudo.calls.length).toBeGreaterThan(0);
   });
 
-  it("on non-darwin (linux/win32): skips the security call entirely + returns skippedReason + manual instructions", () => {
+  it("platform=win32 invokes UnknownBackend — no runners called, soft-skip with 'Slice B' note", () => {
     const sec = makeRunner([okExit]);
     const osl = makeRunner([okFingerprint]);
+    const sudo = makeRunner([okExit]);
+    const cp = makeRunner([okExit]);
+
+    const r = installCa({
+      tlsManager,
+      platform: "win32",
+      home: fakeHome,
+      runSecurity: sec.runner,
+      runOpenssl: osl.runner,
+      runSudo: sudo.runner,
+      runCp: cp.runner,
+      readOsRelease: () => null,
+    });
+
+    expect(sec.calls).toHaveLength(0);
+    expect(sudo.calls).toHaveLength(0);
+    expect(cp.calls).toHaveLength(0);
+    expect(r.installedInKeychain).toBe(false);
+    expect(r.skippedReason).toContain("platform=win32");
+    expect(r.skippedReason).toContain("Slice B");
+  });
+
+  it("platform=linux + unknown distro (readOsRelease returns null): no runners called, soft-skip", () => {
+    const sec = makeRunner([okExit]);
+    const osl = makeRunner([okFingerprint]);
+    const sudo = makeRunner([okExit]);
+    const cp = makeRunner([okExit]);
+
     const r = installCa({
       tlsManager,
       platform: "linux",
       home: fakeHome,
       runSecurity: sec.runner,
       runOpenssl: osl.runner,
+      runSudo: sudo.runner,
+      runCp: cp.runner,
+      readOsRelease: () => null,
     });
-    expect(sec.calls).toHaveLength(0); // never invoked
+
+    expect(sec.calls).toHaveLength(0);
+    expect(sudo.calls).toHaveLength(0);
+    expect(cp.calls).toHaveLength(0);
     expect(r.installedInKeychain).toBe(false);
     expect(r.skippedReason).toContain("platform=linux");
-    // Env snippet + manual instructions still useful on non-mac.
-    expect(r.envSnippet).toContain("NODE_EXTRA_CA_CERTS");
-    expect(r.envSnippet).toContain("HTTPS_PROXY");
-    expect(r.manualInstallInstructions.length).toBeGreaterThan(0);
   });
+});
 
-  it("env snippet contains both env vars + the configured proxy port (drift-free with daemon)", () => {
-    // Bug class: env snippet advertises a port the daemon doesn't
-    // actually bind to. Port is parameterized; default = 7727.
+// ── Legacy field-name preservation (cli.ts contract) ─────────────────────
+
+describe("legacy field-name preservation", () => {
+  it("installCa returns `installedInKeychain` (not `installed`) — cli.ts:203 reads this name", () => {
     const sec = makeRunner([okExit, okExit]);
     const osl = makeRunner([okFingerprint]);
-
-    const rDefault = installCa({
+    const r = installCa({
       tlsManager,
       platform: "darwin",
       home: fakeHome,
       runSecurity: sec.runner,
       runOpenssl: osl.runner,
     });
-    expect(rDefault.envSnippet).toContain('HTTPS_PROXY="http://127.0.0.1:7727"');
-    expect(rDefault.envSnippet).toContain(`NODE_EXTRA_CA_CERTS="${rDefault.caPath}"`);
-
-    // Custom port flows through.
-    const rCustom = installCa({
-      tlsManager,
-      platform: "darwin",
-      home: fakeHome,
-      runSecurity: sec.runner,
-      runOpenssl: osl.runner,
-      proxyPort: 9999,
-    });
-    expect(rCustom.envSnippet).toContain('HTTPS_PROXY="http://127.0.0.1:9999"');
-    expect(rCustom.proxyPort).toBe(9999);
+    expect("installedInKeychain" in r).toBe(true);
+    expect(r.installedInKeychain).toBe(true);
+    // The neutral name MUST NOT leak through:
+    expect((r as unknown as { installed?: unknown }).installed).toBeUndefined();
   });
 
-  it("caPath returned by installCa matches TlsManager.caCertPath() (no drift)", () => {
-    // Bug class: if installCa returns a path different from what the
-    // daemon's TlsManager actually produces, the env snippet points
-    // at a non-existent file.
+  it("caStatus returns `inKeychain` (not `inTrustStore`) — cli.ts:237 reads this name", () => {
+    tlsManager.ensureCa();
+    const sec = makeRunner([okExit]);
+    const osl = makeRunner([okFingerprint]);
+    const r = caStatus({
+      tlsManager,
+      platform: "darwin",
+      home: fakeHome,
+      runSecurity: sec.runner,
+      runOpenssl: osl.runner,
+    });
+    expect("inKeychain" in r).toBe(true);
+    expect(r.inKeychain).toBe(true);
+    expect((r as unknown as { inTrustStore?: unknown }).inTrustStore).toBeUndefined();
+  });
+});
+
+// ── Legacy skipReason bridge (composeLegacySkipReason) ───────────────────
+
+describe("legacy skipReason bridge", () => {
+  it("non-darwin: prepends 'keychain install skipped on platform=X' when backend reason lacks it", () => {
+    const r = installCa({
+      tlsManager,
+      platform: "linux",
+      home: fakeHome,
+      runSecurity: makeRunner([okExit]).runner,
+      runOpenssl: makeRunner([okFingerprint]).runner,
+      runSudo: makeRunner([okExit]).runner,
+      runCp: makeRunner([okExit]).runner,
+      readOsRelease: () => "ID=arch\n", // LinuxBackend returns 'unsupported distro...' (no 'platform=linux')
+    });
+    expect(r.skippedReason).toContain("platform=linux");
+    expect(r.skippedReason).toContain("unsupported distro");
+  });
+
+  it("non-darwin: passes through unchanged if backend reason already contains 'platform=X'", () => {
+    // UnknownBackend (win32) already produces "...platform=win32; Windows arrives in Slice B"
+    const r = installCa({
+      tlsManager,
+      platform: "win32",
+      home: fakeHome,
+      runSecurity: makeRunner([okExit]).runner,
+      runOpenssl: makeRunner([okFingerprint]).runner,
+      readOsRelease: () => null,
+    });
+    // No double-prefix: "keychain install skipped on platform=win32; keychain install skipped on platform=win32; ..."
+    const occurrences = (r.skippedReason ?? "").split("platform=win32").length - 1;
+    expect(occurrences).toBe(1);
+  });
+
+  it("darwin: backend's skipReason (if any) passes through unmodified — no platform prefix added", () => {
+    // MacBackend doesn't produce skipReason on success path; this guard
+    // documents the bridge's darwin-passthrough behavior.
+    const r = installCa({
+      tlsManager,
+      platform: "darwin",
+      home: fakeHome,
+      runSecurity: makeRunner([okExit, okExit]).runner,
+      runOpenssl: makeRunner([okFingerprint]).runner,
+    });
+    expect(r.skippedReason).toBeUndefined();
+  });
+
+  it("uninstallCa on non-darwin: same bridge applies", () => {
+    tlsManager.ensureCa();
+    const r = uninstallCa({
+      tlsManager,
+      platform: "linux",
+      home: fakeHome,
+      runSecurity: makeRunner([okExit]).runner,
+      runSudo: makeRunner([okExit]).runner,
+      runCp: makeRunner([okExit]).runner,
+      readOsRelease: () => "ID=arch\n",
+    });
+    expect(r.skippedReason).toContain("platform=linux");
+  });
+});
+
+// ── Dispatcher invariants ────────────────────────────────────────────────
+
+describe("dispatcher invariants", () => {
+  it("caPath matches TlsManager.caCertPath() (drift guard — env snippet must point at the daemon's actual CA)", () => {
     const sec = makeRunner([okExit, okExit]);
     const osl = makeRunner([okFingerprint]);
     const r = installCa({
@@ -174,118 +278,121 @@ describe("installCa", () => {
       runOpenssl: osl.runner,
     });
     expect(r.caPath).toBe(tlsManager.caCertPath());
-    expect(existsSync(r.caPath)).toBe(true); // ensureCa actually created it
-  });
-});
-
-describe("uninstallCa", () => {
-  it('on darwin with CA present: invokes `security delete-certificate -c "Synapse Proxy CA"`', () => {
-    // Ensure a CA exists first.
-    tlsManager.ensureCa();
-    const sec = makeRunner([okExit]);
-    const r = uninstallCa({
-      tlsManager,
-      platform: "darwin",
-      home: fakeHome,
-      runSecurity: sec.runner,
-    });
-    expect(sec.calls).toHaveLength(1);
-    expect(sec.calls[0][0]).toBe("delete-certificate");
-    expect(sec.calls[0]).toContain("-c");
-    expect(sec.calls[0]).toContain("Synapse Proxy CA");
-    expect(r.removed).toBe(true);
   });
 
-  it("reports removed=false when the security command errors (cert not in keychain)", () => {
-    tlsManager.ensureCa();
-    const sec = makeRunner([errExit]);
-    const r = uninstallCa({
-      tlsManager,
-      platform: "darwin",
-      home: fakeHome,
-      runSecurity: sec.runner,
-    });
-    expect(r.removed).toBe(false);
-  });
-
-  it("when CA pem is absent on disk: skips with reason, never calls security", () => {
-    const sec = makeRunner([okExit]);
-    const r = uninstallCa({
-      tlsManager, // CA not ensured — no cert file on disk
-      platform: "darwin",
-      home: fakeHome,
-      runSecurity: sec.runner,
-    });
-    expect(sec.calls).toHaveLength(0);
-    expect(r.removed).toBe(false);
-    expect(r.skippedReason).toContain("no CA cert present");
-  });
-
-  it("on non-darwin: soft-skips with skippedReason even when CA exists", () => {
-    tlsManager.ensureCa();
-    const sec = makeRunner([okExit]);
-    const r = uninstallCa({
-      tlsManager,
-      platform: "win32",
-      home: fakeHome,
-      runSecurity: sec.runner,
-    });
-    expect(sec.calls).toHaveLength(0);
-    expect(r.removed).toBe(false);
-    expect(r.skippedReason).toContain("platform=win32");
-  });
-});
-
-describe("caStatus", () => {
-  it("when CA doesn't exist: caExists=false, no fingerprint, no keychain call", () => {
-    const sec = makeRunner([okExit]);
+  it("env snippet port plumbing on darwin: proxyPort=9999 flows through to envSnippet", () => {
+    const sec = makeRunner([okExit, okExit]);
     const osl = makeRunner([okFingerprint]);
-    const r = caStatus({
+    const r = installCa({
       tlsManager,
       platform: "darwin",
       home: fakeHome,
       runSecurity: sec.runner,
       runOpenssl: osl.runner,
+      proxyPort: 9999,
+    });
+    expect(r.envSnippet).toContain('HTTPS_PROXY="http://127.0.0.1:9999"');
+    expect(r.proxyPort).toBe(9999);
+  });
+
+  it("env snippet port plumbing on linux: proxyPort=9999 flows through to envSnippet", () => {
+    const r = installCa({
+      tlsManager,
+      platform: "linux",
+      home: fakeHome,
+      runSecurity: makeRunner([okExit]).runner,
+      runOpenssl: makeRunner([okFingerprint]).runner,
+      runSudo: makeRunner([okExit]).runner,
+      runCp: makeRunner([okExit]).runner,
+      readOsRelease: () => "ID=ubuntu\nID_LIKE=debian\n",
+      proxyPort: 9999,
+    });
+    expect(r.envSnippet).toContain('HTTPS_PROXY="http://127.0.0.1:9999"');
+    expect(r.proxyPort).toBe(9999);
+  });
+
+  it("uninstallCa: CA absent on disk → skip with 'no CA cert present' BEFORE invoking any backend", () => {
+    const sec = makeRunner([okExit]);
+    const sudo = makeRunner([okExit]);
+    const cp = makeRunner([okExit]);
+    const r = uninstallCa({
+      tlsManager, // CA NOT ensured — file absent on disk
+      platform: "darwin",
+      home: fakeHome,
+      runSecurity: sec.runner,
+      runSudo: sudo.runner,
+      runCp: cp.runner,
+      readOsRelease: () => null,
+    });
+    expect(r.removed).toBe(false);
+    expect(r.skippedReason).toContain("no CA cert present");
+    // Crucial: no backend invocation when CA is missing — the early exit is dispatcher-level.
+    expect(sec.calls).toHaveLength(0);
+    expect(sudo.calls).toHaveLength(0);
+    expect(cp.calls).toHaveLength(0);
+  });
+
+  it("caStatus: CA absent on disk → caExists:false + inKeychain:false + no backend.checkInstall call", () => {
+    const sec = makeRunner([okExit]);
+    const cp = makeRunner([okExit]);
+    const r = caStatus({
+      tlsManager,
+      platform: "darwin",
+      home: fakeHome,
+      runSecurity: sec.runner,
+      runOpenssl: makeRunner([okFingerprint]).runner,
+      runCp: cp.runner,
+      readOsRelease: () => null,
     });
     expect(r.caExists).toBe(false);
     expect(r.fingerprint).toBeNull();
     expect(r.inKeychain).toBe(false);
     expect(sec.calls).toHaveLength(0);
-    expect(osl.calls).toHaveLength(0);
-    // Env snippet is still computed so the user sees what they NEED.
+    expect(cp.calls).toHaveLength(0);
+    // Env snippet still computed so the user has the info they need.
     expect(r.envSnippet).toContain("NODE_EXTRA_CA_CERTS");
+    expect(r.envSnippet).toContain("HTTPS_PROXY");
   });
 
-  it("when CA exists: returns fingerprint + checks keychain on darwin", () => {
-    tlsManager.ensureCa();
-    const sec = makeRunner([okExit]); // find-certificate succeeds
-    const osl = makeRunner([okFingerprint]);
-    const r = caStatus({
-      tlsManager,
-      platform: "darwin",
-      home: fakeHome,
-      runSecurity: sec.runner,
-      runOpenssl: osl.runner,
-    });
-    expect(r.caExists).toBe(true);
-    expect(r.fingerprint).toContain("SHA256");
-    expect(r.inKeychain).toBe(true);
-    expect(sec.calls[0][0]).toBe("find-certificate");
-  });
-
-  it("on non-darwin with CA present: skips keychain check", () => {
+  it("caStatus on linux with CA present + unknown distro: inKeychain:false, no runSecurity calls", () => {
     tlsManager.ensureCa();
     const sec = makeRunner([okExit]);
-    const osl = makeRunner([okFingerprint]);
+    const sudo = makeRunner([okExit]);
+    const cp = makeRunner([okExit]);
     const r = caStatus({
       tlsManager,
       platform: "linux",
       home: fakeHome,
       runSecurity: sec.runner,
-      runOpenssl: osl.runner,
+      runOpenssl: makeRunner([okFingerprint]).runner,
+      runSudo: sudo.runner,
+      runCp: cp.runner,
+      readOsRelease: () => null, // unknown distro
     });
     expect(r.caExists).toBe(true);
     expect(r.inKeychain).toBe(false);
     expect(sec.calls).toHaveLength(0);
+    // unknown distro: linux backend's checkInstall returns inTrustStore:false WITHOUT calling cp
+    expect(cp.calls).toHaveLength(0);
+  });
+
+  it("caStatus on linux with CA present + known distro: inKeychain reflects runCp result", () => {
+    tlsManager.ensureCa();
+    const sec = makeRunner([okExit]);
+    const cp = makeRunner([okExit]); // test -f returns 0 = file exists
+    const r = caStatus({
+      tlsManager,
+      platform: "linux",
+      home: fakeHome,
+      runSecurity: sec.runner,
+      runOpenssl: makeRunner([okFingerprint]).runner,
+      runCp: cp.runner,
+      readOsRelease: () => "ID=ubuntu\nID_LIKE=debian\n",
+    });
+    expect(r.caExists).toBe(true);
+    expect(r.inKeychain).toBe(true); // runCp returned 0
+    expect(sec.calls).toHaveLength(0); // mac runner never touched
+    expect(cp.calls).toHaveLength(1);
+    expect(cp.calls[0]).toEqual(["test", "-f", "/etc/ssl/certs/synapse.pem"]);
   });
 });
