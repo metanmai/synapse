@@ -338,13 +338,13 @@ async function runEditorSetup(apiKey: string): Promise<void> {
   const hasClaudeCode = selectedEditors.some((e) => e.id === "claude-code");
   if (!hasClaudeCode) {
     clack.outro(
-      `Restart your editor to connect. ${muted("Session capture requires Claude Code \u2014 pick it in the wizard to enable.")}`,
+      `Restart your editor to connect. ${muted("For automatic session capture from any AI tool, run `synapsesync capture proxy install` next.")}`,
     );
     return;
   }
 
   const startCapture = await clack.confirm({
-    message: "Start capturing Claude Code sessions automatically?",
+    message: "Install Claude Code hooks for fine-grained session capture?",
     initialValue: true,
   });
 
@@ -389,6 +389,6 @@ async function runEditorSetup(apiKey: string): Promise<void> {
   }
 
   clack.outro(
-    `Restart Claude Code to pick up the new hooks and MCP server. ${muted("Your sessions will then be captured automatically.")}`,
+    `Restart your editor to pick up the new hooks and MCP server. ${muted("For capture from non-Claude-Code tools (Cline, Cursor, Codex, OpenCode, etc.), also run `synapsesync capture proxy install`.")}`,
   );
 }
