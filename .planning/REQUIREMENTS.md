@@ -95,4 +95,30 @@ Explicit exclusions for this milestone. Reasons documented to prevent re-adding 
 
 ## Traceability
 
-(Populated by roadmap creation. Each requirement maps to exactly one phase.)
+Each v1 requirement maps to exactly one phase. Coverage: 23/23 ✓.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| BUG-01 | Phase 1: Stabilize Backend & Observability | Pending |
+| BUG-02 | Phase 1: Stabilize Backend & Observability | Pending |
+| BUG-03 | Phase 1: Stabilize Backend & Observability | Pending |
+| BUG-04 | Phase 1: Stabilize Backend & Observability | Pending |
+| OBS-01 | Phase 1: Stabilize Backend & Observability | Pending |
+| OPS-01 | Phase 1: Stabilize Backend & Observability | Pending |
+| IDENT-01 | Phase 2: Real User Identity | Pending |
+| IDENT-02 | Phase 2: Real User Identity | Pending |
+| MEAS-01 | Phase 3: Telemetry — Quality & Speed Signals | Pending |
+| MEAS-02 | Phase 3: Telemetry — Quality & Speed Signals | Pending |
+| MEAS-03 | Phase 3: Telemetry — Quality & Speed Signals | Pending |
+| MEAS-04 | Phase 3: Telemetry — Quality & Speed Signals | Pending |
+| COLLAB-01 | Phase 4: Cross-User Collaboration | Pending |
+| COLLAB-02 | Phase 4: Cross-User Collaboration | Pending |
+| COLLAB-03 | Phase 4: Cross-User Collaboration | Pending |
+| TOKEN-01 | Phase 5: Token Brokering MVP | Pending |
+| TOKEN-02 | Phase 5: Token Brokering MVP | Pending |
+| TOKEN-03 | Phase 5: Token Brokering MVP | Pending |
+| TOKEN-04 | Phase 5: Token Brokering MVP | Pending |
+| LAUNCH-01 | Phase 6: Waitlist Launch & Cold-Laptop Rehearsal | Pending |
+| LAUNCH-02 | Phase 6: Waitlist Launch & Cold-Laptop Rehearsal | Pending |
+| LAUNCH-03 | Phase 6: Waitlist Launch & Cold-Laptop Rehearsal | Pending |
+| DOG-01 | Phase 7: Dogfood & Public Open | Pending |
