@@ -66,6 +66,9 @@ function startCapture(): void {
     detached: true,
     stdio: ["ignore", "ignore", "ignore"],
   });
+  // Defensive: unhandled 'error' on a detached spawn kills the parent
+  // (see daemon.spawnPrewarm comment for the bug-class explanation).
+  child.on("error", () => {});
 
   child.unref();
   if (child.pid) {
@@ -346,6 +349,9 @@ async function restartDaemon(): Promise<{ stoppedPid?: number; startedPid?: numb
     detached: true,
     stdio: ["ignore", "ignore", "ignore"],
   });
+  // Defensive: unhandled 'error' on a detached spawn kills the parent
+  // (see daemon.spawnPrewarm comment for the bug-class explanation).
+  child.on("error", () => {});
   child.unref();
 
   let startedPid: number | undefined;
