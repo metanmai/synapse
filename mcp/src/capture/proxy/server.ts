@@ -342,12 +342,14 @@ function handleRequest(
         clientRes.end();
         if (endpoint.capture && opts.onCaptured) {
           const resBody = Buffer.concat(resChunks);
+          const uaHeader = clientReq.headers["user-agent"];
           const captured: CapturedRequest = {
             timestamp: startedAt,
             endpoint,
             requestBody: parseBody(reqBody, clientReq.headers["content-type"]),
             responseBody: parseBody(resBody, upstreamRes.headers["content-type"]),
             statusCode: upstreamRes.statusCode ?? 502,
+            userAgent: typeof uaHeader === "string" ? uaHeader : uaHeader?.[0],
           };
           try {
             opts.onCaptured(captured);

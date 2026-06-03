@@ -64,9 +64,10 @@ export interface ProxySourceOptions {
    */
   reconstructIdleMs?: number;
   /**
-   * Tool tag applied to emitted sessions. Defaults to "claude-code"
-   * matching reconstructSessions' default; UA-based inference is a
-   * follow-up.
+   * Optional explicit tool tag for every emitted session. When unset
+   * (production default), reconstructSessions classifies each session
+   * from the request's User-Agent header via classifyUserAgent.
+   * Override is preserved as a test/debug hook only.
    */
   tool?: CapturedSession["tool"];
   /**
