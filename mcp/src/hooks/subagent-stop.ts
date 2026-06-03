@@ -8,6 +8,8 @@ export function runSubagentStopHook(a: {
   user_id: string;
   session_id: string;
   subagent: string;
+  git_basename?: string;
+  git_remote_url?: string;
 }): void {
   if (process.env.SYNAPSE_DAEMON_SESSION === "1") return;
   appendEvent(projectDir(a.project_id), {
@@ -17,6 +19,12 @@ export function runSubagentStopHook(a: {
     attached_to: null,
     kind: EventKind.ToolUsed,
     occurred_at: new Date().toISOString(),
-    payload: { tool: "Agent", subagent: a.subagent },
+    // Routing payload — see pre-compact.ts for full motivation.
+    payload: {
+      tool: "Agent",
+      subagent: a.subagent,
+      ...(a.git_basename ? { git_basename: a.git_basename } : {}),
+      ...(a.git_remote_url ? { git_remote_url: a.git_remote_url } : {}),
+    },
   });
 }

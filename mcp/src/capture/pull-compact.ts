@@ -142,30 +142,50 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
     return null;
   }
 
-  // 2. Find the most-recent conversation with a FRESH cached handoff —
-  //    cached handoff postdating the last message means no work has been
-  //    added since the brief was written. This walks past empty-newest
-  //    rows (session-started-but-not-yet-compacted) to reach the real
-  //    "where I left off" content. Track the newest non-fresh cachedHandoff
-  //    as a fallback for when the recompute path below also fails.
+  // 2. Prioritize the NEWEST conversation, because that's the active session.
+  //    Pulling a stale handoff from an OLDER conversation would surface the
+  //    wrong "where I left off" (e.g. a `claude -p` subprocess's freshly-
+  //    compacted handoff outranking the main session's not-yet-compacted
+  //    work). The flow per row:
+  //      (a) fresh cached handoff (handoff_at >= updated_at) — return it.
+  //      (b) recomputable (has capturedSessionId + local file) — try it.
+  //      (c) skip; remember its handoff_markdown (if any) as a fallback.
+  //    Only when conv[0] yields nothing do we fall back to OLDER rows'
+  //    cached handoffs as a stale-but-better-than-nothing degradation.
+  //
+  //    Track the newest cached handoff among rows we walked past; if the
+  //    recompute path also fails we return this rather than null. Stale
+  //    handoff > no handoff (caller treats null as "render bare brief").
   let staleFallback: string | null = null;
-  for (const c of listed) {
-    const m = (c.metadata ?? {}) as Record<string, unknown>;
-    const cached = typeof m.handoff_markdown === "string" ? m.handoff_markdown : null;
-    const at = typeof m.handoff_at === "string" ? m.handoff_at : null;
-    if (cached && at && at >= c.updated_at) {
-      log(`pull-compact: cache hit for ${c.id}`);
-      return cached;
-    }
-    if (cached && !staleFallback) staleFallback = cached;
+  const conv = listed[0];
+  const convMeta = (conv.metadata ?? {}) as Record<string, unknown>;
+  const convCached = typeof convMeta.handoff_markdown === "string" ? convMeta.handoff_markdown : null;
+  const convAt = typeof convMeta.handoff_at === "string" ? convMeta.handoff_at : null;
+
+  // 2a. Newest has a fresh cache hit — done. The active session's handoff
+  //     postdates its last message: no work added since, serve cache.
+  if (convCached && convAt && convAt >= conv.updated_at) {
+    log(`pull-compact: cache hit for ${conv.id}`);
+    return convCached;
   }
 
-  // 3. No fresh cache anywhere — recompute against the newest conversation
-  //    (where the active session would be writing). This is unchanged from
-  //    the original single-row path; only the cached-hit fan-out above is new.
-  const conv = listed[0];
-  const meta = (conv.metadata ?? {}) as Record<string, unknown>;
-  const cachedHandoff = (typeof meta.handoff_markdown === "string" ? meta.handoff_markdown : null) ?? staleFallback;
+  // 2b. Collect fallback candidates from listed[1..N] so we can degrade
+  //     gracefully if the newest's recompute path fails. We prefer the
+  //     newest among them — most likely to share context with the active
+  //     session even if it's not the active session itself.
+  if (convCached) staleFallback = convCached;
+  for (const c of listed.slice(1)) {
+    const m = (c.metadata ?? {}) as Record<string, unknown>;
+    const cached = typeof m.handoff_markdown === "string" ? m.handoff_markdown : null;
+    if (cached && !staleFallback) {
+      staleFallback = cached;
+      break; // first (newest) older cached handoff is the best fallback
+    }
+  }
+
+  // 3. Recompute against conv[0] — the active session. This is the path
+  //    that produces the actual "where I left off" for the user.
+  const cachedHandoff = convCached ?? staleFallback;
 
   // 3. Stale or missing — recompute. We need working_context.capturedSessionId
   //    to find the local transcript; the list endpoint doesn't return it,

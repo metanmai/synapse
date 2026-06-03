@@ -14,6 +14,8 @@ interface Args {
   session_id: string;
   prompt: string;
   stdout: NodeJS.WriteStream;
+  git_basename?: string;
+  git_remote_url?: string;
 }
 
 export function runUserPromptSubmitHook(a: Args): void {
@@ -26,7 +28,12 @@ export function runUserPromptSubmitHook(a: Args): void {
     attached_to: null,
     kind: EventKind.UserPrompted,
     occurred_at: new Date().toISOString(),
-    payload: { prompt_excerpt: a.prompt.slice(0, 80) },
+    // Routing payload — see pre-compact.ts for full motivation.
+    payload: {
+      prompt_excerpt: a.prompt.slice(0, 80),
+      ...(a.git_basename ? { git_basename: a.git_basename } : {}),
+      ...(a.git_remote_url ? { git_remote_url: a.git_remote_url } : {}),
+    },
   });
 
   const injectPath = path.join(projectDir(a.project_id), "last_injection.txt");
