@@ -422,10 +422,18 @@ describe("projects queries", () => {
   // when multiple rows match; that's reachable in production whenever a
   // user has two same-named projects with different git_remote_urls (e.g.,
   // two unrelated `scratch` dirs). Both the URL match (Tier 1) and the
-  // name match (Tier 2) must use `.order(updated_at desc).limit(1)` before
-  // `.maybeSingle()` so the query can never see more than one row.
+  // name match (Tier 2) must use `.limit(1)` before `.maybeSingle()` so
+  // the query can never see more than one row.
+  //
+  // NOTE: an earlier version of these tests also asserted
+  // `.order("updated_at", { ascending: false })` — that was removed when
+  // we discovered (2026-05-24) that the `projects` table has no
+  // updated_at column, so every Tier ORDER BY was silently throwing in
+  // production. `.limit(1)` alone is sufficient: post-migration-021 the
+  // unique constraint on (owner_id, git_remote_url) means Tier 1 has at
+  // most one match, and for Tier 2's same-name case any one is fine.
   describe("findOrCreateProjectByGit", () => {
-    it("Tier 1 URL match chain calls .order().limit(1) before .maybeSingle()", async () => {
+    it("Tier 1 URL match chain calls .limit(1) before .maybeSingle()", async () => {
       // Membership lookup: 1 project. Tier 1 hit: returns the existing id.
       const db = createSequentialMockDb(
         { data: [{ project_id: "proj_a" }], error: null },
@@ -439,14 +447,15 @@ describe("projects queries", () => {
 
       expect(result).toBe("proj_a");
       // chains[1] is the Tier 1 SELECT. Walking the calls verifies that the
-      // chain went .eq() → .in() → .order() → .limit() → .maybeSingle().
+      // chain went .eq() → .in() → .limit() → .maybeSingle(), with NO .order
+      // (the projects table has no updated_at column).
       const tier1 = db.chains[1];
-      expect(tier1.order).toHaveBeenCalledWith("updated_at", { ascending: false });
+      expect(tier1.order).not.toHaveBeenCalled();
       expect(tier1.limit).toHaveBeenCalledWith(1);
       expect(tier1.maybeSingle).toHaveBeenCalled();
     });
 
-    it("Tier 2 name match chain calls .order().limit(1) before .maybeSingle()", async () => {
+    it("Tier 2 name match chain calls .limit(1) before .maybeSingle()", async () => {
       // Membership lookup → 1 proj. Tier 1 miss (no URL). Tier 2 returns a row.
       const db = createSequentialMockDb(
         { data: [{ project_id: "proj_b" }], error: null }, // memberships
@@ -461,7 +470,7 @@ describe("projects queries", () => {
       expect(result).toBe("proj_b");
       const tier2 = db.chains[1];
       expect(tier2.eq).toHaveBeenCalledWith("name", "scratch");
-      expect(tier2.order).toHaveBeenCalledWith("updated_at", { ascending: false });
+      expect(tier2.order).not.toHaveBeenCalled();
       expect(tier2.limit).toHaveBeenCalledWith(1);
       expect(tier2.maybeSingle).toHaveBeenCalled();
     });

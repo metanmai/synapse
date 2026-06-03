@@ -181,7 +181,6 @@ export async function findOrCreateProjectByGit(
       .select("id")
       .eq("git_remote_url", gitRemoteUrl)
       .in("id", memberProjectIds)
-      .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (t1Err) console.error("findOrCreateProjectByGit Tier 1 err:", t1Err);
@@ -199,7 +198,6 @@ export async function findOrCreateProjectByGit(
       .select("id, git_remote_url")
       .eq("name", gitBasename)
       .in("id", memberProjectIds)
-      .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (t2Err) console.error("findOrCreateProjectByGit Tier 2 err:", t2Err);
@@ -231,7 +229,6 @@ export async function findOrCreateProjectByGit(
       .select("id")
       .eq("owner_id", userId)
       .eq("git_remote_url", gitRemoteUrl)
-      .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (t1bErr) console.error("findOrCreateProjectByGit Tier 1b err:", t1bErr);
