@@ -7,6 +7,7 @@ const mockFrom = vi.fn();
 const mockSelect = vi.fn();
 const mockEq = vi.fn();
 const mockSingle = vi.fn();
+const mockMaybeSingle = vi.fn();
 const mockSubscriptionQuery = vi.fn();
 
 vi.mock("@supabase/supabase-js", () => ({
@@ -31,6 +32,9 @@ vi.mock("../../src/db/client", () => ({
             mockEq(...eqArgs);
             return {
               single: mockSingle,
+              limit: (..._limitArgs: unknown[]) => ({
+                maybeSingle: mockMaybeSingle,
+              }),
               in: (..._inArgs: unknown[]) => ({
                 order: (..._orderArgs: unknown[]) => ({
                   limit: (..._limitArgs: unknown[]) => ({
@@ -42,6 +46,10 @@ vi.mock("../../src/db/client", () => ({
           };
           return chainable;
         },
+        // Support update().eq() chain (used by updateApiKeyLastUsed)
+        update: () => ({
+          eq: () => Promise.resolve({ error: null }),
+        }),
       };
     },
   }),
@@ -116,6 +124,8 @@ describe("authMiddleware", () => {
       error: { message: "Invalid token" },
     });
     mockSingle.mockResolvedValue({ data: null, error: { code: "PGRST116" } });
+    // API key fallback also fails (findUserByApiKeyHash via api_keys table)
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
 
     const c = createMockContext("Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NSJ9.abc123");
     const next = vi.fn();
@@ -130,6 +140,8 @@ describe("authMiddleware", () => {
     });
     // findUserBySupabaseAuthId returns null (no row in public.users)
     mockSingle.mockResolvedValue({ data: null, error: { code: "PGRST116" } });
+    // API key fallback also fails (findUserByApiKeyHash via api_keys table)
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
 
     const c = createMockContext("Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NSJ9.abc123");
     const next = vi.fn();
@@ -156,10 +168,13 @@ describe("authMiddleware", () => {
   });
 
   it("accepts valid API key", async () => {
-    const mockUser = { id: "user-uuid", email: "test@test.com", api_key_hash: "abc" };
+    const mockUser = { id: "user-uuid", email: "test@test.com" };
     // Not a JWT, so skip JWT path
-    // findUserByApiKeyHash returns user
-    mockSingle.mockResolvedValue({ data: mockUser, error: null });
+    // findUserByApiKeyHash queries api_keys table with join to users
+    mockMaybeSingle.mockResolvedValue({
+      data: { id: "key-uuid", user_id: "user-uuid", expires_at: null, users: mockUser },
+      error: null,
+    });
 
     const c = createMockContext("Bearer simple-api-key");
     const next = vi.fn();
@@ -172,7 +187,8 @@ describe("authMiddleware", () => {
   });
 
   it("rejects invalid API key", async () => {
-    mockSingle.mockResolvedValue({ data: null, error: { code: "PGRST116" } });
+    // findUserByApiKeyHash returns null (no matching key in api_keys)
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
 
     const c = createMockContext("Bearer bad-api-key");
     const next = vi.fn();
