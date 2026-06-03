@@ -1,11 +1,14 @@
+import child_process from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { API_URL } from "../cli/config.js";
 import { readProjectMap, removeProjectMapping, upsertProjectMapping } from "../cli/project-map.js";
 import { type BackendResolveFn, type BackendResolveResponse, resolveProject } from "../cli/resolve-project.js";
 import type { AdapterRegistry } from "./adapter-registry.js";
 import { resolveApiKey } from "./cloud-sync.js";
 import { defaultRegistry } from "./default-registry.js";
+import { synapseRoot } from "./handoff-paths.js";
 import type { ToolAdapter } from "./types.js";
 
 interface ConversationListItem {
@@ -27,6 +30,20 @@ export interface PullHandoffOptions {
   apiUrl?: string;
   registry?: AdapterRegistry;
   log?: (msg: string) => void;
+  /**
+   * Fast mode for the SessionStart hook caller: when conv[0] has stale or
+   * missing cached handoff, kick off the actual `claude -p` recompute in a
+   * DETACHED background process and return the staleFallback (or null)
+   * synchronously. The recompute can take 30-60s on a large transcript —
+   * way over the hook's 10s budget — and the previous design timed out
+   * inside `pullHandoffWithTimeout` before the inline await could return
+   * its fallback value. Result was user-visible "first session after
+   * /compact shows STATE.md only, no `## Last conversation handoff`."
+   *
+   * Default false preserves the original inline-await behavior used by
+   * the `synapsesync pull-handoff` CLI (which IS the background process).
+   */
+  fast?: boolean;
 }
 
 /**
@@ -187,6 +204,25 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
   //    that produces the actual "where I left off" for the user.
   const cachedHandoff = convCached ?? staleFallback;
 
+  // 3a. FAST MODE shortcut. SessionStart hook can't afford the 30-60s
+  //     recompute (it has a 10s budget before the brief is emitted).
+  //     If we have any cached content (fresh enough to be worth showing,
+  //     or stale-but-from-the-active-session), serve it NOW and spawn a
+  //     detached `synapsesync pull-handoff` process to do the slow
+  //     recompute in the background. The next session will hit a fresh
+  //     cache.
+  //
+  //     Subtle: we only enter the fast-bg-spawn path when we actually
+  //     have something to serve (cachedHandoff non-null). If everything
+  //     is empty we fall through to inline recompute — fast mode without
+  //     any cache to serve would emit a bare brief anyway, so blocking
+  //     on the inline path is the same outcome but with a slight chance
+  //     of completing within budget for small sessions.
+  if (opts.fast && cachedHandoff) {
+    spawnBackgroundRecompute(canonicalCwd, log);
+    return cachedHandoff;
+  }
+
   // 3. Stale or missing — recompute. We need working_context.capturedSessionId
   //    to find the local transcript; the list endpoint doesn't return it,
   //    so fetch the full row.
@@ -256,7 +292,14 @@ export async function pullHandoffWithTimeout(opts: PullHandoffOptions, timeoutMs
   const log = opts.log ?? (() => {});
   // Defensive: pullHandoff is designed not to throw, but if it ever does
   // we don't want an unhandled rejection scribbled on the daemon log.
-  const work = pullHandoff(opts).catch((err) => {
+  // Force fast mode here — this wrapper is always called from the
+  // SessionStart hook, which can't afford inline recompute. The fast
+  // path returns staleFallback synchronously and spawns the slow
+  // recompute as a detached child process, so the next session hits a
+  // warm cache. Without `fast: true` the inline recompute would block
+  // until either it completes (~30-60s) or the timer fires (10s default),
+  // and a timer win would return null without ever using the fallback.
+  const work = pullHandoff({ ...opts, fast: true }).catch((err) => {
     log(`pull-compact: background pull errored: ${err instanceof Error ? err.message : err}`);
     return null;
   });
@@ -327,4 +370,36 @@ function scanForFiles(root: string): string[] {
     }
   }
   return out;
+}
+
+/**
+ * Spawn `synapsesync pull-handoff --cwd <cwd>` as a detached child process
+ * so the slow recompute (claude -p, 30-60s for large transcripts) can run
+ * past the parent hook's lifetime. Fire-and-forget; stderr goes to
+ * ~/.synapse/pull-compact-bg.log for diagnosis.
+ *
+ * Without this, fast-mode pullHandoff would return staleFallback but
+ * NEVER refresh the cache — every subsequent session would also see
+ * stale until something else triggered the recompute. Spawning here
+ * means cache freshness is bounded by recompute latency, not by user
+ * activity.
+ */
+function spawnBackgroundRecompute(cwd: string, log: (msg: string) => void): void {
+  try {
+    const logFile = path.join(synapseRoot(), "pull-compact-bg.log");
+    fs.mkdirSync(synapseRoot(), { recursive: true });
+    const out = fs.openSync(logFile, "a");
+    // The synapsesync CLI sits at dist/index.js relative to this file
+    // (this file lives at dist/capture/pull-compact.js after build).
+    const cliEntry = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), "index.js");
+    const child = child_process.spawn(process.execPath, [cliEntry, "pull-handoff", "--cwd", cwd], {
+      detached: true,
+      stdio: ["ignore", out, out],
+      env: { ...process.env, SYNAPSE_PULL_COMPACT_BG: "1" },
+    });
+    child.unref();
+    log(`pull-compact: spawned background recompute for ${cwd} (pid=${child.pid})`);
+  } catch (err) {
+    log(`pull-compact: background spawn failed: ${err instanceof Error ? err.message : err}`);
+  }
 }
