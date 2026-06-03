@@ -49,6 +49,13 @@ export const schemas = {
     expires_at: z.string().nullable().optional(),
   }),
 
+  // Project resolve
+  resolveProject: z.object({
+    cwd: z.string().min(1, "cwd is required"),
+    git_origin_url: z.string().optional(),
+    git_basename: z.string().optional(),
+  }),
+
   // Projects
   createProject: z.object({
     name: z.string().min(1, "Name is required"),
