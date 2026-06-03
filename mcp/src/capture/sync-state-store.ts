@@ -5,6 +5,14 @@ import { synapseRoot } from "./handoff-paths.js";
 export interface SyncState {
   cloudConversationId: string;
   lastSyncedMessageCount: number;
+  // Cached after first sync. The conversation's owning project on the
+  // backend — known after createConversation returns (the backend resolves
+  // it from working_context.git_origin_url). Persisted so a daemon restart
+  // doesn't have to refetch the conversation row to learn the routing.
+  // Older state files written before this field landed will omit these;
+  // loadSyncStates tolerates the absence.
+  projectId?: string;
+  projectName?: string | null;
 }
 
 interface SyncStateFile {
@@ -37,10 +45,13 @@ export function loadSyncStates(log?: (msg: string) => void): Map<string, SyncSta
         typeof v.cloudConversationId === "string" &&
         typeof v.lastSyncedMessageCount === "number"
       ) {
-        entries.push([
-          k,
-          { cloudConversationId: v.cloudConversationId, lastSyncedMessageCount: v.lastSyncedMessageCount },
-        ]);
+        const state: SyncState = {
+          cloudConversationId: v.cloudConversationId,
+          lastSyncedMessageCount: v.lastSyncedMessageCount,
+        };
+        if (typeof v.projectId === "string") state.projectId = v.projectId;
+        if (typeof v.projectName === "string" || v.projectName === null) state.projectName = v.projectName;
+        entries.push([k, state]);
       }
     }
     return new Map(entries);

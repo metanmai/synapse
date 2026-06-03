@@ -13,6 +13,7 @@ import {
   saveConversationContext,
   updateConversation,
 } from "../db/queries";
+import { findOrCreateProjectByGit } from "../db/queries/projects";
 import { detectAdapter, getAdapter } from "../lib/adapters";
 import { authMiddleware } from "../lib/auth";
 import type { Env } from "../lib/env";
@@ -28,17 +29,42 @@ conversations.use("*", authMiddleware);
 conversations.use("*", idempotency);
 
 // POST /api/conversations — create a new conversation
+//
+// project_id is optional. When omitted, working_context.git_remote_url and
+// working_context.cwd are used to auto-route to (or create) the right
+// per-cwd project for the user, via the same findOrCreateProjectByGit
+// helper that /api/events/batch uses. The capture-worker relies on this
+// path so that sessions captured in /path/to/repo land in the same backend
+// project as that repo's handoff events — not in `projects[0]`.
 conversations.post("/", async (c) => {
   const user = c.get("user");
   const body = await parseBody(c, schemas.createConversation);
 
   const db = c.get("db");
 
-  // Verify the user is at least an editor on the project
-  await requireRole(db, body.project_id, user.id, "editor");
+  let projectId = body.project_id ?? null;
+
+  if (!projectId) {
+    const wc = (body.working_context ?? {}) as Record<string, unknown>;
+    const gitRemoteUrl = typeof wc.git_origin_url === "string" ? wc.git_origin_url : null;
+    // git_basename is derived from the cwd's tail; fall back to the
+    // projectPath basename if a separate git_basename field isn't present.
+    let gitBasename: string | null = null;
+    if (typeof wc.git_basename === "string") gitBasename = wc.git_basename;
+    else if (typeof wc.cwd === "string") gitBasename = wc.cwd.split("/").filter(Boolean).pop() ?? null;
+    else if (typeof wc.projectPath === "string") gitBasename = wc.projectPath.split("/").filter(Boolean).pop() ?? null;
+
+    projectId = await findOrCreateProjectByGit(db, user.id, {
+      git_remote_url: gitRemoteUrl,
+      git_basename: gitBasename,
+    });
+  } else {
+    // When the caller supplied a project_id explicitly, enforce membership.
+    await requireRole(db, projectId, user.id, "editor");
+  }
 
   const conversation = await createConversation(db, {
-    project_id: body.project_id,
+    project_id: projectId,
     user_id: user.id,
     title: body.title ?? null,
     fidelity_mode: body.fidelity_mode,
@@ -48,7 +74,7 @@ conversations.post("/", async (c) => {
   });
 
   await logActivity(db, {
-    project_id: body.project_id,
+    project_id: projectId,
     user_id: user.id,
     action: "conversation_created",
     source: "human",

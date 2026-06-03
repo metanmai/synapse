@@ -137,6 +137,82 @@ export async function removeMember(db: SupabaseClient, projectId: string, userId
   if (error) throw error;
 }
 
+/**
+ * Find an existing project for `userId` keyed by git signals, or create a
+ * fresh one and add `userId` as owner. Used by both the events-batch
+ * auto-create flow and the conversations capture path so a captured
+ * session in /path/to/repo lands in the SAME backend project as the
+ * handoff events from that cwd — not in `projects[0]`.
+ *
+ * Match precedence (mirrors events-batch.ts:91-126):
+ *   1. `git_remote_url` exact match — globally unique per the user's clones.
+ *   2. Project name (= git_basename) match, restricted to user's memberships.
+ *      Opportunistically backfills git_remote_url if the matched row had none.
+ *   3. Insert new project with `name = git_basename ?? "untitled"` and add
+ *      `userId` as owner.
+ *
+ * Returns the resolved/created project id.
+ */
+export async function findOrCreateProjectByGit(
+  db: SupabaseClient,
+  userId: string,
+  opts: { git_remote_url?: string | null; git_basename?: string | null },
+): Promise<string> {
+  const gitBasename = opts.git_basename ?? "untitled";
+  const gitRemoteUrl = opts.git_remote_url ?? null;
+
+  const { data: memberships } = await db.from("project_members").select("project_id").eq("user_id", userId);
+  const memberProjectIds = (memberships ?? []).map((m: { project_id: string }) => m.project_id);
+
+  let existingId: string | null = null;
+
+  if (gitRemoteUrl && memberProjectIds.length > 0) {
+    const { data } = await db
+      .from("projects")
+      .select("id")
+      .eq("git_remote_url", gitRemoteUrl)
+      .in("id", memberProjectIds)
+      .maybeSingle();
+    existingId = (data as { id: string } | null)?.id ?? null;
+  }
+
+  if (!existingId && memberProjectIds.length > 0) {
+    const { data: existing } = await db
+      .from("projects")
+      .select("id, git_remote_url")
+      .eq("name", gitBasename)
+      .in("id", memberProjectIds)
+      .maybeSingle();
+    const existingRow = existing as { id: string; git_remote_url: string | null } | null;
+    existingId = existingRow?.id ?? null;
+
+    if (existingId && gitRemoteUrl && !existingRow?.git_remote_url) {
+      await db
+        .from("projects")
+        .update({ git_remote_url: gitRemoteUrl })
+        .eq("id", existingId)
+        .is("git_remote_url", null);
+    }
+  }
+
+  if (existingId) return existingId;
+
+  const { data: created, error: createErr } = await db
+    .from("projects")
+    .insert({ name: gitBasename, owner_id: userId, git_remote_url: gitRemoteUrl })
+    .select("id")
+    .single();
+  if (createErr) throw createErr;
+  const createdId = (created as { id: string }).id;
+
+  const { error: memberErr } = await db
+    .from("project_members")
+    .insert({ project_id: createdId, user_id: userId, role: "owner" });
+  if (memberErr) throw memberErr;
+
+  return createdId;
+}
+
 export async function getProjectStats(db: SupabaseClient, projectId: string) {
   const [convResult, insightResult] = await Promise.all([
     db
