@@ -148,22 +148,26 @@ export function detectExistingSetup(): ExistingSetup {
   ];
 
   for (const [filePath, label] of mcpFiles) {
-    if (fs.existsSync(filePath)) {
-      try {
-        const content = fs.readFileSync(filePath, "utf-8");
-        if (content.includes("synapsesync") || content.includes("synapse")) {
-          const key = extractApiKey(filePath);
-          if (key) apiKeySet.add(key);
-          locations.push({
-            label,
-            filePath,
-            status: key ? "has_key" : "no_key",
-            apiKey: key,
-          });
-        }
-      } catch {
-        /* ignore */
-      }
+    if (!fs.existsSync(filePath)) continue;
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      // Only treat the file as a Synapse install location if there's an
+      // actual MCP server entry called "synapse". A bare substring match
+      // would false-positive on Claude Code's slash-command usage counters
+      // (`"synapse": { usageCount, lastUsedAt }`), which sit at the top
+      // level of ~/.claude.json and are unrelated to MCP config.
+      const synapseServer = parsed?.mcpServers?.synapse ?? parsed?.mcp?.servers?.synapse ?? parsed?.servers?.synapse;
+      if (!synapseServer || typeof synapseServer !== "object") continue;
+      const key = extractApiKey(filePath);
+      if (key) apiKeySet.add(key);
+      locations.push({
+        label,
+        filePath,
+        status: key ? "has_key" : "no_key",
+        apiKey: key,
+      });
+    } catch {
+      /* ignore unparseable files */
     }
   }
 

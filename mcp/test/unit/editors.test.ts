@@ -528,6 +528,23 @@ describe("editors", () => {
       expect(result.apiKeys).toEqual([]);
     });
 
+    // Regression: Claude Code writes top-level `"synapse": { usageCount, lastUsedAt }`
+    // entries in ~/.claude.json to track slash-command usage. The detector must
+    // ignore these — they are not MCP server config and have no API key by design.
+    it("ignores ~/.claude.json that only contains slash-command usage counters", () => {
+      fs.writeFileSync(
+        path.join(tmpHomeDir, ".claude.json"),
+        JSON.stringify({
+          synapse: { usageCount: 5, lastUsedAt: 1774402661930 },
+          "synapse:sync": { usageCount: 24, lastUsedAt: 1774402661930 },
+        }),
+      );
+
+      const result = detectExistingSetup();
+      expect(result.configured).toBe(false);
+      expect(result.locations).toEqual([]);
+    });
+
     it("detects .mcp.json with synapsesync entry", () => {
       fs.writeFileSync(
         path.join(tmpDir, ".mcp.json"),
