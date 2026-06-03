@@ -67,7 +67,10 @@ async function main(): Promise<void> {
   const proxyEnabled = process.env.SYNAPSE_PROXY_ENABLE === "1";
   let proxySource: ProxySource | null = null;
   if (proxyEnabled) {
-    const proxyPort = process.env.SYNAPSE_PROXY_PORT ? Number.parseInt(process.env.SYNAPSE_PROXY_PORT, 10) : undefined;
+    // Default 7727 — stable, so users can hard-code HTTPS_PROXY in their
+    // shell rc. Override via SYNAPSE_PROXY_PORT only for tests / unusual
+    // network setups. Matches DEFAULT_PROXY_PORT in proxy/onboarding.ts.
+    const proxyPort = process.env.SYNAPSE_PROXY_PORT ? Number.parseInt(process.env.SYNAPSE_PROXY_PORT, 10) : 7727;
     const proxyIdleMs = process.env.SYNAPSE_PROXY_IDLE_MS
       ? Number.parseInt(process.env.SYNAPSE_PROXY_IDLE_MS, 10)
       : undefined;
