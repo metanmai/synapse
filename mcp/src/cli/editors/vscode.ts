@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { SYNAPSE_COMMAND_DEFS, appendInstructions, globalConfigDir, synapseMcpServer, writeJsonSafe } from "./io.js";
+import { SYNAPSE_COMMAND_DEFS, appendInstructions, globalConfigDir, synapseMcpServer, writeMcpJson, writeJsonSafe } from "./io.js";
 
 /** Write VS Code Copilot prompt files to .github/prompts/. */
 function writeVSCodePromptFiles(cwd: string): string[] {
@@ -20,13 +20,13 @@ function writeVSCodePromptFiles(cwd: string): string[] {
 
 export function writeVSCodeLocal(apiKey: string, cwd: string): string[] {
   const written: string[] = [];
-  writeJsonSafe(path.join(cwd, ".vscode", "settings.json"), (settings) => {
-    if (!settings.mcp) settings.mcp = {};
-    const mcp = settings.mcp as Record<string, unknown>;
-    if (!mcp.servers) mcp.servers = {};
-    (mcp.servers as Record<string, unknown>).synapse = synapseMcpServer(apiKey);
+  const mcpJsonPath = path.join(cwd, ".vscode", "mcp.json");
+  fs.mkdirSync(path.dirname(mcpJsonPath), { recursive: true });
+  writeJsonSafe(mcpJsonPath, (config) => {
+    if (!config.servers) config.servers = {};
+    (config.servers as Record<string, unknown>).synapse = synapseMcpServer(apiKey);
   });
-  written.push(".vscode/settings.json");
+  written.push(".vscode/mcp.json");
   const ghDir = path.join(cwd, ".github");
   fs.mkdirSync(ghDir, { recursive: true });
   if (appendInstructions(path.join(ghDir, "copilot-instructions.md"))) {
@@ -38,15 +38,13 @@ export function writeVSCodeLocal(apiKey: string, cwd: string): string[] {
 
 export function writeVSCodeGlobal(apiKey: string): string[] {
   const written: string[] = [];
-  const settingsPath = path.join(globalConfigDir(), "Code", "User", "settings.json");
-  if (fs.existsSync(path.dirname(settingsPath))) {
-    writeJsonSafe(settingsPath, (settings) => {
-      if (!settings.mcp) settings.mcp = {};
-      const mcp = settings.mcp as Record<string, unknown>;
-      if (!mcp.servers) mcp.servers = {};
-      (mcp.servers as Record<string, unknown>).synapse = synapseMcpServer(apiKey);
+  const mcpJsonPath = path.join(globalConfigDir(), "Code", "User", "mcp.json");
+  if (fs.existsSync(path.dirname(mcpJsonPath))) {
+    writeJsonSafe(mcpJsonPath, (config) => {
+      if (!config.servers) config.servers = {};
+      (config.servers as Record<string, unknown>).synapse = synapseMcpServer(apiKey);
     });
-    written.push("VS Code user settings.json");
+    written.push("VS Code user mcp.json");
   }
   return written;
 }
