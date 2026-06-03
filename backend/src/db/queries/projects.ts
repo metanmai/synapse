@@ -211,12 +211,56 @@ export async function findOrCreateProjectByGit(
 
   if (existingId) return existingId;
 
+  // Tier 3 — INSERT a new project. Vulnerable to a race where two
+  // workers both passed Tier 1 with `null` and both reach this INSERT
+  // concurrently. Migration 021 adds a unique constraint on
+  // (owner_id, git_remote_url); the losing INSERT raises 23505 and we
+  // recover by re-running Tier 1, which now sees the winner's row.
   const { data: created, error: createErr } = await db
     .from("projects")
     .insert({ name: gitBasename, owner_id: userId, git_remote_url: gitRemoteUrl })
     .select("id")
     .single();
-  if (createErr) throw createErr;
+
+  if (createErr) {
+    const violatedUnique =
+      gitRemoteUrl !== null &&
+      (createErr as { code?: string }).code === "23505" &&
+      typeof (createErr as { message?: string }).message === "string" &&
+      ((createErr as { message: string }).message.includes("projects_user_remote_url_uniq_idx") ||
+        (createErr as { message: string }).message.toLowerCase().includes("git_remote_url"));
+
+    if (violatedUnique) {
+      // The winner's row is now visible. Re-run Tier 1 to fetch it.
+      const { data: winner } = await db
+        .from("projects")
+        .select("id")
+        .eq("git_remote_url", gitRemoteUrl)
+        .in("id", memberProjectIds.length > 0 ? memberProjectIds : [""])
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const winnerId = (winner as { id: string } | null)?.id ?? null;
+      // memberProjectIds was a snapshot from before the race — the winner
+      // may have inserted a project_members row that wasn't in our list.
+      // Fall back to an unscoped lookup if the scoped query missed.
+      if (!winnerId) {
+        const { data: anyOwner } = await db
+          .from("projects")
+          .select("id")
+          .eq("owner_id", userId)
+          .eq("git_remote_url", gitRemoteUrl)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const anyOwnerId = (anyOwner as { id: string } | null)?.id ?? null;
+        if (anyOwnerId) return anyOwnerId;
+      } else {
+        return winnerId;
+      }
+    }
+    throw createErr;
+  }
   const createdId = (created as { id: string }).id;
 
   const { error: memberErr } = await db
