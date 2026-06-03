@@ -1,10 +1,11 @@
 # Synapse proxy Layer 8 E2E -- Windows trust-store install assertions.
 #
 # Drives `synapsesync capture proxy install/status/uninstall` against
-# the REAL CurrentUser Root certificate store via certutil. Mirrors the
-# Linux Docker matrix's e2e-proxy-install.sh -- same install/status/
-# uninstall sequence, same filesystem-state assertions, distro-aware
-# expected paths replaced with the Windows certutil store query.
+# the REAL CurrentUser Root certificate store via certutil queries.
+# Mirrors the Linux Docker matrix's e2e-proxy-install.sh -- same
+# install/status/uninstall sequence, same filesystem-state assertions,
+# distro-aware expected paths replaced with the Windows certutil store
+# query.
 #
 # Run on:
 #   - GitHub Actions windows-latest runner (CI matrix)
@@ -22,6 +23,10 @@
 # (PowerShell 7, UTF-8 native) but keeping this script ASCII means it
 # also works under legacy Windows PowerShell, in Git Bash, or in any
 # code page the user happens to be on.
+#
+# SYNAPSE_PROXY_DEBUG=1 is set when invoking the daemon so any future
+# regression in tls.ts / onboarding.ts / windows.ts surfaces timing
+# markers in the CI log instead of a silent hang.
 
 $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -32,103 +37,6 @@ $CN = "Synapse Proxy CA"
 Write-Host "== e2e-proxy-install (Windows) =="
 Write-Host "  repo_root=$RepoRoot"
 Write-Host "  cli=$Cli"
-
-# Preflight diagnostics: surface what's on PATH BEFORE the daemon runs.
-# The daemon's TlsManager spawns `openssl` via execFileSync — if it's
-# missing or broken, knowing that here is more useful than a 15-min
-# silent hang later.
-Write-Host ""
-Write-Host "-- preflight diagnostics --"
-$OpensslSrc = (Get-Command openssl -ErrorAction SilentlyContinue).Source
-Write-Host "  openssl on PATH: $OpensslSrc"
-if (-not $OpensslSrc) {
-    Write-Host "FAIL preflight: openssl is NOT on PATH; the daemon will crash when ensureCa() runs"
-    exit 1
-}
-$OpensslVer = & openssl version 2>&1
-Write-Host "  openssl version: $OpensslVer"
-Write-Host "  node version:    $(& node --version)"
-Write-Host "  certutil:        $((Get-Command certutil).Source)"
-
-# Exercise the EXACT openssl commands the daemon uses, in PowerShell,
-# with timing. If these hang here, the daemon hang has the same root
-# cause. If these are fast, the hang is in node-spawn-of-openssl with
-# stdio:"ignore" (a different bug class entirely).
-$TmpKey = "$env:TEMP\preflight-test.key"
-$TmpCrt = "$env:TEMP\preflight-test.crt"
-Remove-Item -ErrorAction SilentlyContinue $TmpKey, $TmpCrt
-
-Write-Host ""
-Write-Host "-- openssl smoke tests --"
-
-$t1 = Get-Date
-& openssl genrsa -out $TmpKey 4096 *>$null
-$e1 = ((Get-Date) - $t1).TotalSeconds
-Write-Host ("  [smoke] genrsa 4096: exit={0} elapsed={1:F2}s" -f $LASTEXITCODE, $e1)
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "FAIL preflight: openssl genrsa 4096 failed"
-    exit 1
-}
-
-$t2 = Get-Date
-& openssl req -new -x509 -days 3650 -key $TmpKey -out $TmpCrt -subj "/CN=PreflightCA/O=Test" -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" *>$null
-$e2 = ((Get-Date) - $t2).TotalSeconds
-Write-Host ("  [smoke] req -new -x509 -addext: exit={0} elapsed={1:F2}s" -f $LASTEXITCODE, $e2)
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "FAIL preflight: openssl req -new -x509 with -addext failed"
-    exit 1
-}
-
-Remove-Item -ErrorAction SilentlyContinue $TmpKey, $TmpCrt
-Write-Host ""
-
-# Pinpoint test: call Node's execFileSync with the EXACT pattern the
-# daemon uses, in isolation. If this hangs, the bug is reproducible at
-# the Node-spawn-openssl level. If it's fast, the daemon's hang is in
-# code BEFORE/AFTER the openssl call (not in the spawn itself).
-Write-Host "-- Node-direct openssl test (mirrors tls.ts execFileSync) --"
-$NodeTestKey = "$env:TEMP\node-direct-test.key"
-Remove-Item -ErrorAction SilentlyContinue $NodeTestKey
-
-$nodeTestScript = @"
-import { execFileSync } from 'node:child_process';
-console.log('before-exec');
-const t0 = Date.now();
-try {
-    execFileSync('openssl', ['genrsa', '-out', '$($NodeTestKey -replace '\\','/')', '4096'], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        windowsHide: true,
-        timeout: 30000,
-    });
-    console.log('after-exec elapsed_ms=' + (Date.now() - t0));
-} catch (e) {
-    console.log('exec-error elapsed_ms=' + (Date.now() - t0) + ' message=' + e.message);
-    process.exit(2);
-}
-"@
-$nodeTestFile = "$env:TEMP\node-direct-test.mjs"
-$nodeTestScript | Out-File -FilePath $nodeTestFile -Encoding utf8 -NoNewline
-
-$t3 = Get-Date
-$nodeJob = Start-Job -ScriptBlock {
-    param($scriptPath)
-    & node $scriptPath 2>&1
-    $LASTEXITCODE
-} -ArgumentList $nodeTestFile
-$nodeCompleted = Wait-Job $nodeJob -Timeout 45
-if (-not $nodeCompleted) {
-    Write-Host "  [node-direct] HUNG > 45s — confirms the bug is in Node's execFileSync of openssl on Windows"
-    Stop-Job $nodeJob -PassThru | Receive-Job
-    Remove-Job $nodeJob -Force
-    Remove-Item -ErrorAction SilentlyContinue $NodeTestKey, $nodeTestFile
-    exit 1
-}
-$nodeOut = Receive-Job $nodeJob
-$e3 = ((Get-Date) - $t3).TotalSeconds
-Write-Host "  [node-direct] output: $nodeOut"
-Write-Host ("  [node-direct] elapsed: {0:F2}s" -f $e3)
-Remove-Item -ErrorAction SilentlyContinue $NodeTestKey, $nodeTestFile
-Write-Host ""
 
 function Assert-CertInStore {
     param([string]$Stage)
@@ -149,17 +57,24 @@ function Assert-CertNotInStore {
     }
 }
 
-# Pre-state: ensure clean slate
-& certutil -delstore -user Root $CN > $null 2>&1
+# Pre-state: ensure clean slate. Use PowerShell X509Store remove
+# (mirrors the daemon's uninstall path) since `certutil -delstore`
+# can hit the same Root-store GUI dialog that hangs CI runners.
+$preCleanScript = @"
+`$store = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root','CurrentUser')
+`$store.Open('ReadWrite')
+`$found = `$store.Certificates | Where-Object { `$_.Subject -like '*CN=$CN*' }
+if (`$found) { `$store.Remove(`$found) }
+`$store.Close()
+"@
+powershell.exe -NoProfile -NonInteractive -Command $preCleanScript > $null 2>&1
 Assert-CertNotInStore -Stage "pre-state"
 
-# STAGE 1: install (with SYNAPSE_PROXY_DEBUG=1 so daemon prints timing
-# markers via [tls-debug] / [onboarding-debug] / [windows-debug] tags).
-# Also: the daemon's certutil spawn now has a 30s internal timeout, so
-# if certutil hangs we get a clear throw with stack trace from Node
-# instead of a silent script-level hang.
+# STAGE 1: install (SYNAPSE_PROXY_DEBUG=1 enables daemon-side timing
+# markers so any future regression surfaces in the CI log instead of
+# hanging silently for 30+ seconds).
 $env:SYNAPSE_PROXY_DEBUG = "1"
-Write-Host "  [install] node $Cli capture proxy install  (60s outer timeout, SYNAPSE_PROXY_DEBUG=1)"
+Write-Host "  [install] node $Cli capture proxy install"
 $installJob = Start-Job -ScriptBlock {
     param($CliPath)
     $env:SYNAPSE_PROXY_DEBUG = "1"
@@ -167,9 +82,11 @@ $installJob = Start-Job -ScriptBlock {
     return $LASTEXITCODE
 } -ArgumentList $Cli
 
+# 60s outer timeout: the daemon's internal cert-store spawn timeout
+# is 30s, so any real bug should surface well within this.
 $completed = Wait-Job $installJob -Timeout 60
 if (-not $completed) {
-    Write-Host "FAIL install: 'capture proxy install' hung > 60s — killing job and dumping any captured output"
+    Write-Host "FAIL install: 'capture proxy install' hung > 60s -- killing job and dumping any captured output"
     $partialOut = Receive-Job $installJob
     $partialOut | ForEach-Object { Write-Host "    $_" }
     Stop-Job $installJob | Out-Null
@@ -179,7 +96,7 @@ if (-not $completed) {
 $installOutput = Receive-Job $installJob
 $installExit = $installJob.ChildJobs[0].Output[-1]
 Remove-Job $installJob
-Write-Host "  [install] stdout/stderr from daemon (debug-enabled):"
+Write-Host "  [install] stdout/stderr from daemon:"
 $installOutput | ForEach-Object { Write-Host "    $_" }
 if ($installExit -ne 0) {
     Write-Host "FAIL install: 'capture proxy install' exited $installExit"
