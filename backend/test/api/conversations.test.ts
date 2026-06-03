@@ -62,28 +62,6 @@ describe("Conversations API — auth enforcement", () => {
     expect(res.status).toBe(401);
   });
 
-  it("POST /api/conversations/:id/media without auth returns 401", async () => {
-    const formData = new FormData();
-    formData.append("file", new Blob(["test"]), "test.txt");
-    formData.append("message_id", FAKE_UUID);
-    const req = new Request(`http://localhost/api/conversations/${FAKE_UUID}/media`, {
-      method: "POST",
-      body: formData,
-    });
-    const ctx = createExecutionContext();
-    const res = await worker.fetch(req, env, ctx);
-    await waitOnExecutionContext(ctx);
-    expect(res.status).toBe(401);
-  });
-
-  it("GET /api/conversations/:id/media/:mediaId without auth returns 401", async () => {
-    const req = new Request(`http://localhost/api/conversations/${FAKE_UUID}/media/${FAKE_UUID}`);
-    const ctx = createExecutionContext();
-    const res = await worker.fetch(req, env, ctx);
-    await waitOnExecutionContext(ctx);
-    expect(res.status).toBe(401);
-  });
-
   it("POST /api/conversations/import without auth returns 401", async () => {
     const req = new Request("http://localhost/api/conversations/import", {
       method: "POST",
@@ -115,8 +93,6 @@ describe("Conversations API — all endpoints require auth", () => {
     ["GET", "/api/conversations/some-id"],
     ["PATCH", "/api/conversations/some-id"],
     ["POST", "/api/conversations/some-id/messages"],
-    ["POST", "/api/conversations/some-id/media"],
-    ["GET", "/api/conversations/some-id/media/some-media"],
     ["POST", "/api/conversations/import"],
     ["GET", "/api/conversations/some-id/export/raw"],
   ];

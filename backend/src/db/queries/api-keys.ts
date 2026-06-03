@@ -108,20 +108,3 @@ export async function listCliKeys(db: SupabaseClient, userId: string): Promise<O
   if (error) throw error;
   return data as Omit<ApiKey, "key_hash">[];
 }
-
-// Update an API key's label (used by dashboard rename). Returns true if a row matched.
-export async function updateApiKeyLabel(
-  db: SupabaseClient,
-  keyId: string,
-  userId: string,
-  label: string,
-): Promise<boolean> {
-  const { error, count } = await db
-    .from("api_keys")
-    .update({ label }, { count: "exact" })
-    .eq("id", keyId)
-    .eq("user_id", userId);
-
-  if (error) throw error;
-  return (count ?? 0) > 0;
-}

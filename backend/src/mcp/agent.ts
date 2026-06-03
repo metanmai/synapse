@@ -11,7 +11,6 @@ import { registerResources } from "./resources";
 import { registerContextCaptureTools } from "./tools/context-capture";
 import { registerContextRetrievalTools } from "./tools/context-retrieval";
 import { registerConversationTools } from "./tools/conversations";
-import { registerGoogleSyncTools } from "./tools/google-sync";
 import { registerInsightTools } from "./tools/insights";
 import { registerProjectManagementTools } from "./tools/project-management";
 
@@ -59,7 +58,6 @@ export class SynapseAgent extends (McpAgent as AnyMcpAgent) {
     registerContextRetrievalTools(this.server, env, getContext, db);
     registerInsightTools(this.server, env, getContext, db);
     registerConversationTools(this.server, env, getContext, db);
-    registerGoogleSyncTools(this.server, env, getContext, db);
     registerPrompts(this.server, env);
     registerResources(this.server, env, db);
   }

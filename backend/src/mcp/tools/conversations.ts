@@ -3,28 +3,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { logActivity } from "../../db/activity-logger";
-import {
-  appendMessages,
-  createConversation,
-  getConversation,
-  getMessages,
-  insertMedia,
-  listConversations,
-} from "../../db/queries";
-import { uploadMedia } from "../../lib/storage";
+import { appendMessages, createConversation, getConversation, getMessages, listConversations } from "../../db/queries";
 
 import type { Env } from "../../lib/env";
 import type { GetMcpContext } from "../agent";
 import { mcpError, mcpResolveProject, mcpSuccess, requireMcpUserId } from "../mcp-context";
-
-/** Detect media type from MIME type string. */
-function mediaTypeFromMime(mime: string): "image" | "file" | "pdf" | "audio" | "video" {
-  if (mime === "application/pdf") return "pdf";
-  if (mime.startsWith("image/")) return "image";
-  if (mime.startsWith("audio/")) return "audio";
-  if (mime.startsWith("video/")) return "video";
-  return "file";
-}
 
 export function registerConversationTools(server: McpServer, _env: Env, getContext: GetMcpContext, db: SupabaseClient) {
   // --- sync_conversation ---
@@ -282,76 +265,6 @@ export function registerConversationTools(server: McpServer, _env: Env, getConte
       return {
         content: [{ type: "text" as const, text: `${header}\n\n${lines.join("\n")}` }],
       };
-    },
-  );
-
-  // --- upload_media ---
-  server.tool(
-    "upload_media",
-    "Upload media (image, file, PDF, audio, video) to a conversation message. The content must be base64-encoded.",
-    {
-      conversationId: z.string().describe("Conversation ID"),
-      messageId: z.string().describe("Message ID to attach media to"),
-      filename: z.string().describe("Filename including extension"),
-      mimeType: z.string().describe("MIME type (e.g. 'image/png', 'application/pdf')"),
-      content: z.string().describe("Base64-encoded file content"),
-    },
-    async ({ conversationId, messageId, filename, mimeType, content }) => {
-      const userId = requireMcpUserId(getContext);
-
-      // Verify conversation exists
-      const conv = await getConversation(db, conversationId);
-      if (!conv) {
-        return mcpError(`Conversation "${conversationId}" not found.`);
-      }
-      if (conv.user_id !== userId) {
-        return mcpError("You do not have access to this conversation.");
-      }
-
-      // Decode base64
-      let bytes: Uint8Array;
-      try {
-        const binary = atob(content);
-        bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          bytes[i] = binary.charCodeAt(i);
-        }
-      } catch {
-        return mcpError("Invalid base64 content.");
-      }
-
-      // Upload to Supabase Storage
-      const storagePath = await uploadMedia(db, conversationId, messageId, filename, bytes, mimeType);
-
-      // Insert media record
-      const mediaType = mediaTypeFromMime(mimeType);
-      const record = await insertMedia(db, {
-        message_id: messageId,
-        conversation_id: conversationId,
-        type: mediaType,
-        mime_type: mimeType,
-        filename,
-        size: bytes.length,
-        storage_path: storagePath,
-      });
-
-      await logActivity(db, {
-        project_id: conv.project_id,
-        user_id: userId,
-        action: "media_uploaded",
-        source: "mcp",
-        metadata: {
-          conversation_id: conversationId,
-          message_id: messageId,
-          media_id: record.id,
-          filename,
-          size: bytes.length,
-        },
-      });
-
-      return mcpSuccess(
-        `Uploaded "${filename}" (${bytes.length} bytes, ${mediaType}) to conversation "${conversationId}", message "${messageId}".`,
-      );
     },
   );
 }

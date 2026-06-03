@@ -22,7 +22,7 @@ Synapse gives AI tools (Claude, ChatGPT, Cursor) persistent memory across sessio
 npm package: synapsesync
 Install: npm install -g synapsesync && synapsesync wizard
 
-Agents save new knowledge via `save_insight`. Reads for historical filesystem browsing are available too.
+Agents save new knowledge via `save_insight` and browse existing entries via `list_insights`. (The v1.0 filesystem-style MCP tools were removed in v1.1 — use the REST API for project/context reads.)
 
 ## Tiers
 - Free: 50 files, 3 connections, 3 version history, 2 team members, insights included

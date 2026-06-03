@@ -6,9 +6,7 @@ import {
   createConversation,
   getConversation,
   getConversationContext,
-  getMediaForConversation,
   getMessages,
-  insertMedia,
   listConversations,
   reassignConversation,
   saveConversationContext,
@@ -18,9 +16,8 @@ import { findOrCreateProjectByGit } from "../db/queries/projects";
 import { detectAdapter, getAdapter } from "../lib/adapters";
 import { authMiddleware } from "../lib/auth";
 import type { Env } from "../lib/env";
-import { AppError, ForbiddenError, NotFoundError } from "../lib/errors";
+import { ForbiddenError, NotFoundError } from "../lib/errors";
 import { idempotency } from "../lib/idempotency";
-import { getSignedUrl, uploadMedia } from "../lib/storage";
 
 import { parseBody, schemas } from "../lib/validate";
 import { requireRole } from "../middleware/project-auth";
@@ -185,18 +182,16 @@ conversations.get("/:id", async (c) => {
   // Verify the user is a member of the project
   await requireRole(db, conversation.project_id, user.id);
 
-  // Fetch messages, context, and media in parallel
-  const [messages, context, media] = await Promise.all([
+  // Fetch messages and context in parallel
+  const [messages, context] = await Promise.all([
     getMessages(db, conversationId, { fromSequence, limit: msgLimit }),
     getConversationContext(db, conversationId),
-    getMediaForConversation(db, conversationId),
   ]);
 
   return c.json({
     conversation,
     messages,
     context,
-    media,
   });
 });
 
@@ -331,91 +326,6 @@ conversations.post("/:id/messages", async (c) => {
   }
 
   return c.json({ messages });
-});
-
-// POST /api/conversations/:id/media — upload media via FormData
-conversations.post("/:id/media", async (c) => {
-  const user = c.get("user");
-  const conversationId = c.req.param("id");
-
-  const db = c.get("db");
-
-  const existing = await getConversation(db, conversationId);
-  if (!existing) throw new NotFoundError("Conversation not found");
-
-  // Only the owner can upload media
-  if (existing.user_id !== user.id) {
-    throw new ForbiddenError("Only the conversation owner can upload media");
-  }
-
-  const formData = await c.req.formData();
-  const file = formData.get("file");
-  const messageId = formData.get("message_id");
-  const mediaType = formData.get("type") as "image" | "file" | "pdf" | "audio" | "video" | null;
-
-  if (!file || !(file instanceof File)) {
-    throw new AppError("file is required", 400, "VALIDATION_ERROR");
-  }
-  if (!messageId || typeof messageId !== "string") {
-    throw new AppError("message_id is required", 400, "VALIDATION_ERROR");
-  }
-
-  const content = new Uint8Array(await file.arrayBuffer());
-  const filename = file.name || "upload";
-  const mimeType = file.type || "application/octet-stream";
-
-  // Upload to storage
-  const storagePath = await uploadMedia(db, conversationId, messageId, filename, content, mimeType);
-
-  // Insert media record
-  const media = await insertMedia(db, {
-    message_id: messageId,
-    conversation_id: conversationId,
-    type: mediaType ?? "file",
-    mime_type: mimeType,
-    filename,
-    size: content.byteLength,
-    storage_path: storagePath,
-  });
-
-  await logActivity(db, {
-    project_id: existing.project_id,
-    user_id: user.id,
-    action: "media_uploaded",
-    source: "human",
-    metadata: {
-      conversation_id: conversationId,
-      media_id: media.id,
-      filename,
-      size: content.byteLength,
-    },
-  });
-
-  return c.json(media, 201);
-});
-
-// GET /api/conversations/:id/media/:mediaId — get signed download URL
-conversations.get("/:id/media/:mediaId", async (c) => {
-  const user = c.get("user");
-  const conversationId = c.req.param("id");
-  const mediaId = c.req.param("mediaId");
-
-  const db = c.get("db");
-
-  const existing = await getConversation(db, conversationId);
-  if (!existing) throw new NotFoundError("Conversation not found");
-
-  // Verify the user is a member of the project
-  await requireRole(db, existing.project_id, user.id);
-
-  // Find the media record
-  const allMedia = await getMediaForConversation(db, conversationId);
-  const media = allMedia.find((m) => m.id === mediaId);
-  if (!media) throw new NotFoundError("Media not found");
-
-  const signedUrl = await getSignedUrl(db, media.storage_path);
-
-  return c.json({ url: signedUrl, media });
 });
 
 // GET /api/conversations/:id/export/:format — export to target format

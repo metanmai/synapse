@@ -259,24 +259,6 @@ onMount(() => {
     flex-wrap: wrap;
   }
 
-  .hero-cta {
-    display: inline-block;
-    background: linear-gradient(135deg, var(--color-brown), #7d3340);
-    color: var(--color-cream);
-    padding: 1.125rem 2.75rem;
-    border-radius: 9999px;
-    font-size: 1.125rem;
-    font-weight: 700;
-    text-decoration: none;
-    transition: transform 0.25s, box-shadow 0.25s;
-    box-shadow: 0 4px 20px rgba(109, 41, 50, 0.3);
-  }
-
-  .hero-cta:hover {
-    transform: scale(1.05) translateY(-2px);
-    box-shadow: 0 8px 32px rgba(109, 41, 50, 0.45);
-  }
-
   .hero-secondary {
     color: var(--color-brown);
     font-size: 1rem;
@@ -563,10 +545,6 @@ onMount(() => {
 
     .hero-visual {
       max-width: 100%;
-    }
-
-    .mockup-sidebar {
-      display: none;
     }
 
     .scroll-indicator {

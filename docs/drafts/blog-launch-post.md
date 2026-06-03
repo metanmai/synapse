@@ -66,12 +66,10 @@ Under the hood: filesystem watching with chokidar, event queue with deduplicatio
 
 | Tool | What it does |
 |------|-------------|
-| `search` | Semantic search across all your knowledge |
-| `read` | Read a specific file |
-| `tree` | Browse the workspace structure |
-| `history` | View version history |
+| `list_insights` | Browse decisions, learnings, preferences, architecture notes, and action items — optionally filtered by project, type, or recency |
+| `save_insight` | Write a new insight, with optional `supersedes` to consolidate against older entries |
 
-When your AI tool starts a new session, it searches Synapse and immediately has context from every previous session across every tool you've used.
+When your AI tool starts a new session, the SessionStart brief surfaces recent insights and the last conversation handoff -- so it immediately has context from every previous session across every tool you've used.
 
 ---
 

@@ -19,7 +19,6 @@
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@supabase/supabase-js": "^2.99.2",
     "agents": "^0.7.9",
-    "fflate": "^0.8.2",
     "hono": "^4.12.8",
     "zod": "^4.3.6"
   },
