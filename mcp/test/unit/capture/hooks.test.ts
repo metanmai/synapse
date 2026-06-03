@@ -53,7 +53,7 @@ describe("Capture Hooks", () => {
       expect(settings.hooks.SessionStart).toHaveLength(1);
       expect(settings.hooks.SessionStart[0].hooks[0].type).toBe("command");
       expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("capture-worker.js");
-      expect(settings.hooks.SessionStart[0].hooks[0].timeout).toBe(10);
+      expect(settings.hooks.SessionStart[0].hooks[0].timeout).toBe(15);
     });
 
     it("preserves existing settings and hooks", () => {
@@ -119,6 +119,27 @@ describe("Capture Hooks", () => {
       installHooks(settingsPath);
       uninstallHooks(settingsPath);
       expect(isInstalled(settingsPath)).toBe(false);
+    });
+  });
+
+  describe("SessionStart hook chains brief", () => {
+    it("installed SessionStart command includes both daemon-start and brief", () => {
+      installHooks(settingsPath);
+      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+      const cmd = settings.hooks.SessionStart[0].hooks[0].command as string;
+      // The existing daemon-start command should still be present:
+      expect(cmd).toContain("capture-worker.js");
+      expect(cmd).toContain("nohup node");
+      // The new brief chain should be present:
+      expect(cmd).toContain("synapsesync-mcp brief");
+    });
+
+    it("chains brief after daemon-start with && operator", () => {
+      installHooks(settingsPath);
+      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+      const cmd = settings.hooks.SessionStart[0].hooks[0].command as string;
+      // The && ensures brief only runs if daemon-start succeeds
+      expect(cmd).toMatch(/&&\s*synapsesync-mcp brief/);
     });
   });
 
