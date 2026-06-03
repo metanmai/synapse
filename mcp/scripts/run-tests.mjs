@@ -71,8 +71,7 @@ child.on("exit", (code) => {
   if (failedTests === 0 && failedSuites === 0) {
     if (code !== 0) {
       console.error(
-        `[run-tests] vitest exited ${code} but all ${passedTests} tests passed; treating as success ` +
-          `(likely the vitest 4 + Windows worker-teardown bug).`,
+        `[run-tests] vitest exited ${code} but all ${passedTests} tests passed; treating as success (likely the vitest 4 + Windows worker-teardown bug).`,
       );
     }
     process.exit(0);

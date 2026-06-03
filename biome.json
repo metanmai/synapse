@@ -35,7 +35,9 @@
       ".wrangler",
       "*.min.js",
       "frontend/test-results",
-      "frontend/playwright-report"
+      "frontend/playwright-report",
+      ".vitest-results.json",
+      "mcp/.vitest-results.json"
     ]
   },
   "overrides": [
