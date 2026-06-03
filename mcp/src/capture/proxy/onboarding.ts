@@ -26,6 +26,74 @@ import { TlsManager } from "./tls.js";
 /** The daemon's default proxy port — also used to compose the HTTPS_PROXY env snippet. */
 export const DEFAULT_PROXY_PORT = 7727;
 
+/**
+ * Result of probing whether `openssl` is on PATH and runnable. `version`
+ * carries the trimmed first line of `openssl version` (e.g. "OpenSSL 3.2.0
+ * 23 Nov 2023"). When unavailable, `installHint` is a platform-specific
+ * one-liner pointing the user at the canonical install path.
+ */
+export interface OpensslAvailability {
+  available: boolean;
+  version?: string;
+  installHint?: string;
+}
+
+/**
+ * Probe whether `openssl` is on PATH. Used by `proxy install` to fail
+ * BEFORE attempting CA generation (which would otherwise throw a bare
+ * "spawn openssl ENOENT" with no actionable guidance).
+ *
+ * Injectable for tests via the `spawn` arg; production uses `spawnSync`.
+ * Pure read — no filesystem or trust-store side effects.
+ */
+export function checkOpensslAvailable(
+  spawn: typeof spawnSync = spawnSync,
+  platform: NodeJS.Platform = process.platform,
+): OpensslAvailability {
+  let r: SpawnSyncReturns<Buffer>;
+  try {
+    r = spawn("openssl", ["version"], { stdio: "pipe", windowsHide: true });
+  } catch {
+    // spawnSync itself can throw on Windows when the binary isn't on PATH
+    // (ENOENT bubbles synchronously through the libuv shim). Treat as
+    // unavailable with the same hint as a non-zero exit.
+    return { available: false, installHint: installHintFor(platform) };
+  }
+  if (r.error || r.status !== 0 || !r.stdout) {
+    return { available: false, installHint: installHintFor(platform) };
+  }
+  return { available: true, version: r.stdout.toString().split(/\r?\n/)[0].trim() };
+}
+
+function installHintFor(platform: NodeJS.Platform): string {
+  if (platform === "darwin") {
+    return "macOS: openssl is preinstalled at /usr/bin/openssl. If you've shadowed PATH, run `brew install openssl@3` or ensure /usr/bin is on PATH.";
+  }
+  if (platform === "linux") {
+    return "Linux: install via your package manager — `apt install openssl` (Debian/Ubuntu), `dnf install openssl` (RHEL/Fedora), or `pacman -S openssl` (Arch).";
+  }
+  if (platform === "win32") {
+    return "Windows: install Git for Windows (https://git-scm.com/download/win) — it bundles openssl on PATH. Alternative: https://slproweb.com/products/Win32OpenSSL.html then add the install dir to PATH.";
+  }
+  return "Install openssl for your platform and ensure the binary is on PATH.";
+}
+
+/**
+ * Error thrown when the openssl prerequisite check fails. Distinct class
+ * so the CLI can render a tailored message (with the install hint)
+ * instead of a generic stack trace.
+ */
+export class OpensslMissingError extends Error {
+  readonly installHint: string;
+  constructor(installHint: string) {
+    super(
+      `Synapse proxy install requires \`openssl\` on PATH, but the binary was not found or didn't run. ${installHint}`,
+    );
+    this.name = "OpensslMissingError";
+    this.installHint = installHint;
+  }
+}
+
 export interface CommandResult {
   status: number;
   stdout: string;
@@ -113,6 +181,14 @@ export function installCa(opts: OnboardingOptions = {}): InstallCaResult {
   const runOpenssl = opts.runOpenssl ?? defaultRunOpenssl;
   const platform = opts.platform ?? process.platform;
   const proxyPort = opts.proxyPort ?? DEFAULT_PROXY_PORT;
+
+  // Fail fast: without openssl the next line (tlsManager.ensureCa) throws
+  // a bare ENOENT with no install guidance. Surface the platform-specific
+  // hint so the user can fix the prerequisite in one read.
+  const opensslCheck = checkOpensslAvailable(spawnSync, platform);
+  if (!opensslCheck.available) {
+    throw new OpensslMissingError(opensslCheck.installHint ?? installHintFor(platform));
+  }
 
   tlsManager.ensureCa();
   const caPath = tlsManager.caCertPath();
