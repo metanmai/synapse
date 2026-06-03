@@ -100,7 +100,7 @@ export async function runFlushCycle(a: FlushArgs): Promise<FlushResult> {
         const body = (await res.clone().json()) as { code?: string; error?: string };
         if (body.code === "PROJECT_QUOTA_EXCEEDED") {
           console.error(
-            `[sync] events/batch rejected: 50/50 project limit reached. Delete a project in the dashboard to continue capturing new repos.`,
+            "[sync] events/batch rejected: 50/50 project limit reached. Delete a project in the dashboard to continue capturing new repos.",
           );
           cacheSyncError({ code: "PROJECT_QUOTA_EXCEEDED", detail: body.error });
           // Do NOT advance the watermark — events stay queued for retry after
