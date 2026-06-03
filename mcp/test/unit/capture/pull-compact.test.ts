@@ -215,6 +215,87 @@ describe("pullHandoff", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
+  // Bug class: the most-recently-updated conversation in a project doesn't
+  // necessarily hold a handoff. The capture daemon creates a conversation
+  // row at session START (before any PreCompact has posted handoff_markdown),
+  // and short-lived sessions (claude -p subprocesses, non-claude-code tools
+  // without compaction, sessions ended early) leave that row with empty
+  // metadata forever. Before this fix, pull-compact looked only at limit=1
+  // and returned null when that single newest row had no handoff — even
+  // though older conversations in the SAME project held valid handoff text.
+  // Real-world symptom: SessionStart hook surfaces a bare STATE.md brief
+  // with no `## Last conversation handoff` section, even after a productive
+  // prior session compacted and pushed its handoff to the backend.
+  it("falls back to an older conversation's handoff when the newest row has no handoff", async () => {
+    writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          conversations: [
+            // Newest: session-started-but-not-compacted. No handoff_markdown,
+            // no handoff_at. Pre-fix this row was the only thing fetched.
+            { id: "conv_newest_empty", updated_at: "2026-05-24T05:00:00Z", metadata: {} },
+            // Middle: also empty (e.g. another short subprocess).
+            { id: "conv_middle_empty", updated_at: "2026-05-24T04:30:00Z", metadata: {} },
+            // Older but holds a real, fresh handoff — this is what the
+            // SessionStart hook should surface.
+            {
+              id: "conv_older_handoff",
+              updated_at: "2026-05-24T04:00:00Z",
+              metadata: { handoff_markdown: "## real prior work", handoff_at: "2026-05-24T04:00:01Z" },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const result = await pullHandoff({ cwd: CWD });
+    expect(result).toBe("## real prior work");
+    // No recompute round-trip — the cache hit on the older row short-circuits.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Companion to the above: when no conversation in the batch has a FRESH
+  // cached handoff (everything is either empty or has handoff_at < updated_at),
+  // pull-compact should still return the newest stale handoff rather than
+  // null. Null would leave SessionStart with a bare brief; a stale handoff
+  // is strictly more informative than nothing.
+  it("returns the newest stale handoff when no fresh handoff exists and recompute is impossible", async () => {
+    writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversations: [
+              // Newest: empty.
+              { id: "conv_n", updated_at: "2026-05-24T05:00:00Z", metadata: {} },
+              // Older: stale handoff (handoff_at < updated_at).
+              {
+                id: "conv_o",
+                updated_at: "2026-05-24T04:30:00Z",
+                metadata: { handoff_markdown: "## stale-but-real", handoff_at: "2026-05-24T04:00:00Z" },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      // Full GET on newest (conv_n) returns no capturedSessionId → recompute
+      // path can't run → must fall back to staleFallback.
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversation: { id: "conv_n", updated_at: "2026-05-24T05:00:00Z", metadata: {}, working_context: {} },
+          }),
+          { status: 200 },
+        ),
+      );
+
+    const result = await pullHandoff({ cwd: CWD });
+    expect(result).toBe("## stale-but-real");
+  });
+
   it("recomputes via adapter.compact() and POSTs the result when handoff is stale", async () => {
     writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
 
