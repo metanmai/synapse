@@ -97,7 +97,7 @@ export function removeServiceFile(): boolean {
     }
   } else if (process.platform === "linux") {
     try {
-      execSync(`systemctl --user disable --now synapsesync.service`, { stdio: "ignore" });
+      execSync("systemctl --user disable --now synapsesync.service", { stdio: "ignore" });
     } catch {
       // Unit may not be enabled.
     }
