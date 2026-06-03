@@ -14,6 +14,7 @@ import {
   getMemberRole,
   getProjectByName,
   removeMember,
+  resolveProjectFromSignals,
 } from "../../src/db/queries/projects";
 
 // ── API keys ─────────────────────────────────────────────────────
@@ -612,6 +613,164 @@ describe("projects queries", () => {
           git_basename: "uses-fk",
         }),
       ).rejects.toMatchObject({ code: "23503" });
+    });
+  });
+
+  describe("resolveProjectFromSignals", () => {
+    // ── THE basename-asymmetry regression guard ──────────────────────
+    // Bug class: a project created on Device A with a RENAMED clone folder
+    // is named after the *folder* basename (write path:
+    // `git rev-parse --show-toplevel`), but Device B's resolver derives
+    // git_basename from the *URL*. When folder != URL basename, Tier 2
+    // (name) misses and the cross-device handoff silently vanishes. Tier 1
+    // (git_remote_url) is the authoritative signal that must rescue it.
+    it("Tier 1 finds the project by git_remote_url even when name != git_basename", async () => {
+      const db = createSequentialMockDb(
+        { data: [{ project_id: "proj_a" }], error: null }, // memberships
+        { data: { id: "proj_a", name: "renamed-folder" }, error: null }, // Tier 1 URL hit
+      );
+
+      const result = await resolveProjectFromSignals(db as unknown as SupabaseClient, "u1", {
+        cwd: "/tmp/clones/data-platform",
+        git_origin_url: "https://github.com/me/data-platform.git",
+        git_basename: "data-platform", // URL basename — DIFFERS from project name "renamed-folder"
+      });
+
+      expect(result).toEqual({
+        project_id: "proj_a",
+        name: "renamed-folder",
+        confidence: "high",
+        signal: "project_url",
+      });
+      // Short-circuits at Tier 1: only memberships + URL query ran. If a
+      // regression made the resolver fall through to name-match, this would
+      // be 3+ (and the basename asymmetry would silently break again).
+      expect(db.from).toHaveBeenCalledTimes(2);
+      // Chain shape mirrors findOrCreateProjectByGit's Tier 1: .in → .eq →
+      // .limit(1) → .maybeSingle, with NO .order (projects has no updated_at).
+      const tier1 = db.chains[1];
+      expect(tier1.eq).toHaveBeenCalledWith("git_remote_url", "https://github.com/me/data-platform.git");
+      expect(tier1.in).toHaveBeenCalledWith("id", ["proj_a"]);
+      expect(tier1.limit).toHaveBeenCalledWith(1);
+      expect(tier1.maybeSingle).toHaveBeenCalled();
+      expect(tier1.order).not.toHaveBeenCalled();
+    });
+
+    it("skips Tier 1 cleanly when git_origin_url is absent and matches on name", async () => {
+      const db = createSequentialMockDb(
+        { data: [{ project_id: "proj_b" }], error: null }, // memberships
+        { data: { id: "proj_b", name: "scratch" }, error: null }, // Tier 2 name hit
+      );
+
+      const result = await resolveProjectFromSignals(db as unknown as SupabaseClient, "u1", {
+        cwd: "/tmp/scratch",
+        git_basename: "scratch", // no git_origin_url → Tier 1 guard skips
+      });
+
+      expect(result.signal).toBe("name");
+      expect(result.project_id).toBe("proj_b");
+      // Only memberships + name query ran (Tier 1 skipped, not just missed).
+      expect(db.from).toHaveBeenCalledTimes(2);
+      expect(db.chains[1].eq).toHaveBeenCalledWith("name", "scratch");
+    });
+
+    it("falls to Tier 2 name match when the URL misses", async () => {
+      const db = createSequentialMockDb(
+        { data: [{ project_id: "proj_b" }], error: null }, // memberships
+        { data: null, error: null }, // Tier 1 URL miss
+        { data: { id: "proj_b", name: "myproj" }, error: null }, // Tier 2 name hit
+      );
+
+      const result = await resolveProjectFromSignals(db as unknown as SupabaseClient, "u1", {
+        cwd: "/tmp/myproj",
+        git_origin_url: "https://github.com/me/unknown-url.git",
+        git_basename: "myproj",
+      });
+
+      expect(result.signal).toBe("name");
+      expect(result.project_id).toBe("proj_b");
+    });
+
+    it("falls to Tier 3 cwd_history when URL and name miss", async () => {
+      const db = createSequentialMockDb(
+        { data: [{ project_id: "proj_c" }], error: null }, // memberships
+        { data: null, error: null }, // Tier 1 URL miss
+        { data: null, error: null }, // Tier 2 name miss
+        { data: { project_id: "proj_c", projects: { name: "cname" } }, error: null }, // Tier 3 cwd hit
+      );
+
+      const result = await resolveProjectFromSignals(db as unknown as SupabaseClient, "u1", {
+        cwd: "/tmp/known-cwd",
+        git_origin_url: "https://github.com/me/x.git",
+        git_basename: "x",
+      });
+
+      expect(result).toEqual({ project_id: "proj_c", name: "cname", confidence: "high", signal: "cwd_history" });
+    });
+
+    it("falls to Tier 4 git_origin (working_context) as the last resort", async () => {
+      const db = createSequentialMockDb(
+        { data: [{ project_id: "proj_d" }], error: null }, // memberships
+        { data: null, error: null }, // Tier 1 URL miss
+        { data: null, error: null }, // Tier 2 name miss
+        { data: null, error: null }, // Tier 3 cwd miss
+        { data: { project_id: "proj_d", projects: { name: "dname" } }, error: null }, // Tier 4 git_origin hit
+      );
+
+      const result = await resolveProjectFromSignals(db as unknown as SupabaseClient, "u1", {
+        cwd: "/tmp/unknown",
+        git_origin_url: "https://github.com/me/legacy.git",
+        git_basename: "legacy",
+      });
+
+      expect(result).toEqual({ project_id: "proj_d", name: "dname", confidence: "medium", signal: "git_origin" });
+    });
+
+    it("returns no_access (and queries nothing further) when the user has no memberships", async () => {
+      const db = createSequentialMockDb({ data: [], error: null }); // empty memberships
+
+      const result = await resolveProjectFromSignals(db as unknown as SupabaseClient, "u1", {
+        cwd: "/tmp/foo",
+        git_origin_url: "https://github.com/me/foo.git",
+        git_basename: "foo",
+      });
+
+      expect(result).toEqual({ project_id: null, name: null, confidence: null, signal: "no_access" });
+      // No tier queries fire — short-circuits after the membership lookup.
+      expect(db.from).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns no_match when every tier misses (never invents a project)", async () => {
+      const db = createSequentialMockDb(
+        { data: [{ project_id: "proj_e" }], error: null }, // memberships
+        { data: null, error: null }, // Tier 1 miss
+        { data: null, error: null }, // Tier 2 miss
+        { data: null, error: null }, // Tier 3 miss
+        { data: null, error: null }, // Tier 4 miss
+      );
+
+      const result = await resolveProjectFromSignals(db as unknown as SupabaseClient, "u1", {
+        cwd: "/tmp/brand-new",
+        git_origin_url: "https://github.com/me/brand-new.git",
+        git_basename: "brand-new",
+      });
+
+      expect(result).toEqual({ project_id: null, name: null, confidence: null, signal: "no_match" });
+    });
+
+    it("propagates a membership-lookup error rather than masking it as no_match", async () => {
+      const db = createSequentialMockDb({
+        data: null,
+        error: { name: "PostgrestError", code: "08006", message: "connection failure", details: "", hint: "" },
+      });
+
+      await expect(
+        resolveProjectFromSignals(db as unknown as SupabaseClient, "u1", {
+          cwd: "/tmp/foo",
+          git_origin_url: "https://github.com/me/foo.git",
+          git_basename: "foo",
+        }),
+      ).rejects.toMatchObject({ code: "08006" });
     });
   });
 });
