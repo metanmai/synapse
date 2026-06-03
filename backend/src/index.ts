@@ -8,6 +8,7 @@ import { context } from "./api/context";
 import { projects } from "./api/projects";
 import { sync } from "./api/sync";
 import { share } from "./api/share";
+import { billing } from "./api/billing";
 import { SynapseAgent } from "./mcp/agent";
 import { runScheduledGoogleSync } from "./sync/from-google";
 
@@ -43,6 +44,7 @@ app.route("/api/projects", projects);
 app.route("/api/sync", sync);
 app.route("/api/share", share);
 app.route("/api/account", account);
+app.route("/api/billing", billing);
 
 // Mount MCP server (Streamable HTTP transport)
 app.mount("/mcp", SynapseAgent.serve("/mcp").fetch);
