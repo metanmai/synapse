@@ -54,10 +54,10 @@
   3. Existing tests + e2e roundtrip (`mcp/scripts/test-cli-flow.mjs` or equivalent) pass against the real-user-id path; no regression in the placeholder `cwd_<hash>` auto-resolve flow
 **Plans:** 6 plans
 Plans:
-- [ ] 02-01-wave0-test-scaffolding-PLAN.md — Wave 0 RED test scaffolding for IDENT-01 + IDENT-02 (8 files: 2 NEW, 6 EXTEND)
-- [ ] 02-02-identity-bootstrap-PLAN.md — Slice A: D-01..D-05 — /api/account/me + init persists user_id + daemon reads from config
-- [ ] 02-03-device-origin-brief-PLAN.md — Slice D: D-09 — brief surfaces actor.hostname on cross-device same-user activity
-- [ ] 02-04-cross-device-link-PLAN.md — Slice B: D-06 + D-08 — migration 018 + git_remote_url matcher + eager pull (BLOCKING schema push)
+- [x] 02-01-wave0-test-scaffolding-PLAN.md — Wave 0 RED test scaffolding for IDENT-01 + IDENT-02 (8 files: 2 NEW, 6 EXTEND)
+- [x] 02-02-identity-bootstrap-PLAN.md — Slice A: D-01..D-05 — /api/account/me + init persists user_id + daemon reads from config
+- [x] 02-03-device-origin-brief-PLAN.md — Slice D: D-09 — brief surfaces actor.hostname on cross-device same-user activity
+- [x] 02-04-cross-device-link-PLAN.md — Slice B: D-06 + D-08 — migration 018 + git_remote_url matcher + eager pull (BLOCKING schema push)
 - [ ] 02-05-manual-link-ui-PLAN.md — Slice C: D-07 — merge_projects RPC + POST /api/projects/:id/merge-into/:target_id + LinkPicker.svelte
 - [ ] 02-06-playwright-e2e-PLAN.md — Wave 5: Playwright browser-driven e2e for LinkPicker (6 states, Chromium-only, mocked backend), wired into CI's existing e2e job
 **Research needed:** yes — daemon currently emits `"default"` placeholder; need to study how `~/.synapse/config.json` is set vs. read, and what the cross-device sync flow looks like for events the daemon hasn't yet pulled. `/gsd:discuss-phase 2` should invoke a researcher before planning.
