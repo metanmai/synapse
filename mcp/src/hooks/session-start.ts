@@ -26,7 +26,7 @@ export interface SessionStartArgs {
 export async function runSessionStartHook(args: SessionStartArgs): Promise<void> {
   if (process.env.SYNAPSE_DAEMON_SESSION === "1") return;
   const session_id = `s_${Date.now().toString(36)}`;
-  const actor = resolveActor(args.user_id);
+  const actor = resolveActor(args.user_id, "human", "claude-code");
 
   let brief = "";
   const bp = briefCachePath(args.project_id);

@@ -169,7 +169,7 @@ export async function maybeFireInferNextStep(a: FireArgs): Promise<void> {
       kind: "synapse-daemon",
       device_id: "daemon",
       hostname: "daemon",
-      client: "claude-code",
+      client: "synapse-daemon",
     },
     kind: EventKind.NextStepInferred,
     occurred_at: new Date().toISOString(),

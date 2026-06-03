@@ -17,7 +17,7 @@ interface Args {
 
 export function runPostToolUseHook(a: Args): void {
   if (process.env.SYNAPSE_DAEMON_SESSION === "1") return;
-  const actor = resolveActor(a.user_id);
+  const actor = resolveActor(a.user_id, "human", "claude-code");
   const base = {
     project_id: a.project_id,
     session_id: a.session_id,
