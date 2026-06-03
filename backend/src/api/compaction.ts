@@ -4,6 +4,7 @@ import {
   getProjectContext,
   getRecentCompactedSummaries,
   updateCompaction,
+  updateConversation,
 } from "../db/queries/conversations";
 import { authMiddleware } from "../lib/auth";
 import type { Env } from "../lib/env";
@@ -48,19 +49,47 @@ compaction.post("/conversations/:id/compact", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     summary?: unknown;
     model?: unknown;
+    handoff?: unknown;
   };
   const precomputedSummary = typeof body.summary === "string" ? body.summary.trim() : null;
   const precomputedModel = typeof body.model === "string" ? body.model.trim() : null;
+  const precomputedHandoff = typeof body.handoff === "string" ? body.handoff.trim() : null;
 
   if (precomputedSummary && precomputedSummary.length > 0) {
     const modelTag = precomputedModel && precomputedModel.length > 0 ? precomputedModel : "client";
     await updateCompaction(db, conversationId, precomputedSummary, modelTag);
+
+    // If an agent handoff document was provided, merge it into the
+    // conversation's metadata JSON (no schema migration needed). The next
+    // session's <synapse-brief> can read this back to give the next agent
+    // a structured "where I left off" doc instead of re-deriving it from
+    // the transcript.
+    let handoffStored = false;
+    if (precomputedHandoff && precomputedHandoff.length > 0) {
+      const existingMetadata = (conversation.metadata ?? {}) as Record<string, unknown>;
+      const mergedMetadata = {
+        ...existingMetadata,
+        handoff_markdown: precomputedHandoff,
+        handoff_model: modelTag,
+        handoff_at: new Date().toISOString(),
+      };
+      try {
+        await updateConversation(db, conversationId, { metadata: mergedMetadata });
+        handoffStored = true;
+      } catch (err) {
+        // Don't fail the whole compaction if metadata write fails — the
+        // summary is the must-have, handoff is best-effort.
+        console.error("[compact] failed to merge handoff into metadata:", err);
+      }
+    }
+
     return c.json({
       compacted_summary: precomputedSummary,
       compacted_at: new Date().toISOString(),
       compaction_model: modelTag,
       message_count: null,
       source: "client",
+      handoff_stored: handoffStored,
     });
   }
 

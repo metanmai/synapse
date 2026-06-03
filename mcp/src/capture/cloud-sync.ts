@@ -147,8 +147,15 @@ export class CloudSyncer {
           try {
             this.log(`Local-CLI compaction starting for ${conversationId} (${session.messages.length} msgs)`);
             const result = await adapter.compact(session);
-            const posted = await this.uploadCompactionSummary(conversationId, result.summary, result.model);
-            this.log(`Local-CLI compaction ${posted ? "stored" : "POST failed"} for ${conversationId}`);
+            const posted = await this.uploadCompactionSummary(
+              conversationId,
+              result.summary,
+              result.model,
+              result.handoff,
+            );
+            this.log(
+              `Local-CLI compaction ${posted ? "stored" : "POST failed"} for ${conversationId} (handoff=${result.handoff ? "yes" : "no"})`,
+            );
           } catch (err) {
             this.log(`Local-CLI compaction failed for ${conversationId}: ${err instanceof Error ? err.message : err}`);
           }
@@ -161,12 +168,19 @@ export class CloudSyncer {
     }
   }
 
-  private async uploadCompactionSummary(conversationId: string, summary: string, model: string): Promise<boolean> {
+  private async uploadCompactionSummary(
+    conversationId: string,
+    summary: string,
+    model: string,
+    handoff?: string,
+  ): Promise<boolean> {
     try {
+      const body: Record<string, string> = { summary, model };
+      if (handoff && handoff.length > 0) body.handoff = handoff;
       const res = await fetch(`${API_URL}/api/conversations/${conversationId}/compact`, {
         method: "POST",
         headers: this.authHeaders(),
-        body: JSON.stringify({ summary, model }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         this.log(`Compact-summary POST returned ${res.status}: ${(await res.text()).slice(0, 200)}`);
