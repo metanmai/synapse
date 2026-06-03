@@ -26,7 +26,7 @@ let { children } = $props();
     "@type": "Offer",
     "price": "0",
     "priceCurrency": "USD",
-    "description": "Free tier with 50 files, 3 connections"
+    "description": "Free tier with 5 projects; Plus extends to 50"
   }
 }
 </script>`}

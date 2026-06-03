@@ -38,7 +38,7 @@ function toolColor(tool: string): string {
   return toolColors[tool] ?? "#8a7565";
 }
 
-const projectLimit = $derived(data.tier === "free" ? 3 : 50);
+const projectLimit = $derived(data.tier === "free" ? 5 : 50);
 
 const countTooltip = $derived(
   data.tier === "free"
