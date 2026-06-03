@@ -8,6 +8,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 import { cliAuthLogin, cliAuthSignup } from "./cli/api.js";
+import { browserAuth } from "./cli/browser-auth.js";
 import { writeAllDetected } from "./cli/editors.js";
 import { createGlyphSpinner } from "./cli/spinner.js";
 import { accent, bold, muted, success } from "./cli/theme.js";
@@ -132,68 +133,43 @@ function isVersionArgv(args: string[]): boolean {
 async function runInteractiveLogin(): Promise<void> {
   clack.intro(`${accent("\u25C6")} ${bold("Sign in to Synapse")}`);
 
-  const email = await clack.text({
-    message: "Email",
-    placeholder: "you@example.com",
-    validate: (v) => (v?.trim() ? undefined : "Required"),
-  });
-  if (clack.isCancel(email)) {
-    clack.cancel("Cancelled.");
-    process.exit(0);
-  }
-
-  const pw = await clack.password({
-    message: "Password",
-    validate: (v) => (v?.trim() ? undefined : "Required"),
-  });
-  if (clack.isCancel(pw)) {
-    clack.cancel("Cancelled.");
-    process.exit(0);
-  }
-
   const spin = createGlyphSpinner();
-  spin.start("Signing in\u2026");
-  const r = await cliAuthLogin(email.trim(), pw, "cli");
-  if (!r.ok) {
-    spin.stop("Could not sign in");
-    clack.log.error(r.message);
+  spin.start("Waiting for browser login\u2026");
+
+  try {
+    const result = await browserAuth();
+    spin.stop(`Signed in as ${result.email}`);
+
+    const written = writeAllDetected(result.api_key);
+    const summary = written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
+    clack.log.message(summary);
+    clack.outro("Restart your editor to connect.");
+  } catch (err) {
+    spin.stop("Login failed");
+    clack.log.error((err as Error).message);
     process.exit(1);
   }
-  spin.stop(`Signed in as ${r.data.email}`);
-
-  const written = writeAllDetected(r.data.api_key);
-  const summary = written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
-  clack.log.message(summary);
-  clack.outro("Restart your editor to connect.");
 }
 
 async function runInteractiveSignup(): Promise<void> {
   clack.intro(`${accent("\u25C6")} ${bold("Create a Synapse account")}`);
 
-  const email = await clack.text({
-    message: "Email",
-    placeholder: "you@example.com",
-    validate: (v) => (v?.trim() ? undefined : "Required"),
-  });
-  if (clack.isCancel(email)) {
-    clack.cancel("Cancelled.");
-    process.exit(0);
-  }
-
   const spin = createGlyphSpinner();
-  spin.start("Creating account\u2026");
-  const r = await cliAuthSignup(email.trim());
-  if (!r.ok) {
+  spin.start("Waiting for browser\u2026");
+
+  try {
+    const result = await browserAuth();
+    spin.stop(`Signed in as ${result.email}`);
+
+    const written = writeAllDetected(result.api_key);
+    const summary = written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
+    clack.log.message(summary);
+    clack.outro("Restart your editor to connect.");
+  } catch (err) {
     spin.stop("Signup failed");
-    clack.log.error(r.message);
+    clack.log.error((err as Error).message);
     process.exit(1);
   }
-  spin.stop(`Welcome \u2014 ${r.data.email}`);
-
-  const written = writeAllDetected(r.data.api_key);
-  const summary = written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
-  clack.log.message(summary);
-  clack.outro("Restart your editor to connect.");
 }
 
 async function runInteractiveInit(): Promise<void> {
