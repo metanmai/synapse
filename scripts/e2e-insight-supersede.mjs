@@ -42,6 +42,7 @@
 // Wall time: ~30-45s.
 
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -61,6 +62,26 @@ const OLD_DETAIL = `Detail for ${OLD_PHRASE} — if the brief still mentions thi
 const NEW_SUMMARY = `Cross-session test NEW — should replace OLD in the brief: ${NEW_PHRASE}`;
 const NEW_DETAIL = `Detail for ${NEW_PHRASE} — supersedes the prior insight via the new backend contract.`;
 
+// Edge case phrases — each unique so the brief assertions can't collide.
+// IS9: multi-supersede (one new insight replaces three old)
+const A1_PHRASE = `lemur-fjord-twelve-${RUN_ID}`;
+const A2_PHRASE = `manatee-glacier-fifteen-${RUN_ID}`;
+const A3_PHRASE = `narwhal-canyon-twenty-${RUN_ID}`;
+const B_PHRASE = `osprey-meadow-thirteen-${RUN_ID}`;
+// IS10: chain supersession C1 → C2 → C3
+const C1_PHRASE = `pangolin-tundra-six-${RUN_ID}`;
+const C2_PHRASE = `quokka-savanna-nine-${RUN_ID}`;
+const C3_PHRASE = `rhinoceros-archipelago-two-${RUN_ID}`;
+// IS11: non-existent UUID in supersedes (must not error)
+const D_PHRASE = `serval-volcano-seven-${RUN_ID}`;
+// IS12: idempotent re-supersede (saving E with supersedes=[A1,A2,A3] must NOT
+// overwrite their existing pointer to B — protects history from race-corruption)
+const E_PHRASE = `tapir-mesa-four-${RUN_ID}`;
+// A real v4 UUID, freshly generated — passes Zod's `.uuid()` validator at
+// the API boundary, but the probability it collides with any auto-generated
+// insight id in the DB is ~1 in 2^122. Used for IS11.
+const NONEXISTENT_UUID = randomUUID();
+
 const SLEEP_DAEMON_SYNC_MS = 15_000;
 const HOOK_FAST_TIMEOUT_MS = 10_000;
 
@@ -71,6 +92,17 @@ let apiKey = null;
 let testProjectId = null;
 let oldInsightId = null;
 let newInsightId = null;
+// Edge case insight ids — captured so final assertions can spot them and
+// cleanup (force-delete via project cascade) doesn't strictly depend on them.
+let a1Id = null;
+let a2Id = null;
+let a3Id = null;
+let bId = null;
+let c1Id = null;
+let c2Id = null;
+let c3Id = null;
+let dId = null;
+let eId = null;
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 function log(msg) {
@@ -420,6 +452,254 @@ async function is8_assert_supersession() {
   }
 }
 
+// ── Helper: save an insight, return id or null on error ────────────────
+async function saveInsight(summary, detail, supersedes) {
+  const body = { project_id: testProjectId, type: "decision", summary, detail };
+  if (supersedes && supersedes.length > 0) body.supersedes = supersedes;
+  const res = await fetchJson("/api/insights", { method: "POST", body: JSON.stringify(body) });
+  if (res._err || !res.id) {
+    return { err: res._err ?? "missing id", status: res._status };
+  }
+  return { id: res.id };
+}
+
+async function findRow(id, includeSuperseded) {
+  const qs = includeSuperseded ? "&include_superseded=true" : "";
+  const list = await fetchJson(`/api/insights?project_id=${testProjectId}${qs}&limit=50`);
+  if (list._err) return null;
+  const items = Array.isArray(list) ? list : (list.insights ?? []);
+  return items.find((i) => i.id === id) ?? null;
+}
+
+// ── IS9: Multi-supersede — one new insight replaces THREE old ones ───────
+async function is9_multi_supersede() {
+  header("IS9 · Multi-supersede (B supersedes A1, A2, A3 in one call)");
+
+  const r1 = await saveInsight(`A1 multi-supersede ${A1_PHRASE}`, "first of three to be replaced", null);
+  const r2 = await saveInsight(`A2 multi-supersede ${A2_PHRASE}`, "second of three to be replaced", null);
+  const r3 = await saveInsight(`A3 multi-supersede ${A3_PHRASE}`, "third of three to be replaced", null);
+  if (r1.err || r2.err || r3.err) {
+    fail("IS9 setup A1-A3", `failed to create old triple — ${r1.err ?? r2.err ?? r3.err}`);
+    return;
+  }
+  a1Id = r1.id;
+  a2Id = r2.id;
+  a3Id = r3.id;
+
+  const rb = await saveInsight(`B multi-supersedes ${B_PHRASE}`, "replaces A1, A2, and A3 in one shot", [
+    a1Id,
+    a2Id,
+    a3Id,
+  ]);
+  if (rb.err) {
+    fail("IS9 save B", `failed to create B — ${rb.err}`);
+    return;
+  }
+  bId = rb.id;
+  ok("IS9 multi-supersede save", `B ${bId.slice(0, 8)}… created with supersedes=[A1,A2,A3]`);
+
+  // All three As should be filtered from the default list.
+  const defaultList = await fetchJson(`/api/insights?project_id=${testProjectId}&limit=50`);
+  const items = Array.isArray(defaultList) ? defaultList : (defaultList.insights ?? []);
+  const ids = new Set(items.map((i) => i.id));
+  const a1Visible = ids.has(a1Id);
+  const a2Visible = ids.has(a2Id);
+  const a3Visible = ids.has(a3Id);
+  const bVisible = ids.has(bId);
+  if (!a1Visible && !a2Visible && !a3Visible && bVisible) {
+    ok("IS9 default filter", "A1, A2, A3 all hidden; B visible — multi-supersede filter works");
+  } else {
+    fail(
+      "IS9 default filter",
+      `expected A1/A2/A3=hidden, B=visible — got A1=${a1Visible} A2=${a2Visible} A3=${a3Visible} B=${bVisible}`,
+    );
+    return;
+  }
+
+  // Verify ALL three As point at B in the full history.
+  const a1Row = await findRow(a1Id, true);
+  const a2Row = await findRow(a2Id, true);
+  const a3Row = await findRow(a3Id, true);
+  if (a1Row?.superseded_by === bId && a2Row?.superseded_by === bId && a3Row?.superseded_by === bId) {
+    ok("IS9 superseded_by pointers", "all three A rows point at B");
+  } else {
+    fail(
+      "IS9 superseded_by pointers",
+      `expected all three to point at B — got A1=${a1Row?.superseded_by} A2=${a2Row?.superseded_by} A3=${a3Row?.superseded_by}`,
+    );
+  }
+}
+
+// ── IS10: Chain supersession — C1 ← C2 ← C3, brief sees only C3 ─────────
+async function is10_chain_supersession() {
+  header("IS10 · Chain supersession (C1 superseded by C2, C2 superseded by C3)");
+
+  const r1 = await saveInsight(`C1 chain ${C1_PHRASE}`, "chain link 1 — earliest", null);
+  if (r1.err) {
+    fail("IS10 save C1", `${r1.err}`);
+    return;
+  }
+  c1Id = r1.id;
+
+  const r2 = await saveInsight(`C2 chain ${C2_PHRASE}`, "chain link 2 — replaces C1", [c1Id]);
+  if (r2.err) {
+    fail("IS10 save C2", `${r2.err}`);
+    return;
+  }
+  c2Id = r2.id;
+
+  const r3 = await saveInsight(`C3 chain ${C3_PHRASE}`, "chain link 3 — replaces C2", [c2Id]);
+  if (r3.err) {
+    fail("IS10 save C3", `${r3.err}`);
+    return;
+  }
+  c3Id = r3.id;
+  ok("IS10 chain save", `C1 ${c1Id.slice(0, 8)}… ← C2 ${c2Id.slice(0, 8)}… ← C3 ${c3Id.slice(0, 8)}…`);
+
+  // Only C3 should remain in the default list.
+  const list = await fetchJson(`/api/insights?project_id=${testProjectId}&limit=50`);
+  const items = Array.isArray(list) ? list : (list.insights ?? []);
+  const ids = new Set(items.map((i) => i.id));
+  const c1Vis = ids.has(c1Id);
+  const c2Vis = ids.has(c2Id);
+  const c3Vis = ids.has(c3Id);
+  if (!c1Vis && !c2Vis && c3Vis) {
+    ok("IS10 chain filter", "only C3 visible in default list — chain collapses correctly");
+  } else {
+    fail("IS10 chain filter", `expected only C3 visible — got C1=${c1Vis} C2=${c2Vis} C3=${c3Vis}`);
+    return;
+  }
+
+  // Verify the pointer chain is intact in the audit view.
+  const c1Row = await findRow(c1Id, true);
+  const c2Row = await findRow(c2Id, true);
+  const c3Row = await findRow(c3Id, true);
+  if (c1Row?.superseded_by === c2Id && c2Row?.superseded_by === c3Id && (c3Row?.superseded_by ?? null) === null) {
+    ok("IS10 chain pointers", "C1→C2, C2→C3, C3=active — chain is well-formed");
+  } else {
+    fail(
+      "IS10 chain pointers",
+      `chain corrupted — C1.by=${c1Row?.superseded_by} C2.by=${c2Row?.superseded_by} C3.by=${c3Row?.superseded_by}`,
+    );
+  }
+}
+
+// ── IS11: Non-existent UUID in supersedes — must not error ───────────────
+async function is11_nonexistent_uuid() {
+  header("IS11 · supersedes=[<non-existent UUID>] — must succeed, no side effects");
+
+  const r = await saveInsight(`D nonexistent-uuid ${D_PHRASE}`, "supersedes a UUID that doesn't exist", [
+    NONEXISTENT_UUID,
+  ]);
+  if (r.err) {
+    fail("IS11 save D", `unexpected error on bogus supersedes — ${r.err} (status ${r.status})`);
+    return;
+  }
+  dId = r.id;
+  ok("IS11 save D", `D ${dId.slice(0, 8)}… created even with non-existent UUID in supersedes`);
+
+  // Sanity: D is active.
+  const dRow = await findRow(dId, false);
+  if (dRow && (dRow.superseded_by ?? null) === null) {
+    ok("IS11 D active", "D is active in default list — bogus supersedes was correctly ignored");
+  } else {
+    fail("IS11 D active", `D should be active — got ${JSON.stringify(dRow)}`);
+  }
+}
+
+// ── IS12: Idempotent re-supersede — already-superseded rows are NOT moved ─
+async function is12_idempotent_resupersede() {
+  header("IS12 · Re-supersede already-superseded rows (E claims A1, A2, A3 again)");
+
+  // A1, A2, A3 already point at B (from IS9). If E tries to supersede them,
+  // the .is('superseded_by', null) guard should leave their pointers alone.
+  const r = await saveInsight(`E idempotent ${E_PHRASE}`, "tries to re-claim A1, A2, A3 — should be ignored", [
+    a1Id,
+    a2Id,
+    a3Id,
+  ]);
+  if (r.err) {
+    fail("IS12 save E", `${r.err}`);
+    return;
+  }
+  eId = r.id;
+  ok("IS12 save E", `E ${eId.slice(0, 8)}… created with supersedes=[A1,A2,A3] (already superseded by B)`);
+
+  // The critical assertion: A1, A2, A3 must STILL point at B, NOT at E.
+  const a1Row = await findRow(a1Id, true);
+  const a2Row = await findRow(a2Id, true);
+  const a3Row = await findRow(a3Id, true);
+  if (a1Row?.superseded_by === bId && a2Row?.superseded_by === bId && a3Row?.superseded_by === bId) {
+    ok("IS12 idempotent guard", "A1/A2/A3 still point at B — re-supersede did NOT corrupt history");
+  } else {
+    fail(
+      "IS12 idempotent guard",
+      `history was corrupted by re-supersede — A1=${a1Row?.superseded_by} A2=${a2Row?.superseded_by} A3=${a3Row?.superseded_by} (expected all = B ${bId})`,
+    );
+  }
+}
+
+// ── IS13: Final comprehensive brief check ───────────────────────────────
+async function is13_final_brief_check() {
+  header("IS13 · Final brief reflects all supersession states correctly");
+
+  const { code, stdout } = fireHook("session-start", {
+    session_id: "e2e-is-final",
+    cwd: testDir,
+    source: "startup",
+    hook_event_name: "SessionStart",
+  });
+  if (code !== 0) {
+    fail("IS13 hook exit", `hook exited ${code}`);
+    return;
+  }
+  if (!stdout.includes("<synapse-brief>")) {
+    fail("IS13 brief shape", "no <synapse-brief> tag");
+    return;
+  }
+  ok("IS13 brief emitted", `${stdout.length} bytes`);
+
+  // Active phrases must appear; superseded phrases must NOT.
+  const active = [
+    { name: "NEW", phrase: NEW_PHRASE },
+    { name: "B (multi-supersede winner)", phrase: B_PHRASE },
+    { name: "C3 (chain head)", phrase: C3_PHRASE },
+    { name: "D (bogus-supersede survivor)", phrase: D_PHRASE },
+    { name: "E (idempotent re-supersede attempt)", phrase: E_PHRASE },
+  ];
+  const superseded = [
+    { name: "OLD", phrase: OLD_PHRASE },
+    { name: "A1", phrase: A1_PHRASE },
+    { name: "A2", phrase: A2_PHRASE },
+    { name: "A3", phrase: A3_PHRASE },
+    { name: "C1", phrase: C1_PHRASE },
+    { name: "C2", phrase: C2_PHRASE },
+  ];
+
+  let allActivePresent = true;
+  for (const a of active) {
+    if (!stdout.includes(a.phrase)) {
+      fail(`IS13 active: ${a.name}`, `missing from brief — phrase ${a.phrase}`);
+      allActivePresent = false;
+    }
+  }
+  if (allActivePresent) ok("IS13 active set", `all ${active.length} active phrases present in brief`);
+
+  let allSupersededAbsent = true;
+  for (const s of superseded) {
+    if (stdout.includes(s.phrase)) {
+      fail(`IS13 superseded: ${s.name}`, `leaked into brief — phrase ${s.phrase}`);
+      allSupersededAbsent = false;
+    }
+  }
+  if (allSupersededAbsent)
+    ok("IS13 superseded set", `all ${superseded.length} superseded phrases correctly hidden from brief`);
+
+  if (!allActivePresent || !allSupersededAbsent) {
+    info(`brief tail (last 1500 chars):\n  ${stdout.slice(-1500).replace(/\n/g, "\n  ")}`);
+  }
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────
 async function main() {
   log("Synapse end-to-end INSIGHT-SUPERSESSION cross-session test");
@@ -441,6 +721,11 @@ async function main() {
           await is6_verify_api_filter();
           await is7_fire_hook();
           await is8_assert_supersession();
+          await is9_multi_supersede();
+          await is10_chain_supersession();
+          await is11_nonexistent_uuid();
+          await is12_idempotent_resupersede();
+          await is13_final_brief_check();
         }
       }
     }
