@@ -49,6 +49,37 @@ $OpensslVer = & openssl version 2>&1
 Write-Host "  openssl version: $OpensslVer"
 Write-Host "  node version:    $(& node --version)"
 Write-Host "  certutil:        $((Get-Command certutil).Source)"
+
+# Exercise the EXACT openssl commands the daemon uses, in PowerShell,
+# with timing. If these hang here, the daemon hang has the same root
+# cause. If these are fast, the hang is in node-spawn-of-openssl with
+# stdio:"ignore" (a different bug class entirely).
+$TmpKey = "$env:TEMP\preflight-test.key"
+$TmpCrt = "$env:TEMP\preflight-test.crt"
+Remove-Item -ErrorAction SilentlyContinue $TmpKey, $TmpCrt
+
+Write-Host ""
+Write-Host "-- openssl smoke tests --"
+
+$t1 = Get-Date
+& openssl genrsa -out $TmpKey 4096 *>$null
+$e1 = ((Get-Date) - $t1).TotalSeconds
+Write-Host ("  [smoke] genrsa 4096: exit={0} elapsed={1:F2}s" -f $LASTEXITCODE, $e1)
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "FAIL preflight: openssl genrsa 4096 failed"
+    exit 1
+}
+
+$t2 = Get-Date
+& openssl req -new -x509 -days 3650 -key $TmpKey -out $TmpCrt -subj "/CN=PreflightCA/O=Test" -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" *>$null
+$e2 = ((Get-Date) - $t2).TotalSeconds
+Write-Host ("  [smoke] req -new -x509 -addext: exit={0} elapsed={1:F2}s" -f $LASTEXITCODE, $e2)
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "FAIL preflight: openssl req -new -x509 with -addext failed"
+    exit 1
+}
+
+Remove-Item -ErrorAction SilentlyContinue $TmpKey, $TmpCrt
 Write-Host ""
 
 function Assert-CertInStore {
@@ -75,10 +106,29 @@ function Assert-CertNotInStore {
 Assert-CertNotInStore -Stage "pre-state"
 
 # STAGE 1: install
-Write-Host "  [install] node $Cli capture proxy install"
-& node $Cli capture proxy install
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "FAIL install: 'capture proxy install' exited $LASTEXITCODE"
+# Wrap in Start-Job + Wait-Job so a hang doesn't burn the full 15-min
+# CI timeout. Anything > 90s is a real bug worth diagnosing fast.
+Write-Host "  [install] node $Cli capture proxy install  (90s timeout)"
+$installJob = Start-Job -ScriptBlock {
+    param($CliPath)
+    & node $CliPath capture proxy install 2>&1
+    return $LASTEXITCODE
+} -ArgumentList $Cli
+
+$completed = Wait-Job $installJob -Timeout 90
+if (-not $completed) {
+    Write-Host "FAIL install: 'capture proxy install' hung > 90s — killing"
+    Stop-Job $installJob -PassThru | Receive-Job
+    Remove-Job $installJob -Force
+    exit 1
+}
+$installOutput = Receive-Job $installJob
+$installExit = $installJob.ChildJobs[0].Output[-1]
+Remove-Job $installJob
+Write-Host "  [install] stdout/stderr from job:"
+$installOutput | ForEach-Object { Write-Host "    $_" }
+if ($installExit -ne 0) {
+    Write-Host "FAIL install: 'capture proxy install' exited $installExit"
     exit 1
 }
 Assert-CertInStore -Stage "post-install"
