@@ -144,6 +144,11 @@ export function createApi(token: string | null) {
       request<{ ok: true }>(`/api/account/keys/${keyId}`, token, {
         method: "DELETE",
       }),
+    renameApiKey: (keyId: string, label: string) =>
+      request<{ id: string; label: string }>(`/api/account/keys/${keyId}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({ label }),
+      }),
     resetAccount: () =>
       request<{ ok: true; api_key: string }>("/api/account/reset", token, {
         method: "POST",

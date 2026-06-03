@@ -10,9 +10,11 @@ import {
   findApiKeyByMachineId,
   findUserByEmail,
   getActiveSubscription,
+  getApiKeyByIdForUser,
   listApiKeys,
   listCliKeys,
   recordDeletedAccount,
+  renameApiKey,
   rotateApiKeyHash,
 } from "../db/queries";
 import { authMiddleware, hashApiKey } from "../lib/auth";
@@ -228,6 +230,27 @@ function deviceLimitForTier(tier: "free" | "plus"): number {
  */
 function displayName(label: string): string {
   return label.startsWith(DEVICE_LABEL_PREFIX) ? label.slice(DEVICE_LABEL_PREFIX.length) : label;
+}
+
+/**
+ * BUG #6 helper: given the existing row's label and the user's input
+ * label (from the rename form), compute the label to persist.
+ *
+ * Rules:
+ *   - If the existing row carried the `cli-` prefix, the new label MUST
+ *     keep it (preserves countCliKeys / device-cap accounting).
+ *   - Otherwise the new label is stored as-is.
+ *   - We always STRIP a leading `cli-` from the user's input first so
+ *     the user can't escape the prefix on a CLI key, nor add it to a
+ *     non-CLI key (would inflate the device count). The user's intent
+ *     is always the bare name; the prefix is plumbing.
+ *
+ * Exported for unit testing.
+ */
+export function computeRenamedLabel(existingLabel: string, userInput: string): string {
+  const stripped = userInput.startsWith(DEVICE_LABEL_PREFIX) ? userInput.slice(DEVICE_LABEL_PREFIX.length) : userInput;
+  const wasCli = existingLabel.startsWith(DEVICE_LABEL_PREFIX);
+  return wasCli ? `${DEVICE_LABEL_PREFIX}${stripped}` : stripped;
 }
 
 /**
@@ -460,6 +483,39 @@ account.delete("/keys/:id", async (c) => {
   }
 
   return c.json({ ok: true });
+});
+
+// BUG #6: PATCH /api/account/keys/:id — rename an API key.
+//
+// CLI device keys are stored with a `cli-` prefix (e.g. `cli-laptop`) so
+// listCliKeys / countCliKeys can find them via `LIKE 'cli-%'`. The
+// dashboard strips that prefix for display ("laptop"), so the user's
+// rename input is also prefix-less. We re-add the prefix on save IFF
+// the existing row had it — otherwise legacy "default" or ad-hoc keys
+// keep their bare label.
+account.patch("/keys/:id", async (c) => {
+  const user = c.get("user");
+  const keyId = c.req.param("id");
+  const body = await parseBody(c, schemas.renameApiKey);
+  const db = c.get("db");
+
+  const existing = await getApiKeyByIdForUser(db, keyId, user.id);
+  if (!existing) {
+    throw new AppError("API key not found", 404, "NOT_FOUND");
+  }
+
+  const newLabel = computeRenamedLabel(existing.label, body.label);
+  const stripped = displayName(newLabel);
+  const updated = await renameApiKey(db, keyId, user.id, newLabel);
+  if (updated === 0) {
+    // Race: the row was deleted between our fetch and update. Safe to
+    // surface as 404 — the user can refresh the dashboard.
+    throw new AppError("API key not found", 404, "NOT_FOUND");
+  }
+
+  // Return the display-form label (without cli- prefix) so the dashboard
+  // can render the new value without an extra round trip.
+  return c.json({ id: keyId, label: stripped });
 });
 
 // GET /api/account/me — return the authenticated user's canonical identity.
