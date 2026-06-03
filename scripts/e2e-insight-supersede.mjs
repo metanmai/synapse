@@ -47,6 +47,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { removeLocalProjectState, removeLocalProjectsByBasename, sweepArtifacts } from "./e2e-cleanup.mjs";
+import { generateSession } from "./e2e-llm-driver.mjs";
 
 // ── Configuration ────────────────────────────────────────────────────────
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -274,18 +275,23 @@ async function is1_setup() {
   ok("IS1 setup", "temp git repo created");
 }
 
-// ── IS2: claude -p captures, daemon syncs, project materializes ─────────
+// ── IS2: LLM captures, daemon syncs, project materializes ──────────────
 async function is2_capture_and_sync() {
-  header("IS2 · claude -p capture + daemon sync");
+  header("IS2 · LLM capture + daemon sync");
 
   const prompt = "E2E insight-supersede test. Reply 'noted' and nothing else.";
-  info("Running claude -p...");
-  const cp = spawnSync("claude", ["-p", prompt], { cwd: testDir, encoding: "utf-8", timeout: 120_000 });
-  if (cp.status !== 0) {
-    fail("IS2 claude -p", `claude exit ${cp.status}: ${(cp.stderr ?? "").slice(0, 200)}`);
+  info("Running LLM driver (direct-API curl OR CLI driver, auto-selected)...");
+  let driver;
+  let mode;
+  try {
+    const result = generateSession({ prompt, cwd: testDir, timeoutMs: 120_000 });
+    driver = result.driver;
+    mode = result.mode;
+  } catch (err) {
+    fail("IS2 LLM capture", `${err.message}`.slice(0, 300));
     return;
   }
-  ok("IS2 claude -p", "session captured");
+  ok("IS2 LLM capture", `session captured via ${mode} (${driver})`);
 
   info(`Waiting ${SLEEP_DAEMON_SYNC_MS / 1000}s for daemon sync...`);
   await sleep(SLEEP_DAEMON_SYNC_MS);

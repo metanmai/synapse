@@ -49,6 +49,7 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFi
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { removeLocalProjectState, removeLocalProjectsByBasename, sweepArtifacts } from "./e2e-cleanup.mjs";
+import { generateSession } from "./e2e-llm-driver.mjs";
 
 // ── Configuration ────────────────────────────────────────────────────────
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -297,19 +298,21 @@ async function md1_device_a_setup() {
 
 // ── MD2: Device A captures ───────────────────────────────────────────────
 async function md2_device_a_captures() {
-  header("MD2 · Device A claude -p captures session");
+  header("MD2 · Device A LLM capture");
 
   const prompt = `E2E multi-device test, Device A side. Remember: (a) test_id is ${A_TEST_ID}, (b) secret_phrase is '${A_TEST_PHRASE}'. Reply 'noted' only.`;
-  info("Running claude -p in Device A cwd...");
-  const start = Date.now();
-  const cp = spawnSync("claude", ["-p", prompt], { cwd: deviceADir, encoding: "utf-8", timeout: 120_000 });
-  const elapsed = Date.now() - start;
-
-  if (cp.status !== 0) {
-    fail("MD2 device A capture", `claude exit ${cp.status}: ${(cp.stderr ?? "").slice(0, 200)}`);
+  info("Running LLM driver in Device A cwd (CLI mode — hook must fire for SYNAPSE_HOME dispatch)...");
+  try {
+    // forceCli: the multi-device test depends on the CLI tool's SessionEnd
+    // hook firing so hook-dispatch routes to Device A's daemon via the
+    // inherited SYNAPSE_HOME. Direct-API curl has no hook → would break
+    // the cross-device handoff semantics this test verifies.
+    const result = generateSession({ prompt, cwd: deviceADir, timeoutMs: 120_000, forceCli: true });
+    ok("MD2 device A capture", `LLM responded in ${result.elapsedMs}ms via ${result.driver}`);
+  } catch (err) {
+    fail("MD2 device A capture", `${err.message}`.slice(0, 300));
     return;
   }
-  ok("MD2 device A capture", `claude -p responded in ${elapsed}ms`);
 }
 
 // ── MD3: Daemon syncs Device A's session to backend ──────────────────────
@@ -518,26 +521,29 @@ async function md8_start_b_daemon() {
   ok("MD8 daemon boot", `Device B daemon running (pid ${deviceBDaemonProc.pid})`);
 }
 
-// ── MD9: Device B claude -p captures ─────────────────────────────────────
+// ── MD9: Device B LLM captures with SYNAPSE_HOME override ───────────────
 async function md9_device_b_captures() {
-  header("MD9 · Device B claude -p captures session");
+  header("MD9 · Device B LLM capture (SYNAPSE_HOME-scoped)");
 
   const prompt = `E2E multi-device test, Device B side. Remember: (a) test_id is ${B_TEST_ID}, (b) secret_phrase is '${B_TEST_PHRASE}'. Reply 'noted' only.`;
-  info("Running claude -p in Device B cwd with SYNAPSE_HOME override...");
-  const start = Date.now();
-  const cp = spawnSync("claude", ["-p", prompt], {
-    cwd: deviceBCwd,
-    encoding: "utf-8",
-    timeout: 120_000,
-    env: { ...process.env, SYNAPSE_HOME: deviceBSynapseHome },
-  });
-  const elapsed = Date.now() - start;
-
-  if (cp.status !== 0) {
-    fail("MD9 device B capture", `claude exit ${cp.status}: ${(cp.stderr ?? "").slice(0, 200)}`);
+  info("Running LLM driver in Device B cwd with SYNAPSE_HOME override...");
+  try {
+    // forceCli + extraEnv: the SYNAPSE_HOME swap that simulates Device B
+    // is read by the CLI tool's SessionEnd hook (synapsesync hook), which
+    // dispatches to Device B's daemon. Direct-API curl has no hook, so
+    // Device B's session would be lost to Device A's daemon.
+    const result = generateSession({
+      prompt,
+      cwd: deviceBCwd,
+      timeoutMs: 120_000,
+      forceCli: true,
+      extraEnv: { SYNAPSE_HOME: deviceBSynapseHome },
+    });
+    ok("MD9 device B capture", `LLM responded in ${result.elapsedMs}ms via ${result.driver}`);
+  } catch (err) {
+    fail("MD9 device B capture", `${err.message}`.slice(0, 300));
     return;
   }
-  ok("MD9 device B capture", `claude -p responded in ${elapsed}ms`);
 }
 
 // ── MD9.5: Re-fire Device B SessionStart to trigger bg recompute ────────
