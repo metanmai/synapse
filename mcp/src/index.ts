@@ -308,7 +308,7 @@ if (!isMcpServerMode(args)) {
   // --- save_insight: store a decision/learning/preference/architecture/action_item ---
   server.tool(
     "save_insight",
-    "Save a key insight about the project — a decision, learning, preference, architecture note, or action item. Call this whenever something worth remembering comes up during a session. Optionally pass `supersedes` with insight IDs that this new one replaces; those will be marked superseded and excluded from future briefs.",
+    "Save a key insight about the project — a decision, learning, preference, architecture note, or action item. BREVITY IS CRITICAL: `summary` MUST be ≤12 words (one short sentence). `detail` is optional and MUST be ≤2 sentences. Insights accumulate and clog future briefs if verbose. CONSOLIDATE AGGRESSIVELY: before saving, call `list_insights` to see existing IDs — if your new insight replaces, contradicts, or makes obsolete any existing ones, pass their IDs in `supersedes` so they are removed from future briefs. Saving without superseding when you should creates clutter.",
     {
       project: z.string().describe("Project name"),
       type: z.enum(["decision", "learning", "preference", "architecture", "action_item"]).describe("Type of insight"),
@@ -391,7 +391,7 @@ if (!isMcpServerMode(args)) {
 
         const lines = insights.map(
           (i) =>
-            `- [${i.type}] ${i.summary}${i.detail ? ` — ${i.detail}` : ""} (${new Date(i.updated_at).toLocaleDateString()})`,
+            `- [${i.type}] ${i.summary}${i.detail ? ` — ${i.detail}` : ""} (${new Date(i.updated_at).toLocaleDateString()}) [id: ${i.id}]`,
         );
         const header = type
           ? `${total} ${type} insight(s) in "${project}" (showing ${insights.length}):`

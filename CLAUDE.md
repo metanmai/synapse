@@ -28,11 +28,13 @@ For every task:
 
 `save_insight` is the only write path. Types: `decision`, `learning`, `preference`, `architecture`, `action_item`. There is no update tool — save a new insight that supersedes the old one if the old one is wrong.
 
+**KEEP INSIGHTS SHORT (HARD RULE)**: `summary` ≤12 words (one short sentence). `detail` is optional and ≤2 sentences. Insights show up in *every* future SessionStart brief — every extra word is paid for in every future session's context budget. If you can't compress to one sentence, the insight is probably two insights or doesn't belong here. Skip the preamble ("During this session I…"), skip the date (the system adds it), skip the meta-narration. State the fact.
+
 **Save proactively when**: a design/technical decision is made, a non-obvious fact is discovered, a subsystem's behavior is uncovered, a user preference is stated, follow-up work is identified, a subagent returns important findings (subagents can't access Synapse), or the user says "remember this."
 
 **Don't save**: source code, transient debug output, verbatim conversation transcripts (the capture daemon handles those), or anything the user explicitly asks to keep local.
 
-**Consolidate proactively**: the SessionStart brief includes a `## Recent insights` section listing existing insights with their IDs. Before saving a new insight, scan that list — if the new insight replaces or contradicts one already there, pass `supersedes: [<old_id>, ...]` to `save_insight` so the old entry is marked superseded and stops surfacing in future briefs. Don't let near-duplicates accumulate; consolidate them.
+**Consolidate proactively (HARD RULE)**: the SessionStart brief includes a `## Recent insights` section AND `list_insights` returns `[id: <uuid>]` per entry. Before saving a new insight, scan that list — if the new insight replaces, contradicts, or completes any existing one, pass `supersedes: [<uuid>, ...]` to `save_insight` so the old entries are removed from future briefs. Default to superseding when in doubt about a near-duplicate; the cost of a false-supersede is small (the old text is still retrievable), the cost of accumulation is brief bloat that compounds every session.
 
 - **Supersede when**: a new decision overrides an older one ("switched from X to Y"); an updated learning corrects a prior misunderstanding; an action item is now done (supersede it with the completion decision).
 - **Don't supersede when**: the two insights cover different aspects (keep both); you're unsure — better to save without `supersedes` than to lose real information.
