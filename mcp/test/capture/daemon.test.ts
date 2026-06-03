@@ -5,14 +5,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startHandoffLoop } from "../../src/capture/daemon.js";
 
 let tmp: string;
+let originalFetch: typeof globalThis.fetch;
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-daemon-"));
   process.env.SYNAPSE_HOME = tmp;
+  // Default-mock fetch so no test leaks a real DNS lookup. Slow Windows DNS
+  // resolution of the synthetic `api.test` host can outlive the test's stop()
+  // and the vitest teardown window — manifesting as "Worker exited
+  // unexpectedly" in CI. Tests that need specific responses overwrite this.
+  originalFetch = globalThis.fetch;
+  globalThis.fetch = vi.fn(async () =>
+    Promise.reject(new Error("test-default-fetch: no api in test")),
+  ) as unknown as typeof fetch;
 });
 afterEach(() => {
   fs.rmSync(tmp, { recursive: true, force: true });
   // biome-ignore lint/performance/noDelete: real delete required
   delete process.env.SYNAPSE_HOME;
+  globalThis.fetch = originalFetch;
 });
 
 describe("handoff daemon loop", () => {
