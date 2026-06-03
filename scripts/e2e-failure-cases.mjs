@@ -311,8 +311,14 @@ async function stageF2_4_stale_project_map() {
   const home = makeIsolatedHome();
   const cwd = mkdtempSync(path.join(tmpdir(), "f2-4-cwd-"));
   cleanupPaths.push(cwd);
-  // Resolve symlinks to match the canonical path the hook will compute
-  const canonicalCwd = path.resolve(cwd);
+  // CRITICAL: must use realpath, not path.resolve. macOS mkdtemp returns
+  // paths under symlinks (/tmp → /private/tmp, /var/folders/... → /private/...)
+  // and production code always stores project-map keys under realpath'd
+  // canonical paths. path.resolve alone misses the symlink dereference,
+  // and the hook would never find the entry — the 404 invalidation path
+  // wouldn't fire and this test would pass on a trivial setup miss
+  // rather than the actual invalidation behavior.
+  const canonicalCwd = (await import("node:fs")).realpathSync(cwd);
   try {
     /* try realpath */
   } catch {}
