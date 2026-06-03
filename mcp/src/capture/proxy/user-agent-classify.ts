@@ -67,6 +67,13 @@ export const USER_AGENT_PATTERNS: readonly Pattern[] = [
   // `copilot-cli/<version>`.
   { match: /\bcopilot[-_]?cli\b/i, tool: "copilot-cli" },
   { match: /\bgh[-_]?copilot\b/i, tool: "copilot-cli" },
+
+  // opencode ships UA `opencode/<version> ai-sdk/provider-utils/<v> runtime/bun/<v>`
+  // — the leading `opencode/` token is the load-bearing classifier.
+  { match: /\bopencode\b/i, tool: "opencode" },
+
+  // crush (Charm Bracelet) ships UA `Crush/<version>` per their source.
+  { match: /\bcrush\b/i, tool: "crush" },
 ];
 
 /**

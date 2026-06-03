@@ -191,14 +191,65 @@ describe("reconstructSessions", () => {
     expect(sessions[0].messages[0].content).toBe("real chat");
   });
 
-  it("drops non-2xx requests (a failed call doesn't produce a turn)", () => {
+  // ── Failed-chat capture (BUG CLASS guarded) ─────────────────────────────
+  //
+  // Bug class: "the proxy silently loses failed chat requests, so a user
+  // on a flaky network / rate-limited tier / expired key has no record
+  // of what they tried to ask."
+  //
+  // Earlier behavior: `reconstructSessions` filtered `statusCode 200-299`
+  // and dropped every 4xx/5xx — including auth fails and rate limits.
+  // Real users on Netskope-flaky networks saw their prompts vanish.
+  //
+  // Current behavior (this block): keep the request when the URL is a
+  // chat endpoint (`endpoint.capture`) regardless of status. The user's
+  // prompt is a real artifact even when the provider responded with an
+  // error; preserving it is more valuable than dashboard cleanliness.
+  // The downstream `messages.length === 0` guard at session-reconstruction
+  // line ~106 protects against garbage bodies that don't parse into a
+  // chat shape.
+  //
+  // Design principle: capture-then-filter beats filter-then-capture when
+  // the filter has any false-positive rate on legitimate data.
+
+  it.each([
+    [401, "auth failure (expired / revoked / fake key)"],
+    [403, "forbidden (key without permission)"],
+    [429, "rate limit"],
+    [500, "provider internal error"],
+    [503, "provider unavailable"],
+    [504, "provider timeout"],
+  ])("captures the user prompt when response is %i (%s)", (status) => {
     const requests = [
       mkAnthropic({
         timestamp: "2026-05-30T01:00:00Z",
-        messages: [{ role: "user", content: "trigger 429" }],
+        messages: [{ role: "user", content: "what is rate limiting" }],
         responseText: "",
-        status: 429,
+        status,
       }),
+    ];
+    const sessions = reconstructSessions(requests);
+    expect(sessions).toHaveLength(1);
+    // The user's prompt is preserved.
+    const userTurn = sessions[0].messages.find((m) => m.role === "user");
+    expect(userTurn?.content).toBe("what is rate limiting");
+    // No assistant turn because the call failed.
+    expect(sessions[0].messages.every((m) => m.role !== "assistant" || m.content === "")).toBe(true);
+  });
+
+  it("does NOT capture when the body has no recognizable user message (downstream messages.length guard)", () => {
+    // A request that's on a chat endpoint but with a garbage body that
+    // doesn't parse into a chat shape — e.g. a tool sending a probe with
+    // no `messages` array. Even with statusCode filter removed, this
+    // must still drop, because there's no real prompt to record.
+    const requests: CapturedRequest[] = [
+      {
+        timestamp: "2026-05-30T01:00:00Z",
+        endpoint: { provider: "anthropic", kind: "messages", capture: true },
+        requestBody: { random: "no messages field at all" },
+        responseBody: { error: "invalid request" },
+        statusCode: 400,
+      },
     ];
     expect(reconstructSessions(requests)).toEqual([]);
   });

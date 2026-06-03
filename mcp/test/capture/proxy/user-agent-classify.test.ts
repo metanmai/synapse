@@ -19,6 +19,14 @@ describe("classifyUserAgent", () => {
     ["Gemini/2.0", "gemini"],
     ["gh-copilot/1.2.3", "copilot-cli"],
     ["copilot-cli/0.9.0", "copilot-cli"],
+    // opencode (SST) — captured live from probe on 2026-06-03 against
+    // mitmdump-as-observer. Their UA composes their own tool name with
+    // the bundled AI SDK + Bun runtime version.
+    ["opencode/1.15.13 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.14", "opencode"],
+    ["opencode/2.0.0", "opencode"],
+    // crush (Charm Bracelet) — Go binary, UA starts with `Crush/<version>`.
+    ["Crush/0.10.0", "crush"],
+    ["crush/0.11.5 go/1.22", "crush"],
   ])("classifies %q → %q", (ua, expected) => {
     expect(classifyUserAgent(ua)).toBe(expected);
   });
@@ -100,5 +108,18 @@ describe("classifyUserAgent", () => {
   it("classifies a real-world Claude Code UA", () => {
     // The actual Claude Code CLI ships something like this.
     expect(classifyUserAgent("claude-cli/1.0.84 (darwin; arm64) node/24.0.0")).toBe("claude-code");
+  });
+
+  it("classifies a real-world opencode UA (captured live 2026-06-03)", () => {
+    // Exact string observed via mitmdump on api.anthropic.com/v1/messages.
+    // If opencode reshuffles its UA tokens, this test still passes as
+    // long as the word `opencode` appears somewhere — that's by design.
+    expect(classifyUserAgent("opencode/1.15.13 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.14")).toBe("opencode");
+  });
+
+  it("does NOT classify substrings like 'opencode-something-else' as opencode if they break word boundary", () => {
+    // Word-boundary check: substring matches that aren't tokens shouldn't fire.
+    // "opencoded" (a hypothetical tool) shouldn't classify as opencode.
+    expect(classifyUserAgent("opencoded/1.0.0")).toBe("unknown");
   });
 });
