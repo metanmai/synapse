@@ -184,6 +184,9 @@ function formatDate(dateStr: string | null): string {
         class="create-form"
       >
         <label for="key-label" class="form-label">Label</label>
+        <!-- svelte-ignore a11y_autofocus -->
+        <!-- Intentional: input lives inside an opened-on-demand "new key" panel.
+             Jumping focus on reveal matches modal-dialog UX. -->
         <input
           id="key-label"
           name="label"

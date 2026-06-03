@@ -57,7 +57,9 @@ function projectLabel(p: Project): string {
         synapse
       </a>
       {#if currentProject}
-        <div class="switcher-wrapper" onclick={(e) => e.stopPropagation()}>
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+        <!-- The wrapper's onclick is plumbing — it swallows bubbling clicks so the outside-click-to-close handler doesn't fire when users interact with the dropdown contents. The button inside is the actual interactive element. -->
+        <div class="switcher-wrapper" role="presentation" onclick={(e) => e.stopPropagation()}>
           <button class="switcher-btn cursor-pointer"
             onclick={() => { switcherOpen = !switcherOpen; }}>
             <span class="switcher-label">{projectLabel(currentProject)}</span>

@@ -128,22 +128,6 @@ Cloudflare's git-integration auto-deploy IS wired (and proved working on 2026-05
 - Switch to GitHub Actions `wrangler deploy` on push to main with CF API token in repo secrets (more explicit, removes the silent-idle failure mode).
 - Document the "if no deploy fires in N minutes, push a no-op commit" workaround in the runbook.
 
-### 13. Frontend has 12 svelte-check warnings (4 a11y, 8 unused-CSS)
-
-Not blocking CI, but worth addressing:
-
-**A11y (real issues):**
-- `src/lib/components/layout/AppShell.svelte:60` — `<div>` with click handler missing keyboard handler + ARIA role (2 warnings against the same line)
-- `src/routes/(app)/home/+page.svelte:77` — autofocus
-- `src/routes/(app)/settings/+page.svelte:192` — autofocus
-
-**Unused CSS selectors (dead styles or HTML mismatch):**
-- `src/lib/components/landing/CliSetupWizard.svelte:154` — `.wizard-alt`
-- `src/lib/components/landing/Hero.svelte:262, 275, 568` — `.hero-cta`, `.hero-cta:hover`, `.mockup-sidebar`
-- `src/lib/components/landing/ProblemSection.svelte:86, 93, 99, 112` — `.problem-headline`, `.pain-points`, `.pain-point` (twice)
-
-**Fix:** for each unused CSS selector, decide whether to (a) delete the rule (selector is dead), or (b) restore the missing class name to the HTML (selector targets a stale element name).
-
 ---
 
 ## P4 — Performance / correctness, no user impact yet
@@ -175,6 +159,10 @@ Fixed in the 2026-05-18 session:
 - **Launchd plist argv mangled** (single string `"node /path/to/commands.js"` instead of separate `<string>` elements) — fixed in `d3cd771`
 - **Service file written but never `launchctl load`ed** — fixed in `d3cd771`
 - **Service file pointed at `dist/cli/commands.js`** (a helper module with no main) **instead of `dist/index.js`** (the dispatcher entry) — fixed in `025a814`
+
+Fixed in the 2026-05-30 session (post-Windows-readiness backlog sweep):
+
+- **#13 Frontend svelte-check warnings (4 a11y + 8 unused-CSS)** — unused-CSS already cleared in an earlier commit; the 4 a11y warnings (AppShell switcher-wrapper div, two `autofocus` inputs) fixed with role="presentation" + svelte-ignore directives that document the intent inline. svelte-check now reports 0 warnings.
 
 Fixed in the 2026-05-19 to 2026-05-20 sessions (Phase 1, slice 1a-prime + 1b):
 
