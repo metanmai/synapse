@@ -93,7 +93,7 @@ LANDMINES:
 - Pitfall 3 (RESEARCH): `.mcp.json` contains `env.SYNAPSE_API_KEY` — MUST be gitignored. `ensureGitignore` call is mandatory; the test asserts it.
 - Don't introduce a new `deepMerge` helper (RESEARCH §"Don't Hand-Roll") — `writeMcpJson` already merges via spread.
 - Wave 0 test "backs up and rewrites an invalid existing .mcp.json" relies on the EXISTING `writeMcpJson` corrupt-path code (line 108 `fs.copyFileSync(filePath, ${filePath}.bak)`) — no new code needed for that branch; the test just exercises it through runInit.
-- DO NOT redefine the warning string inline. Import `PROXY_FALLBACK_WARNING` from `./util/mcp-command`. If you find yourself typing "npm registry unreachable", you are doing it wrong (WARNING #11).
+- DO NOT redefine the warning string inline. Import `PROXY_FALLBACK_WARNING` from `./util/mcp-command`. The positive import-and-use check (≥2 `PROXY_FALLBACK_WARNING` hits — import + usage) is the class-correct guard for "warning is centralized." (Prior iter-2 plans also included a negative grep on the literal `"npm registry unreachable"`; that was redundant theater per `feedback_test_generality.md` — the positive grep already catches the bug class. Dropped in iter-3.)
 </interfaces>
 </context>
 
@@ -130,7 +130,7 @@ LANDMINES:
 
     After `writeServiceFile()`, add a conditional block that re-calls `resolveSynapseMcpCommand(a.api_key)`; if `.command === "npx"`, await `probeNpmRegistry()`; if false, print `PROXY_FALLBACK_WARNING` via the existing `@clack/prompts` warning surface (match the visual style already used by other warnings in `runInit`).
 
-    Verify (re-read after edit) that no other call site of `writeMcpJson` was affected — this plan only adds a new call, does not modify the helper. Verify the warning string is imported, not redefined inline (BLOCKER #4 enforcement during planning, WARNING #11 enforcement during execution).
+    Verify (re-read after edit) that no other call site of `writeMcpJson` was affected — this plan only adds a new call, does not modify the helper. Verify the warning string is imported, not redefined inline.
   </action>
   <verify>
     <automated>cd mcp && npx vitest run test/cli/init.test.ts</automated>
@@ -138,17 +138,16 @@ LANDMINES:
     <automated>grep -nE "PROXY_FALLBACK_WARNING" mcp/src/cli/init.ts</automated>
   </verify>
   <acceptance_criteria>
-    - VALIDATION row: BUG-04 / "writes a new .mcp.json in cwd with the synapse server entry" → `cd mcp && npx vitest run test/cli/init.test.ts -t "writes a new .mcp.json"` exits 0.
+    - VALIDATION row: BUG-04 / "writes a new .mcp.json in cwd with the synapse server entry" → `cd mcp && npx vitest run test/cli/init.test.ts -t "writes a new .mcp.json"` exits 0. This behavioral test runs `runInit` in a tmpdir and asserts `<tmp>/.mcp.json` exists with `mcpServers.synapse` — it fully proves the `writeMcpJson` call site without needing a source-text grep.
     - VALIDATION row: BUG-04 / "merges into an existing .mcp.json preserving other server entries" → `cd mcp && npx vitest run test/cli/init.test.ts -t "merges into an existing"` exits 0.
     - VALIDATION row: BUG-04 / "backs up and rewrites an invalid existing .mcp.json" → `cd mcp && npx vitest run test/cli/init.test.ts -t "backs up and rewrites an invalid"` exits 0.
-    - VALIDATION row: BUG-04 / "calls ensureGitignore(cwd, '.mcp.json') whenever cwd .mcp.json is written" → `cd mcp && npx vitest run test/cli/init.test.ts -t "ensureGitignore"` exits 0.
-    - Insertion order: `grep -nE "writeConfig|writeMcpJson|ensureGitignore|writeServiceFile" mcp/src/cli/init.ts` shows the lines in this exact order: `writeConfig` → `writeMcpJson` → `ensureGitignore` → `writeServiceFile`.
-    - Both new calls present: `grep -cE "writeMcpJson\\(path\\.join\\(process\\.cwd\\(\\)" mcp/src/cli/init.ts` returns ≥ 1; `grep -cE "ensureGitignore\\(process\\.cwd\\(\\)" mcp/src/cli/init.ts` returns ≥ 1.
-    - Warning string is imported, not redefined: `grep -nE "PROXY_FALLBACK_WARNING" mcp/src/cli/init.ts` returns at least 2 hits (1 import line + 1 usage); `grep -cE '"npm registry unreachable"' mcp/src/cli/init.ts` returns 0 (no inline duplication of the warning text).
+    - VALIDATION row: BUG-04 / "calls ensureGitignore(cwd, '.mcp.json') whenever cwd .mcp.json is written" → `cd mcp && npx vitest run test/cli/init.test.ts -t "ensureGitignore"` exits 0. The test spies on `ensureGitignore` and asserts it's called with `cwd` and `.mcp.json` — fully proves the `ensureGitignore` call site behaviorally. (Replaces the prior `grep -cE "writeMcpJson\\(path\\.join\\(process\\.cwd\\(\\)" ... ≥ 1` and `grep -cE "ensureGitignore\\(process\\.cwd\\(\\)" ... ≥ 1` source-text greps — those were redundant with this behavioral test per `feedback_test_generality.md`.)
+    - Insertion order (class-correct structural invariant — catches "writeMcpJson runs after writeServiceFile" / call-order regressions): `grep -nE "writeConfig|writeMcpJson|ensureGitignore|writeServiceFile" mcp/src/cli/init.ts` shows the lines in this exact order: `writeConfig` → `writeMcpJson` → `ensureGitignore` → `writeServiceFile`. This guards the ORDERING contract, not the literal call shape — the bug class is "init wires the new helpers in the wrong order," which the behavioral tests above cannot catch (they would still pass if ordering is wrong but the calls happen).
+    - Warning string is imported, not redefined (positive import-and-use check — class-correct): `grep -nE "PROXY_FALLBACK_WARNING" mcp/src/cli/init.ts` returns at least 2 hits (1 import line + 1 usage). This catches the bug class "wizard hardcodes the warning text instead of importing from the single source of truth." Future drift — different inline strings, paraphrased warnings — would all leave the central constant unreferenced and fail this check. (The prior iter-2 plan also included `grep -cE '"npm registry unreachable"' mcp/src/cli/init.ts` returns 0 — a negative literal-string check that was redundant theater per `feedback_test_generality.md`. Dropped in iter-3: the positive check above already guards the class.)
     - All adapters still resolve: `cd mcp && npx vitest run` exits 0 (no regression in existing tests).
     - `npm run lint && npm run typecheck` exit 0 from repo root.
   </acceptance_criteria>
-  <done>All 4 BUG-04 rows in 01-VALIDATION.md "Per-Task Verification Map" flip from ⬜ to ✅; existing mcp tests still pass; `npm run lint && npm run typecheck` exit 0 from repo root; `grep -nE 'writeMcpJson|ensureGitignore|PROXY_FALLBACK_WARNING' mcp/src/cli/init.ts` shows the imports + the two new calls in `runInit` + the outro warning surface.</done>
+  <done>All 4 BUG-04 rows in 01-VALIDATION.md "Per-Task Verification Map" flip from ⬜ to ✅; existing mcp tests still pass; `npm run lint && npm run typecheck` exit 0 from repo root; `PROXY_FALLBACK_WARNING` is referenced ≥ 2 times in `mcp/src/cli/init.ts` (import + usage).</done>
 </task>
 
 </tasks>
@@ -165,7 +164,7 @@ LANDMINES:
 
 | Threat ID | Category | Component | Disposition | Mitigation Plan |
 |-----------|----------|-----------|-------------|-----------------|
-| T-01-04-01 | Information Disclosure | `.mcp.json` (contains SYNAPSE_API_KEY) committed to git | mitigate | `ensureGitignore(process.cwd(), ".mcp.json")` is a mandatory call after `writeMcpJson` — Wave 0 test asserts the call happens. ASVS V7 (Error Handling & Logging) family. |
+| T-01-04-01 | Information Disclosure | `.mcp.json` (contains SYNAPSE_API_KEY) committed to git | mitigate | `ensureGitignore(process.cwd(), ".mcp.json")` is a mandatory call after `writeMcpJson` — Wave 0 test asserts the call happens behaviorally (spy on `ensureGitignore`). ASVS V7 (Error Handling & Logging) family. |
 | T-01-04-02 | Tampering | Existing `.mcp.json` with unparseable JSON | mitigate | Existing `writeMcpJson` backs up to `.mcp.json.bak` (io.ts:108) before rewriting; Wave 0 test exercises this branch. |
 | T-01-04-03 | Information Disclosure | Backup file `.mcp.json.bak` could contain prior server's secrets | accept | The backup preserves what was already on disk; if the prior `.mcp.json` had secrets, they were already there. Not a NEW disclosure introduced by this plan. |
 </threat_model>
@@ -175,9 +174,8 @@ LANDMINES:
 2. `cd mcp && npx vitest run` — full mcp suite green
 3. `npm run lint && npm run typecheck` from repo root — exit 0
 4. `grep -nE "writeConfig|writeMcpJson|ensureGitignore|writeServiceFile" mcp/src/cli/init.ts` — lines in correct order (writeConfig → writeMcpJson → ensureGitignore → writeServiceFile)
-5. `grep -nE "PROXY_FALLBACK_WARNING" mcp/src/cli/init.ts` — 2+ hits (import + usage)
-6. `grep -cE '"npm registry unreachable"' mcp/src/cli/init.ts` — exactly 0 (warning text not duplicated)
-7. Manual: run `synapse init --api-key TESTKEY` in a fresh tmpdir; verify `.mcp.json` exists, contains `mcpServers.synapse.env.SYNAPSE_API_KEY === "TESTKEY"`, and `<tmpdir>/.gitignore` contains a line `.mcp.json`. Re-run `synapse init` in the same dir — verify `.mcp.json` is not duplicated and `.gitignore` is not double-entried.
+5. `grep -nE "PROXY_FALLBACK_WARNING" mcp/src/cli/init.ts` — 2+ hits (import + usage); positive import-and-use check is the class-correct guard for "warning is centralized."
+6. Manual: run `synapse init --api-key TESTKEY` in a fresh tmpdir; verify `.mcp.json` exists, contains `mcpServers.synapse.env.SYNAPSE_API_KEY === "TESTKEY"`, and `<tmpdir>/.gitignore` contains a line `.mcp.json`. Re-run `synapse init` in the same dir — verify `.mcp.json` is not duplicated and `.gitignore` is not double-entried.
 </verification>
 
 <success_criteria>
@@ -185,7 +183,7 @@ LANDMINES:
 - 4 RED tests turn GREEN.
 - No new dependency added; no `--scope` flag added (D-02 honored).
 - `runInit` is now a complete one-shot wizard replacement (CONTEXT.md framing).
-- Wizard outro warning surfaces `PROXY_FALLBACK_WARNING` from `./util/mcp-command` (imported, not redefined).
+- Wizard outro warning surfaces `PROXY_FALLBACK_WARNING` from `./util/mcp-command` (imported, not redefined — guarded by the positive ≥2-hits import-and-use check, class-correct per `feedback_test_generality.md`).
 - Wave 3 placement honored: this plan runs strictly after Plan 01-03 (Wave 2) so the resolver and warning constant are real, not stubs.
 </success_criteria>
 
