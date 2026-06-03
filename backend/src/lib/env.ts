@@ -22,6 +22,11 @@ export interface Env {
   TIER_PRO_MAX_CONNECTIONS?: string;   // Default: "0" (unlimited)
   TIER_PRO_PRICE?: string;             // Default: "5.99"
 
+  // Stripe
+  STRIPE_SECRET_KEY: string;
+  STRIPE_WEBHOOK_SECRET: string;
+  STRIPE_PRO_PRICE_ID: string;
+
   // Valid sources for entries
   VALID_SOURCES?: string; // Default: "human,claude,chatgpt,cursor,copilot,windsurf,google_docs"
 
