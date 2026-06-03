@@ -1,4 +1,4 @@
-import { API_URL } from "$env/static/private";
+import { env } from "$env/dynamic/private";
 import { getSupabase } from "$lib/server/auth";
 import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
@@ -125,7 +125,12 @@ export const actions: Actions = {
       return fail(400, { error: "Missing session or CLI parameters." });
     }
 
-    const res = await fetch(`${API_URL}/auth/cli-session`, {
+    const apiUrl = env.API_URL;
+    if (!apiUrl) {
+      return fail(500, { error: "API_URL is not configured." });
+    }
+
+    const res = await fetch(`${apiUrl}/auth/cli-session`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
