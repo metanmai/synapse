@@ -48,6 +48,7 @@ import { readProjectMap } from "./project-map.js";
 import { runPurgeEmptyCmd } from "./purge-empty.js";
 import { runDaemon } from "./run-daemon.js";
 import { runPullHandoff } from "./run-pull-handoff.js";
+import { formatSmokeResult, runSmoke } from "./smoke.js";
 import { runStats } from "./stats.js";
 import { runDoctor as runHandoffDoctor, runStatus as runHandoffStatus } from "./status.js";
 
@@ -129,8 +130,19 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
   status: async () => {
     process.stdout.write(`${await runHandoffStatus()}\n`);
   },
-  doctor: async () => {
+  // `doctor` reports daemon health by default. `doctor --smoke` adds a
+  // 5-stage roundtrip check against the live backend: hooks installed, API
+  // key valid, synthetic event POST, brief readable, self-cleanup. The
+  // smoke is opt-in because it costs a network roundtrip and creates +
+  // deletes a project — useful after `wizard` or when debugging "why does
+  // Claude open without a brief" but not what every `doctor` call needs.
+  doctor: async (args) => {
     process.stdout.write(`${await runHandoffDoctor()}\n`);
+    if (args.includes("--smoke")) {
+      const result = await runSmoke();
+      process.stdout.write(`${formatSmokeResult(result)}\n`);
+      if (!result.ok) process.exit(1);
+    }
   },
   refresh: async () => runRefresh(),
   upgrade: async () => runUpgrade(),
