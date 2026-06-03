@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-last_updated: "2026-05-20T18:10:00.000Z"
+last_updated: "2026-05-22T06:00:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 1
@@ -14,7 +14,7 @@ progress:
 
 # State — Stabilize-for-Launch Milestone
 
-*Last updated: 2026-05-20 (late evening) — **Phase 2 ALL WAVES SHIPPED**. Close-out commit `0812764` backfilled SUMMARY.md for Plans 02-02/03/04 (production commits existed but SUMMARY.md ritual was skipped — caught by safe_resume_gate). Plan 02-05 (Slice C Manual Link UI, Wave 4) shipped via `8038636`: merge_projects SQL RPC appended to migration 018, POST /api/projects/:id/merge-into/:target_id route with triple-layer owner-check (frontend filter + backend requireRole×2 + SQL re-verify), LinkPicker.svelte with all 6 UI-SPEC states + locked copy + accessibility contract (section landmark, fieldset+legend.sr-only, Matched aria-label, role="alert", svelte:window Escape, tick()+focus management), api.mergeProjects + listLinkCandidates wired, settings page mount + linkProject form action with 5 status→locked-copy mappings. Plan 02-06 (Wave 5 Playwright e2e) shipped via this commit: @playwright/test devDep declared, playwright.config.ts (Chromium-only, preview not dev), test-only fixture route /__e2e/link-picker (sidesteps Supabase-auth-via-hooks.server.ts), 7-test spec covering states A-F with semantic locators + verbatim UI-SPEC copy assertions, CI wired (install + run + report-on-failure upload). **CI GREEN: 380+72+372=824 vitest passing, 184 skipped, 0 failing.** Phase 2 closes IDENT-01 + IDENT-02. Operator action consolidated: supabase db push migration 018 (now col + merge_projects function), wrangler deploy, frontend redeploy*
+*Last updated: 2026-05-22 — Phase 2 SHIPPED in code (6/6 plans) end-to-end on 2026-05-20 evening (commits `0812764` close-out, `8038636` Plan 02-05 Slice C Manual Link UI, `c66f30e` Plan 02-06 Playwright e2e). **UAT walkthrough on 2026-05-21/22 surfaced 9 inline UX/docs fixes** (`5823cbe` → `2b04178`, see Recent activity) and **5 critical OPEN issues** ranked in "Critical Open Issues" below. Prod LinkPicker visually validated by user's click-through on `synapsesync.app` — State A→C render correctly, State F locked-copy alert renders on the predicted 5xx (blocked on the unfixed `merge_projects` SQL function not yet applied). CI green on metanmai across all shipped commits (896 vitest passing across 4 workspaces). Highest-leverage operator action now: apply migrations 018 + 019 via Supabase Dashboard SQL Editor (~3 min) — unblocks /api/events/batch 1101 + 1,597 queued local events + LinkPicker happy path on prod, all in one shot.*
 
 ## Project Reference
 
@@ -24,7 +24,7 @@ progress:
 
 **Current milestone:** Stabilize-for-launch. Public launch with waitlist throttle by **Friday 2026-05-29** (10 days from today, 7 working days).
 
-**Current focus:** Phase 2 SHIPPED. Next: `/gsd:verify-work 2` for phase-level UAT, then begin Phase 3 (Telemetry — Quality & Speed Signals). Slice 1b residual (OPS-01 + Plan 05 Sentry) still parked on CF-enabled machine.
+**Current focus:** Phase 2 code shipped; UAT partial (2 of 7 tests resolved, paused at user's pivot to prod walkthrough). Highest-leverage next action: apply migrations 018+019 via Supabase Dashboard SQL Editor — fixes the production /api/events/batch 1101 + restores LinkPicker happy path + flushes 1,597 queued events. Phase 3 (Telemetry) begins after these stabilize. Slice 1b residual (OPS-01 + Plan 05 Sentry) still parked on CF-enabled machine.
 
 ## Current Position
 
@@ -45,7 +45,7 @@ progress:
 - **Phases planned:** 7
 - **Phases shipped:** 1 (Phase 2; Phase 1 slice 1a-prime done, 1b residual deferred to CF-enabled machine)
 - **Requirements v1:** 23 (all mapped, 100% coverage)
-- **Days remaining:** 9
+- **Days remaining:** 7
 
 ## Accumulated Context
 
@@ -60,10 +60,22 @@ progress:
 
 ### Open questions / TODOs
 
-- **BUG-01 root cause refuted, not the Promise.all hypothesis.** Real cause was `handoff_events` table missing from prod Supabase — schema drift between `supabase/migrations/*.sql` and prod went undetected. **Process gap:** no drift detection between migration files and prod schema. Worth a separate cleanup task.
+- **BUG-01 root cause refuted, not the Promise.all hypothesis.** Real cause was `handoff_events` table missing from prod Supabase — schema drift between `supabase/migrations/*.sql` and prod went undetected. **Process gap:** no drift detection between migration files and prod schema. Worth a separate cleanup task. **2026-05-22 update:** same class recurring — see Critical Open Issue #1 below (migration 018 column missing causes /api/events/batch to 1101).
 - **Phase 2, 4, 5 need per-phase research** before planning (IDENT, COLLAB, TOKEN were added after the 4-agent research wave). `/gsd:discuss-phase N` will invoke a researcher.
 - **Workers Paid tier** needs verification — assumption until proven otherwise.
 - **Linux daemon path** is unverified at launch unless a Linux machine is accessed during Phase 1.
+
+### Critical Open Issues (diagnosed 2026-05-21/22 during UAT walkthrough — NOT yet fixed)
+
+1. **`/api/events/batch` returns Cloudflare 1101 on every flush.** Empirically confirmed root cause: migration 018's `git_remote_url` column add isn't applied to dogfood Supabase. The deployed events-batch matcher at `backend/src/api/events-batch.ts:91-112` queries that column on every `cwd_<12hex>` flush; column missing → query throws unhandled → Worker 1101. 1,597 events queued locally across 12 cwd_* directories. Same BUG-01 class. **Fix:** apply `supabase/migrations/018_projects_git_remote_url.sql` + `019_merge_projects.sql` via Supabase Dashboard SQL Editor (both `create or replace` / `if not exists`-safe to re-apply). Then re-run `synapsesync wizard` to refresh stale `~/.synapse/config.json` (currently has only `api_key`, missing `user_id` + `email` — user never re-ran init after Plan 02-02 shipped, so all queued events carry `actor.user_id: "default"`).
+
+2. **Creem webhook drift — billing card shows 22+ day stale renewal date.** `/api/billing/status` returns `{ status: "active", current_period_end: "2026-04-29..." }` while today is 2026-05-22. Webhook handler at `backend/src/api/billing.ts:17-118` has **no `default:` case** in the switch — renewals likely fire `subscription.updated` / `subscription.renewed` / `invoice.paid`, none handled, silent 200 OK to Creem (no retry, no log). Secondary: field-name mismatch — webhook reads `obj.current_period_end` (line 67), `/verify` endpoint at line 188 reads `current_period_end_date`. **Diagnostic next:** check Creem dashboard → Webhooks → Delivery history around April 29 to confirm which hypothesis. User has a 4-step checklist from the prior session's chat history.
+
+3. **Test pollution in `~/.synapse/project-map.json`.** Real user `~/.synapse/` directory contains fixture entries (`/home/user/project` → `proj_1`, `project_name: "P"`) written by a vitest run on 2026-05-21. Some test is writing to the live `~/.synapse/` instead of a tmpdir. Find with `grep -rn "project-map" mcp/test/` and fix the test's fs setup to use `os.tmpdir()` + cleanup.
+
+4. **Two Playwright fixture-route tests fail in CI on metanmai (Plan 02-06).** State E (post-redirect trigger-not-visible) + State F (alert-not-appearing) fail; other 5 pass. Suspected SvelteKit client-side-nav reusing the LinkPicker instance when the `/__e2e/link-picker` route's form action redirects back to itself. **Production itself works** — confirmed via user's prod walkthrough that the State F alert renders correctly on the deployed Settings page. Test-only artifact, lower priority.
+
+5. **Dashboard "conversations" count doesn't include Claude Code activity.** `getProjectStats` at `backend/src/db/queries/projects.ts:140` reads from the `conversations` table only — that table is populated by adapter-based capture (Cursor/Codex/Gemini). Claude Code activity flows via the hook pipeline into `handoff_events`. Result: users who work primarily in Claude Code see "0 conversations · 0 insights" forever, even with thousands of captured handoff events. Architecture-level mismatch. Probably wants a deliberate design call: surface both counts separately, or unify under a "captured events" metric.
 
 ### Blockers
 
@@ -82,6 +94,18 @@ progress:
   - CI green across all 4 workspaces: backend 380 / frontend 72 / packages 72 / mcp 372 = **896 passing, 184 skipped, 0 failing** (+playwright spec runs first time on next CI push).
   - **Operator action consolidated:** `supabase db push` to apply migration 018 (now col + merge_projects function), `wrangler deploy` backend, frontend redeploy. All deferred to next CF-enabled-machine session. Code is production-deployable; activation requires the deploy.
 
+- 2026-05-21/22 (multi-day UAT walkthrough): `/gsd-verify-work 2` invoked — 2 of 7 scripted tests resolved (Test 1 cold-start skipped per user signal "go ahead for now"; Test 2 init persists user_id passed on user's "it just works" report). Rest paused mid-walkthrough as the user pivoted to clicking through real prod surfaces on `synapsesync.app`. **9 atomic UX/docs fixes shipped during the walkthrough** (`5823cbe` → `2b04178`):
+  - `5823cbe` AppShell switcher hidden on /home + home count moved to pill with info button + "Workspaces" → "Projects"
+  - `239d1f0` Migration 018→019 split (merge_projects extracted to a new filename so `supabase db push` can apply it; original 018 was already marked applied for the column add) + CI auto-migrate job scaffolded (`.github/workflows/ci.yml` `migrate:` job, gracefully skips until SUPABASE_* secrets configured) + BUGS.md P1 entry with setup steps
+  - `fbb4fee` SetupGuide install-command block fixed: no horizontal scroll, copy button centered + non-overlapping (sibling flex layout instead of absolute overlay), bash line-continuation for multi-line display
+  - `8da6ec5` HowItWorks illustrations rewritten — old illustrations depicted wrong concepts (Capture showed `.mcp.json` which is retrieval plumbing; Distill showed Claude⇄ChatGPT which is cross-tool sharing not LLM-extraction; Remember showed two-user folder sharing which is Phase 4 cross-user collab not single-user context-recall)
+  - `d2c550e` UAT partial-state committed (`.planning/phases/02-real-user-identity/02-UAT.md`)
+  - `4dfc7d1` OR divider on `/login` + `/signup` + `/cli-auth` — span had `background-color: transparent` so the line crossed through the "or" text
+  - `906063a` README: `synapse <cmd>` → `synapsesync <cmd>` everywhere + removed dead `daemon.ai_enabled` paragraph (config flag doesn't exist in codebase) + reflect adapter-driven capture for non-Claude-Code tools (`mcp/src/capture/adapters/{cursor,codex,gemini}.ts`) + add Phase 2 cross-device features paragraph
+  - `bf2f3a2` README pronouns for Tanmai (he/him, not she/her) + memory `user_tanmai_pronouns.md` so future sessions don't repeat the assumption from the name spelling
+  - `2b04178` 5 user-facing CLI error/usage strings fixed to say `synapsesync` instead of `synapse` (handlers.ts:143+175, commands.ts:196, os-service.ts:145, mcp-command.ts:18). Test fixtures referencing the v1.0 `synapse hook X` shape kept as-is — they test the backwards-compat migration detector.
+  - **5 critical OPEN issues diagnosed but NOT fixed** — see "Critical Open Issues" above.
+
 ## Session Continuity
 
 **To resume work in a fresh session:**
@@ -93,7 +117,16 @@ progress:
 5. Read `.planning/research/SUMMARY.md` for technical decisions on Phases 1, 3, 6
 6. Read `docs/BUGS.md` for the canonical "what's still broken" list
 
-**Next command:** `/gsd:verify-work 2` — phase-level UAT for IDENT-01 + IDENT-02 against the 3 ROADMAP success criteria. Verification gates: (a) events flushed by an authenticated daemon carry `actor_user_id = public.users.id` — no "default" rows; (b) machine B SessionStart for a project that already has machine A events produces a brief including machine A activity within one pull cycle; (c) existing e2e roundtrip passes + no regression in placeholder `cwd_<hash>` auto-resolve flow. **Operator action consolidated for next CF-enabled session:** `supabase db push` to apply migration 018 (column + merge_projects function) + `wrangler deploy` backend + frontend redeploy + monitor first CI run that includes the Playwright e2e step (~2-3 min added runtime). Slice 1b residual (OPS-01 + Plan 05 Sentry) unblocks separately on the CF-enabled machine. **CI invariant:** stay green at all times (per `feedback_ci_must_stay_green.md`).
+**Next actions (ranked by user-leverage):**
+
+1. **Highest — apply migrations 018 + 019 via Supabase Dashboard SQL Editor** (~3 min). Single action unblocks: the /api/events/batch 1101, the 1,597 locally-queued events flushing on next daemon cycle, the LinkPicker happy-path merge on prod, and Phase 2 IDENT-01/02 SC verification gates. SQL is in `supabase/migrations/018_projects_git_remote_url.sql` (column add + index) and `supabase/migrations/019_merge_projects.sql` (function). Both `create or replace` / `if not exists`-safe to re-apply. After apply, re-run `synapsesync wizard` locally to refresh stale `~/.synapse/config.json` (will populate `user_id` + `email` via Plan 02-02's init flow).
+2. **Highest — check Creem dashboard → Webhooks → Delivery history around 2026-04-29** to confirm which billing-drift hypothesis is correct (event-type missing / field-name mismatch / signature reject / sub-id mismatch). 4-step checklist available in prior session's chat history; once confirmed, defensive fix is small (add `default:` case + normalize field paths + add self-heal in `/api/billing/status`).
+3. **Medium — file Critical Open Issues #2, #3, #5 as BUGS.md entries** (Creem drift, test pollution, dashboard metric mismatch). #1 is already covered by the existing `docs/BUGS.md` P1 "Configure Supabase secrets" entry; #4 is a low-priority test-only artifact that can be deferred indefinitely.
+4. **Medium — configure SUPABASE_ACCESS_TOKEN / SUPABASE_PROJECT_REF / SUPABASE_DB_PASSWORD secrets on metanmai/synapse** per `docs/BUGS.md` P1 setup steps. Activates the already-scaffolded CI auto-migrate job (`.github/workflows/ci.yml` `migrate:` between `verify:` and `e2e:`). Prevents the BUG-01-class issue from recurring.
+5. **Low — resume Phase 2 UAT via `/gsd-verify-work 2`** — Tests 3-7 outstanding. Most are orthogonal to the 1101 (LinkPicker fixture route works locally without auth via `/__e2e/link-picker`; brief renderer testable as vitest unit test; full suite green is auto-verifiable).
+6. **Low — fix the 2 Playwright fixture-route artifacts** (State E + F). Suspected SvelteKit client-side-nav state-reuse; component itself is correct (prod proves it). May require a key/remount strategy on the fixture route's redirect target.
+
+Slice 1b residual (OPS-01 + Plan 05 Sentry) still parked on CF-enabled machine — unchanged from prior state. **CI invariant:** stay green on metanmai at all times (per `feedback_ci_must_stay_green.md`).
 
 ## Critical Risks Active
 
