@@ -36,7 +36,15 @@ async function main(): Promise<void> {
 
   const store = new SessionStore();
   const syncer = new CloudSyncer(log);
-  const watcher = new CaptureWatcher(registry);
+  // Optional env override so end-to-end tests can run without waiting the
+  // default 5-minute idle window: `SYNAPSE_CAPTURE_IDLE_MS=5000` flushes
+  // after ~5 seconds of file quiet. Production default unchanged.
+  const idleMs = process.env.SYNAPSE_CAPTURE_IDLE_MS
+    ? Number.parseInt(process.env.SYNAPSE_CAPTURE_IDLE_MS, 10)
+    : undefined;
+  const watcher =
+    idleMs && Number.isFinite(idleMs) ? new CaptureWatcher(registry, 5000, idleMs) : new CaptureWatcher(registry);
+  if (idleMs && Number.isFinite(idleMs)) log(`Idle timeout overridden via SYNAPSE_CAPTURE_IDLE_MS=${idleMs}ms`);
 
   watcher.on("session", (session) => {
     log(`Captured session ${session.id} from ${session.tool} (${session.messages.length} messages)`);
@@ -53,7 +61,10 @@ async function main(): Promise<void> {
     const stored = store.load(session.id);
     if (!stored) return;
 
-    const ok = await syncer.sync(stored);
+    // Pass the adapter through so the syncer can invoke its local-CLI
+    // `compact()` method on first sync. Adapters without compact() skip
+    // local-CLI compaction; the dashboard falls back to the hosted path.
+    const ok = await syncer.sync(stored, adapter);
     if (ok) {
       log(`Synced session ${stored.id} to cloud (${stored.messages.length} messages)`);
     }
