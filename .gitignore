@@ -31,3 +31,6 @@ Thumbs.db
 .superpowers/
 .worktrees/
 .mcp.json
+
+# Vitest JSON output (used by mcp/scripts/run-tests.mjs wrapper)
+.vitest-results.json
