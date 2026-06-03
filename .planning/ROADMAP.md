@@ -11,7 +11,7 @@
 ## Phases
 
 - [ ] **Phase 1: Stabilize Backend & Observability** — Daemon flushes succeed end-to-end; Sentry catches future escapes; install works on proxy networks
-- [ ] **Phase 2: Real User Identity** — Events carry authenticated `user_id`; same-user cross-device sync works
+- [x] **Phase 2: Real User Identity** — Events carry authenticated `user_id`; same-user cross-device sync works
 - [ ] **Phase 3: Telemetry — Quality & Speed Signals** — Brief ratings + time-to-context measurable per project, surfaced on dashboard
 - [ ] **Phase 4: Cross-User Collaboration** — Owners invite teammates by email; invitees accept; briefs show per-actor view
 - [ ] **Phase 5: Token Brokering MVP** — Plus subscribers opt-in to lend LLM tokens; one Synapse-internal call routes through the broker with attribution
@@ -59,7 +59,7 @@ Plans:
 - [x] 02-03-device-origin-brief-PLAN.md — Slice D: D-09 — brief surfaces actor.hostname on cross-device same-user activity
 - [x] 02-04-cross-device-link-PLAN.md — Slice B: D-06 + D-08 — migration 018 + git_remote_url matcher + eager pull (BLOCKING schema push)
 - [x] 02-05-manual-link-ui-PLAN.md — Slice C: D-07 — merge_projects RPC + POST /api/projects/:id/merge-into/:target_id + LinkPicker.svelte
-- [ ] 02-06-playwright-e2e-PLAN.md — Wave 5: Playwright browser-driven e2e for LinkPicker (6 states, Chromium-only, mocked backend), wired into CI's existing e2e job
+- [x] 02-06-playwright-e2e-PLAN.md — Wave 5: Playwright browser-driven e2e for LinkPicker (6 states, Chromium-only, mocked backend), wired into CI's existing e2e job
 **Research needed:** yes — daemon currently emits `"default"` placeholder; need to study how `~/.synapse/config.json` is set vs. read, and what the cross-device sync flow looks like for events the daemon hasn't yet pulled. `/gsd:discuss-phase 2` should invoke a researcher before planning.
 **UI hint**: no
 
