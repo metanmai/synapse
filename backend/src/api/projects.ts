@@ -12,6 +12,7 @@ import {
   getActivityLog,
   getAllEntries,
   getProjectByName,
+  getProjectStats,
   listProjectsForUser,
   listShareLinks,
   removeMember,
@@ -62,7 +63,13 @@ projects.get("/", async (c) => {
   const user = c.get("user");
   const db = c.get("db");
   const list = await listProjectsForUser(db, user.id);
-  return c.json(list);
+  const enriched = await Promise.all(
+    list.map(async (p) => {
+      const stats = await getProjectStats(db, p.id);
+      return { ...p, ...stats };
+    }),
+  );
+  return c.json(enriched);
 });
 
 // POST /api/projects/:id/members
