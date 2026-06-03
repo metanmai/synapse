@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -160,6 +161,28 @@ export class CloudSyncer {
 
   private async createConversation(projectId: string, session: CapturedSession): Promise<string | null> {
     try {
+      // Build working_context with cwd and optional git_origin_url
+      const workingContext: Record<string, string> = {
+        tool: session.tool,
+        projectPath: session.projectPath,
+        cwd: session.projectPath,
+        capturedSessionId: session.id,
+      };
+
+      try {
+        const url = execSync("git config --get remote.origin.url", {
+          cwd: session.projectPath,
+          stdio: ["ignore", "pipe", "ignore"],
+        })
+          .toString()
+          .trim();
+        if (url) {
+          workingContext.git_origin_url = url;
+        }
+      } catch {
+        // Not a git repo or no remote — omit git_origin_url
+      }
+
       const res = await fetch(`${API_URL}/api/conversations`, {
         method: "POST",
         headers: this.authHeaders(),
@@ -168,11 +191,7 @@ export class CloudSyncer {
           title: `[${session.tool}] ${session.projectPath.split("/").pop() ?? "session"} — ${session.startedAt}`,
           fidelity_mode: "full",
           system_prompt: null,
-          working_context: {
-            tool: session.tool,
-            projectPath: session.projectPath,
-            capturedSessionId: session.id,
-          },
+          working_context: workingContext,
         }),
       });
 

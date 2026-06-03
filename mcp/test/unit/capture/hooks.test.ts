@@ -134,12 +134,25 @@ describe("Capture Hooks", () => {
       expect(cmd).toContain("synapsesync-mcp brief");
     });
 
-    it("chains brief after daemon-start with && operator", () => {
+    it("chains brief after daemon-start subshell with ; operator", () => {
       installHooks(settingsPath);
       const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
       const cmd = settings.hooks.SessionStart[0].hooks[0].command as string;
-      // The && ensures brief only runs if daemon-start succeeds
-      expect(cmd).toMatch(/&&\s*synapsesync-mcp brief/);
+      // The ; ensures brief runs regardless of whether the daemon subshell exited 0 or started fresh
+      expect(cmd).toMatch(/\)\s*;\s*synapsesync-mcp brief/);
+    });
+
+    it("brief still runs when daemon-start takes the exit-0 path", () => {
+      installHooks(settingsPath);
+      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+      const cmd = settings.hooks.SessionStart[0].hooks[0].command as string;
+      // 1. The idempotency branch with exit 0 is still present
+      expect(cmd).toContain("exit 0");
+      // 2. The brief invocation is still present
+      expect(cmd).toContain("synapsesync-mcp brief");
+      // 3. The exit 0 lives inside a subshell (...) and brief is OUTSIDE it,
+      //    separated by ") ;" — so exit 0 only kills the subshell, not the brief
+      expect(cmd).toMatch(/\)\s*;\s*synapsesync-mcp\s+brief/);
     });
   });
 
