@@ -1,0 +1,47 @@
+# Force LF line endings on checkout for ALL platforms.
+#
+# Without this, git on Windows defaults to `core.autocrlf=true` which
+# converts LF→CRLF on checkout. Biome's formatter (configured for LF)
+# then sees CRLF on every line as a format diff — surfaces as 400+
+# spurious lint errors on the windows-latest runner.
+#
+# `text=auto eol=lf` tells git: detect text files automatically, but
+# always check them out with LF. Binary files (PNGs, fonts, etc.) are
+# unaffected — git still treats them as binary.
+* text=auto eol=lf
+
+# Be explicit about line endings for shell scripts so they remain
+# executable on Linux when checked out on Windows.
+*.sh text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+Dockerfile* text eol=lf
+
+# PowerShell scripts are platform-specific to Windows; CRLF is the
+# native expectation there even though many editors handle both.
+# Keeping them on LF anyway means no mixed-endings inside one repo,
+# and PowerShell 5.1+ reads LF files correctly.
+*.ps1 text eol=lf
+
+# Explicitly mark binary so git doesn't try to "fix" them.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.tgz binary
