@@ -742,7 +742,7 @@ suite("Full User Journey", () => {
       const { status, data } = await api("GET", `/api/conversations/${CONVERSATION_ID}/export/raw`, KEY);
       expect(status).toBe(200);
       expect(data.format).toBe("raw");
-      expect(data.messages.length).toBe(3);
+      expect(data.data.length).toBe(3);
     });
 
     it("imports from OpenAI format", async () => {
@@ -758,7 +758,8 @@ suite("Full User Journey", () => {
       });
       if (status === 403) return;
       expect(status).toBe(201);
-      expect(data.messageCount).toBe(3);
+      expect(data.id).toBeTruthy();
+      expect(data.title).toBe("Imported from ChatGPT");
     });
 
     it("soft-deletes conversation", async () => {
