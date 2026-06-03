@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { readUserIdFromConfig } from "../capture/identity.js";
 import { runPostToolUseHook } from "../hooks/post-tool-use.js";
@@ -47,11 +48,24 @@ export async function dispatchHook(kind: string, payload: AnyHookPayload): Promi
  *   SessionEnd        → { session_id, cwd, reason }
  *   SubagentStop      → { session_id, cwd, subagent_type }
  */
-export async function readHookPayloadFromStdin(): Promise<AnyHookPayload> {
+export async function readHookPayloadFromStdin(): Promise<AnyHookPayload | null> {
   let raw = "";
   for await (const chunk of process.stdin) raw += chunk;
   const parsed = JSON.parse(raw);
   const cwd: string = canonicalCwd(parsed.cwd ?? process.cwd());
+
+  // Short-circuit BEFORE shelling out to git or emitting any event when the
+  // cwd is ephemeral (agent worktree, scratch dir, marker opt-out, env opt-out).
+  // Without this guard the backend's findOrCreateProjectByGit happily creates
+  // a project per throwaway cwd, polluting the user's dashboard.
+  const skip = shouldSkipDispatch(cwd, process.env);
+  if (skip.skip) {
+    if (process.env.SYNAPSE_DEBUG === "1") {
+      process.stderr.write(`synapse hook skipped: ${skip.reason}\n`);
+    }
+    return null;
+  }
+
   // Derive a cwd-hash placeholder; the backend's auto-create flow rewrites
   // it to a canonical UUID using `git_basename` as the project name.
   const project_id = hashCwd(cwd);
@@ -71,6 +85,110 @@ export async function readHookPayloadFromStdin(): Promise<AnyHookPayload> {
     git_remote_url,
     stdout: process.stdout,
   };
+}
+
+/**
+ * Predicate: should the daemon skip event emission for this cwd?
+ *
+ * Returns `{ skip: true, reason }` when ANY of these hold:
+ *   (a) cwd is under `~/.claude/worktrees/` — Claude Code's agent-isolation
+ *       namespace; agent worktrees are throwaway and capturing them creates
+ *       dashboard pollution.
+ *   (b) cwd is under `$TMPDIR` / `/tmp/` / `/private/tmp/` — scratch dirs
+ *       from tests, spikes, throwaway experiments. macOS aliases `/tmp` →
+ *       `/private/tmp` so we list both.
+ *   (c) a `.synapse-skip` marker file exists in cwd or any ancestor up to
+ *       (and including) the user's home directory — per-dir opt-out.
+ *   (d) `SYNAPSE_SKIP_DISPATCH=1` env var is set — scripted opt-out for E2E
+ *       test runners and CI.
+ *
+ * Pure: takes `cwd` + `env`. `opts` exists only for DI in unit tests (override
+ * homeDir, tmpDir, markerFile, fileExists). No side effects.
+ */
+export interface SkipDispatchOpts {
+  homeDir?: string;
+  tmpDir?: string;
+  // Full override of the (b)-branch prefix list. When set, `tmpDir` is ignored
+  // for the purposes of building the default list. Pass `[]` to disable the
+  // (b) check entirely (useful in tests whose sandbox lives under a real
+  // tmp prefix).
+  tmpPrefixes?: string[];
+  markerFile?: string;
+  fileExists?: (p: string) => boolean;
+}
+
+export type SkipDispatchResult = { skip: true; reason: string } | { skip: false };
+
+export function shouldSkipDispatch(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  opts: SkipDispatchOpts = {},
+): SkipDispatchResult {
+  // (d) env var — cheapest check, do first.
+  if (env.SYNAPSE_SKIP_DISPATCH === "1") {
+    return { skip: true, reason: "SYNAPSE_SKIP_DISPATCH=1" };
+  }
+
+  const homeDir = opts.homeDir ?? os.homedir();
+  const tmpDir = opts.tmpDir ?? env.TMPDIR ?? "/tmp";
+  const markerFile = opts.markerFile ?? ".synapse-skip";
+  const fileExists = opts.fileExists ?? ((p) => fs.existsSync(p));
+
+  const normCwd = path.resolve(cwd);
+
+  // (a) Claude Code agent worktree paths.
+  const worktreesDir = path.resolve(homeDir, ".claude", "worktrees");
+  if (isPathStrictlyUnder(normCwd, worktreesDir)) {
+    return { skip: true, reason: `cwd under ${worktreesDir}` };
+  }
+
+  // (b) tmpdir / /tmp / /private/tmp. Check all of these because $TMPDIR
+  // resolves to /var/folders/... on macOS while /tmp is a separate symlink
+  // target — we want to catch any of them. `tmpPrefixes` is overridable
+  // for testability.
+  const tmpPrefixes = opts.tmpPrefixes ?? [
+    path.resolve(tmpDir),
+    "/tmp",
+    "/private/tmp",
+    "/private/var/folders",
+    "/var/folders",
+  ];
+  for (const prefix of tmpPrefixes) {
+    if (isPathStrictlyUnder(normCwd, prefix)) {
+      return { skip: true, reason: `cwd under ${prefix}` };
+    }
+  }
+
+  // (c) Marker file walk: cwd → parent → ... → home (inclusive). Stop at
+  // home so a stray marker in `/` or `/Users` doesn't silently disable
+  // everything for the entire user.
+  const stopAt = path.resolve(homeDir);
+  let cur = normCwd;
+  // Cap the loop in case of unusual filesystems / symlink cycles.
+  for (let i = 0; i < 64; i++) {
+    if (fileExists(path.join(cur, markerFile))) {
+      return { skip: true, reason: `${markerFile} marker found in ${cur}` };
+    }
+    if (cur === stopAt) break;
+    const parent = path.dirname(cur);
+    if (parent === cur) break; // hit filesystem root before reaching home
+    cur = parent;
+  }
+
+  return { skip: false };
+}
+
+/**
+ * True iff `child` is strictly the same as `parent` or a path under it.
+ * Uses `path.relative` so `/tmp` does NOT match `/tmpfoo` (relative would be
+ * `../tmpfoo`, starting with `..`).
+ */
+function isPathStrictlyUnder(child: string, parent: string): boolean {
+  const rel = path.relative(parent, child);
+  if (rel === "") return true; // same path
+  if (rel.startsWith("..")) return false;
+  if (path.isAbsolute(rel)) return false;
+  return true;
 }
 
 /**

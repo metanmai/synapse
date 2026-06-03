@@ -205,6 +205,10 @@ export async function runHook(args: string[]): Promise<void> {
   }
   try {
     const payload = await readHookPayloadFromStdin();
+    // shouldSkipDispatch (in hook-dispatch.ts) returns null payload for
+    // ephemeral cwds — agent worktrees, $TMPDIR scratch, .synapse-skip
+    // marker, SYNAPSE_SKIP_DISPATCH=1. Exit cleanly without dispatching.
+    if (!payload) return;
     await dispatchHook(kind, payload);
   } catch (err) {
     // Hooks must never break Claude Code — log and exit 0.
