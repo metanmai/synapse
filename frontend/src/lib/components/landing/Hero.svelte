@@ -36,7 +36,6 @@ onMount(() => {
         and every AI tool persistent memory across sessions.
       </p>
       <div class="hero-actions">
-        <a href="#setup" class="hero-cta">Set up in 30 seconds</a>
         <a href="#how-it-works" class="hero-secondary">See how it works</a>
       </div>
     </div>
