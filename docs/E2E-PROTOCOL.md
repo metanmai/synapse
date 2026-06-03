@@ -58,12 +58,13 @@ None of these were caught by 437 passing unit tests. **Unit tests verify code, E
 Concrete stages, in order:
 
 1. **Install** — CLI present, daemon healthy, hooks wired in `~/.claude/settings.json`.
-2. **Cold cwd SessionStart** — opening Claude in a never-before-seen repo. Hook returns a bare brief (no handoff yet — correct fallback).
-3. **Session capture** — `claude -p` runs, daemon syncs to backend, backend auto-routes the session to a project by `git_remote_url`.
+2. **Cold cwd SessionStart** — opening a session in a never-before-seen repo. Hook returns a bare brief (no handoff yet — correct fallback).
+3. **Session capture** (UNIVERSAL) — the harness-agnostic LLM driver (`scripts/e2e-llm-driver.mjs`) makes a real Anthropic API call routed through the Synapse proxy. The proxy intercepts, the daemon syncs to backend, the backend auto-routes the session to a project by `git_remote_url`. **No `claude -p` required** — works on macOS, Linux, Windows. Pre-2026-06-03 versions of this stage used `spawnSync("claude", ["-p", prompt])` which only worked on macOS because Linux/WSL2 doesn't write session files.
 4. **Message integrity** — every prompt the user typed lands in `conversation_messages` table verbatim.
 5. **Fast-mode SessionStart** — second hook fire on the same cwd returns in <5s, hits the project-map cache.
-6. **Background handoff** — `claude -p` background recompute completes, posts `handoff_markdown` to backend, captures the session content.
-7. **Recall (the critical test)** — a NEW `claude -p` session opens with the brief, asks for facts only the prior session knew, and answers correctly FROM the brief.
+6. **Background handoff** — server-side recompute completes (uses `claude -p --no-session-persistence` on the daemon's machine; doesn't depend on session file persistence), posts `handoff_markdown` to backend, captures the session content.
+7. **Recall integration test** (Claude-Code-specific, SOFT-SKIPS without claude) — a NEW `claude -p` session opens with the brief, asks for facts only the prior session knew, and answers correctly FROM the brief. Tests the SessionStart hook protocol → brief injection chain. Skips with clear message when claude isn't on PATH.
+7b. **Brief content check** (UNIVERSAL) — `/api/projects/:id/brief` returns content containing the test phrase. Catches "brief generation broken" without needing claude in the loop. Runs on every OS regardless of claude availability.
 8. **Insights roundtrip** — `save_insight` writes, `list_insights` reads back the same record.
 9. **CLI commands** — `synapsesync status`, `stats`, etc. return non-error output.
 
@@ -85,8 +86,9 @@ If any chain script fails, a real user will hit a corresponding failure in produ
 
 ## What it costs
 
-- **Time:** ~5-8 minutes per run with `claude` on PATH; ~5-6 minutes when proxy Layer 5/7 scripts soft-skip.
-- **Tokens:** ~$0.01-0.05 (happy-flow's 3 `claude -p` calls + 1 server-side compact via claude-haiku). Proxy Layer 5/7 add ~$0.005 each when they run; adapter-roundtrip + Layer 9 lifecycle use fixtures + local port assertions, $0.
+- **Time:** ~5-8 minutes per run with `claude` on PATH; ~5-6 minutes when claude is missing (Stage 7 soft-skips, proxy Layer 5/7 scripts soft-skip).
+- **Tokens:** ~$0.01-0.05 (happy-flow's 1 universal-driver Anthropic call + 1 server-side compact via claude-haiku + 1 Stage-7 `claude -p` if installed). Proxy Layer 5/7 add ~$0.005 each when they run; adapter-roundtrip + Layer 9 lifecycle use fixtures + local port assertions, $0.
+- **Prerequisites:** `curl` on PATH (universal), `ANTHROPIC_API_KEY` in env (driver makes a real API call), Synapse proxy installed + enabled (`~/.synapse/proxy/ca.pem` present), Synapse API key configured. Optional: `claude` on PATH for Stage 7's integration test.
 - **Backend side effects:** Creates and deletes test projects named `synapse-e2e-<timestamp>` (happy-flow) and `e2e-roundtrip-<timestamp>-{cursor,codex,copilot}` (adapter-roundtrip). Cleanup runs even on failure.
 - **Local side effects:** Lifecycle E2E uses `SYNAPSE_HOME=mktemp_dir` + `SYNAPSE_PROXY_PORT=17727` — never touches the user's real `~/.synapse/` or competes with the production daemon on port 7727.
 
