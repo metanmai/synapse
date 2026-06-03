@@ -1,0 +1,6 @@
+{"type":"session.start","data":{"cwd":"/Users/test/copilot-project"},"id":"evt_001","timestamp":"2026-04-02T11:00:00Z","parentId":null}
+{"type":"user.message","data":{"content":"add error handling to the API client"},"id":"evt_002","timestamp":"2026-04-02T11:00:05Z","parentId":"evt_001"}
+{"type":"assistant.message","data":{"content":"I'll examine the API client and add structured error handling."},"id":"evt_003","timestamp":"2026-04-02T11:00:10Z","parentId":"evt_001"}
+{"type":"tool.execution_start","data":{"name":"shell","input":{"cmd":"cat src/api/client.ts"}},"id":"evt_004","timestamp":"2026-04-02T11:00:11Z","parentId":"evt_003"}
+{"type":"tool.execution_complete","data":{"name":"shell","output":"export class ApiClient { /* ... */ }"},"id":"evt_005","timestamp":"2026-04-02T11:00:12Z","parentId":"evt_003"}
+{"type":"assistant.message","data":{"content":"Added try/catch with structured error logging on all fetch calls."},"id":"evt_006","timestamp":"2026-04-02T11:00:20Z","parentId":"evt_001"}

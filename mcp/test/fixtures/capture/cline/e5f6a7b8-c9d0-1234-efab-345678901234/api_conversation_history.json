@@ -1,0 +1,54 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "refactor the auth module to use bcrypt instead of plain SHA256"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I'll start by examining the current auth module."
+      },
+      {
+        "type": "tool_use",
+        "name": "read_file",
+        "id": "tool_001",
+        "input": { "path": "src/auth.ts" }
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "tool_result",
+        "tool_use_id": "tool_001",
+        "content": "import crypto from 'crypto';\nexport function hash(s) { return crypto.createHash('sha256').update(s).digest('hex'); }"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Replacing SHA256 with bcrypt now."
+      },
+      {
+        "type": "tool_use",
+        "name": "write_to_file",
+        "id": "tool_002",
+        "input": {
+          "path": "src/auth.ts",
+          "content": "import bcrypt from 'bcrypt';\nexport function hash(s) { return bcrypt.hashSync(s, 10); }"
+        }
+      }
+    ]
+  }
+]
