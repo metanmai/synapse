@@ -16,6 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { type HandoffLoopArgs, startHandoffLoop } from "../capture/daemon.js";
 import { synapseRoot } from "../capture/handoff-paths.js";
+import { readUserIdFromConfig } from "../capture/identity.js";
 
 const API_URL = "https://api.synapsesync.app";
 
@@ -31,7 +32,6 @@ export function runDaemon(opts: RunDaemonOpts = {}): () => void {
   const config = fs.existsSync(configPath)
     ? (JSON.parse(fs.readFileSync(configPath, "utf-8")) as {
         api_key?: string;
-        user_id?: string;
       })
     : {};
   const apiKey = config.api_key ?? process.env.SYNAPSE_API_KEY;
@@ -50,7 +50,7 @@ export function runDaemon(opts: RunDaemonOpts = {}): () => void {
     projects,
     api_key: apiKey,
     api_url: API_URL,
-    user_id: config.user_id,
+    user_id: readUserIdFromConfig(),
   });
 
   if (!opts._exitImmediately) {

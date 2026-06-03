@@ -17,6 +17,21 @@ beforeEach(() => {
   // process.cwd(). Isolate every test in the tmpdir so those files don't
   // leak into the mcp/ workspace.
   process.chdir(tmp);
+  // Phase 2 (Plan 02-02): runInit now calls fetchMe() before any disk write.
+  // Default-mock fetch with a sane /me response so existing tests don't need
+  // to know about the network call. Tests that exercise specific fetchMe
+  // behavior (fail-fast, persist user_id, idempotent) override with
+  // mockRejectedValueOnce / mockResolvedValueOnce / mockImplementation.
+  // Use mockImplementation so each call gets a fresh Response (Response.json()
+  // consumes the body, so reusing the same Response across calls throws).
+  vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+    Promise.resolve(
+      new Response(JSON.stringify({ user_id: "default-test-uuid", email: "test@example.com" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+  );
 });
 afterEach(() => {
   process.chdir(originalCwd);
@@ -193,11 +208,16 @@ describe("synapse init — IDENT-01 user_id bootstrap", () => {
   });
 
   it("is idempotent on re-run with same key — config.json contents stable (D-01)", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ user_id: "22222222-3333-4444-5555-666666666666", email: "a@b.co" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
+    // mockImplementation (not mockResolvedValue) so each call gets a fresh
+    // Response. Response.json() consumes the body, so reusing the same
+    // Response across two runInit calls would throw "non-JSON body".
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ user_id: "22222222-3333-4444-5555-666666666666", email: "a@b.co" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
     );
 
     await runInit({ api_key: "sk-idem", skip_service: true });

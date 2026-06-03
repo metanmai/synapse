@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { synapseRoot } from "../capture/handoff-paths.js";
 import { writeServiceFile } from "../capture/os-service.js";
+import { fetchMe, type MeResponse } from "./api.js";
 // Namespace import so vi.spyOn(editorIo, "ensureGitignore") in init.test.ts
 // intercepts the call site (ESM bindings are immutable from the importer's
 // perspective when destructured).
@@ -57,10 +58,16 @@ function hookDefs(bin: string): Record<string, { command: string; matcher?: stri
 }
 
 export async function runInit(a: InitArgs): Promise<void> {
+  // Phase 2 (IDENT-01, D-05): fail-fast on /me failure BEFORE any disk write.
+  // If the backend rejects the api_key (401) or we can't reach it (network),
+  // refuse to write a half-configured config.json. Caller (the wizard or
+  // direct CLI invocation) surfaces the error via process.exit(1).
+  const identity = await fetchMe(a.api_key);
+
   const bin = resolveBin();
   installHooks(bin);
   installSlashCommands(bin);
-  writeConfig(a.api_key);
+  writeConfig(a.api_key, identity);
 
   // BUG-04: write project-local `.mcp.json` so Claude Code in this cwd
   // can reach the Synapse MCP server. `writeMcpJson` is merge-aware (preserves
@@ -181,16 +188,22 @@ function installHooks(bin: string): void {
 
 interface SynapseConfig {
   api_key?: string;
+  user_id?: string;
+  email?: string;
 }
 
-function writeConfig(api_key: string): void {
+function writeConfig(api_key: string, identity: MeResponse): void {
   // Honor SYNAPSE_HOME (via synapseRoot) so init + daemon agree on where the
   // config lives. In production both resolve to ~/.synapse; in tests SYNAPSE_HOME
   // routes both to the isolated tmpdir.
+  // Phase 2 (D-01): persist user_id + email from /me so the daemon resolves the
+  // real public.users.id on every hook capture instead of the "default" placeholder.
   const dir = synapseRoot();
   fs.mkdirSync(dir, { recursive: true });
   const configPath = path.join(dir, "config.json");
   const existing: SynapseConfig = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, "utf-8")) : {};
   existing.api_key = api_key;
+  existing.user_id = identity.user_id;
+  existing.email = identity.email;
   fs.writeFileSync(configPath, JSON.stringify(existing, null, 2));
 }
