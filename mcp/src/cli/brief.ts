@@ -1,6 +1,6 @@
-import { API_URL } from "./config.js";
 import { formatBrief, formatWorkspaceBrief } from "./brief-format.js";
-import { resolveProject, type BackendResolveFn } from "./resolve-project.js";
+import { API_URL } from "./config.js";
+import { type BackendResolveFn, resolveProject } from "./resolve-project.js";
 
 interface SessionContextResponse {
   project_id: string;
@@ -44,8 +44,7 @@ export async function runBrief(_args: string[]): Promise<void> {
 
   const cwd = process.cwd();
 
-  const backendResolve: BackendResolveFn = (signals) =>
-    api("POST", "/api/projects/resolve", key, signals);
+  const backendResolve: BackendResolveFn = (signals) => api("POST", "/api/projects/resolve", key, signals);
 
   const resolved = await resolveProject(cwd, backendResolve);
   const now = new Date();
