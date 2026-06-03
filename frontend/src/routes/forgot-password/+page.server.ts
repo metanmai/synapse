@@ -15,7 +15,7 @@ export const actions: Actions = {
 
     const supabase = getSupabase(cookies);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${url.origin}/auth/callback?redirect=/account`,
+      redirectTo: `${url.origin}/auth/callback?type=recovery`,
     });
 
     if (error) return fail(400, { error: error.message, email });
