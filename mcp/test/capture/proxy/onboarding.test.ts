@@ -139,11 +139,14 @@ describe("dispatcher routing", () => {
       readOsRelease: () => null,
     });
 
-    // Install path: PowerShell Import-Certificate (avoids the Windows
-    // Root-store GUI confirmation dialog that hangs CI runners).
+    // Install path: PowerShell X509Store.Add via inline PEM-to-DER decode
+    // (avoids the Windows Root-store GUI confirmation dialog that hangs
+    // CI runners, AND works on Windows PowerShell 5.1 which can't load
+    // PEM via Import-Certificate).
     expect(powershell.calls).toHaveLength(1);
-    expect(powershell.calls[0][0]).toContain("Import-Certificate");
-    expect(powershell.calls[0][0]).toContain("Cert:\\CurrentUser\\Root");
+    expect(powershell.calls[0][0]).toContain("X509Store('Root','CurrentUser')");
+    expect(powershell.calls[0][0]).toContain("$store.Add($cert)");
+    expect(powershell.calls[0][0]).not.toContain("Import-Certificate");
     // Verify path: certutil -store (non-destructive query, no UI prompt).
     expect(certutil.calls).toHaveLength(1);
     expect(certutil.calls[0][0]).toBe("-store");
