@@ -8,7 +8,6 @@ import {
   deleteUser,
   findUserByEmail,
   listApiKeys,
-  resetUser,
 } from "../db/queries";
 import { authMiddleware, hashApiKey } from "../lib/auth";
 import {
@@ -386,36 +385,19 @@ account.post("/reset", async (c) => {
   const user = c.get("user");
   const db = c.get("db");
 
-  try {
-    await resetUser(db, user.id);
-  } catch (err) {
-    console.error("[account/reset] resetUser error:", err);
+  // Single RPC call — avoids Cloudflare Workers subrequest limit
+  const { error: rpcErr } = await db.rpc("reset_user_data", { p_user_id: user.id });
+  if (rpcErr) {
+    console.error("[account/reset] rpc error:", JSON.stringify(rpcErr));
+    return c.json({ error: `Reset failed: ${rpcErr.message}`, code: "RESET_ERROR" }, 500);
   }
 
-  try {
-    // Force-delete any remaining API keys
-    await db.from("api_keys").delete().eq("user_id", user.id);
-  } catch (err) {
-    console.error("[account/reset] api_keys delete error:", err);
-  }
+  // Create a fresh API key (reset_user_data already deleted all keys)
+  const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+  const apiKeyHash = await hashApiKey(apiKey);
+  await createApiKey(db, user.id, apiKeyHash, "default");
 
-  // Create a fresh API key with a timestamped label to avoid any conflicts
-  try {
-    const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
-    const apiKeyHash = await hashApiKey(apiKey);
-    const label = `default-${Date.now()}`;
-    const { data: keyRow, error: insertErr } = await db
-      .from("api_keys")
-      .insert({ user_id: user.id, key_hash: apiKeyHash, label })
-      .select()
-      .single();
-    if (insertErr) throw insertErr;
-    return c.json({ ok: true, api_key: apiKey });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : JSON.stringify(err);
-    console.error("[account/reset] insert api_key error:", msg);
-    return c.json({ error: `Reset failed to create new API key: ${msg}`, code: "RESET_KEY_ERROR" }, 500);
-  }
+  return c.json({ ok: true, api_key: apiKey });
 });
 
 // DELETE /api/account — delete the authenticated user and all their data
