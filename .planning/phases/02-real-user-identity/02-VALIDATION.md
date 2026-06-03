@@ -1,9 +1,9 @@
 ---
 phase: 2
 slug: real-user-identity
-status: draft
+status: wave_0_complete
 nyquist_compliant: false
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-05-20
 ---
 
@@ -52,14 +52,14 @@ created: 2026-05-20
 
 Test files that must exist (NEW) or be extended (EXISTING) **before** implementation begins. Source: `02-RESEARCH.md` § Wave 0 Gaps.
 
-- [ ] `backend/test/api/auth-me.test.ts` — **NEW** (~80 LOC). `/me` endpoint contract: 200 with `{user_id, email, tier}`, 401 on bad/missing auth, `user_id` matches `public.users.id` (not `auth.users.id`).
-- [ ] `mcp/test/cli/init.test.ts` — **EXTEND** (~6 cases). Fail-fast on `/me` rejection (D-05); successful `/me` writes `user_id` + `email` to `~/.synapse/config.json`; idempotent re-run.
-- [ ] `mcp/test/cli/hook-dispatch.test.ts` — **EXTEND** (~4 cases). Env-var precedence (`SYNAPSE_USER_ID` wins), config fallback, no-config fallback to placeholder, hashCwd determinism (regression guard).
-- [ ] `mcp/test/capture/handoff-sync.test.ts` — **EXTEND** (~5 cases). `runEagerPullCycle` writes `_pulled: true`, advances watermark, no-op on empty pull, clean error on 401/5xx, subsequent flush filters `_pulled` events.
-- [ ] `backend/test/api/events-batch-auto-create.test.ts` — **EXTEND** (~3 cases). Request body accepts `payload.git_remote_url`; cwd_<hash> with `git_remote_url` still resolves; `git_basename`-only path still works (regression).
-- [ ] `mcp/test/capture/handoff-brief.test.ts` — **EXTEND** (~3 cases). D-09: "Your last activity" when device_id matches; hostname-suffix when device_id differs but user_id matches; existing other-user line untouched.
-- [ ] `mcp/test/e2e/handoff.e2e.test.ts` — **EXTEND** (~1 describe block). Machine-A captures + flushes; "machine-B" (fresh tmpdir, same user_id, different device_id) inits + eager-pulls + SessionStart's brief contains machine-A focus + hostname.
-- [ ] `backend/test/api/projects-merge.test.ts` — **NEW** (~60 LOC). **DEFERRED behind `/gsd:ui-phase 2`** — owner-role enforcement on both source + target, RPC result, activity-log entry.
+- [x] `backend/test/api/auth-me.test.ts` — **NEW** (5 tests, 3 skipped — live-DB contracts). Structural auth-gating PASS today; 200+body shape, public.users.id contract, invalid Bearer all .skip'd per existing convention (SUPABASE_URL not in test env). Plan 02-01 T1 (`9b00670`).
+- [x] `mcp/test/cli/init.test.ts` — **EXTEND** (3 new RED cases). All 3 fail under vitest today (RED): fetchMe-before-disk-write, user_id+email persist, idempotent re-run. Plan 02-01 T2 (`549bc6e`).
+- [x] `mcp/test/cli/hook-dispatch.test.ts` — **EXTEND** (1 new PASS + 3 SKIP). Env-var precedence regression guard PASSES today; env > config, config > placeholder, placeholder fallback all .skip'd (require Plan 02-02's identity helper). Plan 02-01 T2 (`549bc6e`).
+- [x] `mcp/test/capture/handoff-sync.test.ts` — **EXTEND** (2 new RED + 3 SKIP). RED: runFlushCycle filters _pulled events + locally-captured still flush. Skipped: runEagerPullCycle behaviors (function doesn't exist until Plan 02-04). Plan 02-01 T2 (`549bc6e`).
+- [x] `backend/test/api/events-batch-auto-create.test.ts` — **EXTEND** (3 new PASS, regression guards). Structural: payload schema accepts git_remote_url (no 400), cwd_<hash> with URL routes (no 404), git_basename-only path regression. Live-DB matcher behavior covered by e2e test below. Plan 02-01 T2 (`549bc6e`).
+- [x] `mcp/test/capture/handoff-brief.test.ts` — **EXTEND** (2 new PASS + 1 RED). Same-device + different-user PASS today (regression); same-user different-device hostname surfacing is RED (Plan 02-03). Plan 02-01 T2 (`549bc6e`).
+- [x] `mcp/test/e2e/handoff.e2e.test.ts` — **EXTEND** (1 new describe block, 1 RED test). Two-tmpdir same-user different-device flow; brief on machine B asserts hostname "laptop-A" AND handoff text round-trip — RED until BOTH Plan 02-03 (renderer) AND Plan 02-04 (eager-pull) land. Plan 02-01 T3 (`09ca68d`).
+- [x] `backend/test/api/projects-merge.test.ts` — **NEW** (8 tests, 5 skipped — live-DB). Structural auth-gating PASS today (no-auth → 401 across body / UUID-shaped path / no-body variations); ownership 403s, self-merge 409, activity_log all .skip'd. Plan 02-01 T1 (`9b00670`).
 
 **Framework install:** None. vitest already present in all 4 workspaces.
 
