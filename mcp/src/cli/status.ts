@@ -40,8 +40,9 @@ export async function runStatus(): Promise<string> {
 
 export async function runDoctor(): Promise<string> {
   const lines: string[] = [];
+  // runStatus() already ends with "Projects tracked: N." — don't print the
+  // count a second time (it read as a confusing duplicate).
   lines.push(await runStatus());
-  lines.push(`Projects tracked: ${listProjects().length}`);
   for (const p of listProjects()) {
     const eventsPath = path.join(synapseRoot(), "projects", p, "events.jsonl");
     const wmPath = path.join(synapseRoot(), "projects", p, ".watermark");
@@ -63,7 +64,13 @@ function countQueued(events: string, watermark: string): number {
   if (!fs.existsSync(watermark)) return all.length;
   const wm = fs.readFileSync(watermark, "utf-8").trim();
   return all.filter((line) => {
-    const event: { event_id: string } = JSON.parse(line);
-    return event.event_id > wm;
+    try {
+      const event: { event_id: string } = JSON.parse(line);
+      return event.event_id > wm;
+    } catch {
+      // A single corrupt/partial line (interrupted append) must not crash
+      // `doctor` — skip it; the daemon's append is atomic per line anyway.
+      return false;
+    }
   }).length;
 }
