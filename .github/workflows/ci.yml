@@ -277,3 +277,119 @@ jobs:
         # as code-page-dependent and misparses UTF-8 chars as mojibake.
         shell: pwsh
         run: ./scripts/e2e-windows/e2e-proxy-install.ps1
+
+  happy-flow-e2e:
+    # The merge-gate test (`npm run test:e2e`) — the same 5-script suite
+    # developers run locally before merging — pinned to BOTH Linux and
+    # Windows. Proves the universal driver + curl-via-proxy + recall
+    # paths actually work on every supported OS, not just whichever
+    # machine the dev happened to use.
+    #
+    # The scripts are agent-agnostic: Stage 3 + Stage 7 use the universal
+    # LLM driver (direct-API curl with ANTHROPIC_API_KEY), proxy-layer5 +
+    # proxy-source use curl through TLS-MITM. No `claude not on PATH →
+    # exit 0` soft-skip in any of them.
+    #
+    # Graceful skip pattern: when secrets aren't configured (tanmain/
+    # synapse), the job logs a notice and exits green. The canonical run
+    # is on metanmai/synapse where SYNAPSE_E2E_API_KEY + ANTHROPIC_API_KEY
+    # are configured.
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: prod
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        # Git Bash on Windows; same shell on Linux. Lets one set of
+        # commands handle both runners without per-OS branches.
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Match the rest of the e2e matrix — Node 24 for native .ts
+          # type-stripping on Windows.
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Check secrets are configured
+        # Mirrors the `e2e` job's pattern: skip-green when keys are absent
+        # (tanmain), run-validated when present (metanmai).
+        id: check
+        env:
+          SYNAPSE_E2E_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$SYNAPSE_E2E_API_KEY" ] || [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::notice::happy-flow-e2e skipped — SYNAPSE_E2E_API_KEY / ANTHROPIC_API_KEY not configured. Mirror to metanmai/synapse for the validated run."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build mcp
+        if: steps.check.outputs.configured == 'true'
+        run: npm run build --workspace=mcp
+
+      - name: Enable proxy (starts the daemon)
+        # `capture proxy enable` writes proxy-config.json + spawns a fresh
+        # detached daemon. SYNAPSE_API_KEY is exported on the step so the
+        # spawned daemon inherits it (it reads the env at startup before
+        # falling back to ~/.synapse/config.json). One step kicks off both
+        # the daemon and the proxy worker — no separate "start daemon"
+        # bash spawn needed (which would create a non-detached child the
+        # next step's restartDaemon would just bounce anyway).
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SYNAPSE_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+        run: |
+          mkdir -p "$HOME/.synapse"
+          node mcp/dist/index.js capture proxy enable
+
+      - name: Wait for daemon healthcheck
+        # Daemon writes ~/.synapse/daemon.healthcheck on its supervisor
+        # loop (~1s cadence). The detached spawn from `proxy enable`
+        # returns immediately; we need to wait for the proxy worker to
+        # actually bind 7727 before the merge gate runs. 30s budget is
+        # generous; tighter would mask a slow-start regression.
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          for i in $(seq 1 30); do
+            if [ -f "$HOME/.synapse/daemon.healthcheck" ]; then
+              echo "Daemon healthcheck present after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Daemon never wrote healthcheck file after 30s"
+          cat "$HOME/.synapse/capture.log" 2>/dev/null || true
+          exit 1
+
+      - name: Run merge gate (npm run test:e2e)
+        # Stage 3 + Stage 7 use direct-API mode via ANTHROPIC_API_KEY —
+        # no claude/crush binary required. proxy-layer5 + proxy-source
+        # use curl. proxy-lifecycle manages its own daemons.
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SYNAPSE_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npm run test:e2e
+
+      - name: Dump daemon log on failure
+        if: failure() && steps.check.outputs.configured == 'true'
+        run: |
+          echo "--- ~/.synapse/capture.log (last 200 lines) ---"
+          tail -200 "$HOME/.synapse/capture.log" 2>/dev/null || true
+          echo "--- ~/.synapse/daemon.log (last 200 lines) ---"
+          tail -200 "$HOME/.synapse/daemon.log" 2>/dev/null || true
+          echo "--- ~/.synapse/proxy-config.json ---"
+          cat "$HOME/.synapse/proxy-config.json" 2>/dev/null || true
