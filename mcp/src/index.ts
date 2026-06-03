@@ -8,20 +8,9 @@ import { z } from "zod";
 
 import * as clack from "@clack/prompts";
 import { runCapture } from "./capture/cli.js";
-import { runBrief } from "./cli/brief.js";
-import {
-  runHook,
-  runRefresh,
-  runReset,
-  runStatus,
-  runTree,
-  runUninstall,
-  runUpgrade,
-  runWhoami,
-} from "./cli/commands.js";
+import { runTree } from "./cli/commands.js";
 import { API_URL } from "./cli/config.js";
-import { runInit } from "./cli/init.js";
-import { runStats } from "./cli/stats.js";
+import { HANDLERS, registerPrintHelp, runLegacyStatus } from "./cli/handlers.js";
 import { accent, bold, muted } from "./cli/theme.js";
 import { runWizard } from "./cli/wizard.js";
 
@@ -120,31 +109,16 @@ function readPackageVersion(): string {
   }
 }
 
-// Single source of truth for CLI subcommands.
-// Add a new command by adding one line here — no other edits needed.
-// The allow-list, dispatcher, and help menu all derive from this map.
-const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
-  brief: async (args) => runBrief(args),
-  wizard: async () => runWizard(readPackageVersion()),
-  help: async () => {
-    printHelp();
-  },
-  stats: async () => runStats(),
-  tree: async () => runTree(),
-  status: async () => runStatus(),
-  refresh: async () => runRefresh(),
-  upgrade: async () => runUpgrade(),
-  whoami: async () => runWhoami(),
-  capture: async (args) => runCapture(args),
-  hook: async (args) => runHook(args),
-  reset: async () => runReset(),
-  uninstall: async () => runUninstall(),
-  init: async (args) => {
-    const api_key = args[0] ?? "";
-    const skip_service = args.includes("--skip-service");
-    await runInit({ api_key, skip_service });
-  },
-};
+// Register the `wizard` handler — it lives in index.ts rather than handlers.ts
+// because it needs the local `readPackageVersion` helper (which reads the
+// package.json sitting next to this file via `import.meta.url`).
+HANDLERS.wizard = async () => runWizard(readPackageVersion());
+
+// Wire `help` (the printer is defined just below) into the dispatch table.
+// `printHelp` is a function declaration so it's hoisted — safe to reference
+// here. The registerPrintHelp indirection keeps `handlers.ts` free of
+// theme / banner dependencies.
+registerPrintHelp(() => printHelp());
 
 // --- CLI help ---
 
@@ -287,7 +261,7 @@ async function runMenu(): Promise<void> {
 
   switch (choice) {
     case "status":
-      await runStatus();
+      await runLegacyStatus();
       break;
     case "capture-start":
       await runCapture(["start"]);
