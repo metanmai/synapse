@@ -143,6 +143,13 @@ VALIDATION row mapping:
     4. Note the version published date; if newer than 7 days, prefer the previous stable version (per project preference — defensive against fresh-publish supply-chain risk).
   </how-to-verify>
   <resume-signal>Type "approved" and provide the verified version string (e.g., "approved, 10.53.1"), OR provide blocking issues (e.g., "blocked: package not in getsentry repo").</resume-signal>
+  <acceptance_criteria>
+    - Operator has captured the published `version` string for `@sentry/hono` from `npm view @sentry/hono` output on a non-proxied network (record in the resume signal).
+    - Operator has confirmed `repository` resolves to `github.com/getsentry/sentry-javascript` (same monorepo as `@sentry/cloudflare`).
+    - Operator has confirmed `license` is `MIT`.
+    - Operator has confirmed `npm view @sentry/hono scripts.postinstall` returns blank (no postinstall hook — supply-chain ASVS V14).
+    - This checkpoint is NEVER auto-approvable: `workflow.auto_advance` is ignored for blocking-human gates on `[ASSUMED]` packages.
+  </acceptance_criteria>
 </task>
 
 <task type="auto">
@@ -167,6 +174,14 @@ VALIDATION row mapping:
     <automated>grep -E '"@sentry/(cloudflare|hono)"' backend/package.json | wc -l</automated>
     <automated>cd backend && node -e "require('@sentry/cloudflare'); require('@sentry/hono'); console.log('ok')"</automated>
   </verify>
+  <acceptance_criteria>
+    - Both packages declared: `grep -cE '"@sentry/(cloudflare|hono)"' backend/package.json` returns exactly 2.
+    - `@sentry/cloudflare` pinned to `^10.53.1`: `grep -E '"@sentry/cloudflare"\\s*:\\s*"\\^10\\.53\\.1"' backend/package.json` exits 0.
+    - `@sentry/hono` pinned to the exact version from Task 1a (operator-supplied): `grep -E '"@sentry/hono"\\s*:\\s*"\\^?[0-9]+\\.[0-9]+\\.[0-9]+' backend/package.json` exits 0 (a semver string is present, not a tag like `latest`).
+    - Both packages load at runtime: `cd backend && node -e "require('@sentry/cloudflare'); require('@sentry/hono'); console.log('ok')"` prints exactly `ok`.
+    - No lockfile staged: `git status --porcelain backend/package-lock.json` outputs empty (per `feedback_no_lockfile.md`).
+    - `npm run lint && npm run typecheck` exit 0 from repo root.
+  </acceptance_criteria>
   <done>Both packages listed in `backend/package.json` dependencies with pinned versions; `node -e require(...)` from `backend/` prints `ok`; no `package-lock.json` staged for commit; `npm run lint && npm run typecheck` exit 0 from repo root.</done>
 </task>
 
@@ -206,6 +221,16 @@ VALIDATION row mapping:
   <verify>
     <automated>cd backend && npx vitest run test/lib/observability.test.ts</automated>
   </verify>
+  <acceptance_criteria>
+    - VALIDATION row: OBS-01 / "scrubPayload removes event.extra[k].payload from synapse-shaped event objects" → `cd backend && npx vitest run test/lib/observability.test.ts -t "removes event.extra"` exits 0.
+    - VALIDATION row: OBS-01 / "scrubPayload preserves stack traces and request metadata" → `cd backend && npx vitest run test/lib/observability.test.ts -t "preserves stack traces"` exits 0.
+    - VALIDATION row: OBS-01 / "scrubPayload returns the same event when no synapse-shaped data is attached" → `cd backend && npx vitest run test/lib/observability.test.ts -t "returns the same event"` exits 0.
+    - VALIDATION row: OBS-01 / "scrubPayload removes event.request.data and event.breadcrumbs[*].data.payload" → `cd backend && npx vitest run test/lib/observability.test.ts -t "removes event.request.data"` exits 0.
+    - `Env.SENTRY_DSN` declared: `grep -nE "SENTRY_DSN\\?:\\s*string" backend/src/lib/env.ts` returns exactly 1 hit.
+    - `reportError` exported: `grep -nE "^export function reportError\\(" backend/src/lib/observability.ts` returns exactly 1 hit.
+    - No `Sentry.init(` in observability.ts (middleware owns init): `grep -cE "Sentry\\.init\\(" backend/src/lib/observability.ts` returns 0.
+    - `npm run lint && npm run typecheck` exit 0 from repo root.
+  </acceptance_criteria>
   <done>All 4 OBS-01 scrubPayload rows in 01-VALIDATION.md "Per-Task Verification Map" flip from ⬜ to ✅; `Env` now has `SENTRY_DSN?: string`; `npm run lint && npm run typecheck` exit 0 from repo root.</done>
 </task>
 
@@ -244,8 +269,19 @@ VALIDATION row mapping:
     <automated>cd backend && npx vitest run test/lib/observability-wiring.test.ts</automated>
     <automated>cd backend && npx vitest run</automated>
     <automated>grep -nE "app\\.use\\(sentry\\(" backend/src/index.ts</automated>
-    <automated>grep -nv "^//" backend/wrangler.jsonc | grep -v '"SENTRY_DSN"' || true</automated>
+    <automated>grep -v "^//" backend/wrangler.jsonc | grep -E '"SENTRY_DSN"\s*:' | wc -l</automated>
   </verify>
+  <acceptance_criteria>
+    - VALIDATION row: OBS-01 (wiring) / "backend/src/index.ts calls app.use(sentry(...)) BEFORE CORS and any other middleware" → `cd backend && npx vitest run test/lib/observability-wiring.test.ts` exits 0.
+    - `app.use(sentry(` appears exactly once in `index.ts`: `grep -cE "app\\.use\\(sentry\\(" backend/src/index.ts` returns exactly 1.
+    - Sentry middleware is FIRST: the line number of the first `app.use(sentry(` match equals the line number of the first `app.use(` match. Verify: `[ "$(grep -nE 'app\\.use\\(sentry\\(' backend/src/index.ts | head -1 | cut -d: -f1)" = "$(grep -nE 'app\\.use\\(' backend/src/index.ts | head -1 | cut -d: -f1)" ]` exits 0.
+    - Defensive `Sentry.captureException(err)` present in onError: `grep -nE "Sentry\\.captureException\\(err\\)" backend/src/index.ts` returns at least 1 hit.
+    - `wrangler.jsonc` has no literal DSN: `grep -v '^[[:space:]]*//' backend/wrangler.jsonc | grep -cE '"SENTRY_DSN"\\s*:' ` returns 0 (the only place SENTRY_DSN appears outside comments is nowhere — the comment about it is fine, the literal value is forbidden).
+    - `nodejs_compat` still present: `grep -cE '"nodejs_compat"' backend/wrangler.jsonc` returns ≥ 1.
+    - SENTRY_DSN comment present in wrangler.jsonc: `grep -nE "//.*SENTRY_DSN.*wrangler secret put" backend/wrangler.jsonc` returns at least 1 hit.
+    - Full backend suite green: `cd backend && npx vitest run` exits 0.
+    - `npm run lint && npm run typecheck` exit 0 from repo root.
+  </acceptance_criteria>
   <done>The OBS-01 wiring row in 01-VALIDATION.md flips from ⬜ to ✅; full `backend` test suite green; `npm run lint && npm run typecheck` exit 0 from repo root; grep confirms `app.use(sentry(` appears in `backend/src/index.ts` and there is NO literal SENTRY_DSN value in `wrangler.jsonc`.</done>
 </task>
 
@@ -287,6 +323,7 @@ VALIDATION row mapping:
 - 5 RED tests turn GREEN (4 scrubPayload + 1 wiring).
 - Pre-install checkpoint executed and approved (Task 1a) — supply-chain risk mitigated for `@sentry/hono`.
 - No PII leakage path: scrubPayload + sendDefaultPii:false + DSN as secret all in place. ASVS V5 + V7 satisfied for this slice.
+- **No Phase-1 success criteria close in slice 1a for OBS-01.** Slice 1b's SC#4 (deliberate-throw → Sentry within 1 min) verifies on the CF-enabled machine and depends on this code landing first. Slice 1a delivers the code; slice 1b delivers the closure of SC#4.
 - Slice 1b deploy task can pick up directly: `wrangler secret put SENTRY_DSN` → `wrangler deploy` → SC#4 verification.
 </success_criteria>
 
@@ -295,4 +332,5 @@ Create `.planning/phases/01-stabilize-backend-observability/01-05-SUMMARY.md` wh
 - Update VALIDATION.md "Per-Task Verification Map" 5 OBS-01 rows from ⬜ → ✅.
 - Record the `@sentry/hono` version pinned (from Task 1a checkpoint).
 - List slice-1b handoff items: (a) run `wrangler secret put SENTRY_DSN <value>` on the CF machine; (b) `wrangler deploy`; (c) execute SC#4 deliberate-throw in events-batch.ts; (d) confirm Sentry receives the event within 1 min.
+- Note explicitly: **0 SCs closed in slice 1a; SC#4 closes only after slice 1b deploy + verification.**
 </output>

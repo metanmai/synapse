@@ -14,7 +14,9 @@ files_modified:
   - mcp/test/cli/status.test.ts
   - mcp/src/cli/util/mcp-command.ts
   - mcp/src/cli/util/daemon-supervisor.ts
+  - mcp/src/capture/daemon-backoff.ts
   - backend/src/lib/observability.ts
+  - mcp/src/capture/os-service.ts
 autonomous: true
 requirements: [BUG-02, BUG-03, BUG-04, OBS-01, BUGS-MD-12]
 
@@ -22,13 +24,15 @@ must_haves:
   truths:
     - "Every Wave 2 task has a failing test that pins down the expected behavior before production code is touched."
     - "No production source files in Wave 2 need to be created from scratch — the stubs already exist with the right exports."
+    - "`mcp/src/capture/os-service.ts` exports `LAUNCHD_LABEL` as the single source of truth for the launchd label; the plist template references it (no string duplication)."
+    - "`mcp/src/capture/daemon-backoff.ts` exports a pure `computeNextDelay(prevDelayMs, lastSucceeded)` helper so backoff math can be unit-tested without driving real or fake timers through `startHandoffLoop`'s setInterval calls."
   artifacts:
     - path: "mcp/test/cli/mcp-command.test.ts"
       provides: "RED tests for BUG-03 resolver branches (which / dist / npx fallback) + proxy probe timeout"
       contains: "resolveSynapseMcpCommand"
     - path: "mcp/test/capture/daemon-backoff.test.ts"
-      provides: "RED tests for BUGS.md #12 backoff schedule (base, doubling, cap, reset, jitter ±25%)"
-      contains: "useFakeTimers"
+      provides: "RED tests for BUGS.md #12 backoff schedule by testing the pure `computeNextDelay` helper directly (base, doubling, cap, reset, jitter ±25%) — NO fake timers, NO loop driving"
+      contains: "computeNextDelay"
     - path: "backend/test/lib/observability.test.ts"
       provides: "RED tests for OBS-01 scrubPayload (event.extra, breadcrumbs, request.data, no-op when no synapse shape)"
       contains: "scrubPayload"
@@ -41,22 +45,34 @@ must_haves:
     - path: "mcp/src/cli/util/daemon-supervisor.ts"
       provides: "Stub exporting checkSupervisor (throws Not Implemented)"
       exports: ["checkSupervisor"]
+    - path: "mcp/src/capture/daemon-backoff.ts"
+      provides: "Stub exporting `computeNextDelay(prevDelayMs, lastSucceeded): number` (throws Not Implemented). Plan 01-02 fills the body."
+      exports: ["computeNextDelay"]
     - path: "backend/src/lib/observability.ts"
       provides: "Stub exporting scrubPayload (throws Not Implemented)"
       exports: ["scrubPayload"]
+    - path: "mcp/src/capture/os-service.ts"
+      provides: "Named export `LAUNCHD_LABEL = 'app.synapsesync.daemon'`; plist template references it (no behavioral change)"
+      contains: "LAUNCHD_LABEL"
   key_links:
     - from: "Wave 2 production tasks"
       to: "Wave 1 test files"
       via: "vitest test discovery"
       pattern: "test files exist before production code change"
+    - from: "Plan 01-02 daemon-supervisor.ts"
+      to: "mcp/src/capture/os-service.ts (LAUNCHD_LABEL)"
+      via: "import — single source of truth"
+      pattern: "import.*LAUNCHD_LABEL.*os-service"
 ---
 
 <objective>
-Wave 0 (Nyquist) scaffolding for slice 1a. Create the 4 new test files referenced by 01-VALIDATION.md with at least one RED (failing) test each, extend 2 existing test files with placeholders for the new BUG-02 and BUG-04 branches, and stub the 3 new production files (`mcp-command.ts`, `daemon-supervisor.ts`, `observability.ts`) with their exported signatures so Wave 2 plans can import without TypeScript errors.
+Wave 0 (Nyquist) scaffolding for slice 1a. Create the 4 new test files referenced by 01-VALIDATION.md with at least one RED (failing) test each, extend 2 existing test files with placeholders for the new BUG-02 and BUG-04 branches, stub the 4 new production files (`mcp-command.ts`, `daemon-supervisor.ts`, `daemon-backoff.ts`, `observability.ts`) with their exported signatures so Wave 2 plans can import without TypeScript errors, AND lift the launchd label out of `mcp/src/capture/os-service.ts` as a named export `LAUNCHD_LABEL` so Wave 2's `daemon-supervisor.ts` can import a single source of truth.
 
-Purpose: Wave 2 (4 parallel implementation plans) cannot start until every failing test exists, per Nyquist validation contract. Stubs also let Wave 2 tasks edit a single file each without circular import / type-resolution churn.
+Purpose: Wave 2 (4 parallel implementation plans) cannot start until every failing test exists, per Nyquist validation contract. Stubs also let Wave 2 tasks edit a single file each without circular import / type-resolution churn. The `LAUNCHD_LABEL` export and the `computeNextDelay` extraction together eliminate two checker-flagged risks: shadowed-string drift and fake-timer pollution from preserved `setInterval` calls.
 
-Output: 6 test files (4 new + 2 extended) and 3 stub source files committed in a single batch. The pre-push hook runs once (per CONTEXT.md "pre-push hook fires ~25s") — `test` will report N failing tests; `lint && typecheck` must pass. We intentionally let the test step fail until Wave 2 lands.
+Output: 6 test files (4 new + 2 extended), 4 stub source files, and 1 surgical edit to `os-service.ts` (extract launchd label as named export, template-string the plist), all committed in a single batch. The pre-push hook runs once (per CONTEXT.md "pre-push hook fires ~25s") — `test` will report N failing tests; `lint && typecheck` must pass. We intentionally let the test step fail until Wave 2 lands.
+
+This plan is **scaffolding-only** — it has no user-observable outcome on its own. The Wave 2 plans (02, 03, 04, 05) deliver the user-observable outcomes for SC#2 (daemon status surfacing), SC#3 (wizard `.mcp.json`), and the code half of SC#4 (Sentry wiring).
 </objective>
 
 <execution_context>
@@ -79,7 +95,7 @@ Output: 6 test files (4 new + 2 extended) and 3 stub source files committed in a
 
 Existing test patterns to mirror:
 - `mcp/test/capture/handoff-sync.test.ts:7-16` — tmpdir + SYNAPSE_HOME override (beforeEach / afterEach)
-- `mcp/test/unit/browser-auth.test.ts:114-123` — vi.useFakeTimers + advanceTimersByTimeAsync
+- `mcp/test/unit/browser-auth.test.ts:114-123` — vi.useFakeTimers + advanceTimersByTimeAsync (NOTE: not used for daemon-backoff tests in this plan — see Task 2 behavior)
 - `mcp/test/cli/init.test.ts` — existing init test layout (extend, do not rewrite)
 - `mcp/test/cli/status.test.ts` — existing status test layout (extend)
 
@@ -92,39 +108,52 @@ Stub export shapes (Wave 2 plans depend on these):
     - `export type Supervisor = "launchd" | "systemd" | null`
     - `export interface SupervisorStatus { running: boolean; pid: number | null; supervisor: Supervisor }`
     - `export function checkSupervisor(): SupervisorStatus`
+- `mcp/src/capture/daemon-backoff.ts` MUST export:
+    - `export const BASE_DELAY_MS = 10_000`
+    - `export const MAX_DELAY_MS = 300_000`
+    - `export function computeNextDelay(prevDelayMs: number, lastSucceeded: boolean): number` — pure function, no side effects, no timers. Wave 2 Plan 01-02 fills the body and wires it into `startHandoffLoop`.
 - `backend/src/lib/observability.ts` MUST export:
     - `export function scrubPayload(event: unknown, hint?: unknown): unknown` (loose-typed in stub; Wave 2 imports `Event, EventHint` from `@sentry/cloudflare` and tightens)
 
-Phase-1 launchd label (single source of truth):
-- `mcp/src/capture/os-service.ts:26` — `app.synapsesync.daemon` (DO NOT re-define; import or re-export)
+Phase-1 launchd label (single source of truth — this plan establishes it):
+- BEFORE this plan: `mcp/src/capture/os-service.ts:26` contains the inline literal `<string>app.synapsesync.daemon</string>` inside the plist template (no named export).
+- AFTER Task 3 of this plan: `mcp/src/capture/os-service.ts` exports `export const LAUNCHD_LABEL = "app.synapsesync.daemon"` near the top of the file. The plist template at line 26 references it via template-literal interpolation: `<key>Label</key><string>${LAUNCHD_LABEL}</string>`. The literal string value `app.synapsesync.daemon` MUST be byte-identical pre/post edit so existing installs are unaffected. Wave 2 Plan 01-02 imports `LAUNCHD_LABEL` from `os-service.ts` (no re-definition).
 </interfaces>
 </context>
 
 <tasks>
 
 <task type="auto" tdd="true">
-  <name>Task 1: Stub the 3 new production files with typed exports</name>
-  <files>mcp/src/cli/util/mcp-command.ts, mcp/src/cli/util/daemon-supervisor.ts, backend/src/lib/observability.ts</files>
+  <name>Task 1: Stub the 4 new production files with typed exports</name>
+  <files>mcp/src/cli/util/mcp-command.ts, mcp/src/cli/util/daemon-supervisor.ts, mcp/src/capture/daemon-backoff.ts, backend/src/lib/observability.ts</files>
   <read_first>
     - .planning/phases/01-stabilize-backend-observability/01-CONTEXT.md (full)
-    - .planning/phases/01-stabilize-backend-observability/01-RESEARCH.md §"Pattern 3" (lines 317-390 — daemon-supervisor shape), §"Pattern 4" (lines 392-480 — mcp-command shape), §"Pattern 2" (lines 267-316 — scrubPayload shape)
+    - .planning/phases/01-stabilize-backend-observability/01-RESEARCH.md §"Pattern 3" (lines 317-390 — daemon-supervisor shape), §"Pattern 4" (lines 392-480 — mcp-command shape), §"Pattern 2" (lines 267-316 — scrubPayload shape), §"Pattern 5" (lines 482-566 — backoff math)
     - .planning/phases/01-stabilize-backend-observability/01-VALIDATION.md §"Wave 0 Requirements"
-    - mcp/src/capture/os-service.ts (lines 1-30) — read existing `LABEL` constant
     - mcp/src/cli/init.ts (full) — read existing util import conventions
     - .planning/codebase/CONVENTIONS.md (TypeScript conventions)
   </read_first>
   <behavior>
     - Each stub file compiles under `npm run typecheck` from repo root.
-    - Each exported function throws `new Error("not implemented — Wave 2")` when called at runtime so test files can `expect(fn).toThrow()` if needed during RED step.
+    - Each exported function throws `new Error("not implemented — Wave 2")` when called at runtime so test files can `expect(fn).toThrow()` if needed during RED step. EXCEPTION: `BASE_DELAY_MS` and `MAX_DELAY_MS` constants in `daemon-backoff.ts` have real values from Wave 0 (the tests assert against them); only `computeNextDelay` throws.
     - No new dependencies installed (mcp workspace gets zero new deps per RESEARCH §"Standard Stack"). `backend/src/lib/observability.ts` stub uses `unknown` for Sentry types — the import of `@sentry/cloudflare` types is deferred to Plan 05 to keep this plan dependency-free.
   </behavior>
   <action>
-    Create `mcp/src/cli/util/mcp-command.ts` exporting the `McpCommand` interface, a sync `resolveSynapseMcpCommand(apiKey)` that throws "not implemented — Wave 2", and an async `probeNpmRegistry(timeoutMs?)` that throws. Use the export shape from `<interfaces>` above; do not implement logic in this task. Create `mcp/src/cli/util/daemon-supervisor.ts` exporting the `Supervisor` type, `SupervisorStatus` interface, and a `checkSupervisor()` that throws "not implemented — Wave 2". Re-export the launchd label from `mcp/src/capture/os-service.ts` (per RESEARCH §"Runtime State Inventory" — single source of truth for `app.synapsesync.daemon`). Create `backend/src/lib/observability.ts` exporting a `scrubPayload(event, hint?)` stub that throws "not implemented — Wave 2"; types are `unknown` for now (Plan 05 will tighten to `Event` / `EventHint` from `@sentry/cloudflare` after the install task lands). No `Sentry.init` in this stub. Follow CONVENTIONS.md TS style (named exports, JSDoc-free, no `default export`).
+    Create `mcp/src/cli/util/mcp-command.ts` exporting the `McpCommand` interface, a sync `resolveSynapseMcpCommand(apiKey)` that throws "not implemented — Wave 2", and an async `probeNpmRegistry(timeoutMs?)` that throws. Use the export shape from `<interfaces>` above; do not implement logic in this task. Create `mcp/src/cli/util/daemon-supervisor.ts` exporting the `Supervisor` type, `SupervisorStatus` interface, and a `checkSupervisor()` that throws "not implemented — Wave 2". Create `mcp/src/capture/daemon-backoff.ts` exporting `BASE_DELAY_MS = 10_000`, `MAX_DELAY_MS = 300_000`, and a `computeNextDelay(prevDelayMs, lastSucceeded)` that throws "not implemented — Wave 2". Create `backend/src/lib/observability.ts` exporting a `scrubPayload(event, hint?)` stub that throws "not implemented — Wave 2"; types are `unknown` for now (Plan 05 will tighten to `Event` / `EventHint` from `@sentry/cloudflare` after the install task lands). No `Sentry.init` in this stub. Follow CONVENTIONS.md TS style (named exports, JSDoc-free, no `default export`).
   </action>
   <verify>
     <automated>npm run typecheck</automated>
   </verify>
-  <done>All 3 files exist; `npm run typecheck` exits 0 from repo root; `npm run lint` exits 0; runtime call of any stub throws "not implemented — Wave 2".</done>
+  <acceptance_criteria>
+    - File exists: `test -f mcp/src/cli/util/mcp-command.ts && grep -q 'export function resolveSynapseMcpCommand' mcp/src/cli/util/mcp-command.ts && grep -q 'export async function probeNpmRegistry' mcp/src/cli/util/mcp-command.ts`
+    - File exists: `test -f mcp/src/cli/util/daemon-supervisor.ts && grep -q 'export function checkSupervisor' mcp/src/cli/util/daemon-supervisor.ts`
+    - File exists: `test -f mcp/src/capture/daemon-backoff.ts && grep -qE 'export const BASE_DELAY_MS\s*=\s*10_?000' mcp/src/capture/daemon-backoff.ts && grep -qE 'export const MAX_DELAY_MS\s*=\s*300_?000' mcp/src/capture/daemon-backoff.ts && grep -q 'export function computeNextDelay' mcp/src/capture/daemon-backoff.ts`
+    - File exists: `test -f backend/src/lib/observability.ts && grep -q 'export function scrubPayload' backend/src/lib/observability.ts`
+    - `npm run typecheck` exits 0 from repo root
+    - `npm run lint` exits 0 from repo root
+    - Each exported function (except the two constants) throws when called: `cd mcp && node -e "require('./src/cli/util/mcp-command').resolveSynapseMcpCommand('x')"` exits non-zero with the "not implemented — Wave 2" message in stderr.
+  </acceptance_criteria>
+  <done>All 4 files exist; `npm run typecheck` exits 0 from repo root; `npm run lint` exits 0; runtime call of any stub function throws "not implemented — Wave 2".</done>
 </task>
 
 <task type="auto" tdd="true">
@@ -134,7 +163,6 @@ Phase-1 launchd label (single source of truth):
     - .planning/phases/01-stabilize-backend-observability/01-VALIDATION.md §"Per-Task Verification Map" (every row)
     - .planning/phases/01-stabilize-backend-observability/01-RESEARCH.md §"Code Examples" (lines 635-722)
     - mcp/test/capture/handoff-sync.test.ts (lines 1-50) — tmpdir test pattern
-    - mcp/test/unit/browser-auth.test.ts (lines 100-140) — fake timers pattern
     - mcp/test/cli/init.test.ts (full) — existing structure to extend
     - mcp/test/cli/status.test.ts (full) — existing structure to extend
     - .planning/codebase/TESTING.md
@@ -148,12 +176,12 @@ Phase-1 launchd label (single source of truth):
       - it("returns `npx synapsesync` last-resort when neither resolves") — mocks `execSync` throw + `fs.existsSync` false, asserts `command === "npx"` and `args === ["synapsesync"]`.
       - it("probeNpmRegistry returns false on 2s timeout") — mocks `fetch` to never resolve (returns a never-settling Promise), `vi.useFakeTimers()`, advances by 2001ms, asserts result is `false`.
 
-    `daemon-backoff.test.ts` cases (BUGS.md #12):
-      - it("starts at base delay 10s") — driven by mocked `runFlushCycle` returning OK, asserts next setTimeout delay is in [7500, 12500] (±25% jitter range around 10000).
-      - it("doubles on each failure: 10→20→40→80→160→300") — mocked flush throws, advance timers, assert delays stay within jittered band for each step.
-      - it("caps at MAX_DELAY 300s") — keeps throwing, asserts delay never exceeds 375000ms (300000 × 1.25 jitter upper bound).
-      - it("resets to base on first success") — fail twice then succeed, assert next delay is back in the 10s band.
-      - it("jitter is within ±25% of the current delay") — assert range explicitly with multiple runs.
+    `daemon-backoff.test.ts` cases (BUGS.md #12) — tests the **pure helper** `computeNextDelay(prevDelayMs, lastSucceeded): number`. NO fake timers, NO loop driving, NO `setInterval` collisions. Each case is a direct call → numeric assertion:
+      - it("returns BASE_DELAY_MS ± 25% jitter when lastSucceeded is true (any prevDelayMs)") — call `computeNextDelay(40_000, true)` 200 times (loop), assert every return ∈ [7500, 12500]; assert that across 200 samples both the min < 9000 and the max > 11000 (sanity check that jitter is actually applied, not a fixed value).
+      - it("doubles prevDelayMs when lastSucceeded is false") — `computeNextDelay(10_000, false)` returns ∈ [15000, 25000] (i.e., 20_000 ± 25%); `computeNextDelay(40_000, false)` returns ∈ [60000, 100000]; assert across 200 samples per case.
+      - it("caps at MAX_DELAY_MS (300s) ± 25% upper bound") — `computeNextDelay(200_000, false)` returns ∈ [225000, 375000] (i.e., min(400_000, 300_000) = 300_000 ± 25%); also assert with `computeNextDelay(1_000_000, false)` that the unjittered cap is 300_000 (max return < 375_001).
+      - it("resets to BASE_DELAY_MS band on success after a long backoff") — `computeNextDelay(300_000, true)` returns ∈ [7500, 12500].
+      - it("jitter is multiplicative ±25% — range [0.75x, 1.25x] of the pre-jitter target") — for prevDelayMs=80_000, lastSucceeded=false, target=160_000, assert across 500 samples that every return ∈ [120000, 200000], and that observed min < 130000 and observed max > 190000.
 
     `observability.test.ts` cases (OBS-01 scrubPayload):
       - it("removes event.extra[k].payload from synapse-shaped event objects") — input event with `extra: { ev: { event_id: "x", kind: "tool_used", payload: { secret: "y" } } }`, asserts output has no `.payload` key.
@@ -162,7 +190,14 @@ Phase-1 launchd label (single source of truth):
       - it("removes event.request.data and event.breadcrumbs[*].data.payload") — covers the Hono body-capture path.
 
     `observability-wiring.test.ts` (OBS-01 wiring assertion):
-      - it("backend/src/index.ts calls app.use(sentry(...)) BEFORE CORS") — reads `backend/src/index.ts` from disk as text, asserts the first occurrence of `app.use(` after the `const app = new Hono` line includes `sentry(`. Use `grep -v '^//' | grep -v '^ *\*'` style comment stripping to avoid false positives from commented examples (per Critical Rules / grep gate hygiene in planner role). This test is module-level — does not require importing the real app.
+      - it("backend/src/index.ts calls app.use(sentry(...)) BEFORE CORS") — reads `backend/src/index.ts` from disk as text. Strips comments using this exact algorithm (per WARNING #7 fix):
+          1. Strip block comments globally with the regex `/\*[\s\S]*?\*/` (replace with empty string).
+          2. Split the remaining text into lines. For each line, find the first non-whitespace character; if that character is `/` AND the next character is also `/`, drop the line entirely. Keep all other lines (including lines where `//` appears mid-line in a string literal — for this test that's an acceptable false positive because string literals containing `//` are vanishingly rare in `index.ts` and the assertion only cares about top-level `app.use(...)` patterns).
+          3. Join the kept lines back with `\n` to form `stripped`.
+      - Then assert two things:
+          (a) `stripped.includes("app.use(sentry(")` is true.
+          (b) The first occurrence index of `app.use(` in `stripped` equals the first occurrence index of `app.use(sentry(` in `stripped` — i.e., no other `app.use(...)` precedes `app.use(sentry(...)`.
+      - This test is module-level — does not require importing the real app.
 
     `init.test.ts` extensions (BUG-04) — append, do not rewrite:
       - it("writes a new .mcp.json in cwd with the synapse server entry") — uses existing tmpdir pattern with `SYNAPSE_HOME` override, also `process.chdir(tmp)`, runs `runInit({ api_key: "test" })`, asserts `${tmp}/.mcp.json` exists and contains `mcpServers.synapse`.
@@ -177,15 +212,65 @@ Phase-1 launchd label (single source of truth):
       - it("capture status output distinguishes 'supervised by launchd/systemd' from 'alive via PID'") — invokes the status command surface with the launchd-mock, asserts output substring "supervised by launchd".
   </behavior>
   <action>
-    Write all 4 new test files at the paths above, mirroring the tmpdir + fake-timer patterns from RESEARCH §"Code Examples". For the 2 existing files (`init.test.ts`, `status.test.ts`), APPEND new `describe(...)` blocks; do not modify existing tests. Each test imports from the Task-1 stub paths (`mcp/src/cli/util/mcp-command`, `mcp/src/cli/util/daemon-supervisor`, `backend/src/lib/observability`). All tests should reference behaviors verbatim from VALIDATION.md "Per-Task Verification Map" rows so the row → test mapping is one-line greppable. DO NOT skip any test (no `.skip` / `it.skip`); they MUST be RED until Wave 2 lands.
+    Write all 4 new test files at the paths above, mirroring the tmpdir + helper-import patterns from RESEARCH §"Code Examples". For `daemon-backoff.test.ts`, import `computeNextDelay`, `BASE_DELAY_MS`, `MAX_DELAY_MS` from `../../src/capture/daemon-backoff` and call the pure function directly — DO NOT use `vi.useFakeTimers`, DO NOT drive `startHandoffLoop` from this test (this is the WARNING #5 / BLOCKER #5 fix). For the 2 existing files (`init.test.ts`, `status.test.ts`), APPEND new `describe(...)` blocks; do not modify existing tests. Each test imports from the Task-1 stub paths (`mcp/src/cli/util/mcp-command`, `mcp/src/cli/util/daemon-supervisor`, `mcp/src/capture/daemon-backoff`, `backend/src/lib/observability`). All tests should reference behaviors verbatim from VALIDATION.md "Per-Task Verification Map" rows so the row → test mapping is one-line greppable. DO NOT skip any test (no `.skip` / `it.skip`); they MUST be RED until Wave 2 lands.
 
-    For `observability-wiring.test.ts`, read `backend/src/index.ts` as text via `fs.readFileSync`, strip line-comments (`//...`) and block-comments before grepping for `app.use(sentry(`, to avoid the comment-gate self-invalidation pitfall called out in the planner role's grep-gate hygiene rule.
+    For `observability-wiring.test.ts`, implement the comment-stripping algorithm specified in `<behavior>` step (a)/(b)/(c) literally. Do not invent a different stripping approach; the algorithm avoids the comment-gate self-invalidation pitfall.
   </action>
   <verify>
     <automated>cd mcp && npx vitest run test/cli/mcp-command.test.ts test/cli/status.test.ts test/cli/init.test.ts test/capture/daemon-backoff.test.ts 2>&1 | grep -E "(Tests|FAIL|pass)" | tail -5</automated>
     <automated>cd backend && npx vitest run test/lib/observability.test.ts test/lib/observability-wiring.test.ts 2>&1 | grep -E "(Tests|FAIL|pass)" | tail -5</automated>
   </verify>
+  <acceptance_criteria>
+    - VALIDATION row: BUG-03 / "resolves to absolute bin path when `which synapsesync` succeeds" → `cd mcp && npx vitest run test/cli/mcp-command.test.ts -t "resolves to absolute bin path when"` reports the test as FAILING (RED step).
+    - VALIDATION row: BUG-03 / "probeNpmRegistry returns false on 2s timeout" → same command + `-t "probeNpmRegistry returns false on 2s timeout"` reports FAILING.
+    - VALIDATION row: BUGS.md #12 / "Backoff starts at base delay (10s)" → `cd mcp && npx vitest run test/capture/daemon-backoff.test.ts -t "returns BASE_DELAY_MS"` reports FAILING.
+    - VALIDATION row: BUGS.md #12 / "Backoff doubles on each failure" → same + `-t "doubles prevDelayMs"` reports FAILING.
+    - VALIDATION row: BUGS.md #12 / "Backoff caps at MAX_DELAY (300s)" → same + `-t "caps at MAX_DELAY_MS"` reports FAILING.
+    - VALIDATION row: BUG-02 / "returns true when launchctl print reports the label loaded" → `cd mcp && npx vitest run test/cli/status.test.ts -t "returns true when launchctl print reports the label loaded"` reports FAILING.
+    - VALIDATION row: BUG-04 / "writes a new .mcp.json in cwd" → `cd mcp && npx vitest run test/cli/init.test.ts -t "writes a new .mcp.json"` reports FAILING.
+    - VALIDATION row: OBS-01 / "removes event.extra[k].payload" → `cd backend && npx vitest run test/lib/observability.test.ts -t "removes event.extra"` reports FAILING.
+    - VALIDATION row: OBS-01 (wiring) / "app.use(sentry(...)) BEFORE CORS" → `cd backend && npx vitest run test/lib/observability-wiring.test.ts` reports FAILING (the assertion will fail because `app.use(sentry(` isn't in `backend/src/index.ts` until Plan 05).
+    - All 6 test files exist on disk and are syntactically valid: `cd mcp && npx vitest run test/cli/mcp-command.test.ts test/capture/daemon-backoff.test.ts test/cli/init.test.ts test/cli/status.test.ts 2>&1 | grep -q "Tests"` exits 0 (vitest reports test counts rather than refusing to load); `cd backend && npx vitest run test/lib/observability.test.ts test/lib/observability-wiring.test.ts 2>&1 | grep -q "Tests"` exits 0.
+    - `npm run lint` exits 0 from repo root; `npm run typecheck` exits 0 from repo root.
+    - No `.skip` / `it.skip` / `describe.skip` strings appear in the new test files: `grep -rE "\.skip\b" mcp/test/cli/mcp-command.test.ts mcp/test/capture/daemon-backoff.test.ts backend/test/lib/observability.test.ts backend/test/lib/observability-wiring.test.ts | wc -l` returns 0.
+  </acceptance_criteria>
   <done>All 6 files exist; `npx vitest run` shows the expected failures (BUG-02: 4 failing, BUG-03: 4 failing, BUG-04: 4 failing, BUGS.md #12: 5 failing, OBS-01: 4 failing scrubPayload + 1 failing wiring = 22 RED tests total per VALIDATION.md map); `npm run lint && npm run typecheck` exit 0 from repo root.</done>
+</task>
+
+<task type="auto" tdd="false">
+  <name>Task 3: Extract LAUNCHD_LABEL as a named export from os-service.ts</name>
+  <files>mcp/src/capture/os-service.ts</files>
+  <read_first>
+    - mcp/src/capture/os-service.ts (full — currently the literal `app.synapsesync.daemon` is inlined in the plist template at line 26 inside `renderLaunchdPlist`; there is NO named export for the label as of the start of this plan)
+    - mcp/test/capture/os-service.test.ts (full — read what it asserts about the rendered plist so the template-literal swap doesn't regress any existing assertion)
+    - .planning/phases/01-stabilize-backend-observability/01-RESEARCH.md §"Runtime State Inventory" (single source of truth for the launchd label)
+  </read_first>
+  <behavior>
+    - Add `export const LAUNCHD_LABEL = "app.synapsesync.daemon";` near the top of `mcp/src/capture/os-service.ts` (just after the imports, above `ServiceTemplate`).
+    - Replace the inline literal `<string>app.synapsesync.daemon</string>` inside `renderLaunchdPlist`'s template literal (currently around line 26) with `<string>${LAUNCHD_LABEL}</string>`.
+    - The string value `app.synapsesync.daemon` MUST be byte-identical before and after the edit — `renderLaunchdPlist(...)` output for any given `ServiceTemplate` must produce the same plist text as today. The existing `mcp/test/capture/os-service.test.ts` assertions about the rendered plist MUST continue to pass.
+    - Name the constant `LAUNCHD_LABEL` (not `LABEL`) per BLOCKER 2 fix — more specific name avoids accidental shadowing when callers import it.
+    - This task is NOT TDD — it's a refactor that preserves observable behavior. The existing `os-service.test.ts` suite serves as the regression guard.
+  </behavior>
+  <action>
+    Edit `mcp/src/capture/os-service.ts`: insert `export const LAUNCHD_LABEL = "app.synapsesync.daemon";` directly after the import block (above the `ServiceTemplate` interface). In `renderLaunchdPlist`'s template literal, change the line `  <key>Label</key><string>app.synapsesync.daemon</string>` to `  <key>Label</key><string>${LAUNCHD_LABEL}</string>`. Do not modify any other line of the file. Do not change the `Label` key spelling, casing, or surrounding XML. Do not touch `renderSystemdUnit` or the install helpers.
+  </action>
+  <verify>
+    <automated>grep -nE '^export const LAUNCHD_LABEL = "app\.synapsesync\.daemon";' mcp/src/capture/os-service.ts</automated>
+    <automated>grep -nE 'Label.*\$\{LAUNCHD_LABEL\}' mcp/src/capture/os-service.ts</automated>
+    <automated>cd mcp && npx vitest run test/capture/os-service.test.ts</automated>
+    <automated>npm run typecheck</automated>
+  </verify>
+  <acceptance_criteria>
+    - `grep -cE '^export const LAUNCHD_LABEL = "app\.synapsesync\.daemon";' mcp/src/capture/os-service.ts` returns exactly 1.
+    - `grep -cE 'Label</key><string>\$\{LAUNCHD_LABEL\}</string>' mcp/src/capture/os-service.ts` returns exactly 1.
+    - `grep -cE '<string>app\.synapsesync\.daemon</string>' mcp/src/capture/os-service.ts` returns exactly 0 (the literal must be gone — replaced by template interpolation).
+    - `cd mcp && npx vitest run test/capture/os-service.test.ts` exits 0 — all pre-existing `os-service.test.ts` assertions still pass (proves the plist output is byte-identical).
+    - Render-equivalence sanity check: `cd mcp && node -e "const {renderLaunchdPlist} = require('./dist/capture/os-service.js') || require('./src/capture/os-service.ts'); const p = renderLaunchdPlist({node:'/n',script:'/s',log:'/l'}); console.log(p.includes('<string>app.synapsesync.daemon</string>'))"` prints `true` (the rendered plist contains the same literal label string as before).
+    - VALIDATION row: BUG-02 / supervisor detection prerequisite → after this task lands, `cd mcp && node -e "console.log(require('./src/capture/os-service').LAUNCHD_LABEL)"` prints `app.synapsesync.daemon` (Plan 01-02 Task 1 depends on this).
+    - `npm run typecheck` exits 0 from repo root.
+  </acceptance_criteria>
+  <done>`LAUNCHD_LABEL` is a top-level named export; the plist template references it; `renderLaunchdPlist` output is unchanged; `os-service.test.ts` still passes; `npm run typecheck` exits 0.</done>
 </task>
 
 </tasks>
@@ -195,33 +280,37 @@ Phase-1 launchd label (single source of truth):
 
 | Boundary | Description |
 |----------|-------------|
-| (none in this plan) | Wave 0 is test scaffolding + stubs only. No new code paths, no inputs, no network surface. Trust boundaries are introduced by the Wave 2 plans (OBS-01 introduces the Sentry SDK transport; BUG-03 introduces a 2-second fetch to registry.npmjs.org). |
+| (none in this plan) | Wave 0 is test scaffolding + stubs + a label-extraction refactor. No new code paths, no inputs, no network surface. Trust boundaries are introduced by the Wave 2 plans (OBS-01 introduces the Sentry SDK transport; BUG-03 introduces a 2-second fetch to registry.npmjs.org). |
 
 ## STRIDE Threat Register
 
 | Threat ID | Category | Component | Disposition | Mitigation Plan |
 |-----------|----------|-----------|-------------|-----------------|
 | T-01-SC | Tampering | npm install (none in this plan) | n/a | This plan installs zero packages. Sentry installs occur in Plan 05; the `@sentry/hono` legitimacy checkpoint lives there per RESEARCH §"Package Legitimacy Audit". |
+| T-01-01-01 | Tampering | Refactored `os-service.ts` plist string | mitigate | Render-equivalence acceptance criterion proves the rendered plist text is byte-identical pre/post edit; pre-existing `os-service.test.ts` is the regression guard. |
 </threat_model>
 
 <verification>
-After both tasks complete:
+After all three tasks complete:
 1. `npm run lint` exits 0 (repo root)
 2. `npm run typecheck` exits 0 (repo root) — proves stubs compile and tests type-check against them
-3. `cd mcp && npx vitest run` shows ≥17 failing tests in slice-1a test files (4 BUG-02 + 4 BUG-03 + 4 BUG-04 + 5 BUGS.md #12)
+3. `cd mcp && npx vitest run` shows ≥17 failing tests in slice-1a test files (4 BUG-02 + 4 BUG-03 + 4 BUG-04 + 5 BUGS.md #12) AND `os-service.test.ts` still all-green (label refactor regression guard)
 4. `cd backend && npx vitest run` shows ≥5 failing tests in `backend/test/lib/observability*.test.ts`
 5. Failures all reference the "not implemented — Wave 2" stub throws — confirming the RED step.
+6. `grep -nE '^export const LAUNCHD_LABEL' mcp/src/capture/os-service.ts` returns 1 hit, and the renderLaunchdPlist output (manual inspection or test) still contains `<string>app.synapsesync.daemon</string>`.
 
 Pre-push hook will run on commit; expected outcome: lint pass, typecheck pass, test FAIL (intentional). Push with the hook running once at the wave boundary per CONTEXT.md guidance — commit locally, push to `tanmain/synapse` after Wave 2 lands. (Alternatively: commit + `git push --no-verify` for the wave-0 commit only, then push normally after Wave 2. Operator's call.)
 </verification>
 
 <success_criteria>
-- All 9 file paths in `files_modified` exist on disk with the contents described.
+- All 11 file paths in `files_modified` exist on disk with the contents described.
 - VALIDATION.md "Wave 0 Requirements" checklist can be ticked: 4 new test files exist, 2 existing test files extended.
-- Wave 2 plans (02, 03, 04, 05) can each touch ONE file without needing to also create supporting test or stub files.
+- Wave 2 plans (02, 03, 04, 05) can each touch their owned files without needing to also create supporting test or stub files.
 - 22 RED tests are queued, mapped to the VALIDATION.md "Per-Task Verification Map" rows that Wave 2 will turn green.
+- `LAUNCHD_LABEL` is the single source of truth for the launchd label — Plan 01-02 imports it instead of redefining.
+- **Scaffolding-only — no user-observable outcome on its own; Wave 2 plans satisfy SC#2 (BUG-02 status surfacing) and SC#3 (BUG-03 `.mcp.json` shape).** Slice 1b satisfies SC#4 (Sentry deliberate-throw end-to-end) on the CF-enabled machine.
 </success_criteria>
 
 <output>
-Create `.planning/phases/01-stabilize-backend-observability/01-01-SUMMARY.md` when done. Note in the summary which VALIDATION.md rows are queued RED for Wave 2.
+Create `.planning/phases/01-stabilize-backend-observability/01-01-SUMMARY.md` when done. Note in the summary which VALIDATION.md rows are queued RED for Wave 2, and confirm that `LAUNCHD_LABEL` is now exported from `os-service.ts`.
 </output>
