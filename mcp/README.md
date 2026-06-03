@@ -81,10 +81,87 @@ Get an API key from **[synapsesync.app](https://synapsesync.app)** → **Account
 - **Node.js** 18+ recommended.
 - A valid **Synapse API key** (except while using the signup/login flow in the wizard).
 
+## Usage examples
+
+### Example 1: Store and retrieve an architecture decision
+
+**User prompt:** "Remember that we chose Redis for the caching layer because of its pub/sub support."
+
+**Expected tool behavior:** The assistant calls `write` to store the decision.
+
+```
+Tool: write
+Input: { path: "decisions/chose-redis.md", content: "# Chose Redis for caching\n\nWe chose Redis over Memcached for the caching layer because of its native pub/sub support, which we need for real-time cache invalidation across services." }
+Output: "Wrote decisions/chose-redis.md (194 chars)"
+```
+
+### Example 2: Search for relevant context
+
+**User prompt:** "What do we know about the authentication flow?"
+
+**Expected tool behavior:** The assistant calls `search` with a semantic query.
+
+```
+Tool: search
+Input: { query: "authentication flow" }
+Output:
+2 results:
+
+[1] architecture/auth-flow.md
+  dir: architecture/ | updated: 3/28/2026
+  # Auth Flow  We use JWT tokens with short-lived access tokens (15min) and long-lived refresh tokens (30 days). The auth middleware validates tokens on every request...
+
+[2] decisions/session-storage.md
+  dir: decisions/ | updated: 3/25/2026
+  # Session storage decision  Chose Supabase Auth for session management because it handles refresh token rotation automatically...
+```
+
+### Example 3: Browse workspace structure and read a file
+
+**User prompt:** "What context do we have for this project?"
+
+**Expected tool behavior:** The assistant calls `tree` to see the workspace, then `read` to load relevant files.
+
+```
+Tool: tree
+Input: {}
+Output:
+.
+  architecture
+    auth-flow.md
+    gateway.md
+  decisions
+    chose-redis.md
+    session-storage.md
+  notes
+    standup-2026-03-28.md
+
+Tool: read
+Input: { path: "architecture/gateway.md" }
+Output:
+path: architecture/gateway.md | updated: 3/27/2026 | source: claude
+---
+# API Gateway Architecture
+
+All public traffic routes through a Cloudflare Worker that handles auth, rate limiting, and request routing...
+```
+
 ## Security notes
 
 - Treat **`SYNAPSE_API_KEY`** like a password; do not commit it to git.
 - Prefer environment variables or your editor’s secret storage for keys.
+
+## Privacy policy
+
+Synapse collects and stores the context files you create in your workspace. For the full privacy policy, see [synapsesync.app/privacy](https://synapsesync.app/privacy).
+
+**Data handling summary:**
+- **What we store:** Workspace files (context, notes, decisions), account info (email), and API keys.
+- **Encryption:** Optional end-to-end encryption via `SYNAPSE_PASSPHRASE`. When enabled, content is encrypted client-side before transmission — the server never sees plaintext.
+- **Third-party sharing:** We do not sell or share your data with third parties. Workspace data is only accessible to you and teammates you explicitly invite.
+- **Data location:** Hosted on Cloudflare Workers and Supabase (Postgres). Data resides in the provider’s default regions.
+- **Deletion:** You can delete any file or your entire account at any time. Deleted data is permanently removed.
+- **Support:** [github.com/metanmai/synapse/issues](https://github.com/metanmai/synapse/issues) or email via your Synapse account.
 
 ## Links
 
