@@ -71,18 +71,23 @@ function defaultRunPowerShell(args: string[]): CommandResult {
       timeout: 30000,
     },
   );
+  const stdout = (r.stdout ?? Buffer.from("")).toString("utf-8");
   const stderr = (r.stderr ?? Buffer.from("")).toString("utf-8");
   dlog(`powershell DONE status=${r.status}`);
-  // Surface stderr in the debug log on non-zero exit — the silent
-  // exit-1 from a PowerShell cmdlet is otherwise indistinguishable from
-  // a thousand different errors. With this you get the actual error
-  // text in CI logs the moment a regression lands.
-  if (r.status !== 0 && stderr.trim()) {
-    dlog(`powershell stderr: ${stderr.trim().slice(0, 400).replace(/\n/g, " | ")}`);
+  // On non-success, surface BOTH stdout (where our Write-Host traces
+  // live) and stderr (where cmdlet errors land). Without this a silent
+  // exit-1 or timeout-null is indistinguishable from a thousand other
+  // failures. Always print, even if empty — "empty stdout" is itself
+  // diagnostic info (e.g., script hung before any Write-Host fired).
+  if (r.status !== 0) {
+    const so = stdout.trim().slice(0, 600).replace(/\n/g, " | ");
+    const se = stderr.trim().slice(0, 600).replace(/\n/g, " | ");
+    dlog(`powershell stdout: ${so || "<empty>"}`);
+    dlog(`powershell stderr: ${se || "<empty>"}`);
   }
   return {
     status: r.status ?? -1,
-    stdout: (r.stdout ?? Buffer.from("")).toString("utf-8"),
+    stdout,
     stderr,
   };
 }
@@ -130,32 +135,56 @@ export const WindowsBackend: PlatformBackend = {
     const envSnippet = this.buildEnvSnippet(caPath, proxyPort);
     const manualInstallInstructions = this.buildManualInstructions(caPath, proxyPort);
 
-    // Why a hand-rolled PEM-to-DER decode instead of Import-Certificate?
-    //   • `Import-Certificate` calls X509Certificate2(string path) which
-    //     on .NET Framework 4.x (Windows PowerShell 5.1, what `powershell.exe`
-    //     resolves to on stock Windows) tries DER / PKCS#7 / PKCS#12 and
-    //     rejects PEM with a silent exit-1. PEM support arrived in .NET 5+
-    //     as X509Certificate2.CreateFromPemFile() — so it works under pwsh
-    //     (PS 7) but not powershell.exe (PS 5.1).
-    //   • Both X509Certificate2(byte[]) and X509Store('Root','CurrentUser')
-    //     are present on .NET Framework 4.x and .NET 5+ → portable across
-    //     every Windows that ships PowerShell.
-    //   • The `-----BEGIN/END-----` armor strip is a 2-character regex
-    //     pair; Base64 decode of what's left gives the raw DER bytes.
+    // Why a hand-rolled install script instead of Import-Certificate?
     //
-    // X509Store.Add on CurrentUser/Root is the same .NET path Import-Certificate
-    // uses under the hood — so the GUI confirmation dialog (the bug that
-    // killed `certutil -addstore -user -f Root <ca.pem>` on CI) is still
-    // bypassed. We just call the underlying API ourselves.
+    //   1. Windows ALWAYS prompts on Root-store adds at CurrentUser
+    //      scope — both `certutil -addstore Root` and the .NET API
+    //      `X509Store('Root','CurrentUser').Add()` ultimately call
+    //      `CertAddCertificateContextToStore`, which shows a GUI dialog
+    //      ("Do you want to install this certificate?"). On CI runners
+    //      (no interactive desktop) the dialog hangs forever. There is
+    //      no library-level workaround — it's a Win32-level behavior.
+    //
+    //      The documented escape hatch is the HKCU registry value
+    //      `Software\Microsoft\SystemCertificates\Root\ProtectedRoots\Flags = 1`
+    //      which tells Windows the user has pre-consented to programmatic
+    //      Root additions for their account (CERT_PROT_ROOT_DISABLE_NOT_DEFINED_NAME_CONSTRAINT_FLAG).
+    //      No admin needed — HKCU is the per-user hive. The user already
+    //      explicitly ran `synapsesync capture proxy install`; suppressing
+    //      the additional Windows dialog is consistent with their intent.
+    //
+    //   2. `Import-Certificate` calls X509Certificate2(string path) which
+    //      on .NET Framework 4.x (Windows PowerShell 5.1 — what
+    //      `powershell.exe` resolves to on stock Windows) tries DER /
+    //      PKCS#7 / PKCS#12 and rejects PEM with a silent exit-1. PEM
+    //      support arrived in .NET 5+ — works under pwsh (PS 7), not
+    //      powershell.exe (PS 5.1). Both X509Certificate2(byte[]) and
+    //      X509Store exist on .NET Framework 4.x AND .NET 5+ → portable.
+    //
+    // Write-Host traces let us see partial progress in [windows-debug]
+    // stdout dumps when the daemon's defaultRunPowerShell prints stdout
+    // on non-zero exit. If a future regression hangs at a specific step,
+    // the last `step:` line tells us where.
     const installScript = [
+      "Write-Host 'step1:reg'",
+      "New-Item -Path 'HKCU:\\Software\\Microsoft\\SystemCertificates\\Root\\ProtectedRoots' -Force | Out-Null",
+      "Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\SystemCertificates\\Root\\ProtectedRoots' -Name 'Flags' -Value 1 -Type DWord",
+      "Write-Host 'step2:get-content'",
       `$pem = Get-Content -LiteralPath ${psSingleQuote(caPath)} -Raw`,
+      "Write-Host 'step3:armor-strip'",
       "$b64 = $pem -replace '-----[^-]+-----','' -replace '\\s+',''",
+      "Write-Host 'step4:base64-decode'",
       "$der = [Convert]::FromBase64String($b64)",
+      "Write-Host 'step5:new-cert'",
       "$cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(,$der)",
+      "Write-Host 'step6:open-store'",
       "$store = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root','CurrentUser')",
       "$store.Open('ReadWrite')",
+      "Write-Host 'step7:add'",
       "$store.Add($cert)",
+      "Write-Host 'step8:close'",
       "$store.Close()",
+      "Write-Host 'step9:done'",
     ].join("; ");
     runPowerShell([installScript]);
 
