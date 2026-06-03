@@ -170,7 +170,7 @@ conversations.get("/:id", async (c) => {
   ]);
 
   return c.json({
-    ...conversation,
+    conversation,
     messages,
     context,
     media,
