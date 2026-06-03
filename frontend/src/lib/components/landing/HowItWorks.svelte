@@ -5,7 +5,7 @@ const steps = [
   {
     number: 1,
     title: "Capture",
-    description: "A background daemon silently records your sessions from Claude Code, Cursor, Codex, and Gemini",
+    description: "A background daemon silently records your AI coding sessions across every tool you use",
     illustration: "capture",
   },
   {
@@ -47,16 +47,19 @@ const steps = [
                     <span class="capture-status">capturing</span>
                   </div>
                   <div class="capture-feed">
+                    <!-- Tool order is intentional: Claude Code is not first.
+                         Each badge maps to a CSS color via .tool-{name}; the
+                         animation rotates through 4 of many supported tools. -->
                     <div class="capture-row">
-                      <span class="capture-tool tool-claude">claude</span>
+                      <span class="capture-tool tool-cursor">cursor</span>
                       <span class="capture-event">session-start</span>
                     </div>
                     <div class="capture-row">
-                      <span class="capture-tool tool-cursor">cursor</span>
+                      <span class="capture-tool tool-codex">codex</span>
                       <span class="capture-event">user-prompt</span>
                     </div>
                     <div class="capture-row">
-                      <span class="capture-tool tool-codex">codex</span>
+                      <span class="capture-tool tool-claude">claude</span>
                       <span class="capture-event">tool-use</span>
                     </div>
                     <div class="capture-row capture-row-fade">
