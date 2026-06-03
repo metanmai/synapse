@@ -7,7 +7,9 @@
 
 ## What you get
 
-Your assistant can use tools such as **`read`**, **`write`**, **`search`**, **`tree`**, **`ls`**, and **`history`** on paths in your Synapse projects (for example `decisions/`, `notes/`, `architecture/`). The same workspace is visible in the browser at **synapsesync.app** and across devices and teammates you invite.
+Your assistant captures and recalls structured **insights** — decisions, learnings, architecture notes, preferences, and action items — across sessions, devices, and teammates. Two MCP tools, **`save_insight`** and **`list_insights`**, let any MCP-capable assistant write to and read from your Synapse workspace. The same insights surface in the browser at **synapsesync.app** and across devices and teammates you invite.
+
+The bulk of context capture happens automatically via the **handoff layer**: the background daemon installed by `synapsesync wizard` records hook events, syncs them to the backend, and injects a `<synapse-brief>` block at every `SessionStart` so the next session starts with full context — no tool calls needed.
 
 The published package talks to the public API at **`https://api.synapsesync.app`**. To use your own backend, build from [source](https://github.com/metanmai/synapse) and change the `API_URL` constant in `src/index.ts` before `npm run build`.
 
@@ -88,67 +90,72 @@ Install once with `npm install -g synapsesync`, then run `synapsesync <command>`
 
 ## Usage examples
 
-### Example 1: Store and retrieve an architecture decision
+### Example 1: Save a decision
 
 **User prompt:** "Remember that we chose Redis for the caching layer because of its pub/sub support."
 
-**Expected tool behavior:** The assistant calls `write` to store the decision.
+**Expected tool behavior:** The assistant calls `save_insight` with `type: "decision"`.
 
 ```
-Tool: write
-Input: { path: "decisions/chose-redis.md", content: "# Chose Redis for caching\n\nWe chose Redis over Memcached for the caching layer because of its native pub/sub support, which we need for real-time cache invalidation across services." }
-Output: "Wrote decisions/chose-redis.md (194 chars)"
+Tool: save_insight
+Input: {
+  project: "my-app",
+  type: "decision",
+  title: "Chose Redis over Memcached for caching",
+  content: "Native pub/sub support is required for real-time cache invalidation across services."
+}
+Output: {
+  id: "9f2c1d3e-...",
+  active: true,
+  created_at: "2026-05-28T..."
+}
 ```
 
-### Example 2: Search for relevant context
+### Example 2: Browse what the project has decided
 
-**User prompt:** "What do we know about the authentication flow?"
+**User prompt:** "What architecture decisions have we made on this project?"
 
-**Expected tool behavior:** The assistant calls `search` with a semantic query.
-
-```
-Tool: search
-Input: { query: "authentication flow" }
-Output:
-2 results:
-
-[1] architecture/auth-flow.md
-  dir: architecture/ | updated: 3/28/2026
-  # Auth Flow  We use JWT tokens with short-lived access tokens (15min) and long-lived refresh tokens (30 days). The auth middleware validates tokens on every request...
-
-[2] decisions/session-storage.md
-  dir: decisions/ | updated: 3/25/2026
-  # Session storage decision  Chose Supabase Auth for session management because it handles refresh token rotation automatically...
-```
-
-### Example 3: Browse workspace structure and read a file
-
-**User prompt:** "What context do we have for this project?"
-
-**Expected tool behavior:** The assistant calls `tree` to see the workspace, then `read` to load relevant files.
+**Expected tool behavior:** The assistant calls `list_insights` filtered by project + type.
 
 ```
-Tool: tree
-Input: {}
-Output:
-.
-  architecture
-    auth-flow.md
-    gateway.md
-  decisions
-    chose-redis.md
-    session-storage.md
-  notes
-    standup-2026-03-28.md
+Tool: list_insights
+Input: { project: "my-app", type: "decision" }
+Output: [
+  {
+    id: "9f2c1d3e-...",
+    title: "Chose Redis over Memcached for caching",
+    content: "Native pub/sub support is required for real-time cache invalidation across services.",
+    created_at: "2026-05-28T..."
+  },
+  {
+    id: "4b3d8d8b-...",
+    title: "Auth uses JWT with 15-min access + 30-day refresh tokens",
+    content: "Sticky sessions are unworkable behind the CDN edge.",
+    created_at: "2026-05-25T..."
+  }
+]
+```
 
-Tool: read
-Input: { path: "architecture/gateway.md" }
-Output:
-path: architecture/gateway.md | updated: 3/27/2026 | source: claude
----
-# API Gateway Architecture
+### Example 3: Supersede an old decision when it changes
 
-All public traffic routes through a Cloudflare Worker that handles auth, rate limiting, and request routing...
+**User prompt:** "Update that — we switched the caching layer from Redis to Cloudflare KV for cost reasons."
+
+**Expected tool behavior:** The assistant calls `save_insight` with the new decision *and* `supersedes` pointing at the old ID it just listed. The default `list_insights` query then hides the old one.
+
+```
+Tool: save_insight
+Input: {
+  project: "my-app",
+  type: "decision",
+  title: "Switched cache from Redis to Cloudflare KV",
+  content: "Cost-driven — KV's free tier covers projected load; pub/sub was dropped in favor of polling.",
+  supersedes: ["9f2c1d3e-..."]
+}
+Output: {
+  id: "8a1f2b4c-...",
+  active: true,
+  superseded: ["9f2c1d3e-..."]
+}
 ```
 
 ## Security notes
