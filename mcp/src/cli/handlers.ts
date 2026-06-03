@@ -15,7 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { runCapture } from "../capture/cli.js";
-import { runBrief } from "./brief.js";
+import { renderBriefFromCache } from "../capture/handoff-brief.js";
 import {
   runHook,
   runStatus as runLegacyStatus,
@@ -127,7 +127,10 @@ export function registerPrintHelp(fn: () => void): void {
 // ── HANDLERS map ────────────────────────────────────────────────────────
 
 export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
-  brief: async (args) => runBrief(args),
+  brief: async () => {
+    const ctx = handlerContext();
+    process.stdout.write(`${renderBriefFromCache(ctx.project_id, ctx.user_id)}\n`);
+  },
   help: async () => {
     _printHelp();
   },
