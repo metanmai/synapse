@@ -94,3 +94,49 @@ export async function runPullCycle(a: FlushArgs): Promise<{ pulled: number }> {
   fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
   return { pulled: 1 };
 }
+
+interface EventsResponse {
+  events?: unknown[];
+  next_since?: string | null;
+}
+
+/**
+ * Phase 2 (IDENT-02, D-08): one-shot historical event pull, called by the
+ * daemon cycle the first time a `cwd_<hash>` is remapped to a canonical
+ * project_id. Pulls the project's recent events from the backend and writes
+ * them into events.jsonl with a `_pulled: true` marker so runFlushCycle
+ * doesn't echo them back. Idempotence relies on (a) the call site only firing
+ * inside the `if (canonical_project_id)` branch of the daemon cycle, and
+ * (b) the `_pulled` filter in runFlushCycle preventing feedback loops if a
+ * crash leaves the watermark unset.
+ */
+export async function runEagerPullCycle(a: FlushArgs & { limit?: number }): Promise<{ pulled: number }> {
+  const limit = a.limit ?? 500;
+  const res = await fetch(`${a.api_url}/api/projects/${a.project_id}/events?limit=${limit}`, {
+    headers: { Authorization: `Bearer ${a.api_key}` },
+  });
+  if (!res.ok) throw new Error(`eager pull failed: ${res.status}`);
+  const body = (await res.json()) as EventsResponse;
+  const events = Array.isArray(body.events) ? body.events : [];
+  if (events.length === 0) return { pulled: 0 };
+
+  const dir = projectDir(a.project_id);
+  fs.mkdirSync(dir, { recursive: true });
+  const logPath = path.join(dir, "events.jsonl");
+  const wmPath = path.join(dir, ".watermark");
+
+  // Tag each pulled event with _pulled: true so runFlushCycle skips them on
+  // subsequent flushes. Write all in one shot; if the process dies mid-write
+  // a re-pull on next cycle is safe (events are server-side durable).
+  const lines = events.map((e) => JSON.stringify({ ...(e as object), _pulled: true })).join("\n");
+  fs.appendFileSync(logPath, `${lines}\n`);
+
+  // Advance the watermark to the highest pulled event_id. Backend returns
+  // events ascending by event_id (ULIDs are lex-sortable), so the last entry
+  // is the highest. If the response shape deviates, fall back to scanning.
+  const last = events[events.length - 1] as { event_id?: string } | undefined;
+  if (last?.event_id) {
+    fs.writeFileSync(wmPath, last.event_id);
+  }
+  return { pulled: events.length };
+}

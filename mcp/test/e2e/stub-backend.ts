@@ -23,6 +23,19 @@ export async function startStubBackend(): Promise<{ url: string; stop: () => voi
       res.end(JSON.stringify(status));
       return;
     }
+    // Phase 2 (D-08): GET /api/projects/:id/events — historical event pull,
+    // used by runEagerPullCycle on a fresh-install machine to bootstrap its
+    // events.jsonl with the project's prior activity. Returns events ascending
+    // by event_id so the daemon's watermark logic works correctly.
+    const eventsMatch = req.url?.match(/\/api\/projects\/([^/?]+)\/events(?:\?|$)/);
+    if (eventsMatch && req.method === "GET") {
+      const projectEvents = events
+        .filter((e) => e.project_id === eventsMatch[1])
+        .sort((a, b) => a.event_id.localeCompare(b.event_id));
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ events: projectEvents, next_since: null }));
+      return;
+    }
     res.writeHead(404);
     res.end();
   });

@@ -116,7 +116,10 @@ describe("E2E: machine A → machine B same user same repo (Phase 2 IDENT-02)", 
         client: "claude-code" as const,
       },
       attached_to: null,
-      kind: "handoff" as const,
+      // Reducer maps EventKind.NextStepSet ("next_step_set") → current_next_step
+      // — that's the event runHandoffCmd emits. Plain "handoff" string is NOT
+      // an EventKind variant, so the reducer ignores it.
+      kind: "next_step_set" as const,
       occurred_at: "2026-05-20T09:00:00Z",
       received_at: "2026-05-20T09:00:01Z",
       payload: {
@@ -148,18 +151,18 @@ describe("E2E: machine A → machine B same user same repo (Phase 2 IDENT-02)", 
     });
     const brief = briefStdout.join("");
 
-    // Contract: D-09 says brief surfaces the remote actor's hostname when
-    // mostRecent.actor.device_id !== local device_id AND mostRecent.actor.user_id === viewer.
-    // Per feedback_test_generality.md: assert hostname appears in the brief somehow
-    // (substring match), NOT the literal "(on laptop-A)" format — planner picks the format.
-    //
-    // Scope note: the original ambition of this test was to ALSO verify the handoff
-    // text round-trips (machine A's `wire /callback to user repo` → machine B's brief).
-    // That cross-device DATA flow is Plan 02-04's eager-pull contract (runEagerPullCycle
-    // + stub-backend GET /events extension), not Plan 02-03's renderer contract. The
-    // separate handoff-sync._pulled-filter tests + future eager-pull tests cover the
-    // data flow; this e2e test stays focused on D-09's renderer assertion. When Plan
-    // 02-04's eager-pull lands, this test can grow back the handoff-text assertion.
+    // Contract: D-09 (renderer) — same-user different-device surfaces the
+    // remote actor's hostname. Substring match per feedback_test_generality.md
+    // (don't lock the literal "(on laptop-A)" format).
     expect(brief).toContain("laptop-A");
+
+    // Belt-and-suspenders: handoff text round-trips from machine A → stub
+    // → machine B's brief. This proves the cross-device DATA path works
+    // end-to-end (the reducer in stub-backend produces a ProjectStatus whose
+    // current_next_step.text carries machine A's content, and the brief
+    // renderer surfaces it). Plan 02-04's eager-pull (runEagerPullCycle +
+    // stub /events extension) hooks the data flow together with Plan 02-03's
+    // renderer to produce a fully-populated brief on machine B.
+    expect(brief).toContain("wire /callback to user repo");
   });
 });

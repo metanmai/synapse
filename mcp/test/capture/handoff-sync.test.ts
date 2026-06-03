@@ -119,28 +119,61 @@ describe("runFlushCycle — _pulled marker filtering (Phase 2 IDENT-02, D-08)", 
   });
 });
 
-describe("runEagerPullCycle — Phase 2 IDENT-02, D-08 (skipped until Plan 02-04 ships)", () => {
-  // These .skip cases describe the contract runEagerPullCycle must satisfy. The executor
-  // of Plan 02-04 Task 4 ("eager-pull cycle") flips them to active when the function lands.
-  //
-  // The function signature (per RESEARCH §Pattern 6): runEagerPullCycle({ project_id, api_key, api_url })
-  // returns { pulled: number, watermark: string | null }.
+describe("runEagerPullCycle — Phase 2 IDENT-02, D-08", () => {
+  it("pulls events, writes them with _pulled: true marker, advances watermark to last event_id", async () => {
+    fs.mkdirSync(path.join(tmp, "projects/p-eager"), { recursive: true });
+    const ev1 = makeEv("01HZA");
+    const ev2 = makeEv("01HZB");
 
-  it.skip("pulls events from GET /api/projects/:id/events, writes them with _pulled: true marker, advances watermark", () => {
-    // Mock fetch to return {events: [ev1, ev2], next_since: ev2.event_id}.
-    // Assert:
-    //   - events.jsonl appended with both events, each carrying _pulled: true
-    //   - .watermark file updated to ev2.event_id
-    //   - returned { pulled: 2, watermark: ev2.event_id }
+    global.fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.includes("/events?limit=")) {
+        return new Response(JSON.stringify({ events: [ev1, ev2], next_since: null }), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+
+    const { runEagerPullCycle } = await import("../../src/capture/handoff-sync.js");
+    const result = await runEagerPullCycle({ project_id: "p-eager", api_key: "k", api_url: "https://api.test" });
+
+    expect(result.pulled).toBe(2);
+
+    // events.jsonl contains both events, each with _pulled: true
+    const lines = fs
+      .readFileSync(path.join(tmp, "projects/p-eager/events.jsonl"), "utf-8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    expect(lines).toHaveLength(2);
+    expect(lines.every((l: { _pulled?: boolean }) => l._pulled === true)).toBe(true);
+
+    // watermark = highest event_id (ev2)
+    const wm = fs.readFileSync(path.join(tmp, "projects/p-eager/.watermark"), "utf-8").trim();
+    expect(wm).toBe("01HZB");
   });
 
-  it.skip("empty pull ({events: []}) is a no-op — no file mutation, returns { pulled: 0 }", () => {
-    // Mock fetch returns {events: [], next_since: null}.
-    // Assert: events.jsonl unchanged; .watermark unchanged; returned { pulled: 0 }.
+  it("empty pull ({events: []}) is a no-op — no file mutation, returns { pulled: 0 }", async () => {
+    fs.mkdirSync(path.join(tmp, "projects/p-empty"), { recursive: true });
+
+    global.fetch = vi.fn(
+      async () => new Response(JSON.stringify({ events: [], next_since: null }), { status: 200 }),
+    ) as typeof fetch;
+
+    const { runEagerPullCycle } = await import("../../src/capture/handoff-sync.js");
+    const result = await runEagerPullCycle({ project_id: "p-empty", api_key: "k", api_url: "https://api.test" });
+
+    expect(result.pulled).toBe(0);
+    // No events.jsonl created; no watermark written.
+    expect(fs.existsSync(path.join(tmp, "projects/p-empty/events.jsonl"))).toBe(false);
+    expect(fs.existsSync(path.join(tmp, "projects/p-empty/.watermark"))).toBe(false);
   });
 
-  it.skip("5xx response throws cleanly (does not swallow into a half-pull)", () => {
-    // Mock fetch returns 503.
-    // Assert: runEagerPullCycle rejects with an Error containing the status.
+  it("5xx response throws cleanly (does not swallow into a half-pull)", async () => {
+    global.fetch = vi.fn(async () => new Response("boom", { status: 503 })) as typeof fetch;
+
+    const { runEagerPullCycle } = await import("../../src/capture/handoff-sync.js");
+    await expect(
+      runEagerPullCycle({ project_id: "p-fail", api_key: "k", api_url: "https://api.test" }),
+    ).rejects.toThrow(/eager pull failed: 503/);
   });
 });
