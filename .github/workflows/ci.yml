@@ -143,3 +143,39 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
+
+  proxy-linux-e2e:
+    # Cross-distro Linux trust-store install gate (Slice A.5).
+    # Builds 5 distro-specific Docker containers and runs `synapsesync
+    # capture proxy install/status/uninstall` against each one's REAL
+    # trust store — covers spec §4.2 paths (debian / rhel / unknown).
+    # Cannot run on the maintainer's macOS machine because Netskope
+    # blocks container egress to the public npm registry; this is the
+    # canonical validation environment.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [debian, ubuntu, fedora, rockylinux, arch]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build container
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: scripts/e2e-linux/Dockerfile.${{ matrix.distro }}
+          tags: synapse-e2e-${{ matrix.distro }}:ci
+          load: true
+          cache-from: type=gha,scope=proxy-linux-${{ matrix.distro }}
+          cache-to: type=gha,scope=proxy-linux-${{ matrix.distro }},mode=max
+
+      - name: Run E2E
+        run: docker run --rm synapse-e2e-${{ matrix.distro }}:ci

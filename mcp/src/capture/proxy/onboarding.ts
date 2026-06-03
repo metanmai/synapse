@@ -123,7 +123,7 @@ export function installCa(opts: OnboardingOptions = {}): InstallCaResult {
     manualInstallInstructions: result.manualInstallInstructions,
     envSnippet: result.envSnippet,
     proxyPort: result.proxyPort,
-    skippedReason: result.skippedReason,
+    skippedReason: composeLegacySkipReason(platform, "install", result.skippedReason),
     requiresSudo: result.requiresSudo,
     manualCommand: result.manualCommand,
   };
@@ -148,7 +148,10 @@ export function uninstallCa(opts: OnboardingOptions = {}): UninstallCaResult {
 
   const backend = detectBackend(platform);
   const result = backend.uninstallCa(caPath, buildBackendOptions(opts, proxyPort));
-  return { removed: result.removed, skippedReason: result.skippedReason };
+  return {
+    removed: result.removed,
+    skippedReason: composeLegacySkipReason(platform, "uninstall", result.skippedReason),
+  };
 }
 
 /** Diagnose the current onboarding state without modifying anything. */
@@ -198,4 +201,25 @@ function defaultRunOpenssl(args: string[]): CommandResult {
     stdout: (r.stdout ?? Buffer.from("")).toString("utf-8"),
     stderr: (r.stderr ?? Buffer.from("")).toString("utf-8"),
   };
+}
+
+/**
+ * Bridge backend's neutral skip messages to the legacy "platform=X" shape
+ * that pre-refactor `cli.ts` and unit tests expect on non-darwin platforms.
+ *
+ * Real LinuxBackend may report something like "unsupported distro" with no
+ * platform name; the legacy contract is "keychain install skipped on
+ * platform=linux; <details>". This helper prepends the platform tag only
+ * when it's not already present, so backends that bake the tag in (e.g.
+ * the UnknownBackend) pass through unchanged.
+ */
+function composeLegacySkipReason(
+  platform: NodeJS.Platform,
+  op: "install" | "uninstall",
+  backendReason: string | undefined,
+): string | undefined {
+  if (!backendReason) return undefined;
+  if (platform === "darwin") return backendReason;
+  if (backendReason.includes(`platform=${platform}`)) return backendReason;
+  return `keychain ${op} skipped on platform=${platform}; ${backendReason}`;
 }
