@@ -352,4 +352,57 @@ projects.post("/:id/merge-into/:target_id", async (c) => {
   return c.json({ ok: true, project_id: targetId });
 });
 
+// DELETE /api/projects/:id
+// Owner-only. Default behavior: refuse if the project still holds
+// conversations or insights (returns 409 PROJECT_NOT_EMPTY with the
+// counts in the body) so the caller can decide whether to migrate the
+// data first via /merge-into or accept the loss with ?force=true.
+//
+// Every child table that references projects.id has ON DELETE CASCADE
+// (entries, project_members, user_preferences, share_links, activity_log,
+// insights, conversations, project_context, handoff_*, project_invites),
+// so a single DELETE drops the whole tree atomically — no manual cleanup
+// of child rows needed.
+//
+// The bug class this closes: post-routing-cleanup, the dashboard accumulated
+// 30+ empty `untitled` placeholders and 8+ duplicate test projects that no
+// existing route could remove. merge_projects could consolidate, but the
+// only path to actually drop an empty project was direct SQL.
+projects.delete("/:id", async (c) => {
+  const user = c.get("user");
+  const projectId = c.req.param("id");
+  const force = c.req.query("force") === "true";
+  const db = c.get("db");
+
+  await requireRole(db, projectId, user.id, "owner");
+
+  if (!force) {
+    const stats = await getProjectStats(db, projectId);
+    if (stats.conversation_count > 0 || stats.insight_count > 0) {
+      return c.json(
+        {
+          error: `Project still holds ${stats.conversation_count} conversation(s) and ${stats.insight_count} insight(s). Merge into another project via POST /merge-into/:target_id, or pass ?force=true to delete anyway.`,
+          code: "PROJECT_NOT_EMPTY",
+          conversation_count: stats.conversation_count,
+          insight_count: stats.insight_count,
+        },
+        409,
+      );
+    }
+  }
+
+  // Capture name BEFORE the delete so the response can echo it back —
+  // useful for CLI/UI to confirm what got removed.
+  const { data: projectRow } = await db.from("projects").select("name").eq("id", projectId).single();
+  const projectName = (projectRow as { name?: string } | null)?.name ?? null;
+
+  const { error } = await db.from("projects").delete().eq("id", projectId);
+  if (error) throw error;
+
+  // No activity log entry — the project (and its activity_log rows) is gone.
+  // The caller's own confirmation + the CASCADE itself is the audit trail.
+
+  return c.json({ ok: true, deleted_project_id: projectId, name: projectName });
+});
+
 export { projects };
