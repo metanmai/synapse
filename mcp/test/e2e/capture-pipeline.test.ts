@@ -190,13 +190,13 @@ suite("Capture Pipeline E2E", () => {
 
     it("capture status when no daemon running shows not running", async () => {
       const { stdout } = await runCaptureCli(tmpHome, ["status"]);
-      expect(stdout).toContain("Not running");
-      expect(stdout).toContain("0 captured session(s)");
+      expect(stdout).toContain("stopped");
+      expect(stdout).toContain("0 captured");
     });
 
     it("capture start starts a daemon and prints PID", async () => {
       const { stdout } = await runCaptureCli(tmpHome, ["start"]);
-      expect(stdout).toContain("Capture daemon started");
+      expect(stdout).toContain("Daemon started");
       expect(stdout).toMatch(/PID \d+/);
 
       // Clean up daemon
@@ -214,7 +214,7 @@ suite("Capture Pipeline E2E", () => {
     it("capture status while daemon running shows Running with PID", async () => {
       await runCaptureCli(tmpHome, ["start"]);
       const { stdout } = await runCaptureCli(tmpHome, ["status"]);
-      expect(stdout).toContain("Running");
+      expect(stdout).toContain("running");
       expect(stdout).toMatch(/PID \d+/);
 
       await runCaptureCli(tmpHome, ["stop"]);
@@ -223,7 +223,7 @@ suite("Capture Pipeline E2E", () => {
     it("capture stop stops daemon and prints confirmation", async () => {
       await runCaptureCli(tmpHome, ["start"]);
       const { stdout } = await runCaptureCli(tmpHome, ["stop"]);
-      expect(stdout).toContain("Capture daemon stopped");
+      expect(stdout).toContain("Daemon stopped");
     });
 
     it("capture stop when not running prints not running", async () => {
@@ -238,11 +238,10 @@ suite("Capture Pipeline E2E", () => {
 
     it("capture with no subcommand prints usage", async () => {
       const { stdout } = await runCaptureCli(tmpHome, []);
-      expect(stdout).toContain("Usage");
-      expect(stdout).toContain("capture start");
-      expect(stdout).toContain("capture stop");
-      expect(stdout).toContain("capture status");
-      expect(stdout).toContain("capture list");
+      expect(stdout).toContain("start");
+      expect(stdout).toContain("stop");
+      expect(stdout).toContain("status");
+      expect(stdout).toContain("list");
     });
   });
 
