@@ -1,7 +1,12 @@
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { renderLaunchdPlist, renderSystemdUnit, resolveDaemonScriptPath } from "../../src/capture/os-service.js";
+import {
+  LAUNCHD_LABEL,
+  renderLaunchdPlist,
+  renderSystemdUnit,
+  resolveDaemonScriptPath,
+} from "../../src/capture/os-service.js";
 
 let tmp: string;
 beforeEach(() => {
@@ -63,5 +68,34 @@ describe("os-service installers", () => {
     });
     expect(unit).toContain("ExecStart=/usr/bin/node /opt/synapse/dist/cli/commands.js daemon");
     expect(unit).toContain("Restart=always");
+  });
+});
+
+// LAUNCHD_LABEL invariant — appended in Plan 01-01 Task 2. These two cases
+// turn GREEN immediately after Task 3 lands (unlike the BUG-02/03/04 tests in
+// sibling files which stay RED until Wave 2/3).
+//
+// Class-correct guards for the bug class "the label is a single source of
+// truth, importable, and the plist renders the same string." They do NOT
+// grep source text — any rename, shadowing, re-export, or accidental
+// double-render is caught at runtime via the actual export + actual
+// `renderLaunchdPlist` call.
+
+describe("LAUNCHD_LABEL invariant", () => {
+  it("exports LAUNCHD_LABEL as a runtime constant equal to 'app.synapsesync.daemon'", () => {
+    expect(LAUNCHD_LABEL).toBe("app.synapsesync.daemon");
+  });
+
+  it("renderLaunchdPlist output contains the LAUNCHD_LABEL string exactly once", () => {
+    const plist = renderLaunchdPlist({
+      node: "/opt/homebrew/bin/node",
+      script: "/Users/x/synapse/mcp/dist/index.js",
+      log: "/tmp/x.log",
+    });
+    // Render-equivalence: the label flows from the constant into the plist
+    // body exactly once. Catches: missing label, accidental double-render,
+    // replacement with a different string.
+    const matches = plist.match(/<string>app\.synapsesync\.daemon<\/string>/g);
+    expect(matches?.length).toBe(1);
   });
 });
