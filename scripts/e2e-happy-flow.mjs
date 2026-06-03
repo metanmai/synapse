@@ -36,7 +36,10 @@
 //
 // Requires:
 //   - curl on PATH (ships natively on macOS, Linux, Windows 10+)
-//   - ANTHROPIC_API_KEY in env (universal driver makes a real API call)
+//   - Stage 3 LLM driver: EITHER ANTHROPIC_API_KEY in env (direct-API
+//     mode) OR an AI CLI on PATH like `claude` or `crush` (CLI-driver
+//     mode; override the default `claude -p` via SYNAPSE_E2E_DRIVER env
+//     var, e.g. `SYNAPSE_E2E_DRIVER="crush run"`).
 //   - Synapse proxy installed + enabled (~/.synapse/proxy/ca.pem present)
 //   - synapsesync daemon running (launchd / systemd / Task Scheduler)
 //   - SYNAPSE_API_KEY resolvable from ~/.synapse/config.json or env
@@ -58,7 +61,15 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { removeLocalProjectState, removeLocalProjectsByBasename, sweepArtifacts } from "./e2e-cleanup.mjs";
-import { callAnthropicViaProxy } from "./e2e-llm-driver.mjs";
+import { generateSession } from "./e2e-llm-driver.mjs";
+
+// E2E tests run in mkdtemp dirs (`os.tmpdir()` → /var/folders on macOS,
+// /tmp on Linux). The daemon's `shouldSkipDispatch` predicate normally
+// drops those paths to keep ephemeral cwds out of the user's dashboard.
+// Tests are LEGITIMATE uses of tmp paths that DO want capture — they
+// set `SYNAPSE_DISPATCH_FORCE_ALLOW=1` so the predicate's force-allow
+// override fires, all subprocess spawns inherit it via process.env.
+process.env.SYNAPSE_DISPATCH_FORCE_ALLOW = "1";
 
 // ── Configuration ────────────────────────────────────────────────────────
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -79,9 +90,21 @@ const TEST_PHRASE = "butterfly mountain seven";
 // Timing knobs. Generous enough to absorb daemon/cloud latency without
 // being so loose that real bugs hide. Adjust if you observe consistent
 // flakes on a stage.
-const SLEEP_DAEMON_SYNC_MS = 15_000;
-const SLEEP_RECOMPUTE_MAX_MS = 90_000;
+// Backend-side handoff recompute polled below. On a fast network the brief
+// usually lands within ~30s; on a slow / proxied network the upstream
+// message-sync that triggers recompute can lag minutes, so we share the
+// same 8-min budget as the project / conversation arrival polls.
+const SLEEP_RECOMPUTE_MAX_MS = 8 * 60_000;
 const HOOK_FAST_TIMEOUT_MS = 5_000; // hook must return well under 10s
+// Backend-arrival poll budget for sync-bound assertions (project + conversation).
+// On the happy-path / fast network these resolve in seconds; on slow / proxied
+// networks the daemon's events-batch + capture-sync paths can lag minutes
+// because their cycle backs off on transient fetch errors. Polling with a
+// flush-now nudge every 30s lets the test ride out either condition without
+// turning sync timing into a phantom regression.
+const POLL_BACKEND_MAX_MS = 8 * 60_000;
+const POLL_BACKEND_INTERVAL_MS = 10_000;
+const POLL_BACKEND_FLUSH_INTERVAL_MS = 30_000;
 
 // ── State ────────────────────────────────────────────────────────────────
 const results = []; // [{ id, label, status, detail, elapsedMs }]
@@ -237,14 +260,26 @@ function preflight() {
   }
   info(`curl at ${curl.stdout.trim().split("\n")[0]}`);
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    fail(
-      "preflight",
-      "ANTHROPIC_API_KEY not set — required by the universal LLM driver (Stage 3 talks to api.anthropic.com via Synapse proxy)",
-    );
-    return false;
+  // Driver selection: either ANTHROPIC_API_KEY (direct-API mode) OR a
+  // working AI CLI on PATH (CLI-driver mode). Most macOS users have
+  // claude installed but auth via OAuth (no plain API key) — they
+  // fall into CLI-driver mode. WSL2 users with crush set
+  // SYNAPSE_E2E_DRIVER="crush run". Either path works equivalently.
+  if (process.env.ANTHROPIC_API_KEY) {
+    info("ANTHROPIC_API_KEY present — Stage 3 will use direct-API mode");
+  } else {
+    const driverCmd = process.env.SYNAPSE_E2E_DRIVER ?? "claude -p";
+    const driverBin = driverCmd.trim().split(/\s+/)[0];
+    const whichDriver = spawnSync(process.platform === "win32" ? "where" : "which", [driverBin], { encoding: "utf-8" });
+    if (whichDriver.status !== 0) {
+      fail(
+        "preflight",
+        `no LLM driver available — ANTHROPIC_API_KEY unset AND "${driverBin}" not on PATH. Either set ANTHROPIC_API_KEY (direct-API mode) or install an AI CLI (claude, crush, etc.) and set SYNAPSE_E2E_DRIVER if not "claude -p".`,
+      );
+      return false;
+    }
+    info(`Stage 3 will use CLI-driver mode: "${driverCmd}" (binary at ${whichDriver.stdout.trim().split("\n")[0]})`);
   }
-  info("ANTHROPIC_API_KEY present");
 
   const caPath = path.join(process.env.HOME ?? "/", ".synapse", "proxy", "ca.pem");
   if (!existsSync(caPath)) {
@@ -276,7 +311,7 @@ function preflight() {
     info("Proxy already enabled");
   }
 
-  ok("preflight", "all prereqs satisfied (curl + ANTHROPIC_API_KEY + proxy CA + proxy enabled)");
+  ok("preflight", "all prereqs satisfied (curl + LLM driver + proxy CA + proxy enabled)");
   return true;
 }
 
@@ -369,81 +404,129 @@ async function stage3_capture() {
   const prompt = `This is an E2E test session. Remember these facts: (a) test_id is ${TEST_ID}, (b) secret_phrase is '${TEST_PHRASE}'. Reply 'noted' and nothing else.`;
   info(`Calling api.anthropic.com via Synapse proxy from ${testDir}…`);
 
-  // The driver makes a real api.anthropic.com call via the Synapse proxy
-  // (curl + --cacert). The proxy's session-reconstruction picks it up
-  // and the daemon syncs to backend — same downstream as a real client.
-  // Replaces the previous `spawnSync("claude", ["-p", prompt])` invocation,
-  // which only worked on macOS because claude -p doesn't write session files
-  // on Linux/WSL2. Universal: works on macOS, Linux, Windows.
+  // generateSession() auto-selects direct-API mode (curl + ANTHROPIC_API_KEY)
+  // OR CLI-driver mode (claude -p / crush / etc. with HTTPS_PROXY env).
+  // Either path's HTTPS call is captured by the Synapse proxy; the daemon
+  // syncs the resulting session to backend. Same downstream as a real client.
+  // Replaces the prior `spawnSync("claude", ["-p", prompt])` invocation,
+  // which only worked on macOS because Linux/WSL2 doesn't persist session
+  // files. Universal: works wherever EITHER an API key OR an AI CLI exists.
   let driverResult;
   try {
-    driverResult = callAnthropicViaProxy({
+    driverResult = generateSession({
       prompt,
-      // User-Agent that hits the proxy's classifier as `claude-code`, so the
-      // captured session is attributed consistently with the OLD test flow.
-      // Swap to "synapse-e2e-driver" to test the "unknown" UA path instead.
+      // User-Agent only fires in direct-API mode; CLI mode uses whatever
+      // UA the CLI sends. Either way the proxy's classifier handles it.
       userAgent: "claude-cli/e2e-driver synapse-e2e",
-      timeoutMs: 60_000,
+      cwd: testDir, // CLI-driver mode runs in the test cwd
+      timeoutMs: 120_000,
     });
   } catch (e) {
     fail("3.1 universal driver", e.message);
     return;
   }
-  ok("3.1 universal driver", `responded in ${driverResult.elapsedMs}ms (proxy-captured)`);
+  ok(
+    "3.1 universal driver",
+    `mode=${driverResult.mode} driver=${driverResult.driver} responded in ${driverResult.elapsedMs}ms`,
+  );
 
-  info(`Waiting ${SLEEP_DAEMON_SYNC_MS / 1000}s for daemon to sync the session…`);
-  await sleep(SLEEP_DAEMON_SYNC_MS);
-
+  // Poll up to POLL_BACKEND_MAX_MS for the project to land on backend. The
+  // daemon pushes events-batch on its cycle loop; on a fast network this is
+  // sub-second, on a slow/proxied network it can take several minutes because
+  // fetch errors push the cycle into backoff. We nudge the cycle with a
+  // flush-now signal every POLL_BACKEND_FLUSH_INTERVAL_MS so we don't sit
+  // through a long backoff window unnecessarily.
+  info(`Polling backend for project (up to ${POLL_BACKEND_MAX_MS / 1000}s, with periodic flush nudges)…`);
   const testBasename = path.basename(testDir);
-  const projects = await fetchJson("/api/projects");
-  if (Array.isArray(projects)) {
-    const match = projects.find((p) => p.name === testBasename);
-    if (match) {
-      testProjectId = match.id;
-      ok("3.2 backend project", `created: ${match.id} (name="${match.name}")`);
-    } else {
-      // Force a daemon flush + retry
-      try {
-        writeFileSync(path.join(process.env.HOME ?? "/", ".synapse", "daemon-flush-now"), "");
-      } catch {}
-      await sleep(5000);
-      const retry = await fetchJson("/api/projects");
-      const m2 = Array.isArray(retry) ? retry.find((p) => p.name === testBasename) : null;
-      if (m2) {
-        testProjectId = m2.id;
-        ok("3.2 backend project (after flush)", `created: ${m2.id}`);
-      } else {
-        fail(
-          "3.2 backend project",
-          `project ${testBasename} not found after ${(SLEEP_DAEMON_SYNC_MS + 5000) / 1000}s wait`,
-        );
-        return;
-      }
-    }
+  const flushPath = path.join(process.env.HOME ?? "/", ".synapse", "daemon-flush-now");
+  const matchedProject = await pollBackend({
+    label: `project name="${testBasename}"`,
+    flushPath,
+    fetch: async () => {
+      const projects = await fetchJson("/api/projects?limit=200");
+      if (!Array.isArray(projects)) return null;
+      return projects.find((p) => p.name === testBasename) ?? null;
+    },
+  });
+  if (matchedProject) {
+    testProjectId = matchedProject.id;
+    ok("3.2 backend project", `created: ${matchedProject.id} (name="${matchedProject.name}")`);
   } else {
-    fail("3.2 backend project", `/api/projects returned non-array: ${JSON.stringify(projects).slice(0, 200)}`);
+    fail("3.2 backend project", `project ${testBasename} not found after ${POLL_BACKEND_MAX_MS / 1000}s wait`);
     return;
   }
 
-  // Verify conversation has the messages
-  const list = await fetchJson(`/api/conversations?project_id=${testProjectId}&limit=5`);
-  const convs = list.conversations ?? [];
-  if (convs.length === 0) {
-    fail("4.1 conversation", "no conversations in project");
+  // Verify conversation has the messages. Same polling shape as the project
+  // check — capture-watcher's idle window can also push this many seconds out.
+  const conv = await pollBackend({
+    label: `conversation under project ${testProjectId}`,
+    flushPath,
+    fetch: async () => {
+      const list = await fetchJson(`/api/conversations?project_id=${testProjectId}&limit=5`);
+      const convs = list?.conversations ?? [];
+      return convs[0] ?? null;
+    },
+  });
+  if (!conv) {
+    fail("4.1 conversation", `no conversations in project ${testProjectId} after ${POLL_BACKEND_MAX_MS / 1000}s`);
     return;
   }
-  testConvId = convs[0].id;
+  testConvId = conv.id;
 
-  const full = await fetchJson(`/api/conversations/${testConvId}`);
-  const allContent = (full.messages ?? []).map((m) => m.content ?? "").join(" ");
-
-  const hasId = allContent.includes(TEST_ID);
-  const hasPhrase = allContent.includes(TEST_PHRASE);
-  if (hasId && hasPhrase) {
+  // Final assertion: the test prompt's secrets actually rode the proxy →
+  // daemon → backend pipeline. Poll the full conversation body until the
+  // messages contain both phrases (the append-messages call can lag the
+  // create-conversation by a beat on slow networks).
+  const matchedContent = await pollBackend({
+    label: "messages with TEST_ID + TEST_PHRASE",
+    flushPath,
+    fetch: async () => {
+      const full = await fetchJson(`/api/conversations/${testConvId}`);
+      const all = (full?.messages ?? []).map((m) => m.content ?? "").join(" ");
+      return all.includes(TEST_ID) && all.includes(TEST_PHRASE) ? all : null;
+    },
+  });
+  if (matchedContent) {
     ok("4.1 message content", "both TEST_ID and TEST_PHRASE present in synced messages");
   } else {
-    fail("4.1 message content", `test phrases missing — TEST_ID=${hasId} TEST_PHRASE=${hasPhrase}`);
+    fail(
+      "4.1 message content",
+      `test phrases missing after ${POLL_BACKEND_MAX_MS / 1000}s — TEST_ID + TEST_PHRASE never reached backend`,
+    );
   }
+}
+
+/**
+ * Generic backend poll with periodic flush-now nudges. `fetch()` is called on
+ * each tick; the first non-null return wins. Returns null on timeout. Keeps
+ * the noisy "I'm still waiting" line live so the test doesn't look hung.
+ */
+async function pollBackend({ label, flushPath, fetch }) {
+  const start = Date.now();
+  let nextFlushAt = 0;
+  let lastError = null;
+  while (Date.now() - start < POLL_BACKEND_MAX_MS) {
+    if (Date.now() >= nextFlushAt) {
+      try {
+        writeFileSync(flushPath, "");
+      } catch {}
+      nextFlushAt = Date.now() + POLL_BACKEND_FLUSH_INTERVAL_MS;
+    }
+    try {
+      const result = await fetch();
+      if (result) {
+        const elapsed = Math.round((Date.now() - start) / 1000);
+        info(`  ✓ ${label} found after ${elapsed}s`);
+        return result;
+      }
+    } catch (e) {
+      lastError = e;
+    }
+    await sleep(POLL_BACKEND_INTERVAL_MS);
+  }
+  const elapsed = Math.round((Date.now() - start) / 1000);
+  info(`  ✗ ${label} not found after ${elapsed}s${lastError ? ` (last error: ${lastError.message})` : ""}`);
+  return null;
 }
 
 // ── Stage 5: fast-mode SessionStart on known cwd ─────────────────────────
@@ -552,25 +635,47 @@ If your brief doesn't have this, say 'NOT IN BRIEF'.`;
 // content Stage 7 would have shown claude. Catches "brief generation
 // broken" / "phrase missing from brief" without needing the integration
 // to exercise it.
+//
+// We can't fetch the brief from the backend — `composeBrief` is daemon-
+// local code that pulls handoff_markdown from backend + local cache and
+// stitches them into the <synapse-brief> tag. To exercise it universally
+// we fire the SessionStart hook directly and read the brief from stdout,
+// the SAME path that Claude Code (or any other harness) takes.
 async function stage7b_brief_content() {
   header("STAGE 7b · brief content contains the test phrase (universal)");
 
-  const brief = await fetchJson(`/api/projects/${testProjectId}/brief`);
-  if (brief._err) {
-    fail("7b.1 brief fetch", `HTTP ${brief._status}: ${brief._err.slice(0, 200)}`);
+  // The handoff_markdown that Stage 6 just verified is the source of the
+  // brief content. The next SessionStart hook in this cwd will pull that
+  // handoff into the brief — that's what we want to assert here. Same
+  // mechanism Claude Code uses; no claude binary required.
+  const { stdout, code, stderr } = fireHook("session-start", {
+    session_id: "e2e-stage-7b",
+    cwd: testDir,
+    source: "startup",
+    hook_event_name: "SessionStart",
+  });
+
+  if (code !== 0) {
+    fail("7b.1 hook exit", `hook exit ${code}: ${(stderr ?? "").slice(0, 200)}`);
     return;
   }
 
-  const text = typeof brief === "string" ? brief : (brief.brief ?? brief.markdown ?? JSON.stringify(brief));
-  const hasId = text.includes(TEST_ID);
-  const hasPhrase = text.includes(TEST_PHRASE);
+  const match = stdout.match(/<synapse-brief>([\s\S]*?)<\/synapse-brief>/);
+  if (!match) {
+    fail("7b.1 brief tag", "no <synapse-brief> tag in hook output");
+    return;
+  }
+  const briefContent = match[1];
+
+  const hasId = briefContent.includes(TEST_ID);
+  const hasPhrase = briefContent.includes(TEST_PHRASE);
 
   if (hasId && hasPhrase) {
     ok("7b.1 brief content", "brief contains BOTH test_id and secret_phrase");
   } else {
     fail(
       "7b.1 brief content",
-      `brief missing facts — TEST_ID=${hasId} TEST_PHRASE=${hasPhrase}; brief excerpt:\n  ${text.slice(0, 400).replace(/\n/g, "\n  ")}`,
+      `brief missing facts — TEST_ID=${hasId} TEST_PHRASE=${hasPhrase}; brief excerpt:\n  ${briefContent.slice(0, 400).replace(/\n/g, "\n  ")}`,
     );
   }
 }

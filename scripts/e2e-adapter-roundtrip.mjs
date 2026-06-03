@@ -54,6 +54,11 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { sweepArtifacts } from "./e2e-cleanup.mjs";
 
+// Opt-out of the daemon's skip-ephemeral-cwd predicate — tests use
+// tmpdir() paths that the predicate normally drops. Inherited by every
+// spawn that uses { env: { ...process.env, ... } }.
+process.env.SYNAPSE_DISPATCH_FORCE_ALLOW = "1";
+
 // ── Config ───────────────────────────────────────────────────────────────
 
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");

@@ -170,6 +170,44 @@ describe("shouldSkipDispatch", () => {
     expect(result.skip).toBe(false);
   });
 
+  // ── (e) SYNAPSE_DISPATCH_FORCE_ALLOW override ────────────────────────────
+
+  it("force-allow env var wins over every other skip condition", () => {
+    fs.writeFileSync(path.join(project, ".synapse-skip"), "");
+    const worktree = path.join(home, ".claude", "worktrees", "agent-abc");
+    const result = shouldSkipDispatch(
+      worktree, // would trigger (a)
+      {
+        SYNAPSE_DISPATCH_FORCE_ALLOW: "1",
+        SYNAPSE_SKIP_DISPATCH: "1", // would trigger (d)
+      },
+      { homeDir: home, tmpPrefixes: ["/var/folders"] }, // would trigger (b) for any /var/folders cwd
+    );
+    expect(result.skip).toBe(false);
+  });
+
+  it("force-allow with worktree cwd in tmpdir-prefix: allows", () => {
+    // Realistic E2E test scenario: testDir under /var/folders, predicate
+    // normally skips, force-allow lets capture fire.
+    const result = shouldSkipDispatch(
+      "/var/folders/_2/abc/T/synapse-e2e-12345",
+      { SYNAPSE_DISPATCH_FORCE_ALLOW: "1" },
+      { homeDir: home, tmpPrefixes: ["/var/folders"] },
+    );
+    expect(result.skip).toBe(false);
+  });
+
+  it("force-allow value other than '1' does NOT override", () => {
+    const worktree = path.join(home, ".claude", "worktrees", "agent-abc");
+    const result = shouldSkipDispatch(
+      worktree,
+      { SYNAPSE_DISPATCH_FORCE_ALLOW: "0" },
+      { homeDir: home, tmpPrefixes: [] },
+    );
+    expect(result.skip).toBe(true);
+    if (result.skip) expect(result.reason).toContain(".claude/worktrees");
+  });
+
   // ── Combinations: env beats everything (short-circuit) ────────────────────
 
   it("env-var wins over worktree path (short-circuits)", () => {
