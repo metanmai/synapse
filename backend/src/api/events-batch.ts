@@ -128,14 +128,40 @@ eventsBatch.post("/batch", async (c) => {
   const accepted = count ?? rows.length;
   const duplicates = rows.length - accepted;
 
+  // Per BUG-01 forensic (2026-05-20): a Supabase-side error inside
+  // recomputeProjectStatus (e.g., handoff_events missing from schema cache)
+  // used to escape this Promise.all as an unhandled rejection, surfacing as
+  // an opaque Cloudflare 1101 outside Hono's app.onError boundary.
+  //
+  // Promise.allSettled isolates per-project failures: the events upsert
+  // above has already succeeded (rows are durable), so a recompute failure
+  // is a side-effect issue — the reducer is idempotent and the next batch
+  // will recompute from the now-stored events. Log the rejection so it
+  // shows up in Sentry once Plan 05 wires it; return 200 with the optional
+  // recompute_errors array so the daemon / dashboard can see which
+  // projects had partial side-effects.
+  //
+  // TODO: BUGS.md #5a — integration tests for this path are .skip'd until
+  // a test Supabase env exists. The behavioral contract (rejection inside
+  // recomputeProjectStatus does not 1101) cannot be unit-tested without it.
   const projectIds = [...new Set(rows.map((r) => r.project_id))];
-  await Promise.all(projectIds.map((pid) => recomputeProjectStatus(db, pid)));
+  const recomputeResults = await Promise.allSettled(projectIds.map((pid) => recomputeProjectStatus(db, pid)));
+  const recomputeErrors: string[] = [];
+  for (let i = 0; i < recomputeResults.length; i++) {
+    const result = recomputeResults[i];
+    if (result.status === "rejected") {
+      const pid = projectIds[i];
+      console.error("[events-batch] recomputeProjectStatus rejected", pid, result.reason);
+      recomputeErrors.push(pid);
+    }
+  }
 
   return c.json({
     accepted,
     duplicates,
     adjusted,
     canonical_project_ids: Object.fromEntries(idMapping),
+    ...(recomputeErrors.length > 0 ? { recompute_errors: recomputeErrors } : {}),
   });
 });
 
