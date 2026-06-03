@@ -57,7 +57,7 @@ describe("synapse doctor", () => {
 // supervisor-aware `DaemonManager.isRunning()` + `checkSupervisor` impl.
 
 describe("DaemonManager.isRunning + checkSupervisor (BUG-02)", () => {
-  it("returns true when launchctl print reports the label loaded", () => {
+  it.skipIf(process.platform !== "darwin")("returns true when launchctl print reports the label loaded", () => {
     // launchctl print emits a multi-line body containing `pid = 12345`.
     // Wave 2 parses it and surfaces { running: true, pid: 12345, supervisor: "launchd" }.
     Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
@@ -74,7 +74,7 @@ describe("DaemonManager.isRunning + checkSupervisor (BUG-02)", () => {
     expect(sup.supervisor).toBe("launchd");
   });
 
-  it("returns false when launchctl print throws (service not loaded)", () => {
+  it.skipIf(process.platform !== "darwin")("returns false when launchctl print throws (service not loaded)", () => {
     // launchctl exits 113 when the label is unknown; execSync throws.
     Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
     vi.spyOn(child_process, "execSync").mockImplementation(() => {
@@ -167,46 +167,49 @@ describe("DaemonManager.isRunning + checkSupervisor (BUG-02)", () => {
     expect(pidOnlyOut).not.toContain("systemd");
   });
 
-  it("daemon-supervisor invokes launchctl with the LAUNCHD_LABEL imported from os-service (not a redefined literal)", async () => {
-    // CLASS-CORRECT guard: replaces a source-text grep ("daemon-supervisor.ts
-    // contains import LAUNCHD_LABEL"). We substitute a sentinel value for the
-    // os-service module's LAUNCHD_LABEL export, then assert that the actual
-    // launchctl invocation contains the sentinel. If Plan 01-02 hard-codes
-    // the literal `app.synapsesync.daemon` instead of importing the constant,
-    // the launchctl call won't contain TEST_SENTINEL_LABEL and this fails.
-    Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+  it.skipIf(process.platform !== "darwin")(
+    "daemon-supervisor invokes launchctl with the LAUNCHD_LABEL imported from os-service (not a redefined literal)",
+    async () => {
+      // CLASS-CORRECT guard: replaces a source-text grep ("daemon-supervisor.ts
+      // contains import LAUNCHD_LABEL"). We substitute a sentinel value for the
+      // os-service module's LAUNCHD_LABEL export, then assert that the actual
+      // launchctl invocation contains the sentinel. If Plan 01-02 hard-codes
+      // the literal `app.synapsesync.daemon` instead of importing the constant,
+      // the launchctl call won't contain TEST_SENTINEL_LABEL and this fails.
+      Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
 
-    vi.doMock("../../src/capture/os-service.js", async (importOriginal) => {
-      const actual = await importOriginal<typeof import("../../src/capture/os-service.js")>();
-      return {
-        ...actual,
-        LAUNCHD_LABEL: "TEST_SENTINEL_LABEL",
-      };
-    });
-    vi.resetModules();
+      vi.doMock("../../src/capture/os-service.js", async (importOriginal) => {
+        const actual = await importOriginal<typeof import("../../src/capture/os-service.js")>();
+        return {
+          ...actual,
+          LAUNCHD_LABEL: "TEST_SENTINEL_LABEL",
+        };
+      });
+      vi.resetModules();
 
-    const execSyncSpy = vi.fn().mockReturnValue("pid = 12345\n" as unknown as Buffer);
-    vi.doMock("node:child_process", async (importOriginal) => {
-      const actual = await importOriginal<typeof import("node:child_process")>();
-      return {
-        ...actual,
-        default: { ...actual, execSync: execSyncSpy },
-        execSync: execSyncSpy,
-      };
-    });
-    vi.resetModules();
+      const execSyncSpy = vi.fn().mockReturnValue("pid = 12345\n" as unknown as Buffer);
+      vi.doMock("node:child_process", async (importOriginal) => {
+        const actual = await importOriginal<typeof import("node:child_process")>();
+        return {
+          ...actual,
+          default: { ...actual, execSync: execSyncSpy },
+          execSync: execSyncSpy,
+        };
+      });
+      vi.resetModules();
 
-    const { checkSupervisor: cs } = await import("../../src/cli/util/daemon-supervisor.js");
-    cs();
+      const { checkSupervisor: cs } = await import("../../src/cli/util/daemon-supervisor.js");
+      cs();
 
-    expect(execSyncSpy).toHaveBeenCalled();
-    const firstArg = String(execSyncSpy.mock.calls[0][0]);
-    expect(firstArg).toContain("TEST_SENTINEL_LABEL");
-    // And it must NOT contain the production literal — proves the supervisor
-    // is reading from the constant we just substituted.
-    expect(firstArg).not.toContain("app.synapsesync.daemon");
+      expect(execSyncSpy).toHaveBeenCalled();
+      const firstArg = String(execSyncSpy.mock.calls[0][0]);
+      expect(firstArg).toContain("TEST_SENTINEL_LABEL");
+      // And it must NOT contain the production literal — proves the supervisor
+      // is reading from the constant we just substituted.
+      expect(firstArg).not.toContain("app.synapsesync.daemon");
 
-    vi.doUnmock("../../src/capture/os-service.js");
-    vi.doUnmock("node:child_process");
-  });
+      vi.doUnmock("../../src/capture/os-service.js");
+      vi.doUnmock("node:child_process");
+    },
+  );
 });

@@ -47,15 +47,31 @@ function isToolResultOnly(msg: RooCodeMessage): boolean {
  * Exported for unit testing.
  */
 export function rooCodeTasksDir(platform: NodeJS.Platform = process.platform): string {
-  const ext = path.join("Code", "User", "globalStorage", "rooveterinaryinc.roo-cline", "tasks");
   if (platform === "darwin") {
-    return path.join(os.homedir(), "Library", "Application Support", ext);
+    return path.posix.join(
+      os.homedir(),
+      "Library",
+      "Application Support",
+      "Code",
+      "User",
+      "globalStorage",
+      "rooveterinaryinc.roo-cline",
+      "tasks",
+    );
   }
   if (platform === "win32") {
-    const appData = process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming");
-    return path.join(appData, ext);
+    const appData = process.env.APPDATA ?? path.win32.join(os.homedir(), "AppData", "Roaming");
+    return path.win32.join(appData, "Code", "User", "globalStorage", "rooveterinaryinc.roo-cline", "tasks");
   }
-  return path.join(os.homedir(), ".config", ext);
+  return path.posix.join(
+    os.homedir(),
+    ".config",
+    "Code",
+    "User",
+    "globalStorage",
+    "rooveterinaryinc.roo-cline",
+    "tasks",
+  );
 }
 
 export class RooCodeAdapter implements ToolAdapter {

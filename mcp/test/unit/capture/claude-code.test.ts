@@ -19,7 +19,10 @@ describe("ClaudeCodeAdapter", () => {
   it("returns watch paths under ~/.claude/projects", () => {
     const paths = adapter.watchPaths();
     expect(paths.length).toBeGreaterThan(0);
-    expect(paths[0]).toContain(".claude/projects");
+    // path.join produces platform-shaped separator; on Windows the path
+    // is `\.claude\projects`, on POSIX `/.claude/projects`. Asserting via
+    // path.join makes the test cross-OS-correct.
+    expect(paths[0]).toContain(path.join(".claude", "projects"));
   });
 
   it("parses a JSONL session file into CapturedSession", () => {

@@ -288,7 +288,9 @@ describe("CLI dispatcher — handoff layer subcommands", () => {
       // Should not be the bare invocation that would require a global install.
       expect(cmd).not.toMatch(/^synapse\s+hook/);
       // Should reference an absolute path to node and an absolute path to a .js entry.
-      expect(cmd).toMatch(/".*\/node"\s+".*\.js"\s+hook session-start/);
+      // Cross-platform regex: matches both `/node`/`\node.exe` (Windows) and
+      // `/node` (POSIX). The .js extension is platform-neutral.
+      expect(cmd).toMatch(/"[^"]*[\\/]node(?:\.exe)?"\s+"[^"]*\.js"\s+hook session-start/);
     });
 
     it("installs slash commands with absolute paths (overwriting stale templates)", async () => {
@@ -301,7 +303,8 @@ describe("CLI dispatcher — handoff layer subcommands", () => {
       expect(code).toBe(0);
       const body = fs.readFileSync(path.join(dir, "handoff.md"), "utf-8");
       expect(body).not.toContain("stale content");
-      expect(body).toMatch(/".*\/node"\s+".*\.js"\s+handoff "\$ARGUMENTS"/);
+      // Cross-platform: matches both POSIX `/node` and Windows `\node.exe`.
+      expect(body).toMatch(/"[^"]*[\\/]node(?:\.exe)?"\s+"[^"]*\.js"\s+handoff "\$ARGUMENTS"/);
     });
 
     it("migrates stale `synapse hook <sub>` entries away when re-running init", async () => {

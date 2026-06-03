@@ -21,7 +21,7 @@ describe("CopilotCliAdapter", () => {
   it("returns watch paths under ~/.copilot/session-state", () => {
     const paths = adapter.watchPaths();
     expect(paths.length).toBeGreaterThan(0);
-    expect(paths[0]).toContain(".copilot/session-state");
+    expect(paths[0]).toContain(path.join(".copilot", "session-state"));
   });
 
   it("parses events.jsonl into a CapturedSession", () => {
