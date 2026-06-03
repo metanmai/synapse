@@ -68,3 +68,28 @@ export function toolSummary(msg: Pick<ConversationMessage, "tool_interaction">):
 export function pluralizeMessages(count: number): string {
   return `${count} message${count === 1 ? "" : "s"}`;
 }
+
+export const toolBadgeColors: Record<string, { bg: string; text: string }> = {
+  "claude-code": { bg: "rgba(86, 28, 36, 0.08)", text: "#561c24" },
+  cursor: { bg: "rgba(59, 130, 246, 0.08)", text: "#2563eb" },
+  codex: { bg: "rgba(16, 185, 129, 0.08)", text: "#059669" },
+  gemini: { bg: "rgba(168, 85, 247, 0.08)", text: "#7c3aed" },
+};
+
+export const defaultToolBadge = { bg: "rgba(107, 114, 128, 0.08)", text: "#6b7280" };
+
+export function getToolBadge(tool: string | undefined | null): { bg: string; text: string } {
+  if (!tool) return defaultToolBadge;
+  return toolBadgeColors[tool] ?? defaultToolBadge;
+}
+
+export function getToolLabel(tool: string | undefined | null): string {
+  if (!tool) return "Unknown";
+  const labels: Record<string, string> = {
+    "claude-code": "Claude Code",
+    cursor: "Cursor",
+    codex: "Codex",
+    gemini: "Gemini",
+  };
+  return labels[tool] ?? tool;
+}
