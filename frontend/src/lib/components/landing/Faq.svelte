@@ -30,7 +30,7 @@ const faqs: FaqItem[] = [
   {
     question: "What does it cost?",
     answer:
-      "Free tier: up to 5 projects with all capture features, MCP access, and team sharing. Plus at $5.99/mo for up to 50 projects and unlimited team members per project. You provide your own LLM API key for distillation.",
+      "Free tier: up to 50 projects with all capture features, MCP access, and 1-on-1 email invites. Plus at $5.99/mo adds AI-generated project context, link-based sharing, unlimited team members per project, and version history. You provide your own LLM API key for distillation.",
   },
 ];
 
