@@ -25,6 +25,7 @@ export function createMockDb(response: { data?: unknown; error?: unknown; count?
     "eq",
     "neq",
     "in",
+    "is",
     "like",
     "or",
     "overlaps",

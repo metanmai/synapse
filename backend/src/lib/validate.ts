@@ -105,6 +105,12 @@ export const schemas = {
       })
       .nullable()
       .optional(),
+    // Curation pointer (migration 024). Optional list of insight ids this
+    // new save replaces; the backend stamps `superseded_by = <new_id>` on
+    // each so they drop out of default brief / list queries. Scope-checked
+    // (same project) and idempotent (skips already-superseded rows) in the
+    // query layer — see createInsight().
+    supersedes: z.array(z.string().uuid("Each supersedes entry must be a valid insight id")).optional(),
   }),
 
   updateInsight: z.object({

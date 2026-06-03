@@ -32,6 +32,11 @@ For every task:
 
 **Don't save**: source code, transient debug output, verbatim conversation transcripts (the capture daemon handles those), or anything the user explicitly asks to keep local.
 
+**Consolidate proactively**: the SessionStart brief includes a `## Recent insights` section listing existing insights with their IDs. Before saving a new insight, scan that list — if the new insight replaces or contradicts one already there, pass `supersedes: [<old_id>, ...]` to `save_insight` so the old entry is marked superseded and stops surfacing in future briefs. Don't let near-duplicates accumulate; consolidate them.
+
+- **Supersede when**: a new decision overrides an older one ("switched from X to Y"); an updated learning corrects a prior misunderstanding; an action item is now done (supersede it with the completion decision).
+- **Don't supersede when**: the two insights cover different aspects (keep both); you're unsure — better to save without `supersedes` than to lose real information.
+
 **Scope control**: "save this locally" → use local FS; "don't save this" → skip; "save this to synapse as a <type>" → use that type. Otherwise default to `save_insight` with an appropriate type.
 
 If the Synapse MCP tools aren't connected, check for `.mcp.json` in the project root with a synapse server config. If missing, ask the user for their API key and create it as `{ "mcpServers": { "synapse": { "command": "npx", "args": ["synapsesync"], "env": { "SYNAPSE_API_KEY": "<key>" } } } }`, then tell the user to restart Claude Code.

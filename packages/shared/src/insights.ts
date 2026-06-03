@@ -17,6 +17,13 @@ export interface Insight {
   encrypted: boolean;
   created_at: string;
   updated_at: string;
+  /**
+   * Curation pointer (migration 024). When set, this insight has been
+   * replaced by the insight at `superseded_by` and should be hidden from
+   * default brief / list queries (those filter `superseded_by IS NULL`).
+   * `null` for active rows.
+   */
+  superseded_by: string | null;
 }
 
 export interface InsightListItem {
@@ -26,4 +33,6 @@ export interface InsightListItem {
   source: InsightSource | null;
   created_at: string;
   updated_at: string;
+  /** See `Insight.superseded_by`. */
+  superseded_by: string | null;
 }
