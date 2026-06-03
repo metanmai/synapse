@@ -7,6 +7,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import { runRefresh, runStatus, runTree, runUpgrade, runWhoami } from "./cli/commands.js";
 import { runStats } from "./cli/stats.js";
 import { accent, bold, muted } from "./cli/theme.js";
 import { runWizard } from "./cli/wizard.js";
@@ -56,7 +57,7 @@ function readPackageVersion(): string {
   }
 }
 
-const CLI_SUBCOMMANDS = new Set(["wizard", "help", "stats"]);
+const CLI_SUBCOMMANDS = new Set(["wizard", "help", "stats", "tree", "status", "refresh", "upgrade", "whoami"]);
 
 // --- CLI help ---
 
@@ -64,18 +65,28 @@ function printHelpPlain(): void {
   const v = readPackageVersion();
   console.log(`synapsesync-mcp v${v} \u2014 Synapse MCP server & CLI
 
-${bold("Usage")}
+${bold("Setup")}
   npx synapsesync-mcp              Interactive setup wizard
+  npx synapsesync-mcp status       Show where configured + connection health
+  npx synapsesync-mcp refresh      Generate new API key, update all configs
+
+${bold("Workspace")}
+  npx synapsesync-mcp tree         View workspace files as a tree
   npx synapsesync-mcp stats        Show lifetime workspace stats
+  npx synapsesync-mcp whoami       Show account info
+
+${bold("Account")}
+  npx synapsesync-mcp upgrade      Upgrade to Plus ($5.99/mo)
+
+${bold("Other")}
   npx synapsesync-mcp --help       Show this help
   npx synapsesync-mcp --version    Show version
 
 ${bold("MCP server")}
-  Runs automatically when stdin is not a TTY and SYNAPSE_API_KEY is set
-  (e.g. Cursor, Claude Code, or VS Code launching the server).
+  Runs automatically when stdin is not a TTY and SYNAPSE_API_KEY is set.
 
-${bold("More")}
-  https://synapsesync.app
+${muted("Made by @metanmai \u00B7 github.com/metanmai/synapse")}
+${muted("If Synapse saves you time, consider sponsoring: github.com/sponsors/metanmai")}
 `);
 }
 
@@ -136,9 +147,30 @@ async function handleCli(raw: string[]): Promise<void> {
     unknownSubcommand(raw[0]);
   }
 
-  // Stats subcommand
-  if (raw[0] === "stats") {
+  // Subcommands
+  const cmd = raw[0];
+  if (cmd === "stats") {
     await runStats();
+    process.exit(0);
+  }
+  if (cmd === "tree") {
+    await runTree();
+    process.exit(0);
+  }
+  if (cmd === "status") {
+    await runStatus();
+    process.exit(0);
+  }
+  if (cmd === "refresh") {
+    await runRefresh();
+    process.exit(0);
+  }
+  if (cmd === "upgrade") {
+    await runUpgrade();
+    process.exit(0);
+  }
+  if (cmd === "whoami") {
+    await runWhoami();
     process.exit(0);
   }
 
