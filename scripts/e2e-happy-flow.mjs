@@ -93,10 +93,6 @@ function info(detail) {
   log(`  · ${detail}`);
 }
 
-function exec(cmd, args, opts = {}) {
-  return spawnSync(cmd, args, { encoding: "utf-8", env: { ...process.env, ...(opts.env ?? {}) }, ...opts });
-}
-
 async function fetchJson(pathname, init = {}) {
   const res = await fetch(`${API_BASE}${pathname}`, {
     ...init,
