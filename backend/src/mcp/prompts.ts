@@ -1,8 +1,8 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Env } from "../lib/env";
 
-export function registerPrompts(server: McpServer, env: Env) {
+export function registerPrompts(server: McpServer, _env: Env) {
   server.prompt(
     "session_start",
     "Load relevant project context at the start of a session. Reminds you of capture conventions.",
@@ -27,7 +27,7 @@ Use \`search_context\` to find relevant prior context before starting work.`,
           },
         },
       ],
-    })
+    }),
   );
 
   server.prompt(
@@ -57,6 +57,6 @@ Also check if any individual decisions or conventions should be saved as separat
           },
         },
       ],
-    })
+    }),
   );
 }
