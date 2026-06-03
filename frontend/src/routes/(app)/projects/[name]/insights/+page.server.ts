@@ -6,9 +6,7 @@ export const load: PageServerLoad = async ({ parent, locals }) => {
   const { project } = await parent();
   const api = createApi(locals.token);
 
-  const { insights, total } = await api
-    .listInsights(project.id)
-    .catch(() => ({ insights: [], total: 0 }));
+  const { insights, total } = await api.listInsights(project.id).catch(() => ({ insights: [], total: 0 }));
 
   return { insights, total };
 };
