@@ -75,7 +75,8 @@ function createSequentialMockDb(...responses: { data?: unknown; error?: unknown;
     // biome-ignore lint/suspicious/noThenProperty: intentional thenable mock
     (chainable as Record<string, unknown>).then = (resolve: (v: unknown) => void) => resolve(resp);
 
-    chains.push(chainable as Record<string, unknown>);
+    // biome-ignore lint/suspicious/noExplicitAny: chains array has a strict Mock<...> + thenable signature; the mock chainable is structurally compatible but TypeScript can't prove it without the broad cast
+    chains.push(chainable as any);
     return chainable;
   });
 
