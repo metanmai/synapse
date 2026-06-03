@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -291,8 +290,6 @@ if (!isMcpServerMode(args)) {
   // --- MCP Server (requires SDK + env vars) ---
 
   const API_KEY = process.env.SYNAPSE_API_KEY;
-  const PASSPHRASE = process.env.SYNAPSE_PASSPHRASE;
-  const USER_EMAIL = process.env.SYNAPSE_USER_EMAIL;
   const SOURCE = process.env.SYNAPSE_SOURCE || "claude";
   const DEFAULT_PROJECT_NAME = process.env.SYNAPSE_PROJECT || "My Workspace";
 
@@ -338,45 +335,6 @@ if (!isMcpServerMode(args)) {
     const created = (await api("POST", "/api/projects", { name: DEFAULT_PROJECT_NAME })) as ProjectResponse;
     PROJECT = created.name;
     return PROJECT;
-  }
-
-  // --- E2E Encryption (matches frontend crypto.ts) ---
-  const ENC_PREFIX = "enc:v1:";
-  const PBKDF2_ITERATIONS = 100_000;
-
-  let derivedKey: Buffer | null = null;
-
-  async function deriveKeyNode(passphrase: string, salt: string): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-      crypto.pbkdf2(passphrase, salt, PBKDF2_ITERATIONS, 32, "sha256", (err, key) => {
-        if (err) reject(err);
-        else resolve(key);
-      });
-    });
-  }
-
-  async function getEncKey(): Promise<Buffer | null> {
-    if (derivedKey) return derivedKey;
-    if (!PASSPHRASE || !USER_EMAIL) return null;
-    derivedKey = await deriveKeyNode(PASSPHRASE, USER_EMAIL);
-    return derivedKey;
-  }
-
-  async function decryptContent(text: string): Promise<string> {
-    if (!text.startsWith(ENC_PREFIX)) return text;
-    const key = await getEncKey();
-    if (!key) return text;
-    const payload = text.slice(ENC_PREFIX.length);
-    const colonIdx = payload.indexOf(":");
-    const ivHex = payload.slice(0, colonIdx);
-    const ctBase64 = payload.slice(colonIdx + 1);
-    const iv = Buffer.from(ivHex, "hex");
-    const combined = Buffer.from(ctBase64, "base64");
-    const authTag = combined.slice(-16);
-    const ciphertext = combined.slice(0, -16);
-    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-    decipher.setAuthTag(authTag);
-    return decipher.update(ciphertext) + decipher.final("utf8");
   }
 
   const server = new McpServer({
@@ -515,8 +473,7 @@ if (!isMcpServerMode(args)) {
         .filter(Boolean)
         .join(" | ");
 
-      const content = await decryptContent(entry.content);
-      return { content: [{ type: "text" as const, text: `${meta}\n---\n${content}` }] };
+      return { content: [{ type: "text" as const, text: `${meta}\n---\n${entry.content}` }] };
     },
   );
 
@@ -550,10 +507,7 @@ if (!isMcpServerMode(args)) {
         return { content: [{ type: "text" as const, text: `No results for "${query}"` }] };
       }
 
-      const decrypted = await Promise.all(
-        results.map(async (e) => ({ ...e, content: await decryptContent(e.content) })),
-      );
-      const text = decrypted
+      const text = results
         .map((e, i) => {
           const dir = e.path.includes("/") ? `${e.path.split("/").slice(0, -1).join("/")}/` : "(root)";
           const tags = e.tags?.length ? `  tags: ${e.tags.join(", ")}` : "";
@@ -602,10 +556,7 @@ if (!isMcpServerMode(args)) {
         return { content: [{ type: "text" as const, text: `No history for ${path}` }] };
       }
 
-      const decryptedVersions = await Promise.all(
-        versions.map(async (v) => ({ ...v, content: await decryptContent(v.content) })),
-      );
-      const text = decryptedVersions
+      const text = versions
         .map((v, i) => {
           const date = new Date(v.changed_at).toLocaleString();
           const preview = v.content.slice(0, 100).replace(/\n/g, " ");
