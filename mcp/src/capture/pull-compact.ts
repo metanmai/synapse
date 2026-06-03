@@ -25,7 +25,19 @@ interface FullConversation {
 }
 
 export interface PullHandoffOptions {
-  cwd: string;
+  /**
+   * Original working dir for hook-driven pulls. Used to resolve the project
+   * via local project-map → backend resolver. Optional when `projectId` is
+   * supplied directly (daemon pre-warm path) — exactly one must be set.
+   */
+  cwd?: string;
+  /**
+   * Direct project_id. Bypasses cwd resolution. The daemon pre-warm caller
+   * already knows the project (it iterates `~/.synapse/projects/<id>/`), so
+   * a cwd lookup would be a wasted round-trip. Mutually exclusive with `cwd`
+   * in effect — when both are provided, `projectId` wins.
+   */
+  projectId?: string;
   apiKey?: string;
   apiUrl?: string;
   registry?: AdapterRegistry;
@@ -68,54 +80,68 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
     return null;
   }
 
-  // Canonicalize cwd so symlinked entry paths route to the same project as
-  // the canonical target. cloud-sync stores project-map keys post-realpath;
-  // a mismatch here would silently miss for symlink users. Falls back to
-  // the raw cwd if the path no longer exists.
-  let canonicalCwd = opts.cwd;
-  try {
-    canonicalCwd = fs.realpathSync(opts.cwd);
-  } catch {
-    /* path gone — use raw */
-  }
-
   const auth = { Authorization: `Bearer ${apiKey}` };
 
-  // Resolve cwd → project. Local map first (fast, offline); on miss we
-  // ask the backend's resolver. This is the cross-device cold-start path:
-  // on a freshly installed machine the project-map is empty, and without
-  // backend resolution every "first session" on a new device would silently
-  // lose the handoff. The resolver only matches existing projects the user
-  // can already see — it never creates one — so a true no-match still
-  // returns null (caller treats null as "render the brief without handoff").
-  const map = readProjectMap();
-  const localMapping = map[canonicalCwd] ?? map[opts.cwd];
+  // Daemon pre-warm path: caller already knows the project (it's iterating
+  // `~/.synapse/projects/<id>/`). Skip the cwd → project lookup entirely —
+  // there's no cwd to canonicalize, no project-map to consult, no fallback
+  // to backend resolve. This is the cheapest correct path; reverse-looking
+  // up a cwd just to feed the resolver would be a wasted round-trip.
+  let canonicalCwd: string | null = null;
   let projectUuid: string;
-  if (localMapping) {
-    projectUuid = localMapping.project_id;
+  if (opts.projectId) {
+    projectUuid = opts.projectId;
   } else {
-    const resolveBackend: BackendResolveFn = async (signals) => {
-      const res = await fetch(`${apiUrl}/api/projects/resolve`, {
-        method: "POST",
-        headers: { ...auth, "Content-Type": "application/json" },
-        body: JSON.stringify(signals),
-      });
-      if (!res.ok) throw new Error(`resolve ${res.status}`);
-      return (await res.json()) as BackendResolveResponse;
-    };
-    const resolved = await resolveProject(canonicalCwd, resolveBackend);
-    if (!resolved.project_id || !resolved.name) {
-      log(`pull-compact: could not resolve project for cwd=${canonicalCwd} (source=${resolved.source})`);
+    if (!opts.cwd) {
+      log("pull-compact: neither cwd nor projectId provided");
       return null;
     }
-    projectUuid = resolved.project_id;
-    // Write-through so the next session on this device is local-fast and
-    // doesn't repeat the backend round-trip.
+    // Canonicalize cwd so symlinked entry paths route to the same project as
+    // the canonical target. cloud-sync stores project-map keys post-realpath;
+    // a mismatch here would silently miss for symlink users. Falls back to
+    // the raw cwd if the path no longer exists.
+    canonicalCwd = opts.cwd;
     try {
-      upsertProjectMapping(canonicalCwd, { project_id: projectUuid, project_name: resolved.name });
-      log(`pull-compact: cached resolved project ${projectUuid} for cwd=${canonicalCwd}`);
+      canonicalCwd = fs.realpathSync(opts.cwd);
     } catch {
-      /* best-effort cache; never fail the pull for it */
+      /* path gone — use raw */
+    }
+
+    // Resolve cwd → project. Local map first (fast, offline); on miss we
+    // ask the backend's resolver. This is the cross-device cold-start path:
+    // on a freshly installed machine the project-map is empty, and without
+    // backend resolution every "first session" on a new device would silently
+    // lose the handoff. The resolver only matches existing projects the user
+    // can already see — it never creates one — so a true no-match still
+    // returns null (caller treats null as "render the brief without handoff").
+    const map = readProjectMap();
+    const localMapping = map[canonicalCwd] ?? map[opts.cwd];
+    if (localMapping) {
+      projectUuid = localMapping.project_id;
+    } else {
+      const resolveBackend: BackendResolveFn = async (signals) => {
+        const res = await fetch(`${apiUrl}/api/projects/resolve`, {
+          method: "POST",
+          headers: { ...auth, "Content-Type": "application/json" },
+          body: JSON.stringify(signals),
+        });
+        if (!res.ok) throw new Error(`resolve ${res.status}`);
+        return (await res.json()) as BackendResolveResponse;
+      };
+      const resolved = await resolveProject(canonicalCwd, resolveBackend);
+      if (!resolved.project_id || !resolved.name) {
+        log(`pull-compact: could not resolve project for cwd=${canonicalCwd} (source=${resolved.source})`);
+        return null;
+      }
+      projectUuid = resolved.project_id;
+      // Write-through so the next session on this device is local-fast and
+      // doesn't repeat the backend round-trip.
+      try {
+        upsertProjectMapping(canonicalCwd, { project_id: projectUuid, project_name: resolved.name });
+        log(`pull-compact: cached resolved project ${projectUuid} for cwd=${canonicalCwd}`);
+      } catch {
+        /* best-effort cache; never fail the pull for it */
+      }
     }
   }
 
@@ -141,7 +167,10 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
       // project-map entry so the NEXT capture-sync from this cwd auto-
       // creates a fresh project. The current SessionStart still emits a
       // brief without handoff (caller treats null as "no handoff").
-      if (res.status === 404) {
+      // Map invalidation only applies on the cwd-driven path. The daemon
+      // pre-warm path skips this — the daemon's project list is already
+      // self-cleaning via reconcileProjects(), and there's no cwd to drop.
+      if (res.status === 404 && canonicalCwd) {
         removeProjectMapping(canonicalCwd, projectUuid);
         log(`pull-compact: invalidated stale project-map entry for cwd=${canonicalCwd} (project ${projectUuid})`);
       }
@@ -219,7 +248,11 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
   //     in a row see bare briefs. Spawn unconditionally so the SECOND
   //     session always wins.
   if (opts.fast) {
-    spawnBackgroundRecompute(canonicalCwd, log);
+    // Fast mode is only entered via the SessionStart hook path, which always
+    // provides a cwd. Daemon pre-warm callers run in slow mode (no `fast`),
+    // so this branch never executes without canonicalCwd. Defensive null-
+    // guard for future callers that might combine fast + projectId.
+    if (canonicalCwd) spawnBackgroundRecompute(canonicalCwd, log);
     return cachedHandoff;
   }
 
