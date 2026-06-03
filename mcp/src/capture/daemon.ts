@@ -39,7 +39,7 @@ export class DaemonManager {
   private logFile: string;
 
   constructor(dir?: string) {
-    this.dir = dir ?? path.join(os.homedir(), ".synapse");
+    this.dir = dir ?? process.env.SYNAPSE_HOME ?? path.join(os.homedir(), ".synapse");
     fs.mkdirSync(this.dir, { recursive: true });
     this.pidFile = path.join(this.dir, "capture.pid");
     this.logFile = path.join(this.dir, "capture.log");

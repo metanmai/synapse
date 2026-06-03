@@ -25,6 +25,8 @@ export class CopilotCliAdapter implements ToolAdapter {
   tool = "copilot-cli";
 
   watchPaths(): string[] {
+    const override = process.env.SYNAPSE_TEST_COPILOT_PATH;
+    if (override) return [override];
     return [path.join(os.homedir(), ".copilot", "session-state")];
   }
 
