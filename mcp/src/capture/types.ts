@@ -35,4 +35,3 @@ export function sessionIdFromNative(nativeId: string): string {
   const stripped = nativeId.replace(/-/g, "").slice(0, 16);
   return `ses_${stripped}`;
 }
-
