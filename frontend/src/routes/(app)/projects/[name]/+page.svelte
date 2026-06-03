@@ -83,10 +83,20 @@ async function selectEntry(path: string) {
   loading = false;
 }
 
+let newFolderPrefix = $state("");
+
 function startNew() {
   mode = "new";
   entry = null;
   selectedPath = null;
+  newFolderPrefix = "";
+}
+
+function startNewInFolder(folderPath: string) {
+  mode = "new";
+  entry = null;
+  selectedPath = null;
+  newFolderPrefix = folderPath + "/";
 }
 
 function startEdit() {
@@ -127,33 +137,25 @@ function closePanel() {
     style="width: {sidebarWidth}px; border-radius: 0;">
     <div class="flex items-center justify-between mb-2 px-1">
       <span class="font-medium uppercase tracking-wide"
-        style="color: var(--color-text-muted); font-size: 11px;">Files</span>
+        style="color: var(--color-text-muted); font-size: 10px;">Files</span>
       <div class="flex items-center gap-2">
         <button onclick={() => startNew()}
           class="cursor-pointer"
-          style="font-size: 12px; padding: 6px 14px; border-radius: 9999px; border: 1px solid var(--color-border); background: rgba(86, 28, 36, 0.04); color: var(--color-text); font-weight: 500; cursor: pointer; transition: all 150ms ease;"
-          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.1)')}
-          onmouseleave={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.04)')}>
-          + New
-        </button>
-        <a href={`/projects/${encodeURIComponent(data.project.name)}/api/export`}
-          download
-          style="font-size: 12px; padding: 6px 14px; border-radius: 9999px; border: 1px solid var(--color-border); background: rgba(86, 28, 36, 0.04); color: var(--color-text); font-weight: 500; cursor: pointer; transition: all 150ms ease; text-decoration: none; display: inline-block;"
-          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.1)')}
-          onmouseleave={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.04)')}>
-          ↓ Export
-        </a>
+          style="font-size: 14px; width: 24px; height: 24px; border-radius: 6px; border: none; background: transparent; color: var(--color-text-muted); cursor: pointer; transition: all 150ms ease; display: flex; align-items: center; justify-content: center; line-height: 1;"
+          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
+          onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
+          title="New file">+</button>
         <button onclick={() => importInput?.click()}
           class="cursor-pointer"
-          style="font-size: 12px; padding: 6px 14px; border-radius: 9999px; border: 1px solid var(--color-border); background: rgba(86, 28, 36, 0.04); color: var(--color-text); font-weight: 500; cursor: pointer; transition: all 150ms ease;"
-          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.1)')}
-          onmouseleave={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.04)')}>
-          ↑ Import
-        </button>
+          style="font-size: 12px; width: 24px; height: 24px; border-radius: 6px; border: none; background: transparent; color: var(--color-text-muted); cursor: pointer; transition: all 150ms ease; display: flex; align-items: center; justify-content: center; line-height: 1;"
+          onmouseenter={(e) => (e.currentTarget.style.background = 'rgba(86, 28, 36, 0.08)')}
+          onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
+          title="Import zip">↑</button>
       </div>
     </div>
     <FolderTree entries={data.entries} {selectedPath}
-      projectName={data.project.name} onSelect={selectEntry} onAction={handleAction} />
+      projectName={data.project.name} onSelect={selectEntry} onAction={handleAction}
+      onNewInFolder={startNewInFolder} />
   </div>
 
   <!-- Resize handle -->
@@ -188,7 +190,7 @@ function closePanel() {
         onClose={closePanel}
       />
     {:else if mode === "new"}
-      <EntryEditor projectName={data.project.name} isNew onCancel={closePanel} />
+      <EntryEditor projectName={data.project.name} isNew onCancel={closePanel} pathPrefix={newFolderPrefix} />
     {:else if mode === "edit" && entry}
       <EntryEditor {entry} projectName={data.project.name} onCancel={closePanel} />
     {:else if mode === "view" && entry}
