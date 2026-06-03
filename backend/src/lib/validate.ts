@@ -38,6 +38,14 @@ export const schemas = {
   cliSession: z.object({
     code_challenge: z.string().min(1, "Code challenge is required"),
     device_name: z.string().optional(),
+    // Phase 03-05: optional per-machine UUID generated at first
+    // `synapsesync wizard` and persisted at ~/.synapse/device.json.
+    // When present, the backend matches on (user_id, machine_id) and
+    // returns the existing API key instead of creating a duplicate,
+    // so re-running `wizard` from the same machine doesn't burn a
+    // device-cap slot. Legacy CLIs that don't send it still work
+    // (machine_id stays NULL on the row).
+    machine_id: z.string().uuid().optional(),
   }),
 
   cliExchange: z.object({

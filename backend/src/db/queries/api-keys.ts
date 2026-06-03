@@ -37,6 +37,7 @@ export async function createApiKey(
   keyHash: string,
   label: string,
   expiresAt?: string | null,
+  machineId?: string | null,
 ): Promise<ApiKey> {
   const { data, error } = await db
     .from("api_keys")
@@ -45,12 +46,70 @@ export async function createApiKey(
       key_hash: keyHash,
       label,
       expires_at: expiresAt ?? null,
+      machine_id: machineId ?? null,
     })
     .select()
     .single();
 
   if (error) throw error;
   return data as ApiKey;
+}
+
+/**
+ * Phase 03-05: lookup an existing CLI device key for (user_id, machine_id).
+ * Returns null if this machine hasn't been registered for this user yet.
+ *
+ * The api_keys.machine_id column has a partial UNIQUE index over
+ * (user_id, machine_id) WHERE machine_id IS NOT NULL — see migration 025.
+ * That index makes this a cheap O(1) lookup, and guarantees at most one
+ * row matches.
+ *
+ * Used by /auth/cli-session: if a machine_id is provided AND already
+ * registered for this user, we DON'T mint a new device-key (which would
+ * burn a slot toward the 3-free / 10-plus cap). Instead, we return null
+ * here, the caller detects "same machine re-init" and re-issues a fresh
+ * exchange code referencing the existing key.
+ *
+ * NOTE: the existing key's plaintext is NOT stored server-side (we only
+ * keep the hash). So "return existing key" actually means "rotate the
+ * key for this row" — we update the hash, return the new plaintext. Same
+ * row id, same machine_id, same device-cap impact = zero.
+ */
+export async function findApiKeyByMachineId(
+  db: SupabaseClient,
+  userId: string,
+  machineId: string,
+): Promise<{ id: string; label: string } | null> {
+  const { data, error } = await db
+    .from("api_keys")
+    .select("id, label")
+    .eq("user_id", userId)
+    .eq("machine_id", machineId)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error(`[db] findApiKeyByMachineId failed: ${error.message}`);
+    return null;
+  }
+  return data as { id: string; label: string } | null;
+}
+
+/**
+ * Phase 03-05: rotate an existing device key's hash. Used when re-init
+ * from the same machine returns the existing row instead of creating a
+ * duplicate — the row id stays, the hash gets a fresh value so the
+ * old plaintext (if it leaked) is invalidated.
+ */
+export async function rotateApiKeyHash(
+  db: SupabaseClient,
+  keyId: string,
+  newKeyHash: string,
+): Promise<void> {
+  const { error } = await db
+    .from("api_keys")
+    .update({ key_hash: newKeyHash, last_used_at: new Date().toISOString() })
+    .eq("id", keyId);
+  if (error) throw error;
 }
 
 export async function listApiKeys(db: SupabaseClient, userId: string): Promise<Omit<ApiKey, "key_hash">[]> {
