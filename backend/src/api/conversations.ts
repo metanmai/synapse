@@ -12,12 +12,13 @@ import {
   saveConversationContext,
   updateConversation,
 } from "../db/queries";
-import { findOrCreateProjectByGit } from "../db/queries/projects";
+import { countOwnedProjects, findOrCreateProjectByGit } from "../db/queries/projects";
 import { detectAdapter, getAdapter } from "../lib/adapters";
 import { authMiddleware } from "../lib/auth";
 import type { Env } from "../lib/env";
 import { ForbiddenError, NotFoundError } from "../lib/errors";
 import { idempotency } from "../lib/idempotency";
+import { enforceProjectQuota } from "../lib/tier";
 
 import { parseBody, schemas } from "../lib/validate";
 import { requireRole } from "../middleware/project-auth";
@@ -52,10 +53,21 @@ conversations.post("/", async (c) => {
     else if (typeof wc.cwd === "string") gitBasename = wc.cwd.split("/").filter(Boolean).pop() ?? null;
     else if (typeof wc.projectPath === "string") gitBasename = wc.projectPath.split("/").filter(Boolean).pop() ?? null;
 
-    projectId = await findOrCreateProjectByGit(db, user.id, {
-      git_remote_url: gitRemoteUrl,
-      git_basename: gitBasename,
-    });
+    projectId = await findOrCreateProjectByGit(
+      db,
+      user.id,
+      { git_remote_url: gitRemoteUrl, git_basename: gitBasename },
+      {
+        // Quota gate — only fires when we're about to create. Existing
+        // cwd/url matches bypass this entirely, so a free user at 5
+        // projects can keep opening sessions in their existing 5 — only
+        // attempts to materialize a 6th hit the 403.
+        onWillCreate: async () => {
+          const count = await countOwnedProjects(db, user.id);
+          enforceProjectQuota(count, c);
+        },
+      },
+    );
   } else {
     // When the caller supplied a project_id explicitly, enforce membership.
     await requireRole(db, projectId, user.id, "editor");

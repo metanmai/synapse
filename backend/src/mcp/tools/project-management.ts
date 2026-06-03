@@ -5,6 +5,8 @@ import { z } from "zod";
 import { logActivity } from "../../db/activity-logger";
 import {
   addMember,
+  countMembers,
+  countOwnedProjects,
   createProject,
   findUserByEmail,
   getMemberRole,
@@ -14,6 +16,7 @@ import {
 } from "../../db/queries";
 
 import type { Env } from "../../lib/env";
+import { enforceMemberLimitForTier, enforceProjectQuotaForTier, getTierForUser } from "../../lib/tier";
 import type { GetMcpContext } from "../agent";
 import { mcpError, mcpResolveProject, mcpSuccess, requireMcpUserId } from "../mcp-context";
 
@@ -29,6 +32,18 @@ export function registerProjectManagementTools(
     { name: z.string().describe("Project name") },
     async ({ name }) => {
       const userId = requireMcpUserId(getContext);
+      // Tier-quota enforcement on the MCP create path. Without this, a free
+      // user at quota can keep creating projects via the MCP tool while
+      // POST /api/projects 403s — the two paths must agree. tier resolved
+      // from subscription rather than `c.get("tier")` because the MCP
+      // handler has no Hono Context.
+      const tier = await getTierForUser(db, userId);
+      const owned = await countOwnedProjects(db, userId);
+      try {
+        enforceProjectQuotaForTier(owned, tier);
+      } catch (err) {
+        return mcpError(err instanceof Error ? err.message : "project limit reached");
+      }
       const project = await createProject(db, name, userId);
       return mcpSuccess(`Project "${project.name}" created (id: ${project.id})`);
     },
@@ -63,6 +78,20 @@ export function registerProjectManagementTools(
       const invitee = await findUserByEmail(db, email);
       if (!invitee) {
         return mcpError(`No user found with email ${email}. They need to sign up first.`);
+      }
+
+      // Tier-member-limit enforcement. Caller is already verified to be
+      // the project owner (callerRole check above), so the OWNER's tier
+      // is the caller's tier. We still resolve via getTierForUser so the
+      // call site is independent of the project_members shape — if we
+      // later allow non-owner admins to invite, we still gate against the
+      // owner's tier (not the inviter's).
+      const ownerTier = await getTierForUser(db, proj.owner_id);
+      const memberCount = await countMembers(db, proj.id);
+      try {
+        enforceMemberLimitForTier(memberCount, ownerTier);
+      } catch (err) {
+        return mcpError(err instanceof Error ? err.message : "member limit reached");
       }
 
       await addMember(db, proj.id, invitee.id, role);
