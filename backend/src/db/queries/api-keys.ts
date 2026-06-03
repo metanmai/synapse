@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { DEVICE_LABEL_PREFIX } from "../../lib/constants";
 import type { ApiKey, UserRow } from "../types";
 
 export class ApiKeyExpiredError extends Error {
@@ -80,4 +81,47 @@ export async function countApiKeys(db: SupabaseClient, userId: string): Promise<
 export async function updateApiKeyLastUsed(db: SupabaseClient, keyId: string): Promise<void> {
   await db.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyId);
   // Fire-and-forget — don't throw on error
+}
+
+// Count CLI-installed device keys (label like 'cli-%'). Distinct from
+// countApiKeys() which counts ALL keys for the global API_KEY_MAX_PER_USER cap.
+export async function countCliKeys(db: SupabaseClient, userId: string): Promise<number> {
+  const { count, error } = await db
+    .from("api_keys")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .like("label", `${DEVICE_LABEL_PREFIX}%`);
+
+  if (error) throw error;
+  return count ?? 0;
+}
+
+// List CLI-installed device keys (label like 'cli-%') with display-friendly fields.
+export async function listCliKeys(db: SupabaseClient, userId: string): Promise<Omit<ApiKey, "key_hash">[]> {
+  const { data, error } = await db
+    .from("api_keys")
+    .select("id, user_id, label, expires_at, last_used_at, created_at")
+    .eq("user_id", userId)
+    .like("label", `${DEVICE_LABEL_PREFIX}%`)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data as Omit<ApiKey, "key_hash">[];
+}
+
+// Update an API key's label (used by dashboard rename). Returns true if a row matched.
+export async function updateApiKeyLabel(
+  db: SupabaseClient,
+  keyId: string,
+  userId: string,
+  label: string,
+): Promise<boolean> {
+  const { error, count } = await db
+    .from("api_keys")
+    .update({ label }, { count: "exact" })
+    .eq("id", keyId)
+    .eq("user_id", userId);
+
+  if (error) throw error;
+  return (count ?? 0) > 0;
 }

@@ -39,6 +39,14 @@ export const CLI_SESSION_SALT = "synapse-cli-session";
 export const API_KEY_MAX_PER_USER = 10;
 export const BEARER_PREFIX = "Bearer ";
 
+// --- Device limits (CLI-installed keys, separate from API_KEY_MAX_PER_USER) ---
+// Each cli-* labeled key represents one device that has run `synapsesync wizard`.
+// Free users can connect 3 devices; Plus is unlimited.
+export const DEVICE_LIMIT_FREE = 3;
+export const DEVICE_LIMIT_PLUS = Number.POSITIVE_INFINITY;
+export const DEVICE_LABEL_PREFIX = "cli-";
+export const DEVICE_NAME_MAX_LENGTH = 60;
+
 // --- Idempotency ---
 export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
