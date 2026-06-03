@@ -1,9 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   getMessages,
+  getProjectContext,
   getRecentCompactedSummaries,
   updateCompaction,
-  getProjectContext,
   upsertProjectContext,
 } from "../../db/queries/conversations";
 import { AnthropicProvider } from "./anthropic";
