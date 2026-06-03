@@ -11,7 +11,7 @@ import ScrollReveal from "./ScrollReveal.svelte";
   <div class="cta-inner">
     <ScrollReveal>
       <h2 class="cta-headline">Start building with context</h2>
-      <p class="cta-sub">Free to start. Pro at $5.99/mo for teams and power users.</p>
+      <p class="cta-sub">Free to start. Plus at $5.99/mo for teams and power users.</p>
       <div class="cta-button-wrap">
         <div class="cta-glow" aria-hidden="true"></div>
         <a href="/signup" class="cta-button">Get Started Free</a>
