@@ -663,12 +663,21 @@ suite("Full User Journey", () => {
     });
 
     // ── Project Quota Enforcement ──
+    //
+    // Phase 03-02: Free expanded from 5 → 50 projects (parity with Plus); the
+    // cap error became 402 PROJECT_QUOTA_EXCEEDED (was 403 TIER_LIMIT).
+    //
+    // The actual cap-hit assertion lives in scripts/e2e-project-cap.mjs —
+    // saturating to 50 here would balloon this suite's runtime by 20×. This
+    // test keeps a sub-cap creation guard (verifies multiple creates under
+    // the cap all succeed; backstop against a regression that would
+    // accidentally lower the cap below the new 50).
 
     const EXTRA_PROJECT_IDS: string[] = [];
 
-    it("can create projects up to the free tier limit", async () => {
-      // The user already has 1 project (PROJECT_ID). Free limit is 5.
-      // Create 4 more to reach the limit.
+    it("creates projects below the cap (regression guard — sub-50 must work)", async () => {
+      // User already has 1 project (PROJECT_ID). Create 4 more; all succeed.
+      // If a regression lowered FREE_MAX_PROJECTS below 5 we'd see a 402 here.
       for (let i = 0; i < 4; i++) {
         const { status, data } = await api("POST", "/api/projects", KEY, {
           name: `E2E-Quota-${Date.now()}-${i}`,
@@ -676,24 +685,15 @@ suite("Full User Journey", () => {
         expect(status).toBe(201);
         EXTRA_PROJECT_IDS.push(data.id);
       }
-      // Confirm we now have 5 projects
       const { data: all } = await api("GET", "/api/projects", KEY);
       expect((all as R[]).length).toBe(5);
     });
 
-    it("rejects project creation beyond the free tier limit (403)", async () => {
-      const { status, data } = await api("POST", "/api/projects", KEY, {
-        name: `E2E-Over-Limit-${Date.now()}`,
-      });
-      expect(status).toBe(403);
-      expect(data.code).toBe("TIER_LIMIT");
-      expect(data.error).toContain("Project limit reached");
-    });
-
     it("extra projects are cleaned up by account deletion at end", async () => {
-      // No individual project delete endpoint exists — the account deletion
-      // test at the end of this suite wipes all user data including projects.
-      // Verify the original project still exists alongside the extras.
+      // No individual project delete endpoint exists in this E2E flow —
+      // the account deletion test at the end of this suite wipes all
+      // user data including projects. Verify the original project still
+      // exists alongside the extras.
       const { status, data } = await api("GET", "/api/projects", KEY);
       expect(status).toBe(200);
       expect((data as R[]).find((p) => p.id === PROJECT_ID)).toBeTruthy();
