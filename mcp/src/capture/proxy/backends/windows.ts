@@ -166,9 +166,19 @@ export const WindowsBackend: PlatformBackend = {
     // on non-zero exit. If a future regression hangs at a specific step,
     // the last `step:` line tells us where.
     const installScript = [
+      // Suppress the "Do you want to install this CA?" GUI dialog when
+      // possible. The flag that controls this is CERT_PROT_ROOT_DISABLE_USER_UI_FLAG
+      // (0x20) in HKLM\SOFTWARE\Microsoft\SystemCertificates\Root\ProtectedRoots\Flags.
+      // - HKLM requires admin → works on CI runners (runneradmin) and on
+      //   sysadmin-managed corporate Windows.
+      // - On non-admin user installs the try{} fails silently and the
+      //   dialog appears as designed — the user has a desktop and clicks Yes,
+      //   which is the intended security UX.
+      // [Microsoft.Win32.Registry]::LocalMachine.CreateSubKey is idempotent
+      // and PS-5.1-bulletproof, unlike `New-Item -Force` which has a
+      // "Cannot delete a subkey tree" quirk on existing keys.
       "Write-Host 'step1:reg'",
-      "New-Item -Path 'HKCU:\\Software\\Microsoft\\SystemCertificates\\Root\\ProtectedRoots' -Force | Out-Null",
-      "Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\SystemCertificates\\Root\\ProtectedRoots' -Name 'Flags' -Value 1 -Type DWord",
+      "try { $k = [Microsoft.Win32.Registry]::LocalMachine.CreateSubKey('SOFTWARE\\Microsoft\\SystemCertificates\\Root\\ProtectedRoots'); $k.SetValue('Flags', 0x20, 'DWord'); $k.Close(); Write-Host 'step1a:hklm-flag-set' } catch { Write-Host \"step1b:hklm-skip:$($_.Exception.Message)\" }",
       "Write-Host 'step2:get-content'",
       `$pem = Get-Content -LiteralPath ${psSingleQuote(caPath)} -Raw`,
       "Write-Host 'step3:armor-strip'",
