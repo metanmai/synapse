@@ -32,3 +32,5 @@ export interface ProjectMember {
   joined_at: string;
   email?: string;
 }
+
+export type { Insight, InsightListItem, InsightType, InsightSource } from "@synapse/shared";
