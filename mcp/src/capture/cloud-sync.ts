@@ -12,7 +12,7 @@ interface Project {
   name: string;
 }
 
-function resolveApiKey(): string | null {
+export function resolveApiKey(): string | null {
   // 1. Environment variable
   const envKey = process.env.SYNAPSE_API_KEY;
   if (envKey && envKey !== "undefined") {

@@ -11,7 +11,10 @@ export interface ProjectMapping {
 export type ProjectMap = Record<string, ProjectMapping>;
 
 export function getProjectMapPath(): string {
-  return path.join(os.homedir(), ".synapse", "project-map.json");
+  // Respect SYNAPSE_HOME so tests can redirect ~/.synapse to a tmp dir
+  // without leaking real project mappings into the test process.
+  const root = process.env.SYNAPSE_HOME ?? path.join(os.homedir(), ".synapse");
+  return path.join(root, "project-map.json");
 }
 
 export function readProjectMap(): ProjectMap {

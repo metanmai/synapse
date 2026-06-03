@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getProjectMapPath } from "../../src/cli/project-map.js";
 import { runSessionStartHook } from "../../src/hooks/session-start.js";
 
 describe("SessionStart hook", () => {
@@ -147,6 +148,60 @@ describe("SessionStart hook", () => {
 
     const brief = captureBrief(out);
     expect(brief).toContain("no cached context");
+    fs.rmSync(repo, { recursive: true, force: true });
+  });
+
+  // Regression guard for the bug class "we built pull-compact but forgot to
+  // wire it into the SessionStart hook." Asserts that when pull-compact
+  // returns a non-null handoff (here: a cached one served from the backend),
+  // the rendered brief actually surfaces it under a labelled section so the
+  // next agent picks it up via the standard <synapse-brief> channel.
+  it("appends pull-compact handoff to the brief when available", async () => {
+    const repo = fs.mkdtempSync("/tmp/synapse-pull-");
+    const mapFile = getProjectMapPath();
+    fs.mkdirSync(path.dirname(mapFile), { recursive: true });
+    fs.writeFileSync(
+      mapFile,
+      JSON.stringify({
+        [repo]: { project_id: "proj-uuid-pull", project_name: "PullRepo", updated_at: new Date().toISOString() },
+      }),
+    );
+    process.env.SYNAPSE_API_KEY = "session-test-key";
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          conversations: [
+            {
+              id: "conv_pull",
+              updated_at: "2026-05-24T03:00:00Z",
+              metadata: {
+                handoff_markdown: "## PREV_SESSION_HANDOFF_BODY",
+                handoff_at: "2026-05-24T03:00:01Z",
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const out: string[] = [];
+    const stdout = {
+      write: (s: string) => {
+        out.push(s);
+        return true;
+      },
+    } as unknown as NodeJS.WriteStream;
+    await runSessionStartHook({ project_id: "p1", user_id: "u1", stdout, cwd: repo, skipFallback: true });
+
+    const brief = captureBrief(out);
+    expect(brief).toContain("## Last conversation handoff");
+    expect(brief).toContain("PREV_SESSION_HANDOFF_BODY");
+
+    fetchSpy.mockRestore();
+    // biome-ignore lint/performance/noDelete: real delete required
+    delete process.env.SYNAPSE_API_KEY;
     fs.rmSync(repo, { recursive: true, force: true });
   });
 });
