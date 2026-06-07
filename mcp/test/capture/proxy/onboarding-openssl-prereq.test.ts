@@ -109,7 +109,7 @@ describe("checkOpensslAvailable", () => {
     // freebsd / other → generic but non-empty hint
     const other = checkOpensslAvailable(fakeSpawnMissing as never, "freebsd");
     expect(other.installHint).toBeDefined();
-    expect(other.installHint!.length).toBeGreaterThan(10);
+    expect(other.installHint?.length).toBeGreaterThan(10);
   });
 });
 
