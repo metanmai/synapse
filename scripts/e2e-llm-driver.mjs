@@ -68,9 +68,12 @@ const PROVIDERS = [
     model: "claude-haiku-4-5-20251001",
     buildCurlArgs(apiKey, body) {
       return [
-        "-H", `x-api-key: ${apiKey}`,
-        "-H", "anthropic-version: 2023-06-01",
-        "-d", JSON.stringify({ ...body, max_tokens: body.max_tokens ?? 256 }),
+        "-H",
+        `x-api-key: ${apiKey}`,
+        "-H",
+        "anthropic-version: 2023-06-01",
+        "-d",
+        JSON.stringify({ ...body, max_tokens: body.max_tokens ?? 256 }),
       ];
     },
     extractText(stdout) {
@@ -79,7 +82,10 @@ const PROVIDERS = [
         throw new Error(`Anthropic API error: ${parsed.error?.message ?? JSON.stringify(parsed.error)}`);
       }
       return Array.isArray(parsed.content)
-        ? parsed.content.filter((b) => b.type === "text" && b.text).map((b) => b.text).join("\n")
+        ? parsed.content
+            .filter((b) => b.type === "text" && b.text)
+            .map((b) => b.text)
+            .join("\n")
         : "";
     },
   },
@@ -95,10 +101,14 @@ const PROVIDERS = [
         messages: body.messages,
       };
       return [
-        "-H", `Authorization: Bearer ${apiKey}`,
-        "-H", "HTTP-Referer: https://github.com/metanmai/synapse",
-        "-H", "X-Title: synapse-e2e",
-        "-d", JSON.stringify(payload),
+        "-H",
+        `Authorization: Bearer ${apiKey}`,
+        "-H",
+        "HTTP-Referer: https://github.com/metanmai/synapse",
+        "-H",
+        "X-Title: synapse-e2e",
+        "-d",
+        JSON.stringify(payload),
       ];
     },
     extractText(stdout) {
@@ -120,10 +130,7 @@ const PROVIDERS = [
         max_tokens: body.max_tokens ?? 256,
         messages: body.messages,
       };
-      return [
-        "-H", `Authorization: Bearer ${apiKey}`,
-        "-d", JSON.stringify(payload),
-      ];
+      return ["-H", `Authorization: Bearer ${apiKey}`, "-d", JSON.stringify(payload)];
     },
     extractText(stdout) {
       const parsed = JSON.parse(stdout);
@@ -259,7 +266,17 @@ export function detectProvider(env) {
  * Curl-post a chat request through the Synapse proxy using the given
  * provider's API format.
  */
-export function callProviderViaProxy({ provider, apiKey, prompt, model, proxy, caPath, userAgent, extraEnv, timeoutMs }) {
+export function callProviderViaProxy({
+  provider,
+  apiKey,
+  prompt,
+  model,
+  proxy,
+  caPath,
+  userAgent,
+  extraEnv,
+  timeoutMs,
+}) {
   const whichCmd = process.platform === "win32" ? "where" : "which";
   const which = spawnSync(whichCmd, ["curl"], { encoding: "utf-8" });
   if (which.status !== 0) {
@@ -273,14 +290,20 @@ export function callProviderViaProxy({ provider, apiKey, prompt, model, proxy, c
   const result = spawnSync(
     "curl",
     [
-      "-x", proxy,
-      "--cacert", caPath,
+      "-x",
+      proxy,
+      "--cacert",
+      caPath,
       "-sS",
-      "-X", "POST",
-      "-H", `User-Agent: ${userAgent}`,
-      "-H", "Content-Type: application/json",
+      "-X",
+      "POST",
+      "-H",
+      `User-Agent: ${userAgent}`,
+      "-H",
+      "Content-Type: application/json",
       ...providerArgs,
-      "--max-time", String(Math.ceil(timeoutMs / 1000)),
+      "--max-time",
+      String(Math.ceil(timeoutMs / 1000)),
       provider.endpoint,
     ],
     {
@@ -330,10 +353,8 @@ export function runCliDriver({ prompt, driverCmd, proxy, caPath, cwd, extraEnv, 
   const whichCmd = process.platform === "win32" ? "where" : "which";
   const which = spawnSync(whichCmd, [cmd], { encoding: "utf-8" });
   if (which.status !== 0) {
-    const configuredKeys = PROVIDERS.map((p) => process.env[p.envKey] ? p.envKey : null).filter(Boolean);
-    const hint = configuredKeys.length
-      ? ` (found: ${configuredKeys.join(", ")} — direct-API mode is available)`
-      : "";
+    const configuredKeys = PROVIDERS.map((p) => (process.env[p.envKey] ? p.envKey : null)).filter(Boolean);
+    const hint = configuredKeys.length ? ` (found: ${configuredKeys.join(", ")} — direct-API mode is available)` : "";
     throw new Error(
       `CLI driver "${cmd}" not on PATH. Set one of ANTHROPIC_API_KEY / OPENROUTER_API_KEY / DEEPSEEK_API_KEY for direct-API mode${hint}, OR set SYNAPSE_E2E_DRIVER to a working CLI (e.g. "claude -p", "crush run").`,
     );

@@ -29,7 +29,6 @@ compaction.use("/projects/*", authMiddleware);
 // Mode is selected by request-body shape. An empty/missing body falls
 // back to hosted mode for backwards compatibility with existing clients.
 compaction.post("/conversations/:id/compact", async (c) => {
-
   const user = c.get("user");
   const conversationId = c.req.param("id");
   const db = c.get("db");
