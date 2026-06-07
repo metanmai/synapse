@@ -52,6 +52,7 @@ import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { sweepArtifacts } from "./e2e-cleanup.mjs";
 
 // Opt-out of the daemon's skip-ephemeral-cwd predicate — tests use
@@ -61,7 +62,7 @@ process.env.SYNAPSE_DISPATCH_FORCE_ALLOW = "1";
 
 // ── Config ───────────────────────────────────────────────────────────────
 
-const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CAPTURE_WORKER = path.join(REPO_ROOT, "mcp", "dist", "capture", "capture-worker.js");
 const CAPTURE_LOG = path.join(homedir(), ".synapse", "capture.log");
 const API_BASE = process.env.SYNAPSE_API_BASE ?? "https://api.synapsesync.app";

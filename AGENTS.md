@@ -25,7 +25,9 @@ cd frontend  && npx vitest run    # 65 tests
 cd packages/shared && npx vitest  # 13 tests
 ```
 
-**Build note:** `mcp/` requires `tsc && node scripts/add-shebang.mjs` — the shebang script patches `dist/index.js` for CLI use. `backend/` has `"noEmit": true`, Wrangler builds on deploy.
+**Build note:** `mcp/` requires `tsc && node scripts/add-shebang.mjs` — the shebang script patches `dist/index.js` for CLI use. `backend/` has `"noEmit": true`, Wrangler builds on deploy. `@synapse/shared` has **no build step** — consumers import `.ts` source directly (requires Node 24 for native type-stripping on non-bundled consumers like CI).
+
+**Test note:** `mcp/` tests use `node ./scripts/run-tests.mjs` (not raw `vitest run`) — this JSON-reporter wrapper tolerates vitest 4's teardown crash on Windows CI.
 
 ## Architecture at a Glance
 
@@ -49,10 +51,10 @@ next SessionStart hook
 
 | Path | Package | Runtime | Key files |
 |------|---------|---------|-----------|
-| `mcp/` | `synapsesync-mcp` | Node 22 ESM | `src/index.ts` (entry), `src/capture/` (daemon+log+sync), `src/hooks/` (6 Claude Code hook handlers), `src/cli/` (subcommands) |
-| `backend/` | `@synapse/backend` | CF Workers (Hono) | `src/index.ts` (router), `src/api/` (Hono sub-apps), `src/db/` (Supabase queries), `src/lib/` (auth, errors, reducer wrapper), `src/mcp/` (Durable Object MCP server) |
+| `mcp/` | `synapsesync-mcp` | Node 24 ESM | `src/index.ts` (entry), `src/capture/` (daemon+log+sync+proxy+adapters), `src/hooks/` (6 Claude Code hook handlers), `src/cli/` (subcommands+editors), `src/capture/proxy/` (TLS-MITM forward proxy), `src/capture/adapters/` (8+ AI tool watchers) |
+| `backend/` | `@synapse/backend` | CF Workers (Hono) | `src/index.ts` (router), `src/api/` (17 Hono sub-apps: auth, billing, events-batch, insights, invites, projects, share, etc.), `src/db/` (Supabase queries), `src/lib/` (auth, errors, embeddings, tier, rate-limit, Creem billing, LLM compaction), `src/mcp/` (Durable Object MCP server with 5 tool domains), `src/cron/` (daily aggregation + consolidation retry), `src/durable-objects/` (CompactionScheduler) |
 | `frontend/` | `@synapse/frontend` | SvelteKit (Vite) | `src/routes/` (pages), `src/lib/server/` (SSR API client), `src/lib/components/` (Svelte 5) |
-| `packages/shared/` | `@synapse/shared` | TypeScript only | `src/handoff/reducer.ts` (THE reducer), `src/handoff/types.ts`, `src/handoff/events.ts` |
+| `packages/shared/` | `@synapse/shared` | TypeScript only (no build) | `src/handoff/reducer.ts` (THE reducer), `src/handoff/types.ts`, `src/handoff/events.ts`. Ships raw `.ts` — consumers import source directly via Node 24 type-stripping or bundler. |
 | `embedding-service/` | — | Python 3.12 Docker | `app.py` (FastAPI, nomic-embed-text-v1.5) |
 | `supabase/migrations/` | — | SQL | 19 numbered migrations |
 
@@ -134,6 +136,9 @@ afterEach(() => {
 ### Two parallel daemon families in same directory
 `mcp/src/capture/` houses both the legacy conversation-capture daemon (`capture-worker.ts`, `watcher.ts`, `store.ts`) and the new handoff daemon (`daemon.ts`, `handoff-sync.ts`). They share zero state, write to different locations, but coexist confusingly. `synapse capture start` and `synapse daemon` are both launchable.
 
+### Multi-tool adapter system
+`mcp/src/capture/adapters/` contains filesystem-watching adapters for 8+ AI tools: claude-code, cursor, codex, gemini, copilot-cli, cline, roo-code, opencode, crush. Each adapter knows the tool's session file paths and log formats. `adapter-registry.ts` discovers which tool is running by matching watch paths. A separate `mcp/src/cli/editors/` module detects installed editors (Claude Code, Cursor, VSCode, Windsurf) for setup orchestration.
+
 ### Frontend uses `$env/dynamic/private`, not `$env/static/private`
 By design (v1.1 switch) — allows single build to deploy to multiple environments. Missing `API_URL` is caught at first request (500) not at build time. Don't "fix" this back to static imports.
 
@@ -158,9 +163,18 @@ Top-level `vi.mock` won't work because the alias replaces the module. Use `vi.do
 ### Watermark writes even on malformed responses
 `runFlushCycle` advances the flush watermark even when the backend response body is unparseable JSON. Events can be silently lost (see `.planning/codebase/CONCERNS.md`).
 
+### `@synapse/shared` ships raw `.ts` — no build, no JS output
+`packages/shared/` has no `build` script and no `dist/`. Its `exports` map directly to `.ts` source files. Consumers must handle TypeScript themselves — the backend bundler (esbuild via Wrangler) handles it natively; the MCP CLI uses `tsc`; the frontend uses Vite. CI requires **Node 24** because of this (Node 24+ natively strips types from `.ts` imports). Never add a build step without updating CI and all consumers.
+
+### `mcp` tests run through a JSON-reporter wrapper
+`mcp/scripts/run-tests.mjs` wraps vitest to tolerate the "Worker exited unexpectedly" teardown crash on Windows CI (vitest 4 + tinypool fork shutdown race). The wrapper reads the JSON report and exits 0 when there are no test failures regardless of vitest's process exit code. Used by both `npm test` and CI.
+
+### Proxy subsystem — TLS-MITM capture daemon
+`mcp/src/capture/proxy/` is a standalone HTTP forward-proxy + HTTPS CONNECT tunneling daemon that captures AI tool API traffic. Two modes: plain HTTP proxy and TLS-MITM (per-host leaf certs). Currently buffers SSE responses end-to-end (no live streaming). Cross-platform backends in `backends/` (Linux, Mac, Windows). Connected to the adapter system via `proxy-source.ts` and `session-reconstruction.ts`.
+
 ## Environment Variables
 
-**Backend** (`backend/`): Set via `wrangler secret put`, typed in `backend/src/lib/env.ts`. Required: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_CLIENT_ID/SECRET`, `CREEM_API_KEY/WEBHOOK_SECRET/PRO_PRODUCT_ID`. Optional: `EMBEDDING_SERVICE_URL/KEY`, `COMPACTION_LLM_KEY`, `CORS_ORIGINS`. Local dev: copy `.dev.vars.example` → `backend/.dev.vars`.
+**Backend** (`backend/`): Set via `wrangler secret put`, typed in `backend/src/lib/env.ts`. Required: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_CLIENT_ID/SECRET`, `CREEM_API_KEY/WEBHOOK_SECRET/PRO_PRODUCT_ID`. Optional: `EMBEDDING_SERVICE_URL/KEY`, `COMPACTION_LLM_KEY`, `CORS_ORIGINS`, `TIER_FREE_MAX_FILES`/`CONNECTIONS`/`HISTORY`/`MEMBERS`, `TIER_PLUS_MAX_FILES`/`CONNECTIONS`/`PRICE`, `APP_URL`. Local dev: copy `.dev.vars.example` → `backend/.dev.vars`.
 
 **Frontend** (`frontend/`): `API_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY` in `frontend/.env`. Read via `$env/dynamic/private`.
 
@@ -175,6 +189,22 @@ Top-level `vi.mock` won't work because the alias replaces the module. Use `vi.do
 **MCP**: `throw new Error("usage: ...")` — dispatcher catches and writes to stderr with exit 1.
 
 **Logging**: `[tag] message` prefix pattern — `[auth]`, `[api]`, `[embeddings]`, `[billing]`, `[creem]`, `[compaction]`. Never log secrets or full JWTs.
+
+## E2E Test Scripts
+
+All E2E scripts live in `scripts/` and are `.mjs` files run with `node`. The main gate (`npm run test:e2e`) chains 5 scripts:
+
+| Script | What it tests |
+|--------|--------------|
+| `e2e-happy-flow.mjs` | Daemon flush → backend → brief roundtrip |
+| `e2e-adapter-roundtrip.mjs` | Multi-tool adapter event capture |
+| `e2e-proxy-layer5.mjs` | CLI orchestration through TLS-MITM proxy |
+| `e2e-proxy-source.mjs` | Proxy source attribution |
+| `e2e-proxy-lifecycle.mjs` | Proxy daemon start/stop/restart |
+
+Additional individual scripts: `e2e-failure-cases.mjs`, `e2e-multi-device.mjs`, `e2e-insight-roundtrip.mjs`, `e2e-insight-supersede.mjs`, `e2e-multi-account.mjs`, `e2e-resilience.mjs`, `e2e-cli.mjs`, `e2e-smoke.mjs`, `e2e-project-cap.mjs`, `e2e-conversation-lru.mjs`, `e2e-insight-cap.mjs`, `e2e-real-tool-roundtrip.mjs`, `e2e-llm-driver.mjs`. Cross-platform proxy install: `e2e-proxy-install-linux.mjs`, `e2e-proxy-install-windows.mjs`.
+
+CI also runs **Playwright UI E2E** (`frontend/`, `npx playwright test`) with Chromium on both Linux and Windows.
 
 ## Key Dependencies
 
@@ -196,11 +226,13 @@ Top-level `vi.mock` won't work because the alias replaces the module. Use `vi.do
 
 ## CI
 
-**Verify** (every push): Node 22, `npm install`, `frontend/.env.example` → `frontend/.env`, `npm run verify` (lint + typecheck + test).
+**Verify** (every push): Node 24 (required for Windows — `@synapse/shared` ships raw `.ts`), `npm install`, `frontend/.env.example` → `frontend/.env`, `npm run verify` (lint + typecheck + test). Cross-OS matrix: ubuntu-latest + windows-latest.
 
-**E2E** (on push to main, requires `prod` environment): builds MCP, runs vitest E2E suite against secrets.
+**E2E** (on push to main, requires `prod` environment): cross-OS matrix (ubuntu + windows), builds MCP, runs vitest E2E suite, Playwright UI E2E tests. Gracefully skips when secrets not configured (mirror repos without secrets stay green).
 
-**Publish** (`mcp-v*` tags): npm trusted publishing with `--provenance`.
+**Migrate** (on push to main): applies pending Supabase migrations via `supabase db push --include-all`. Skips gracefully when `SUPABASE_ACCESS_TOKEN`/`SUPABASE_PROJECT_REF` secrets not set.
+
+**Publish** (`mcp-v*` tags): npm trusted publishing with `--provenance`. `prepublishOnly` runs `npm install && npm run build` to ensure fresh build.
 
 **Pre-push hook**: Runs `npm run verify` — adds ~25s per push.
 
@@ -208,6 +240,8 @@ Top-level `vi.mock` won't work because the alias replaces the module. Use `vi.do
 
 - **Adding a new handoff event kind?** Update `EventKind` enum in `packages/shared/src/handoff/events.ts`, add the type in `types.ts`, handle it in the reducer, update tests. The reducer must stay pure.
 - **Changing the reducer?** Tests in `packages/shared/test/handoff/reducer.test.ts` and `mcp/test/capture/` must pass. The server wrapper (`backend/src/lib/handoff-reducer.ts`) must stay in sync.
-- **Adding a new MCP tool?** Add to `backend/src/mcp/tools/` for the Streamable HTTP surface. The legacy stdio MCP server (`mcp/src/index.ts`) only has `save_insight`/`list_insights` and is deprecated (removal target v2.0).
+- **Adding a new MCP tool?** Add to `backend/src/mcp/tools/` for the Streamable HTTP surface. Tools are organized by domain: context-capture, context-retrieval, conversations, insights, project-management. The legacy stdio MCP server (`mcp/src/index.ts`) only has `save_insight`/`list_insights` and is deprecated (removal target v2.0).
 - **Adding a migration?** Number it, run `supabase db push`, verify with E2E before merge.
-- **Touching the proxy subsystem?** Layer 5/7 E2E scripts exercise `claude` through the TLS-MITM proxy. Tests soft-skip without `claude` on PATH but the unit suite at `mcp/test/unit/capture/proxy/` is always runnable.
+- **Touching the proxy subsystem?** Layer 5/7 E2E scripts exercise `claude` through the TLS-MITM proxy. Tests soft-skip without `claude` on PATH but the unit suite at `mcp/test/unit/capture/proxy/` is always runnable. Cross-platform backends live in `mcp/src/capture/proxy/backends/`.
+- **Adding a new AI tool adapter?** Add to `mcp/src/capture/adapters/` implementing the `ToolAdapter` interface. Register in `default-registry.ts`. Update `CapturedSession.tool` union type in `mcp/src/capture/types.ts`.
+- **Changing `@synapse/shared`?** No build step — changes to `.ts` files are immediately visible to all consumers. Test all three consumers (mcp, backend, frontend) after changes.
