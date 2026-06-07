@@ -286,14 +286,15 @@ jobs:
     # machine the dev happened to use.
     #
     # The scripts are agent-agnostic: Stage 3 + Stage 7 use the universal
-    # LLM driver (direct-API curl with ANTHROPIC_API_KEY), proxy-layer5 +
+    # LLM driver (direct-API curl with ANTHROPIC_API_KEY / OPENROUTER_API_KEY
+    # / DEEPSEEK_API_KEY — whichever is configured), proxy-layer5 +
     # proxy-source use curl through TLS-MITM. No `claude not on PATH →
     # exit 0` soft-skip in any of them.
     #
     # Graceful skip pattern: when secrets aren't configured (tanmain/
     # synapse), the job logs a notice and exits green. The canonical run
-    # is on metanmai/synapse where SYNAPSE_E2E_API_KEY + ANTHROPIC_API_KEY
-    # are configured.
+    # is on metanmai/synapse where SYNAPSE_E2E_API_KEY + at least one
+    # provider API key are configured.
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     needs: verify
@@ -323,14 +324,20 @@ jobs:
 
       - name: Check secrets are configured
         # Mirrors the `e2e` job's pattern: skip-green when keys are absent
-        # (tanmain), run-validated when present (metanmai).
+        # (tanmain), run-validated when present (metanmai). Requires
+        # SYNAPSE_E2E_API_KEY + at least one provider API key.
         id: check
         env:
           SYNAPSE_E2E_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
-          if [ -z "$SYNAPSE_E2E_API_KEY" ] || [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "::notice::happy-flow-e2e skipped — SYNAPSE_E2E_API_KEY / ANTHROPIC_API_KEY not configured. Mirror to metanmai/synapse for the validated run."
+          if [ -z "$SYNAPSE_E2E_API_KEY" ]; then
+            echo "::notice::happy-flow-e2e skipped — SYNAPSE_E2E_API_KEY not configured. Mirror to metanmai/synapse for the validated run."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ] && [ -z "$DEEPSEEK_API_KEY" ]; then
+            echo "::notice::happy-flow-e2e skipped — no LLM provider key configured (needs ANTHROPIC_API_KEY / OPENROUTER_API_KEY / DEEPSEEK_API_KEY). Mirror to metanmai/synapse for the validated run."
             echo "configured=false" >> "$GITHUB_OUTPUT"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
@@ -375,13 +382,16 @@ jobs:
           exit 1
 
       - name: Run merge gate (npm run test:e2e)
-        # Stage 3 + Stage 7 use direct-API mode via ANTHROPIC_API_KEY —
-        # no claude/crush binary required. proxy-layer5 + proxy-source
-        # use curl. proxy-lifecycle manages its own daemons.
+        # Stage 3 + Stage 7 use direct-API mode via whichever provider key
+        # is configured (ANTHROPIC / OPENROUTER / DEEPSEEK). No claude/crush
+        # binary required. proxy-layer5 + proxy-source use curl.
+        # proxy-lifecycle manages its own daemons.
         if: steps.check.outputs.configured == 'true'
         env:
           SYNAPSE_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: npm run test:e2e
 
       - name: Dump daemon log on failure

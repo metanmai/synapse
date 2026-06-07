@@ -297,9 +297,11 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
     return cachedHandoff;
   }
 
-  // 3. Stale or missing — recompute. We need working_context.capturedSessionId
-  //    to find the local transcript; the list endpoint doesn't return it,
-  //    so fetch the full row.
+  // 3. Stale or missing — recompute. Try hosted compaction first for
+  //    sessions without a local capturedSessionId (proxy-captured, etc.).
+  //    Sessions with a local file prefer the local adapter.compact() path.
+  //    We need working_context.capturedSessionId to find the local
+  //    transcript; the list endpoint doesn't return it, so fetch the full row.
   let full: FullConversation | null = null;
   try {
     const res = await fetch(`${apiUrl}/api/conversations/${conv.id}`, { headers: auth });
@@ -319,18 +321,22 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
 
   const wc = (full?.working_context ?? {}) as Record<string, unknown>;
   const capturedSessionId = typeof wc.capturedSessionId === "string" ? wc.capturedSessionId : null;
+
+  // No local session file — try hosted compaction (works for any tool).
   if (!capturedSessionId) {
-    log("pull-compact: no capturedSessionId in working_context, can't recompute");
-    return cachedHandoff;
+    log("pull-compact: no capturedSessionId, falling back to hosted compaction");
+    return triggerHostedCompaction(apiUrl, auth, conv, cachedHandoff, log);
   }
 
+  // Has local session file — try local adapter.compact() first.
+  // If the adapter can't compact (no compact() method, or local file not
+  // found), fall back to hosted compaction.
   const registry = opts.registry ?? defaultRegistry();
   const found = findLocalSession(registry, capturedSessionId, log);
-  if (!found) return cachedHandoff;
-
-  if (!found.adapter.compact) {
-    log(`pull-compact: adapter "${found.adapter.tool}" has no compact()`);
-    return cachedHandoff;
+  if (!found || !found.adapter.compact) {
+    const reason = !found ? "local session file not found" : `adapter "${found.adapter.tool}" has no compact()`;
+    log(`pull-compact: ${reason}, falling back to hosted compaction`);
+    return triggerHostedCompaction(apiUrl, auth, conv, cachedHandoff, log);
   }
 
   try {
@@ -347,7 +353,8 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
     return result.handoff ?? result.summary ?? cachedHandoff;
   } catch (err) {
     log(`pull-compact: compact failed: ${err instanceof Error ? err.message : err}`);
-    return cachedHandoff;
+    log("pull-compact: falling back to hosted compaction after local compact failure");
+    return triggerHostedCompaction(apiUrl, auth, conv, cachedHandoff, log);
   }
 }
 
@@ -393,6 +400,44 @@ interface LocalSessionMatch {
   adapter: ToolAdapter;
   path: string;
   session: NonNullable<ReturnType<ToolAdapter["parse"]>>;
+}
+
+/**
+ * Trigger hosted (server-side) compaction for a conversation that has no
+ * local session file or whose adapter doesn't implement compact().
+ * Posts an empty body to the backend's /compact endpoint so the server
+ * runs its own LLM to generate the handoff. Returns the handoff_markdown
+ * if the backend produced one, or cachedHandoff on failure.
+ */
+async function triggerHostedCompaction(
+  apiUrl: string,
+  auth: Record<string, string>,
+  conv: { id: string },
+  cachedHandoff: string | null,
+  log: (msg: string) => void,
+): Promise<string | null> {
+  try {
+    const hosted = await fetch(`${apiUrl}/api/conversations/${conv.id}/compact`, {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: "{}",
+    });
+    if (!hosted.ok) {
+      log(`pull-compact: hosted compaction returned ${hosted.status}`);
+      return cachedHandoff;
+    }
+    // Re-fetch the conversation to get the newly-persisted handoff_markdown
+    const refetch = await fetch(`${apiUrl}/api/conversations/${conv.id}`, { headers: auth });
+    if (refetch.ok) {
+      const body = (await refetch.json()) as { conversation?: { metadata?: Record<string, unknown> } };
+      const meta = body.conversation?.metadata ?? {};
+      const handoff = typeof meta.handoff_markdown === "string" ? meta.handoff_markdown : null;
+      if (handoff) return handoff;
+    }
+  } catch (err) {
+    log(`pull-compact: hosted compaction error: ${err instanceof Error ? err.message : err}`);
+  }
+  return cachedHandoff;
 }
 
 function findLocalSession(
