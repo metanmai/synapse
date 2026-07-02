@@ -90,9 +90,25 @@ export const load: PageServerLoad = ({ url }) => {
   return scenario;
 };
 
+// `next` lives on the *page* URL (?scenario=basic&next=403), but the form's
+// `action="?/linkProject"` is a relative URL that replaces the entire query
+// string per the URL spec — so by the time this handler runs, `url` is
+// `/__e2e/link-picker?/linkProject` with no `next`. The Referer header still
+// carries the originating page URL with its search params intact, so read
+// `next` from there. Fixture-only mechanism; prod's LinkPicker doesn't use
+// URL params for action wiring.
+function readNextFromReferer(referer: string | null): string {
+  if (!referer) return "success";
+  try {
+    return new URL(referer).searchParams.get("next") ?? "success";
+  } catch {
+    return "success";
+  }
+}
+
 export const actions: Actions = {
-  linkProject: async ({ request, url }) => {
-    const next = url.searchParams.get("next") ?? "success";
+  linkProject: async ({ request }) => {
+    const next = readNextFromReferer(request.headers.get("referer"));
     const data = await request.formData();
     const sourceProjectId = data.get("sourceProjectId") as string;
     const targetProjectId = data.get("targetProjectId") as string;

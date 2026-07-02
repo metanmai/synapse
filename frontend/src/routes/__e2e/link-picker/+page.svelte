@@ -1,4 +1,5 @@
 <script lang="ts">
+import { page } from "$app/state";
 import LinkPicker from "$lib/components/project-link/LinkPicker.svelte";
 
 let { data, form } = $props();
@@ -14,11 +15,13 @@ let { data, form } = $props();
     Playwright-only test route. Not linked from product UI. See plan 02-06.
   </p>
 
-  <LinkPicker
-    sourceProjectId={data.sourceProjectId}
-    sourceProjectName={data.sourceProjectName}
-    candidates={data.candidates}
-    allOtherProjects={data.allOtherProjects}
-    linkError={form?.linkError}
-  />
+  {#key page.url.search}
+    <LinkPicker
+      sourceProjectId={data.sourceProjectId}
+      sourceProjectName={data.sourceProjectName}
+      candidates={data.candidates}
+      allOtherProjects={data.allOtherProjects}
+      linkError={form?.linkError}
+    />
+  {/key}
 </div>
