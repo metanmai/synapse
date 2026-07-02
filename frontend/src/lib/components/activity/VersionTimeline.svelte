@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
-  import { marked } from "marked";
-  import type { EntryHistory } from "$lib/types";
+import { enhance } from "$app/forms";
+import type { EntryHistory } from "$lib/types";
+import { marked } from "marked";
 
-  let { versions } = $props<{ versions: EntryHistory[] }>();
+let { versions } = $props<{ versions: EntryHistory[] }>();
 </script>
 
 <div class="space-y-3">

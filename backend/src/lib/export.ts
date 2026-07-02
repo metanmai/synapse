@@ -1,4 +1,4 @@
-import { zipSync, strToU8 } from "fflate";
+import { strToU8, zipSync } from "fflate";
 import type { Entry } from "../db/types";
 
 function buildFrontmatter(entry: Entry): string {
@@ -15,19 +15,20 @@ function buildFrontmatter(entry: Entry): string {
   return lines.join("\n");
 }
 
-export function buildProjectZip(
-  projectName: string,
-  entries: Entry[]
-): Uint8Array {
+export function buildProjectZip(projectName: string, entries: Entry[]): Uint8Array {
   const files: Record<string, Uint8Array> = {};
 
   // Add metadata file
-  const meta = JSON.stringify({
-    version: 1,
-    project_name: projectName,
-    exported_at: new Date().toISOString(),
-    entry_count: entries.length,
-  }, null, 2);
+  const meta = JSON.stringify(
+    {
+      version: 1,
+      project_name: projectName,
+      exported_at: new Date().toISOString(),
+      entry_count: entries.length,
+    },
+    null,
+    2,
+  );
   files["_synapse_meta.json"] = strToU8(meta);
 
   // Add each entry as a file

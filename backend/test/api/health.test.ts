@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { env, createExecutionContext, waitOnExecutionContext } from "../setup";
+import { describe, expect, it } from "vitest";
+import { createExecutionContext, env, waitOnExecutionContext } from "../setup";
 
 // Import the default export (full worker)
 import worker from "../../src/index";

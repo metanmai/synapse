@@ -1,14 +1,18 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
-  import { page } from "$app/stores";
-  import { hasPassphrase, encrypt } from "$lib/crypto";
-  import type { Entry } from "$lib/types";
+import { enhance } from "$app/forms";
+import { page } from "$app/stores";
+import { encrypt, hasPassphrase } from "$lib/crypto";
+import type { Entry } from "$lib/types";
 
-  let { entry, projectName, isNew = false } = $props<{
-    entry?: Entry | null;
-    projectName: string;
-    isNew?: boolean;
-  }>();
+let {
+  entry,
+  projectName,
+  isNew = false,
+} = $props<{
+  entry?: Entry | null;
+  projectName: string;
+  isNew?: boolean;
+}>();
 </script>
 
 <form method="POST" action="?/saveEntry" use:enhance={({ formData }) => {
