@@ -3,8 +3,54 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ClaudeCodeAdapter } from "../../../src/capture/adapters/claude-code.js";
+import { ClaudeCodeAdapter, claudeCodeWatchCandidates } from "../../../src/capture/adapters/claude-code.js";
 import { SYNAPSE_INTERNAL_MARKER } from "../../../src/capture/types.js";
+
+describe("claudeCodeWatchCandidates", () => {
+  it("includes ~/.claude/projects/ as the first candidate", () => {
+    const candidates = claudeCodeWatchCandidates({ home: "/h", env: {} });
+    expect(candidates[0]).toBe(path.join("/h", ".claude", "projects"));
+  });
+
+  it("includes $XDG_CONFIG_HOME/claude/projects/ when XDG_CONFIG_HOME is set", () => {
+    const candidates = claudeCodeWatchCandidates({
+      home: "/h",
+      env: { XDG_CONFIG_HOME: "/custom/xdg" },
+    });
+    expect(candidates).toContain(path.join("/custom/xdg", "claude", "projects"));
+  });
+
+  it("includes ~/.config/claude/projects/ as the Linux XDG default fallback", () => {
+    const candidates = claudeCodeWatchCandidates({ home: "/h", env: {} });
+    expect(candidates).toContain(path.join("/h", ".config", "claude", "projects"));
+  });
+
+  it("does NOT duplicate when XDG_CONFIG_HOME equals ~/.config", () => {
+    const candidates = claudeCodeWatchCandidates({
+      home: "/h",
+      env: { XDG_CONFIG_HOME: "/h/.config" },
+    });
+    const dedupCount = candidates.filter((c) => c === path.join("/h", ".config", "claude", "projects")).length;
+    expect(dedupCount).toBe(1);
+  });
+
+  it("ignores empty XDG_CONFIG_HOME (treats as unset)", () => {
+    const candidates = claudeCodeWatchCandidates({
+      home: "/h",
+      env: { XDG_CONFIG_HOME: "" },
+    });
+    // Should be 2 entries (legacy + ~/.config), not 3
+    expect(candidates).toHaveLength(2);
+  });
+
+  it("ignores whitespace-only XDG_CONFIG_HOME", () => {
+    const candidates = claudeCodeWatchCandidates({
+      home: "/h",
+      env: { XDG_CONFIG_HOME: "   " },
+    });
+    expect(candidates).toHaveLength(2);
+  });
+});
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = path.join(__dirname, "../../fixtures/capture/claude-code/sample-session.jsonl");
