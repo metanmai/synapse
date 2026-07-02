@@ -124,17 +124,87 @@ describe("buildCompactionPrompt — backend-prompt parity", () => {
 });
 
 describe("compactLocally — end-to-end provider call", () => {
-  it("returns null when no provider key is set (caller falls through to hosted)", async () => {
+  it("returns null when LONG conversation has no provider key (caller falls through to hosted)", async () => {
+    // 11 messages bypasses the passthrough fast-path, so reaching the
+    // LLM is gated on a configured provider. Short conversations still
+    // succeed via passthrough — see the test below this one.
+    const longConversation = Array.from({ length: 11 }, (_, i) => ({
+      role: (i % 2 === 0 ? "user" : "assistant") as "user" | "assistant",
+      content: `message ${i}`,
+    }));
     const logs: string[] = [];
-    const result = await compactLocally([{ role: "user", content: "anything" }], null, {}, (msg) => logs.push(msg));
+    const result = await compactLocally(longConversation, null, {}, (msg) => logs.push(msg));
     expect(result).toBeNull();
     expect(logs.some((l) => l.includes("no provider key in env"))).toBe(true);
   });
 
-  it("calls the detected provider's endpoint and returns the parsed text", async () => {
+  it("SHORT conversation passthrough succeeds even with NO provider key (LLM-free path)", async () => {
+    // Side benefit of the passthrough threshold: users with no LLM key
+    // at all still get a working handoff for short conversations. The
+    // only loss is compression — the literal facts are preserved.
+    const result = await compactLocally(
+      [
+        { role: "user", content: "test_id is abc123" },
+        { role: "assistant", content: "noted" },
+      ],
+      null,
+      {}, // no env keys
+      () => {},
+    );
+    expect(result).not.toBeNull();
+    expect(result?.provider).toBe("passthrough");
+    expect(result?.text).toContain("test_id is abc123");
+  });
+
+  // ── Short-conversation passthrough (bug class guard) ────────────────────
+  //
+  // BUG CLASS: "summarization-trained LLMs drop literal identifiers
+  // from short conversations because the model has nothing else to do
+  // — without compression pressure it abstracts." A 2-message E2E
+  // session with "test_id is abc123" became "the user provided test
+  // facts" in 3.5-haiku's output on Ubuntu (Windows preserved it; same
+  // run, same code — LLM non-determinism). The passthrough fast path
+  // eliminates the non-determinism by never invoking the LLM for
+  // conversations small enough to package verbatim.
+
+  it("short-circuits to passthrough for ≤10 messages — preserves identifiers verbatim WITHOUT calling any LLM", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const result = await compactLocally(
+        [
+          { role: "user", content: "Remember: test_id is abc123def, secret is 'xyz789'" },
+          { role: "assistant", content: "noted" },
+        ],
+        null,
+        { OPENROUTER_API_KEY: "sk-or-test" },
+        () => {},
+      );
+      // Provider/model are tagged "passthrough" so backend audits show
+      // which conversations bypassed the LLM.
+      expect(result?.provider).toBe("passthrough");
+      expect(result?.model).toBe("passthrough");
+      // The literal identifiers MUST appear verbatim.
+      expect(result?.text).toContain("test_id is abc123def");
+      expect(result?.text).toContain("xyz789");
+      // No network call — passthrough never invokes the LLM.
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("calls the detected provider's endpoint and returns the parsed text (long-conversation path)", async () => {
     // Stub global fetch so the test doesn't make real network calls.
     // Verifying via the URL the provider hit gives us defense against
     // future refactors that accidentally call the wrong endpoint.
+    // Use 11 messages so the passthrough threshold (10) is exceeded and
+    // the LLM path actually executes.
+    const longConversation = Array.from({ length: 11 }, (_, i) => ({
+      role: (i % 2 === 0 ? "user" : "assistant") as "user" | "assistant",
+      content: `message ${i}`,
+    }));
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       // OpenRouter response shape (OpenAI-compatible).
@@ -143,12 +213,7 @@ describe("compactLocally — end-to-end provider call", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     try {
-      const result = await compactLocally(
-        [{ role: "user", content: "do thing" }],
-        null,
-        { OPENROUTER_API_KEY: "sk-or-test" },
-        () => {},
-      );
+      const result = await compactLocally(longConversation, null, { OPENROUTER_API_KEY: "sk-or-test" }, () => {});
       expect(result?.text).toBe("compacted text here");
       expect(result?.provider).toBe("openrouter");
       // Confirm the call landed on the OpenRouter endpoint, not Anthropic's.
@@ -162,6 +227,11 @@ describe("compactLocally — end-to-end provider call", () => {
   });
 
   it("returns null when the provider call throws (caller falls through to hosted)", async () => {
+    // 11 messages to bypass the passthrough fast path and reach the LLM call.
+    const longConversation = Array.from({ length: 11 }, (_, i) => ({
+      role: (i % 2 === 0 ? "user" : "assistant") as "user" | "assistant",
+      content: `message ${i}`,
+    }));
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       status: 429,
@@ -171,11 +241,8 @@ describe("compactLocally — end-to-end provider call", () => {
 
     try {
       const logs: string[] = [];
-      const result = await compactLocally(
-        [{ role: "user", content: "x" }],
-        null,
-        { DEEPSEEK_API_KEY: "sk-ds-test" },
-        (msg) => logs.push(msg),
+      const result = await compactLocally(longConversation, null, { DEEPSEEK_API_KEY: "sk-ds-test" }, (msg) =>
+        logs.push(msg),
       );
       expect(result).toBeNull();
       expect(logs.some((l) => l.includes("deepseek") && l.includes("429"))).toBe(true);
@@ -189,6 +256,11 @@ describe("compactLocally — end-to-end provider call", () => {
     // field (e.g. content filter triggered, max_tokens=0, etc.), we
     // don't want to write an empty handoff_markdown to the backend
     // and call it a day. Fall through to hosted instead.
+    // 11 messages to bypass the passthrough fast path.
+    const longConversation = Array.from({ length: 11 }, (_, i) => ({
+      role: (i % 2 === 0 ? "user" : "assistant") as "user" | "assistant",
+      content: `message ${i}`,
+    }));
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ choices: [{ message: { content: "" } }] }),
@@ -196,12 +268,7 @@ describe("compactLocally — end-to-end provider call", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     try {
-      const result = await compactLocally(
-        [{ role: "user", content: "x" }],
-        null,
-        { OPENROUTER_API_KEY: "sk-or-test" },
-        () => {},
-      );
+      const result = await compactLocally(longConversation, null, { OPENROUTER_API_KEY: "sk-or-test" }, () => {});
       expect(result).toBeNull();
     } finally {
       vi.unstubAllGlobals();

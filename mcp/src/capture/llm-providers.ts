@@ -179,11 +179,55 @@ ${transcript}`;
 }
 
 /**
+ * Threshold below which we skip the LLM and pass messages through
+ * verbatim. Short conversations don't need compression and CAN'T
+ * afford summarization loss: a 2-message E2E session with literal
+ * `test_id is XYZ` user-side facts must reach the next agent exactly,
+ * but summarization-trained models drop unique identifiers in favor
+ * of narrative abstraction (paraphrasing "test_id is abc" to "the
+ * user provided test facts"). The 2026-06-07 happy-flow-e2e on
+ * Ubuntu failed Stage 6.2 because 3.5-haiku via OpenRouter
+ * paraphrased the literal TEST_ID/TEST_PHRASE values, even with an
+ * explicit MUST-PRESERVE prompt — Windows on the same run preserved
+ * them, confirming LLM non-determinism. Pass-through eliminates the
+ * non-determinism entirely for short conversations.
+ *
+ * 10 messages ≈ 5 turns — past this, the size case for compression
+ * starts to matter and lossy summarization is acceptable.
+ */
+const PASSTHROUGH_MAX_MESSAGES = 10;
+
+/**
+ * Format messages as a verbatim handoff document. Used when the
+ * conversation is short enough to preserve in full (≤
+ * PASSTHROUGH_MAX_MESSAGES messages). Same Markdown shape as the LLM
+ * compaction output so the downstream consumers (SessionStart brief,
+ * dashboard renderer) don't need to special-case the source.
+ */
+function buildPassthroughHandoff(messages: ChatMessage[], title: string | null): string {
+  const header = title ? `# ${title}\n\n` : "";
+  const body = messages
+    .map((m) => {
+      const roleHeader = m.role === "assistant" ? "## Assistant" : "## User";
+      return `${roleHeader}\n\n${m.content ?? ""}`;
+    })
+    .join("\n\n");
+  return `${header}${body}`;
+}
+
+/**
  * Call the auto-detected local LLM to compact a conversation. Returns the
  * summary text on success; null on any failure (no provider configured,
  * API error, parse error, etc.). All errors are logged but never thrown
  * — callers should always have a hosted-fallback path so a local LLM
  * outage doesn't break the handoff pipeline.
+ *
+ * Short-conversation short-circuit: when messages.length is below
+ * PASSTHROUGH_MAX_MESSAGES, the function returns a verbatim formatting
+ * of the messages WITHOUT calling any LLM. This is deterministic, free,
+ * and preserves every literal identifier — the right answer for a
+ * 2-message E2E session OR a conversation that genuinely hasn't grown
+ * past the threshold yet. Long conversations still get LLM compaction.
  */
 export async function compactLocally(
   messages: ChatMessage[],
@@ -192,6 +236,15 @@ export async function compactLocally(
   log: (msg: string) => void,
   maxTokens = 1024,
 ): Promise<LLMCallResult | null> {
+  // SHORT-CONVERSATION FAST PATH: skip the LLM entirely. Guarantees
+  // verbatim preservation of identifiers, file paths, secrets, etc.
+  // even when summarization-trained models would paraphrase them.
+  if (messages.length > 0 && messages.length <= PASSTHROUGH_MAX_MESSAGES) {
+    const text = buildPassthroughHandoff(messages, title);
+    log(`local-compact: short-conversation passthrough (${messages.length} messages, ${text.length} chars)`);
+    return { text, provider: "passthrough", model: "passthrough" };
+  }
+
   const detected = detectLLMProvider(env);
   if (!detected) {
     log("local-compact: no provider key in env, skipping local path");
