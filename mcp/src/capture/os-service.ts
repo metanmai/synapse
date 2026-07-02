@@ -44,6 +44,46 @@ WantedBy=default.target
 `;
 }
 
+/**
+ * Activate the service file the OS just received. Idempotent: an already-loaded
+ * service produces a launchctl/systemctl error which we swallow (re-running
+ * install should never throw).
+ *
+ * On macOS we unload-then-load so re-installs pick up a new plist body
+ * (launchd caches the previous Label config until unloaded). The `-w` on load
+ * flips the Disabled key to false in the LaunchDaemons overrides, so the
+ * service stays loaded across reboots.
+ */
+function loadServiceFile(p: string): void {
+  if (process.platform === "darwin") {
+    try {
+      execSync(`launchctl unload "${p}"`, { stdio: "ignore" });
+    } catch {
+      // Service wasn't loaded yet — fine, this is first install.
+    }
+    try {
+      execSync(`launchctl load -w "${p}"`, { stdio: "ignore" });
+    } catch {
+      // Best-effort: load can fail for reasons we can't recover from in-process
+      // (e.g. SIP restrictions, malformed plist) — surface via daemon.log
+      // rather than crashing the install.
+    }
+    return;
+  }
+  if (process.platform === "linux") {
+    try {
+      execSync("systemctl --user daemon-reload", { stdio: "ignore" });
+    } catch {
+      /* not running under systemd — fine */
+    }
+    try {
+      execSync("systemctl --user enable --now synapsesync.service", { stdio: "ignore" });
+    } catch {
+      /* enable failed — daemon.log will show why */
+    }
+  }
+}
+
 export function writeServiceFile(): { platform: string; path: string } {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const synapseBin = `node ${path.resolve(here, "../cli/commands.js")}`;
@@ -53,12 +93,14 @@ export function writeServiceFile(): { platform: string; path: string } {
     const p = path.join(os.homedir(), "Library/LaunchAgents/app.synapsesync.daemon.plist");
     fs.mkdirSync(path.dirname(p), { recursive: true });
     fs.writeFileSync(p, renderLaunchdPlist({ bin: synapseBin, log }));
+    loadServiceFile(p);
     return { platform: "darwin", path: p };
   }
   if (process.platform === "linux") {
     const p = path.join(os.homedir(), ".config/systemd/user/synapsesync.service");
     fs.mkdirSync(path.dirname(p), { recursive: true });
     fs.writeFileSync(p, renderSystemdUnit({ bin: synapseBin, log }));
+    loadServiceFile(p);
     return { platform: "linux", path: p };
   }
   throw new Error(
