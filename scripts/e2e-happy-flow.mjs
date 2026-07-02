@@ -97,7 +97,14 @@ const TEST_PHRASE = "butterfly mountain seven";
 // message-sync that triggers recompute can lag minutes, so we share the
 // same 8-min budget as the project / conversation arrival polls.
 const SLEEP_RECOMPUTE_MAX_MS = 8 * 60_000;
-const HOOK_FAST_TIMEOUT_MS = 5_000; // hook must return well under 10s
+// Hook fast-mode budget. Linux/macOS runners hit this comfortably (~600ms
+// observed). Windows GitHub Actions runners are systematically ~50% slower
+// for filesystem + process-spawn work (NTFS overhead, Defender real-time
+// scan, slower CreateProcess) — a 6420ms reading on metanmai run
+// 27117823971 tripped the 5s budget despite no code regression. Bumping
+// to 7500ms on Windows preserves regression-detection (anything >>7500ms
+// is still a real problem) while tolerating the OS-level overhead.
+const HOOK_FAST_TIMEOUT_MS = process.platform === "win32" ? 7_500 : 5_000;
 // Backend-arrival poll budget for sync-bound assertions (project + conversation).
 // On the happy-path / fast network these resolve in seconds; on slow / proxied
 // networks the daemon's events-batch + capture-sync paths can lag minutes
