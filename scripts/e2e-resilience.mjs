@@ -37,7 +37,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { removeLocalProjectState, sweepArtifacts } from "./e2e-cleanup.mjs";
+import { removeLocalProjectState, removeLocalProjectsByBasename, sweepArtifacts } from "./e2e-cleanup.mjs";
 
 // ── Configuration ────────────────────────────────────────────────────────
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -169,6 +169,11 @@ async function cleanup() {
     else log(`  · cleanup: WARN failed to delete project ${pid} (HTTP ${res.status})`);
     removeLocalProjectState(pid, { log });
   }
+  // Also nuke placeholder dirs — resilience creates 3 distinct cwd basenames
+  // per run (r1-renamed-, r2-protocol-, r3-no-origin-), all sharing RUN_ID.
+  removeLocalProjectsByBasename(`r1-renamed-${RUN_ID}`, { log });
+  removeLocalProjectsByBasename(`r2-protocol-${RUN_ID}`, { log });
+  removeLocalProjectsByBasename(`r3-no-origin-${RUN_ID}`, { log });
   // Belt-and-suspenders sweep: the resilience test deliberately exercises
   // edge cases (renamed folders, asymmetric URLs, no-origin) that can land
   // 2-3 extra projects per stage — easy to miss in the explicit ID set.

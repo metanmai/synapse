@@ -45,7 +45,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { sweepArtifacts } from "./e2e-cleanup.mjs";
+import { removeLocalProjectsByBasename, sweepArtifacts } from "./e2e-cleanup.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const MCP_DIST = path.join(REPO_ROOT, "mcp", "dist", "index.js");
@@ -663,6 +663,16 @@ async function cleanup() {
     try {
       rmSync(p, { recursive: true, force: true });
     } catch {}
+  }
+  // Nuke daemon placeholder dirs for each of this suite's basenames
+  // (prefixes — daemon dirs have random suffixes from mkdtempSync).
+  for (const prefix of [
+    `f1-2-cwd-${RUN_ID}`,
+    `f2-1-no-git-${RUN_ID}`,
+    `f-recover-${RUN_ID}`,
+    `this-path-truly-does-not-exist-${RUN_ID}`,
+  ]) {
+    removeLocalProjectsByBasename(prefix, { log });
   }
   // Sweep backend projects auto-created by the daemon during failure stages.
   // Pre-fix this was completely absent — failure-cases never deleted any

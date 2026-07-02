@@ -48,7 +48,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { removeLocalProjectState, sweepArtifacts } from "./e2e-cleanup.mjs";
+import { removeLocalProjectState, removeLocalProjectsByBasename, sweepArtifacts } from "./e2e-cleanup.mjs";
 
 // ── Configuration ────────────────────────────────────────────────────────
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -218,6 +218,9 @@ async function cleanup() {
     deviceBDaemonProc = null;
   }
 
+  // Also nuke any cwd_<hash> placeholder dirs (both daemons may have created
+  // them pre-canonical UUID resolution).
+  removeLocalProjectsByBasename(PROJECT_BASENAME, { log });
   // Belt-and-suspenders sweep: device-B daemon may have created auxiliary
   // projects via auto-route; the named testProjectId may not be the only one.
   await sweepArtifacts({

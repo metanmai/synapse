@@ -60,7 +60,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { removeLocalProjectState, sweepArtifacts } from "./e2e-cleanup.mjs";
+import { removeLocalProjectState, removeLocalProjectsByBasename, sweepArtifacts } from "./e2e-cleanup.mjs";
 
 // ── Configuration ────────────────────────────────────────────────────────
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -219,6 +219,11 @@ async function cleanup() {
     removeLocalProjectState(testProjectId, { log });
   }
 
+  // Also nuke any cwd_<hash> placeholder dirs from BOTH daemons.
+  removeLocalProjectsByBasename(PROJECT_BASENAME, { log });
+  if (userBSynapseHome) {
+    removeLocalProjectsByBasename(PROJECT_BASENAME, { synapseHome: userBSynapseHome, log });
+  }
   // Belt-and-suspenders sweep on BOTH accounts: User B's daemon may have
   // auto-created a shadow project under User B's account from the same
   // remote, and the project may be co-owned, so a User A sweep alone misses
