@@ -42,9 +42,18 @@ export function reduce(events: Event[], project_id: string, opts: ReduceOptions 
       case EventKind.NextStepSet:
         next_step = { text: String(e.payload.text ?? ""), set_by: e.actor, set_at: e.occurred_at, inferred: false };
         break;
-      case EventKind.NextStepInferred:
-        next_step = { text: String(e.payload.text ?? ""), set_by: e.actor, set_at: e.occurred_at, inferred: true };
+      case EventKind.NextStepInferred: {
+        const m = (e.payload as { inferred_method?: unknown }).inferred_method;
+        const inferred_method = m === "llm" || m === "heuristic" ? m : undefined;
+        next_step = {
+          text: String(e.payload.text ?? ""),
+          set_by: e.actor,
+          set_at: e.occurred_at,
+          inferred: true,
+          ...(inferred_method ? { inferred_method } : {}),
+        };
         break;
+      }
       case EventKind.FocusSet:
         slot.current_focus = String(e.payload.text ?? "");
         break;
