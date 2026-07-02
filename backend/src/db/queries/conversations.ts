@@ -365,10 +365,7 @@ export async function updateCompaction(
   if (error) throw error;
 }
 
-export async function getProjectContext(
-  db: SupabaseClient,
-  projectId: string,
-): Promise<ProjectContext | null> {
+export async function getProjectContext(db: SupabaseClient, projectId: string): Promise<ProjectContext | null> {
   const { data, error } = await db
     .from("project_context")
     .select("id, project_id, summary, conversation_count, model, updated_at")
@@ -385,18 +382,16 @@ export async function upsertProjectContext(
   conversationCount: number,
   model: string,
 ): Promise<void> {
-  const { error } = await db
-    .from("project_context")
-    .upsert(
-      {
-        project_id: projectId,
-        summary,
-        conversation_count: conversationCount,
-        model,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "project_id" },
-    );
+  const { error } = await db.from("project_context").upsert(
+    {
+      project_id: projectId,
+      summary,
+      conversation_count: conversationCount,
+      model,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "project_id" },
+  );
   if (error) throw error;
 }
 
