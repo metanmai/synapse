@@ -130,7 +130,14 @@ export async function updateConversation(
     encrypted?: boolean;
   },
 ): Promise<Conversation> {
-  const updates: Record<string, unknown> = {};
+  const updates: Record<string, unknown> = {
+    // Bump updated_at on every write so the conversation bubbles up in
+    // listConversations (ordered desc on updated_at). See appendMessages
+    // for the full motivation — same bug class, all conversation-mutation
+    // paths need this. Migration 023 also installs a BEFORE UPDATE trigger
+    // as the schema-level enforcement.
+    updated_at: new Date().toISOString(),
+  };
   if (params.title !== undefined) updates.title = params.title;
   if (params.status !== undefined) updates.status = params.status;
   if (params.fidelity_mode !== undefined) updates.fidelity_mode = params.fidelity_mode;
@@ -164,7 +171,7 @@ export async function reassignConversation(
 ): Promise<Conversation> {
   const { data, error } = await db
     .from("conversations")
-    .update({ project_id: newProjectId })
+    .update({ project_id: newProjectId, updated_at: new Date().toISOString() })
     .eq("id", conversationId)
     .select(CONVERSATION_COLUMNS)
     .single();
@@ -223,10 +230,20 @@ export async function appendMessages(
   const { data, error } = await db.from("conversation_messages").insert(rows).select(MESSAGE_COLUMNS);
   if (error) throw error;
 
-  // Update message_count on the conversation
+  // Update message_count + bump updated_at so listConversations (which
+  // orders by updated_at desc) ranks this conversation as most-recent
+  // activity. Without this, long-running sessions stay at their original
+  // creation timestamp even as thousands of messages append — short-lived
+  // subprocess sessions created later then outrank them, and the
+  // SessionStart hook pulls the wrong "where I left off" handoff.
+  // Migration 023 also wires a BEFORE UPDATE trigger; this explicit set
+  // is belt-and-suspenders for pre-migration deploys.
   const { error: updateError } = await db
     .from("conversations")
-    .update({ message_count: (maxRow?.sequence ?? 0) + messages.length })
+    .update({
+      message_count: (maxRow?.sequence ?? 0) + messages.length,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", conversationId);
   if (updateError) {
     console.error(`[conversations] Failed to update message_count for ${conversationId}:`, updateError.message);
@@ -383,6 +400,7 @@ export async function updateCompaction(
       compacted_summary: summary,
       compacted_at: new Date().toISOString(),
       compaction_model: model,
+      updated_at: new Date().toISOString(),
     })
     .eq("id", conversationId);
   if (error) throw error;

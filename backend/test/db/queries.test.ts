@@ -996,3 +996,85 @@ describe("share-links queries", () => {
     });
   });
 });
+
+// ═════════════════════════════════════════════════════════════════
+// CONVERSATIONS — updated_at bump guards
+// ═════════════════════════════════════════════════════════════════
+//
+// Bug class: every UPDATE path on the `conversations` table must set
+// `updated_at` explicitly. The table's `updated_at` default fires only
+// at INSERT (`default now()`); there was historically no BEFORE UPDATE
+// trigger (migration 023 adds one as schema-level enforcement). Without
+// these bumps a long-running session's conversation row stays at its
+// creation timestamp forever, even as thousands of messages append.
+// `listConversations` orders by `updated_at desc`, so short-lived
+// subprocess conversations (claude -p, gsd subagents) created later
+// outrank the main session, and the SessionStart hook then pulls the
+// wrong "where I left off" handoff.
+//
+// These tests guard the bug CLASS — they assert that each mutating
+// query path passes `updated_at` in its UPDATE payload, not that the
+// SessionStart hook does something specific. The hook test would be
+// brittle to mock; the contract here is local to query helpers and
+// regression-detectable from the call site alone.
+describe("conversations queries — updated_at bumps on every UPDATE", () => {
+  it("appendMessages bumps updated_at when updating message_count", async () => {
+    const { appendMessages } = await import("../../src/db/queries/conversations");
+
+    // 1st from("conversation_messages").select.eq.order.limit.maybeSingle() → no rows
+    // 2nd from("conversation_messages").insert.select() → returns inserted rows
+    // 3rd from("conversations").update.eq() → ok
+    const db = createSequentialMockDb(
+      { data: null, error: null }, // maxRow lookup → empty conversation
+      { data: [{ id: "msg-1", sequence: 1, role: "user", content: "hi", source_agent: "claude-code" }], error: null },
+      { data: null, error: null }, // update result
+    );
+
+    await appendMessages(db as unknown as SupabaseClient, "conv-1", [
+      { role: "user", content: "hi", source_agent: "claude-code" },
+    ]);
+
+    // The 3rd from() call is the UPDATE on conversations.
+    const updateCall = db.chains[2].update as Mock;
+    expect(updateCall).toHaveBeenCalled();
+    const updatePayload = updateCall.mock.calls[0][0] as Record<string, unknown>;
+    expect(updatePayload).toHaveProperty("updated_at");
+    expect(typeof updatePayload.updated_at).toBe("string");
+    // Sanity: it's an ISO 8601 timestamp, not a static placeholder.
+    expect(updatePayload.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("updateConversation bumps updated_at even when no other fields change", async () => {
+    const { updateConversation } = await import("../../src/db/queries/conversations");
+    const db = mockSuccess({ id: "conv-1" });
+
+    await updateConversation(db as unknown as SupabaseClient, "conv-1", {});
+
+    const updatePayload = (db.chainable.update as Mock).mock.calls[0][0] as Record<string, unknown>;
+    expect(updatePayload).toHaveProperty("updated_at");
+    expect(typeof updatePayload.updated_at).toBe("string");
+  });
+
+  it("reassignConversation bumps updated_at when moving to a new project", async () => {
+    const { reassignConversation } = await import("../../src/db/queries/conversations");
+    const db = mockSuccess({ id: "conv-1", project_id: "proj-new" });
+
+    await reassignConversation(db as unknown as SupabaseClient, "conv-1", "proj-new");
+
+    const updatePayload = (db.chainable.update as Mock).mock.calls[0][0] as Record<string, unknown>;
+    expect(updatePayload).toHaveProperty("updated_at");
+    expect(updatePayload).toHaveProperty("project_id", "proj-new");
+  });
+
+  it("updateCompaction bumps updated_at when storing the summary", async () => {
+    const { updateCompaction } = await import("../../src/db/queries/conversations");
+    const db = createMockDb({ data: null, error: null });
+
+    await updateCompaction(db as unknown as SupabaseClient, "conv-1", "the summary", "claude-haiku");
+
+    const updatePayload = (db.chainable.update as Mock).mock.calls[0][0] as Record<string, unknown>;
+    expect(updatePayload).toHaveProperty("updated_at");
+    expect(updatePayload).toHaveProperty("compacted_summary", "the summary");
+    expect(updatePayload).toHaveProperty("compaction_model", "claude-haiku");
+  });
+});
