@@ -43,6 +43,7 @@ import {
 } from "./handoff-commands.js";
 import { runInit } from "./init.js";
 import { runInviteCmd } from "./invite.js";
+import { runMoveCmd } from "./move.js";
 import { readProjectMap } from "./project-map.js";
 import { runDaemon } from "./run-daemon.js";
 import { runStats } from "./stats.js";
@@ -177,6 +178,17 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
     const projectIdx = args.indexOf("--project");
     const project_id = projectIdx >= 0 ? args[projectIdx + 1] : undefined;
     await runInviteCmd({ email, project_id });
+  },
+  // `move` reassigns a misrouted conversation to a different project.
+  // <conv> = UUID or the literal "latest"; <project> = UUID or name
+  // (exact, then unique-substring fuzzy match).
+  move: async (args) => {
+    const conv = args[0];
+    const project = args[1];
+    if (!conv || !project || conv.startsWith("--") || project.startsWith("--")) {
+      throw new Error("usage: synapsesync move <conv-uuid|latest> <project-uuid|name>");
+    }
+    await runMoveCmd({ conv, project });
   },
   issue: async (args) => {
     const sub = args[0];

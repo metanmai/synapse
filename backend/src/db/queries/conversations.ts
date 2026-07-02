@@ -149,6 +149,29 @@ export async function updateConversation(
   return data as Conversation;
 }
 
+/**
+ * Move a conversation to a different project. Used by `synapse move` to
+ * fix misrouted captures (e.g., the legacy projects[0] heuristic, or
+ * Tier 2 name-collisions that silently merged two unrelated `scratch`
+ * dirs). Caller is responsible for membership checks on BOTH source and
+ * target projects before calling this — the query helper itself only
+ * runs the UPDATE.
+ */
+export async function reassignConversation(
+  db: SupabaseClient,
+  conversationId: string,
+  newProjectId: string,
+): Promise<Conversation> {
+  const { data, error } = await db
+    .from("conversations")
+    .update({ project_id: newProjectId })
+    .eq("id", conversationId)
+    .select(CONVERSATION_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data as Conversation;
+}
+
 // --- Messages ---
 
 export async function appendMessages(

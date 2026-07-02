@@ -28,11 +28,16 @@ export async function runSessionStartHook(args: SessionStartArgs): Promise<void>
 
   let brief = "";
   const bp = briefCachePath(args.project_id);
-  // canonicalCwd resolves symlinks (e.g. /tmp → /private/tmp on macOS,
-  // or a user-created `~/work/proj → ~/Documents/proj` symlink) so the
-  // routing key matches what the dispatcher computed at hook entry. If
-  // the dispatcher already canonicalized, this is a no-op.
-  const cwd = canonicalCwd(args.cwd ?? process.cwd());
+  // Two cwd variants flow through this hook:
+  //  - rawCwd: what the dispatcher / caller handed us. Used as the routing
+  //    key when looking things up in caches written by old clients (which
+  //    didn't canonicalize before storing). pull-compact also accepts the
+  //    raw form and canonicalizes internally with its own fallback chain.
+  //  - cwd: the canonical (realpath-resolved) version. Used for local
+  //    filesystem checks like STATE.md lookup — those should follow
+  //    symlinks transparently.
+  const rawCwd = args.cwd ?? process.cwd();
+  const cwd = canonicalCwd(rawCwd);
   if (shouldPreferStateMd(bp, cwd)) {
     // STATE.md is the canonical project-state artifact (GSD convention).
     // When the daemon's brief cache is missing or older than STATE.md, the repo
@@ -51,7 +56,10 @@ export async function runSessionStartHook(args: SessionStartArgs): Promise<void>
   // background and the next session picks it up from the backend cache.
   let handoff: string | null = null;
   try {
-    handoff = await pullHandoffWithTimeout({ cwd }, PULL_HANDOFF_TIMEOUT_MS);
+    // Pass the RAW cwd — pull-compact does its own realpath with a
+    // fallback chain (canonical → raw), so caches written by older
+    // clients under the raw key still resolve.
+    handoff = await pullHandoffWithTimeout({ cwd: rawCwd }, PULL_HANDOFF_TIMEOUT_MS);
   } catch {
     handoff = null;
   }
