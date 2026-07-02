@@ -118,6 +118,12 @@ These four phases from the original roadmap were not shipped in the milestone. E
 
 None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-enabled machine.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260621-h13 | Billing/subscription test coverage (webhook transitions, gating filter, valid-HMAC dispatch) | 2026-06-21 | 89e0d875 | [260621-h13-billing-subscription-tests](./quick/260621-h13-billing-subscription-tests/) |
+
 ### Recent activity
 
 - 2026-05-18: Shipped per-device CLI keys end-to-end (`a8ecf98` + `34de058`) and fixed 5 install-pipeline bugs (`d3cd771` + `025a814`). Daemon alive locally via launchd; cloud sync blocked by BUG-01.
