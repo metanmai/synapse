@@ -1,7 +1,7 @@
 # Synapse proxy Layer 8 E2E — Debian 12 trust-store install test.
 # Spec §4.2: debian-family install to /usr/local/share/ca-certificates/synapse.crt
 # + update-ca-certificates → /etc/ssl/certs/synapse.pem symlink.
-FROM node:22-bookworm-slim
+FROM node:24-bookworm-slim
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \

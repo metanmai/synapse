@@ -4,12 +4,14 @@
 # rather than ID. Mirror test for Ubuntu (ID_LIKE=debian).
 FROM rockylinux:9
 
+# Rocky 9 ships curl-minimal preinstalled. Don't install `curl` — it
+# conflicts with curl-minimal at the file-provides level. curl-minimal
+# provides the `curl` binary we need for the NodeSource setup script.
 RUN dnf install -y \
       ca-certificates \
       sudo \
       openssl \
-      curl \
- && curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - \
+ && curl -fsSL https://rpm.nodesource.com/setup_24.x | bash - \
  && dnf install -y nodejs \
  && dnf clean all
 

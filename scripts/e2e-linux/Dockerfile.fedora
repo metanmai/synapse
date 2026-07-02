@@ -8,7 +8,7 @@ RUN dnf install -y \
       sudo \
       openssl \
       curl \
- && curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - \
+ && curl -fsSL https://rpm.nodesource.com/setup_24.x | bash - \
  && dnf install -y nodejs \
  && dnf clean all
 
