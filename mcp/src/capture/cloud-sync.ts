@@ -224,21 +224,47 @@ export class CloudSyncer {
         // back to basename match.
       }
 
-      const res = await fetch(`${API_URL}/api/conversations`, {
-        method: "POST",
-        headers: this.authHeaders(),
-        body: JSON.stringify({
-          // Intentionally NO project_id — backend auto-routes via
-          // working_context.git_origin_url + cwd basename.
-          title: `[${session.tool}] ${session.projectPath.split("/").pop() ?? "session"} — ${session.startedAt}`,
-          fidelity_mode: "full",
-          system_prompt: null,
-          working_context: workingContext,
-        }),
+      // Retry the POST up to 3 times with backoff to absorb transient
+      // backend issues (rate limits, brief 5xx, GHA→cloud network
+      // hiccups). The e2e-adapter-roundtrip suite was flaking on both
+      // platforms with the daemon's "POST failed silently" pattern —
+      // metanmai runs 27131499349, 27132064970, 27132732268 each had a
+      // random subset of the 6 tools' POSTs fail. The work is idempotent
+      // from the test's perspective (the assertion only checks the
+      // project list by name), so a retry that lands a duplicate
+      // conversation row in the unlikely "succeeded but response
+      // dropped" case is benign.
+      const conversationBody = JSON.stringify({
+        // Intentionally NO project_id — backend auto-routes via
+        // working_context.git_origin_url + cwd basename.
+        title: `[${session.tool}] ${session.projectPath.split("/").pop() ?? "session"} — ${session.startedAt}`,
+        fidelity_mode: "full",
+        system_prompt: null,
+        working_context: workingContext,
       });
+      let res: Response | null = null;
+      let lastStatus: number | null = null;
+      let lastError: string | null = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          res = await fetch(`${API_URL}/api/conversations`, {
+            method: "POST",
+            headers: this.authHeaders(),
+            body: conversationBody,
+          });
+          if (res.ok) break;
+          lastStatus = res.status;
+          // Don't retry 4xx client errors — they're not transient.
+          if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) break;
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : String(err);
+        }
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 500 * attempt));
+      }
 
-      if (!res.ok) {
-        this.log(`Failed to create conversation: ${res.status}`);
+      if (!res || !res.ok) {
+        const reason = lastError ?? `HTTP ${lastStatus ?? "?"}`;
+        this.log(`Failed to create conversation after 3 attempts: ${reason}`);
         return null;
       }
 
@@ -265,27 +291,37 @@ export class CloudSyncer {
     conversationId: string,
     messages: SessionMessage[],
   ): Promise<{ ok: boolean; status: number }> {
-    try {
-      const res = await fetch(`${API_URL}/api/conversations/${conversationId}/messages`, {
-        method: "POST",
-        headers: this.authHeaders(),
-        body: JSON.stringify({
-          messages: mapMessages(messages),
-        }),
-      });
-
-      if (!res.ok) {
-        this.log(`Failed to append messages: ${res.status}`);
-        return { ok: false, status: res.status };
+    // Same retry logic as createConversation — append is the second leg of
+    // the same sync trip, equally subject to transient backend hiccups.
+    // Idempotent on the test's view: the assertion checks for the
+    // "Synced session..." log line which only fires when appendMessages
+    // returns ok, so a successful retry produces the same observable
+    // result as a single successful first attempt.
+    const body = JSON.stringify({ messages: mapMessages(messages) });
+    let res: Response | null = null;
+    let lastStatus: number | null = null;
+    let lastError: string | null = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        res = await fetch(`${API_URL}/api/conversations/${conversationId}/messages`, {
+          method: "POST",
+          headers: this.authHeaders(),
+          body,
+        });
+        if (res.ok) break;
+        lastStatus = res.status;
+        if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) break;
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
       }
-
-      return { ok: true, status: res.status };
-    } catch (err) {
-      this.log(`Failed to append messages: ${err}`);
-      // Network error — pretend the conversation is unreachable but NOT
-      // gone, so we don't wipe the cache on transient blips.
-      return { ok: false, status: 0 };
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 500 * attempt));
     }
+    if (!res || !res.ok) {
+      const reason = lastError ?? `HTTP ${lastStatus ?? "?"}`;
+      this.log(`Failed to append messages after 3 attempts: ${reason}`);
+      return { ok: false, status: lastStatus ?? 0 };
+    }
+    return { ok: true, status: res.status };
   }
 
   private updateProjectMap(projectPath: string, projectId: string, projectName: string | null): void {

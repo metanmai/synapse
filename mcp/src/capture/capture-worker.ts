@@ -54,6 +54,14 @@ async function main(): Promise<void> {
     const ok = await syncer.sync(stored);
     if (ok) {
       log(`Synced session ${stored.id} to cloud (${stored.messages.length} messages)`);
+    } else {
+      // Surface the failure at the same layer that emits the success
+      // message. Without this companion log, capture-worker is the
+      // boundary that swallows POST failures silently. CloudSync also
+      // logs its specific error reason below — keep both so a log scan
+      // for one tool's session can find both the "did this session
+      // sync?" answer and the "if not, why?" answer.
+      log(`Sync FAILED for session ${stored.id} (${stored.messages.length} messages) — see CloudSync log lines above`);
     }
   });
 

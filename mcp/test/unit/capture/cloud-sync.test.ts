@@ -429,14 +429,21 @@ describe("CloudSyncer", () => {
         };
         fs.writeFileSync(path.join(tmpDir, "sync-state.json"), JSON.stringify(seededState));
 
+        // Three transient 5xx — CloudSync retries 3 times with backoff
+        // before giving up. All three must be 5xx (not 404) so the cache
+        // is preserved per the bug-class this test guards.
+        fetchSpy.mockResolvedValueOnce(new Response("upstream sad", { status: 503 }));
+        fetchSpy.mockResolvedValueOnce(new Response("upstream sad", { status: 503 }));
         fetchSpy.mockResolvedValueOnce(new Response("upstream sad", { status: 503 }));
 
         const syncer = new CloudSyncer();
         const ok = await syncer.sync(makeSession());
 
         expect(ok).toBe(false);
-        // Only the failed append — no recovery createConversation should fire.
-        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        // 3 retried appends — no recovery createConversation should fire
+        // because the response was 5xx, not 404 (the 5xx path bails
+        // without dropping the cached conversation).
+        expect(fetchSpy).toHaveBeenCalledTimes(3);
         // sync-state.json should still hold the original mapping.
         const after = JSON.parse(fs.readFileSync(path.join(tmpDir, "sync-state.json"), "utf-8"));
         expect(after.states.ses_test1234567890.cloudConversationId).toBe("conv_live");
