@@ -21,7 +21,7 @@ import {
 } from "../db/queries";
 import { authMiddleware } from "../lib/auth";
 import { DEFAULT_PAGE_LIMIT } from "../lib/constants";
-import { AppError, NotFoundError } from "../lib/errors";
+import { AppError, ForbiddenError, NotFoundError } from "../lib/errors";
 import { buildProjectZip } from "../lib/export";
 import { recomputeProjectStatus } from "../lib/handoff-reducer";
 import { idempotency } from "../lib/idempotency";
@@ -137,6 +137,17 @@ projects.delete("/:id/members/:email", async (c) => {
 
   const target = await findUserByEmail(db, email);
   if (!target) throw new NotFoundError(`No user found with email ${email}`);
+
+  // Block owner self-removal. requireRole above already guaranteed the
+  // caller is owner; if target == caller, this is the owner trying to
+  // remove themselves, which would orphan the project (no owner left,
+  // every subsequent owner-gated call 404s). Editors/viewers calling
+  // here fail requireRole earlier, so this guard is owner-specific.
+  if (target.id === user.id) {
+    throw new ForbiddenError(
+      "You cannot remove yourself from the project. Transfer ownership first or delete the project entirely.",
+    );
+  }
 
   await removeMember(db, projectId, target.id);
   await logActivity(db, {
