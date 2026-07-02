@@ -1,5 +1,4 @@
 import child_process from "node:child_process";
-import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { safeReadFile } from "../safe-read.js";
@@ -127,29 +126,42 @@ export class ClaudeCodeAdapter implements ToolAdapter {
   }
 
   /**
-   * Compact via `claude -p` running locally. Uses a locked-down config
-   * profile (read-only, deny destructive tools) and `--max-turns 1` so the
-   * model emits a single text reply with no follow-on tool use.
+   * Compact via `claude -p` running locally.
+   *
+   * Flag choices (verified against `claude --help` in v1.x):
+   *   --no-session-persistence: skips writing the compaction session to
+   *       ~/.claude/projects/<cwd>/<uuid>.jsonl — primary defense against
+   *       recursive capture+compaction (each compaction would otherwise
+   *       generate a new session file that the adapter would re-capture).
+   *   --tools "": disable all tools — summarization is text-only, no tool
+   *       use needed, and it eliminates permission-prompt surface area.
+   *   --model claude-haiku-4-5-20251001: cheap + fast model suitable for
+   *       3-5 sentence summaries (matches the hosted compaction default).
    *
    * Failure modes that throw:
    *   - `claude` not on PATH (ENOENT)
    *   - non-zero exit (network, auth, billing)
    *   - empty stdout (model returned nothing parseable)
    *
-   * The transcript is truncated to ~80 KB of `role: content` text — Claude
-   * Haiku's context budget comfortably handles that, and beyond it the
-   * summary quality degrades. The first/last halves are preserved (middle
-   * truncated) so both setup context and recent decisions survive.
+   * Transcript is truncated to ~80 KB. The first/last halves are preserved
+   * (middle truncated) so both setup context and recent decisions survive.
+   *
+   * The prompt also prepends SYNAPSE_INTERNAL_MARKER as belt-and-suspenders
+   * defense — if --no-session-persistence ever regresses, the adapter's
+   * parse() still filters out marker-tagged sessions.
    */
   async compact(session: CapturedSession): Promise<CompactResult> {
     const transcript = renderTranscript(session);
-    const profile = writeCompactionProfile();
     const instruction = buildCompactionPrompt(transcript);
     return new Promise((resolve, reject) => {
-      const child = child_process.spawn("claude", ["-p", instruction, "--config", profile, "--max-turns", "1"], {
-        env: { ...process.env, SYNAPSE_DAEMON_SESSION: "1" },
-        stdio: ["pipe", "pipe", "pipe"],
-      });
+      const child = child_process.spawn(
+        "claude",
+        ["-p", instruction, "--no-session-persistence", "--tools", "", "--model", "claude-haiku-4-5-20251001"],
+        {
+          env: { ...process.env, SYNAPSE_DAEMON_SESSION: "1" },
+          stdio: ["pipe", "pipe", "pipe"],
+        },
+      );
       let stdout = "";
       let stderr = "";
       child.stdout?.on("data", (d: Buffer) => {
@@ -191,19 +203,4 @@ function renderTranscript(session: CapturedSession): string {
 
 function buildCompactionPrompt(transcript: string): string {
   return `${SYNAPSE_INTERNAL_MARKER}\nSummarize the following AI coding conversation in 3-5 short sentences focused on: what the user was working on, what decisions or learnings emerged, and what would be useful for the next session to know. Return ONLY the summary text — no headers, no preamble.\n\n---\n${transcript}\n---`;
-}
-
-function writeCompactionProfile(): string {
-  const dir = path.join(os.homedir(), ".synapse");
-  fs.mkdirSync(dir, { recursive: true });
-  const p = path.join(dir, "compaction-cc-profile.json");
-  const profile = {
-    permissions: {
-      deny: ["Edit", "Write", "MultiEdit", "Bash", "NotebookEdit", "Agent", "WebFetch"],
-      allow: ["Read"],
-    },
-    model: "claude-haiku-4-5-20251001",
-  };
-  fs.writeFileSync(p, JSON.stringify(profile, null, 2));
-  return p;
 }
