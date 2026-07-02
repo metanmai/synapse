@@ -166,22 +166,36 @@ export async function findOrCreateProjectByGit(
 
   let existingId: string | null = null;
 
+  // Tier 1 — URL match. Same-URL duplicates SHOULDN'T exist (a unique index
+  // on (owner_id, git_remote_url) prevents them as of migration 021), but
+  // until that constraint lands on every deployment we still pick the
+  // most-recently-touched row defensively rather than letting Supabase's
+  // .maybeSingle() throw on multi-row matches.
   if (gitRemoteUrl && memberProjectIds.length > 0) {
     const { data } = await db
       .from("projects")
       .select("id")
       .eq("git_remote_url", gitRemoteUrl)
       .in("id", memberProjectIds)
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     existingId = (data as { id: string } | null)?.id ?? null;
   }
 
+  // Tier 2 — name match. Same-name projects ARE legitimate (two `scratch`
+  // repos with different URLs both stored at name="scratch"). .maybeSingle()
+  // throws on 2+ matches, which would 500 every sync from the second cwd.
+  // Pick the most-recently-touched row so the routing is stable across
+  // sessions.
   if (!existingId && memberProjectIds.length > 0) {
     const { data: existing } = await db
       .from("projects")
       .select("id, git_remote_url")
       .eq("name", gitBasename)
       .in("id", memberProjectIds)
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     const existingRow = existing as { id: string; git_remote_url: string | null } | null;
     existingId = existingRow?.id ?? null;
