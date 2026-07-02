@@ -11,7 +11,8 @@ import {
 
 describe("handoff-paths", () => {
   afterEach(() => {
-    process.env.SYNAPSE_HOME = undefined;
+    // biome-ignore lint/performance/noDelete: real delete needed; assigning `undefined` coerces to string "undefined" in Node
+    delete process.env.SYNAPSE_HOME;
   });
 
   it("projectDir is under ~/.synapse/projects/<pid> by default", () => {
