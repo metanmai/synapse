@@ -78,9 +78,12 @@ const PROVIDERS: LLMProvider[] = [
   {
     name: "openrouter",
     envKey: "OPENROUTER_API_KEY",
-    // OpenRouter routes "x-ai/grok" through to xAI; "anthropic/claude-haiku-4.5"
-    // is a stable mid-tier option that won't break the bank on test runs.
-    defaultModel: "anthropic/claude-haiku-4.5",
+    // Match scripts/e2e-llm-driver.mjs PROVIDERS — known to be available
+    // on OpenRouter's catalog and cheap enough for repeated CI runs.
+    // Stay in lockstep with the harness model; drift would mean local-
+    // compact uses a different (potentially unavailable) model than the
+    // Stage-3 chat call that already exercised the same provider.
+    defaultModel: "anthropic/claude-3.5-haiku",
     async call(prompt, apiKey, maxTokens) {
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
