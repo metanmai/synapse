@@ -112,6 +112,21 @@ export class CaptureWatcher extends EventEmitter {
         resolve();
       }
     });
+
+    // Windows-only post-ready warmup. On win32 with `usePolling: true`,
+    // chokidar fires `ready` once the initial directory scan completes
+    // but BEFORE the stat-poll loop has done its first non-initial
+    // pass. A file written immediately after start() can be missed
+    // entirely because the polling backend doesn't yet have a baseline
+    // to compare against. 500ms covers one polling interval plus
+    // safety margin. Linux/macOS use native event APIs and don't need
+    // this; on those platforms `ready` accurately means "watcher is
+    // listening." Discovered 2026-06-08 via watcher.test.ts on Windows
+    // CI: the only test in the suite that wrote a file with no warmup
+    // gap was the lone Windows verify failure.
+    if (process.platform === "win32") {
+      await new Promise<void>((resolve) => setTimeout(resolve, 500));
+    }
   }
 
   async stop(): Promise<void> {
