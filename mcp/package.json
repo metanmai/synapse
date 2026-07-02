@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "tsc && node ./scripts/add-shebang.mjs",
-    "test": "vitest run",
+    "test": "node ./scripts/run-tests.mjs",
     "test:e2e": "TEST_E2E=1 vitest run test/e2e/",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
