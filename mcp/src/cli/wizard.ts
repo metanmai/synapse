@@ -1,8 +1,8 @@
 import * as clack from "@clack/prompts";
 import { validateApiKey } from "./api.js";
 import { browserAuth } from "./browser-auth.js";
-import type { SetupScope } from "./editors.js";
-import { detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors.js";
+import type { SetupScope } from "./editors/index.js";
+import { detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors/index.js";
 import { createGlyphSpinner } from "./spinner.js";
 import { accent, bold, muted, success, error as themeError } from "./theme.js";
 import { showWelcome } from "./welcome.js";
