@@ -17,7 +17,7 @@ const app = new Hono<{ Bindings: Env }>();
 
 // CORS for frontend
 app.use("*", (c, next) => {
-  const origins = envList(c.env, "CORS_ORIGINS", "http://localhost:5173,https://synapsesync.app");
+  const origins = envList(c.env, "CORS_ORIGINS", "http://localhost:5173,https://synapsesync.app,https://synapse-7mq.pages.dev");
   return cors({
     origin: origins,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],

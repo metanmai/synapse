@@ -106,7 +106,7 @@ export async function searchEntries(
   query: string,
   options?: { tags?: string[]; folder?: string }
 ): Promise<Entry[]> {
-  // Use Postgres full-text search
+  // Try Postgres full-text search first
   let dbQuery = db
     .from("entries")
     .select("*")
@@ -123,7 +123,31 @@ export async function searchEntries(
 
   const { data, error } = await dbQuery;
   if (error) throw error;
-  return (data ?? []) as Entry[];
+
+  // If full-text search found results, return them
+  if (data && data.length > 0) {
+    return data as Entry[];
+  }
+
+  // Fallback: ILIKE search on path and content for partial/fuzzy matching
+  const pattern = `%${query}%`;
+  let fallbackQuery = db
+    .from("entries")
+    .select("*")
+    .eq("project_id", projectId)
+    .or(`path.ilike.${pattern},content.ilike.${pattern}`);
+
+  if (options?.folder) {
+    fallbackQuery = fallbackQuery.like("path", `${options.folder}/%`);
+  }
+
+  if (options?.tags?.length) {
+    fallbackQuery = fallbackQuery.overlaps("tags", options.tags);
+  }
+
+  const { data: fallbackData, error: fallbackError } = await fallbackQuery;
+  if (fallbackError) throw fallbackError;
+  return (fallbackData ?? []) as Entry[];
 }
 
 export async function getRecentEntries(
