@@ -1,206 +1,218 @@
-# Design — GUI-App Capture (Claude Desktop, ChatGPT Desktop, Browser)
+# Design — GUI / Browser Capture (claude.ai, chatgpt.com, desktop apps best-effort)
 
 **Date:** 2026-06-11
-**Status:** Draft for review
-**Author:** brainstorming session (Tanmai + Claude)
+**Status:** Draft for review (revised after adversarial design review — see "Review changelog")
+**Author:** brainstorming session (Tanmai + Claude), hardened by an Opus design review
 
 ## Problem
 
-Synapse captures AI coding sessions via two paths today:
+Synapse captures AI sessions two ways today:
 
-1. **File-watcher** (chokidar on `~/.claude/projects/*.jsonl`, `~/.codex/…`, Cursor/Cline/Roo/Copilot storage dirs) — zero setup, captures any tool that writes session files to disk. This is the capture backbone.
-2. **TLS-MITM proxy** (port 7727) — captures CLI tools that honor `HTTPS_PROXY` + `NODE_EXTRA_CA_CERTS`, *if* the user completed the manual env-var paste.
+1. **File-watcher** (chokidar on tool session-JSONL dirs) — zero setup, the capture backbone.
+2. **TLS-MITM proxy** (port 7727) — captures CLI tools that honor `HTTPS_PROXY` + `NODE_EXTRA_CA_CERTS`, *if* the user did the manual env-var paste.
 
-Neither path captures **GUI applications**: the Claude Desktop app, the ChatGPT Desktop app, or browser sessions on `claude.ai` / `chatgpt.com`. This is true for **every user on every OS**, by design, not a machine-specific quirk. Two architectural gaps cause it:
+Neither captures GUI/browser AI usage — the Claude Desktop app, ChatGPT Desktop app, or browser sessions on `claude.ai` / `chatgpt.com`. This is universal (every user, every OS), because (a) GUI apps obey the OS system proxy, not shell env, and `proxy enable` never sets the OS proxy; (b) the CA is trusted only in the login keychain, but Electron/Chromium validate against the System trust store.
 
-- `proxy enable` never configures the OS system proxy, so GUI apps (which obey OS proxy settings, not shell env) never route to 7727.
-- `proxy install` trusts the CA only in the login keychain, but Electron/Chromium validate against the **System** trust store, so they would reject the MITM cert even if routed.
+This design adds an **opt-in, default-OFF, crash-safe** routing+trust shell around the existing proxy to close the gap **for browsers as the primary target**, with native desktop apps as explicitly best-effort (see Goals — a design review found both native apps are largely uncapturable today).
 
-This design adds an **opt-in, default-OFF, crash-safe second tier** of the proxy that closes both gaps.
+## Review changelog (what the adversarial review changed)
+
+The first draft assumed the native desktop apps were the prize and that routing+trust would suffice. Verification falsified key claims; this revision incorporates all findings:
+
+- **Native ChatGPT Desktop (macOS) pins certs** and OpenAI removed pinning exceptions (2026-02) → uncapturable by local-CA MITM. **Demoted out of v1.** (rev C1)
+- **Native Claude Desktop (Electron) is Cloudflare-403'd through an explicit proxy on macOS** (UA-based, independent of trust) → at-risk even if routed+trusted. **Best-effort, not a v1 commitment.** (rev C2)
+- **There is no shared host constant** and `endpoint-recognition.ts` classifies `claude.ai`/`chatgpt.com` as `capture:false`. Routing browser hosts captures *nothing* without **net-new web-session parsing** — now explicit in-scope work. (rev C3)
+- **Proxy MITMs any host routed to it** (no allowlist in `handleConnect`) — host restriction was PAC-advisory only. Now enforced at the proxy. (rev M1)
+- **Windows raw `AutoConfigURL` write is unreliable** for Chromium/Electron — must author `DefaultConnectionSettings`. (rev H1)
+- **PAC `;DIRECT` failover isn't transparent** (first-request stall, ~5min bad-proxy cache) and **fails entirely when the PAC server itself is down** (daemon fully dead). Crash-safety reworded + hardened. (rev H2/H3)
+- **macOS `setautoproxyurl` persistence is unreliable** (Sequoia regression) → manual reboot smoke test added. (rev H3)
+- **Linux trust = sudo system-store only today**; per-user NSS is net-new. Linux GUI **cut from v1**. (rev H4)
+- Added a **Security section** (CA key protection under System-trust). (rev M2)
+- De-dup, Netskope coexistence, status diagnostics, pacport, wizard copy all corrected (rev M3/M4/L1/L2/L3).
 
 ## Goals & Non-Goals
 
-**Goals (v1 "done" criteria):**
-- Capture the Claude Desktop app, the ChatGPT Desktop app, and browser sessions on `claude.ai` / `chatgpt.com`.
-- All three OSes: macOS, Windows, Linux (Linux GUI capture explicitly best-effort — see §3).
+**v1 "done" = browser capture works:**
+- Capture browser sessions on `claude.ai` and `chatgpt.com` (Chrome/Edge/Safari) — **this is the primary, committed target.**
 - Opt-in via a wizard step, default OFF.
-- **Crash-safe**: a dead daemon must never break the user's networking.
-- **Best-effort coexistence** with an existing corporate MITM (e.g. Netskope) — work where the environment allows, degrade cleanly where it fights back; do not block v1 on the hard cases.
+- **Crash-safe**: a dead daemon must self-heal networking to DIRECT (within one failover timeout — not instantly; see §4).
+- macOS + Windows. **Linux GUI/browser capture is NOT in v1** (sudo-only trust today + weak gsettings routing — revisit later).
+
+**Best-effort (ship if the spike says capturable, don't block v1):**
+- Native Claude Desktop app — gated on the macOS Cloudflare-403 spike (rev C2).
 
 **Non-Goals:**
-- Capturing GUI tools already covered by the file-watcher (Cursor, Windsurf, etc.) — file-watcher stays primary; proxy is fallback only.
-- A PAC-merging engine for machines with an explicit corporate PAC already set (future enhancement).
-- Per-app network-extension interception (notarized system extensions / WFP / netfilter) — out of scope; revisit only if PAC proves insufficient.
-- Defeating certificate pinning. If a target app pins, capture yields nothing for that app and we document it; we do not attempt pinning bypass.
+- Native ChatGPT Desktop app — known-uncapturable (pinning, rev C1). Out.
+- File-captured IDEs (Cursor/Windsurf) — file-watcher stays primary; do not target via proxy.
+- Defeating cert pinning / HSTS — if a target pins, capture yields nothing; we document, not bypass.
+- PAC-merging for machines with an explicit corporate PAC already set (future enhancement).
+- Per-app network-extension interception (notarized extensions / WFP / netfilter) — out.
+- Linux GUI capture (deferred).
 
-## Decisions (locked during brainstorming)
+## Decisions (locked)
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| OS scope | All three (mac/win/linux) | Full parity intent; Linux GUI leg flagged best-effort |
-| Must-capture targets | Claude Desktop, ChatGPT Desktop, browser (claude.ai/chatgpt.com) | Highest-value uncaptured surfaces |
-| File-captured IDEs | Out of scope (file-watcher primary, proxy fallback only) | No double-work; de-dup concern minimized |
-| Corporate MITM | Best-effort coexist; don't block v1 | Detect-and-don't-clobber, not a merge engine |
-| Routing primitive | PAC file + host-allowlist + `; DIRECT` fallback | Crash-safe, minimal blast radius, enables coexistence + privacy for free |
-| Default state | OFF, opt-in | System-proxy + System-keychain changes are invasive |
+| Primary target | **Browsers** (claude.ai/chatgpt.com) | Native apps largely uncapturable (rev C1/C2) |
+| Native Claude Desktop | Best-effort, spike-gated | Cloudflare-403 risk on macOS proxied path |
+| Native ChatGPT Desktop | Out | Cert pinning, no exceptions |
+| OS scope | macOS + Windows (Linux deferred) | Linux trust/routing too weak for v1 (rev H4) |
+| Routing primitive | PAC + host-allowlist + `;DIRECT` fallback | Crash-safe-ish, minimal blast radius |
+| Allowlist enforcement | **Both** PAC (advisory) **and** proxy (enforced) | PAC isn't a security boundary (rev M1) |
+| Web-session capture | **Net-new** recognition + extractors for claude.ai/chatgpt.com | Existing code only parses API bodies (rev C3) |
+| Default state | OFF, opt-in | System-proxy + System-keychain are invasive |
 
 ## Architecture
 
-The existing proxy (TLS-MITM on 7727, session reconstruction, `ProxySource → CloudSyncer`) is **unchanged**. This feature adds the routing + trust + safety shell around it. GUI capture is an **additive second tier**: Tier 1 (existing) = login-keychain CA + `proxy enable` + shell env → CLI tools; Tier 2 (new) = System-keychain CA + PAC routing → GUI apps. Tier 2 implies Tier 1; you can have Tier 1 without Tier 2.
+Existing proxy (TLS-MITM 7727, `ProxySource → CloudSyncer`) unchanged. New shell:
 
 ```
-                    ┌────────────────────────────────────────────────┐
-   wizard opt-in ──▶│  GuiCaptureManager  (enable / disable / status) │
-   (default OFF)    └───────────────┬────────────────────────────────┘
-                        ┌───────────┼───────────┬──────────────┐
-                        ▼           ▼           ▼              ▼
-                 ┌────────────┐ ┌────────┐ ┌──────────┐ ┌─────────────┐
-                 │RoutingMgr  │ │PAC      │ │SystemCA  │ │Watchdog/    │
-                 │(per-OS     │ │server   │ │trust     │ │reconcile    │
-                 │ autoproxy) │ │:7728    │ │(per-OS)  │ │             │
-                 └─────┬──────┘ └────┬────┘ └──────────┘ └─────────────┘
-                       │             │
-  GUI app HTTPS ─▶ OS proxy ─▶ reads PAC ─▶ AI host? ─▶ PROXY 127.0.0.1:7727; DIRECT ─▶ [existing proxy] ─▶ capture
-                                          else?      ─▶ DIRECT (untouched)
+   wizard opt-in ──▶ GuiCaptureManager (enable / disable / status)
+   (default OFF)        │
+        ┌───────────────┼─────────────┬───────────────┬──────────────┐
+        ▼               ▼             ▼               ▼              ▼
+   RoutingMgr       PAC server    SystemCA      Watchdog/        WebSession
+   (per-OS          :7728         trust         reconcile        recognizers
+    autoproxy)      (allowlist)   (per-OS)      (clear on stale) (claude.ai/
+        │               │                                         chatgpt.com)
+        ▼               ▼
+  OS proxy ─▶ reads PAC ─▶ host ∈ CAPTURE_HOSTS? ─▶ PROXY 127.0.0.1:7727; DIRECT ─▶ proxy
+                          else ─▶ DIRECT                                              │
+                                                          proxy ENFORCES allowlist ───┤
+                                                          (refuse-MITM non-allowlist) │
+                                                          recognize + extract ────────┘
 ```
 
 | New component | Job | Location |
 |---|---|---|
-| **RoutingManager** | Set/clear OS *auto-proxy URL* (not a hard proxy), per-OS backends | `mcp/src/capture/proxy/routing/` (new, mirrors `backends/` shape) |
-| **PAC server** | Serve the allowlist PAC over `http://127.0.0.1:7728/proxy.pac` | extends the daemon (capture-worker) |
-| **System-CA trust** | Per-OS machine/system trust install, admin-gated where required | extends `onboarding.ts` backends with a `scope: 'system'` variant |
-| **Watchdog / reconcile** | Clear routing if daemon healthcheck goes stale; reconcile on startup | daemon supervisor + daemon startup |
-| **GuiCaptureManager** | Orchestrate enable/disable/status across the four; wizard + CLI both call it | `mcp/src/capture/proxy/gui-capture.ts` (new) |
+| **CAPTURE_HOSTS constant** | Single source of truth for routed+captured hosts; consumed by PAC gen, `endpoint-recognition`, and proxy enforcement | `mcp/src/capture/proxy/capture-hosts.ts` (new) |
+| **RoutingManager** | Set/clear OS auto-proxy, per-OS backends | `mcp/src/capture/proxy/routing/` (new) |
+| **PAC server** | Serve allowlist PAC over `http://127.0.0.1:7728/proxy.pac` | extends daemon |
+| **System-CA trust** | Per-OS system-trust install, admin-gated where required | extends `onboarding.ts` with `scope:'system'` |
+| **Web-session recognizers** | Classify + extract `claude.ai`/`chatgpt.com` web wire formats (SSE/JSON, differ from API bodies) | extends `endpoint-recognition.ts` + `session-reconstruction.ts` |
+| **Proxy allowlist enforcement** | `handleConnect` refuses to MITM hosts ∉ CAPTURE_HOSTS | edit `server.ts` |
+| **Watchdog/reconcile** | Clear routing on stale healthcheck; reconcile on startup | daemon |
+| **GuiCaptureManager** | Orchestrate the above | `mcp/src/capture/proxy/gui-capture.ts` (new) |
 
-**Core invariant: every new piece is symmetric and reversible.** `disable`, `uninstall`, and crash all converge on the same clean state (auto-proxy URL cleared, optionally CA removed). Nothing is a one-way door.
+**Core invariant:** every piece is symmetric/reversible — `disable`, `uninstall`, crash all converge on "auto-proxy cleared."
 
 ## §1. Wizard flow & lifecycle
 
-**CLI surface** (mirrors existing `proxy install/enable/disable/uninstall/status`):
-```
-synapsesync capture gui enable     # base proxy → System CA (admin) → PAC server → set auto-proxy URL → verify
-synapsesync capture gui disable    # clear auto-proxy URL + stop PAC server  (base proxy stays up)
-synapsesync capture gui uninstall  # disable + remove System CA
-synapsesync capture gui status     # per-layer: CA-trust | PAC-server | auto-proxy | last-capture
-```
+CLI (mirrors existing verbs): `synapsesync capture gui enable | disable | uninstall | status`.
 
-**Wizard opt-in** — `clack.confirm`, default N, after the base capture step:
+**Wizard opt-in** — `clack.confirm`, default N:
 ```
-? Also capture desktop apps & browsers? (Claude Desktop, ChatGPT, claude.ai)
-    • One admin prompt (trusts Synapse's cert system-wide)
-    • Routes only AI hosts to Synapse — your other traffic is untouched
-    • Auto-restores to normal if Synapse ever stops
+? Also capture browser AI sessions? (claude.ai, chatgpt.com)
+    • One admin prompt on macOS (trusts Synapse's cert system-wide)
+    • Routes only AI hosts to Synapse — other traffic stays direct
+    • Restores to a direct connection automatically if Synapse stops
   (y/N)
 ```
-On `y` → `GuiCaptureManager.enable()`. If admin unavailable or an explicit existing proxy is detected → print "skipped GUI capture, CLI + file capture still active" and continue. **Never hard-fail the wizard.**
+On `y` → `GuiCaptureManager.enable()`. Admin unavailable / explicit corporate proxy detected → "skipped GUI capture, CLI + file capture still active," continue. Never hard-fail.
 
-**Lifecycle ordering is the safety contract** — build up, unwind in reverse, roll back on mid-enable failure:
+**Lifecycle ordering = safety contract** (build up; unwind reverse; roll back on mid-enable failure):
 
-| Step | Enable (in order) | Teardown (reverse) |
+| Step | Enable | Teardown (reverse) |
 |---|---|---|
-| 1 | Ensure base proxy running | clear auto-proxy URL **first** (apps stop routing) |
-| 2 | Install System CA (admin) | stop PAC server |
-| 3 | Start PAC server, confirm reachable | (CA kept on `disable`; removed on `uninstall`) |
+| 1 | Ensure base proxy running | clear auto-proxy URL **first** |
+| 2 | Install System CA (admin if macOS) | stop PAC server |
+| 3 | Start PAC server, confirm reachable | (CA kept on disable; removed on uninstall) |
 | 4 | Set OS auto-proxy URL **last** | — |
 
-Set the auto-proxy URL last (apps never route to an unconfirmed proxy); clear it first on teardown (apps stop diverting before the proxy goes away). Any enable step that fails rolls back prior steps.
+## §2. Routing layer (PAC + enforced allowlist)
 
-## §2. The PAC routing layer
-
-**PAC script** — generated from the same provider-host constant the proxy already uses, so the allowlist cannot drift:
+**PAC script** — generated from the new shared `CAPTURE_HOSTS` constant:
 ```javascript
 function FindProxyForURL(url, host) {
-  if (host == "api.anthropic.com" || host == "claude.ai" ||
-      host == "chatgpt.com" || host == "chat.openai.com" ||
-      host == "api.openai.com") {
-    return "PROXY 127.0.0.1:7727; DIRECT";   // ; DIRECT = crash-safe fallback
-  }
-  return "DIRECT";                            // everything else untouched
+  if (CAPTURE_HOSTS.includes(host)) return "PROXY 127.0.0.1:7727; DIRECT";
+  return "DIRECT";
 }
 ```
+`CAPTURE_HOSTS` = `api.anthropic.com, claude.ai, chatgpt.com, chat.openai.com, api.openai.com` (browser + API). **The same constant drives `endpoint-recognition` and proxy enforcement** — a real shared source, not a hope (rev C3). A test asserts PAC hosts ⊆ recognized-and-extractable hosts.
 
-**Served over HTTP, not `file://`** — `http://127.0.0.1:7728/proxy.pac` (default pacport 7728, persisted in `proxy-config.json`). Reasons: (1) `file://` PAC is flaky in Safari/Chrome/Edge; (2) all three OSes accept an http auto-config URL reliably; (3) it doubles as a kill-switch — to stop routing instantly the daemon serves a `return "DIRECT"` PAC without touching OS settings.
+**Served over HTTP** (`http://127.0.0.1:7728/proxy.pac`) not `file://` (flaky in browsers); doubles as a kill-switch (serve `DIRECT` PAC to stop routing instantly). pacport default 7728, **persisted in `proxy-config.json` (new field), and startup-reconcile rewrites the OS auto-proxy URL to the actually-bound port** so a port change can't silently break routing (rev L2).
 
-**Per-OS set/clear** (RoutingManager backends, injectable runners like the `onboarding.ts` backends):
+**Proxy-side enforcement (rev M1):** `handleConnect` refuses to MITM any host ∉ `CAPTURE_HOSTS` (blind-tunnel it instead). PAC narrows what's *sent*; the proxy enforces what's *intercepted*. Closes the "any client can tunnel arbitrary HTTPS through a System-trusted-CA proxy" hole.
+
+**Per-OS set/clear:**
 
 | OS | Set | Clear |
 |---|---|---|
-| macOS | `networksetup -setautoproxyurl <svc> http://127.0.0.1:7728/proxy.pac` per active service | `-setautoproxystate <svc> off` |
-| Windows | registry `AutoConfigURL` + WinINET `INTERNET_OPTION_SETTINGS_CHANGED` refresh | delete the value |
-| Linux | `gsettings ...proxy.mode='auto'` + `autoconfig-url` (GNOME) | `mode='none'` |
+| macOS | `networksetup -setautoproxyurl <svc> http://127.0.0.1:7728/proxy.pac` per service | `-setautoproxystate <svc> off` |
+| Windows | author `DefaultConnectionSettings` (+`SavedLegacySettings`) via `InternetSetOption(INTERNET_OPTION_PER_CONNECTION_OPTION)` then `SETTINGS_CHANGED`+`REFRESH` — **NOT a raw `AutoConfigURL` registry write** (rev H1; Chromium/Electron read WinINET `DefaultConnectionSettings`, not the loose string) | rewrite the blob (not "delete a value") |
 
-**Corporate coexistence = detect-and-don't-clobber** (not a merge engine). The OS has one auto-proxy slot. Before setting ours, RoutingManager checks for an existing explicit proxy/PAC:
-- **Slot empty** (common — Netskope typically MITMs via a transparent network extension, not the AutoConfigURL slot): safe to set our PAC. AI traffic chains `GUI app → Synapse 7727 → corporate transparent layer → real host`; works because the proxy already trusts the corporate CA upstream via `NODE_EXTRA_CA_CERTS`.
-- **Slot occupied** (explicit corporate PAC/system-proxy): we'd break it → don't touch, degrade, log "explicit proxy detected, GUI capture skipped." Merging is a documented future enhancement.
+**Windows implementation risk (rev H1):** the existing Windows backend deliberately shells out (PowerShell/certutil) and avoids native APIs; `InternetSetOption` needs WinINET interop with no built-in Node binding. Flag as an impl risk — may need a tiny PowerShell `Add-Type` shim or a vetted helper.
 
-**Linux GUI capture is the weakest leg** — `gsettings` only reaches GNOME apps that honor it; KDE / env-only / many Electron-on-Linux builds ignore it. v1 ships the GNOME path and reports "Linux GUI capture is best-effort" in `gui status` rather than claiming parity.
+**Corporate coexistence — two stacked MITMs, partial detection (rev M4):** Netskope steers via a macOS **network extension** below the proxy layer — it generally does *not* occupy the auto-proxy slot, so "slot empty ⇒ set ours" is reasonable. But: (1) when our proxy connects upstream, Netskope's extension intercepts *that* too — it's **two stacked MITMs**, not a linear chain; double-decryption can break HTTP/2 coalescing or trip DLP. (2) A transparent network-extension MITM is **undetectable from a Node daemon** — detect-and-don't-clobber only sees the *explicit* proxy/PAC slot. So on a Netskope Mac we proceed blind and hope upstream-CA-trust (`NODE_EXTRA_CA_CERTS`) holds. Slot occupied (explicit corporate PAC) → don't clobber, degrade. Best-effort, not guaranteed.
 
-## §3. Trust layer (System-keychain CA)
+## §3. Trust layer (System-trust CA)
 
-GUI apps validate TLS against the OS/system trust store, not the login keychain. Extend `onboarding.ts` backends with a `scope: 'system'` variant. **The admin requirement is asymmetric across OSes — exploit that to minimize friction:**
+Extend `onboarding.ts` backends with `scope:'system'`:
 
-| OS | System-trust mechanism | Admin needed? |
+| OS | Mechanism | Admin? |
 |---|---|---|
-| macOS | `sudo security add-trusted-cert -d -r trustRoot -p ssl -k /Library/Keychains/System.keychain ca.pem` | **Yes** (admin password) |
-| Windows | `certutil -addstore -f Root` in **CurrentUser** store (Chromium/Edge/Electron read CurrentUser Root for the current user) | **No** — already the Tier-1 path in `windows.ts`; GUI capture on Windows may need no extra trust step |
-| Linux | Chromium/Electron use per-user NSS db: `certutil -d sql:$HOME/.pki/nssdb -A -n synapse -t C,, -i ca.pem` (no sudo). Firefox uses per-profile NSS. System store (`/usr/local/share/ca-certificates/` + `update-ca-certificates`) needs sudo but reaches curl/CLI not GUI | **Mostly no** (per-user NSS) |
+| macOS | `sudo security add-trusted-cert -d -r trustRoot -p ssl -k /Library/Keychains/System.keychain ca.pem` | **Yes** |
+| Windows | `certutil -addstore -f Root` (CurrentUser) — already the Tier-1 path in `windows.ts`; **verify in the spike** whether Claude Desktop Electron honors CurrentUser Root or bundles its own store (rev H1/C2) | Likely **no** |
 
-So macOS is the only OS that strictly needs an admin prompt for GUI trust. The wizard copy and `GuiCaptureManager` must branch on this: prompt for admin only where required, and **degrade gracefully when admin is unavailable** (corporate-managed Macs) — skip GUI capture, keep Tier 1 + file-watcher, surface the reason in `gui status`.
+Branch wizard copy on admin need (only macOS prompts). Degrade gracefully when admin unavailable. `uninstall` removes from whichever store `enable` populated.
 
-`uninstall` removes the CA from whichever store(s) `enable` populated — symmetric per OS.
+**Linux trust is cut from v1 (rev H4):** the existing Linux backend is sudo-system-store only and (per its own logic) doesn't reach Chromium/Electron, which use per-user NSS (`~/.pki/nssdb`) — that's unbuilt. Don't half-claim it.
 
-## §4. Crash-safe restore
+## §4. Crash-safe restore (corrected — rev H2/H3)
 
-Defense in depth, four layers, weakest-to-strongest dependency on a live process:
+Four layers, honest about the gap:
 
-1. **PAC `; DIRECT` fallback (primary).** Even with the auto-proxy URL set and the proxy *and* PAC server both dead, every app falls through to a direct connection. Networking never breaks. This holds with zero live Synapse processes.
-2. **Daemon-startup reconciliation.** The OS service (launchd/systemd/Task Scheduler) restarts a crashed daemon. On startup the daemon reconciles: "is an auto-proxy URL set pointing at my PAC, but GUI capture is not supposed to be enabled (per `proxy-config.json`)? → clear it. Is GUI capture enabled but my PAC server isn't up? → start it." Converges to the configured state.
-3. **Graceful-shutdown signal handler.** On SIGTERM/SIGINT the daemon clears routing (or serves the DIRECT PAC) before exit, for clean stops.
-4. **`gui status` drift surfacing.** Reports any mismatch (auto-proxy set but PAC server down, etc.) so the user / `doctor --smoke` can see and fix.
+1. **PAC `;DIRECT` fallback** — works **only while the PAC is still served**. "Proxy 7727 dead, PAC 7728 alive" ⇒ apps fetch the PAC, get `;DIRECT`, fall through. **NOT transparent**: the first request per app stalls for the connect-failure timeout, and Chromium marks the proxy "bad" for ~5 min. A *half-open* 7727 (accepts, never responds) is the dangerous case — full connect timeout. Reword the guarantee to **"networking self-heals to DIRECT within one failover timeout per app,"** not "never breaks."
+2. **Daemon-fully-dead gap (the real hole):** if the daemon is dead, **7728 is also down → the PAC can't be fetched at all**, and per-browser PAC-unreachable behavior is undefined (many fall back to DIRECT; some stall/queue). Layer 1's guarantee does **not** cover this. **Mitigations:** (a) on graceful shutdown (SIGTERM/SIGINT) clear the auto-proxy URL entirely — don't rely on a dead PAC; (b) consider running the PAC server in a *separate, more-resilient* tiny process from the capture proxy so 7728 outlives a 7727 crash.
+3. **Daemon-startup reconciliation:** restarted daemon reconciles OS auto-proxy vs `proxy-config.json` (clear if GUI disabled; restart PAC + rewrite URL to bound port if enabled).
+4. **`gui status` drift surfacing** (+ per-host diagnostics, see L1).
 
-The watchdog is *layer 2+3*, not a separate always-on process — co-locating it in the daemon-startup + signal-handler avoids the "who watches the watchdog" regress. Layer 1 is what guarantees safety in the gap between crash and restart.
+**macOS persistence risk (rev H3):** `setautoproxyurl` is not reliably persistent across OS updates and has a reported Sequoia regression (proxy stops functioning / GUI toggle breaks after set). **Add a manual smoke step:** set auto-proxy URL → reboot with daemon stopped → confirm a GUI app still has working networking.
 
-## §5. Capture path & de-dup
+## §5. Capture path & web-session reconstruction (expanded — rev C3)
 
-Proxy-sourced sessions flow through the existing `ProxySource → store.save + syncer.sync` path, **unchanged**. De-dup analysis:
+**Net-new work, not free:** routing `claude.ai`/`chatgpt.com` captures nothing today because `endpoint-recognition.ts` returns `capture:false` for them and `session-reconstruction.ts` only extracts the API `/v1/messages` body shape. The browser wire format (SSE streams, different JSON envelopes, auth via cookies not API keys) needs **new recognizers + extractors**. This is the bulk of the implementation risk and must be scoped explicitly. The spike (§7) must confirm the wire format is parseable before committing.
 
-- **Must-capture targets don't overlap the file-watcher.** Claude Desktop, ChatGPT Desktop, and browser sessions write no local session files, so they have zero file-watcher overlap → no de-dup needed for the v1 goal.
-- **Only overlap source = Electron IDEs** (Cursor/Windsurf) that both write session files *and* make proxied API calls to `api.anthropic.com`. Their API host is indistinguishable from Claude Desktop's at the network layer, so the PAC can't exclude them by host.
-- **v1 posture:** tag proxy-sourced sessions with `capturedVia: 'proxy'`. Accept that an IDE captured by both paths may double-store in v1 — it is rare, the user prioritized file-watcher for those, and the brief-rendering layer already de-dups insights. A proper `(source, id)` SessionStore keying + content-signature de-dup (the latent refactor noted earlier) is a **fast-follow**, not a v1 blocker.
+**De-dup (rev M3):** must-capture browsers write no session files → no file-watcher overlap. The only overlap (file-captured IDEs making proxied API calls) is now moot — IDEs aren't targeted and the proxy enforces the host allowlist. **Before accepting any residual double-capture, verify:** (a) it doesn't inflate the tier/quota counts the daemon's flush path reads, and (b) `session-reconstruction`'s `ses_<firstMessageHash>` keying behavior when the same conversation arrives via two sources. Tag proxy-sourced sessions `capturedVia:'proxy'`. The `(source,id)` SessionStore keying remains a fast-follow.
 
-This keeps v1 scope tight while being honest about the known edge.
+## §6. Security (new — rev M2)
 
-## §6. Failure posture
+System-trust escalates the stakes vs. login-keychain Tier 1: a leaked CA private key now lets an attacker MITM the victim's AI traffic against a root the OS/GUI apps trust.
+
+- Enforce `0600` on the CA key, `0700` on `~/.synapse/proxy/`.
+- Proxy enforces the host allowlist (rev M1) so a stolen-key attacker's *own* proxy is the threat model, not arbitrary interception via ours.
+- Document CA validity + a rotation story; shorter validity preferred.
+- `gui uninstall` offers to delete the on-disk key, not just remove it from trust stores (today `uninstallCa` leaves the pem).
+- Stated accepted risk: a System-trusted long-lived CA + readable key = MITM capability.
+
+## §7. Failure posture & testing
 
 | Condition | Behavior |
 |---|---|
-| Target app pins its cert | Capture silently yields nothing for that app. `gui status` shows `auto-proxy: set, last-capture: never` as a diagnostic. Per-app pinning findings documented from the spike (§7). |
-| No admin (macOS) | Degrade: skip GUI capture, keep Tier 1 + file-watcher, surface reason in status. |
-| Explicit corporate proxy already set | Degrade: don't clobber, log + skip. |
-| Daemon crash | PAC DIRECT-fallback (networking fine) + startup reconciliation. |
-| PAC server port (7728) in use | Pick next free port, persist it, regenerate auto-proxy URL. |
+| Target pins / HSTS | Capture yields nothing; `gui status` per-host "CONNECT seen, 0 captured" distinguishes pin-vs-routing (rev L1) |
+| Claude Desktop macOS Cloudflare-403 | Best-effort target may fail; documented, browser path unaffected |
+| No admin (macOS) | Degrade, keep Tier 1 + file-watcher |
+| Explicit corporate proxy | Don't clobber, degrade |
+| Daemon crash | self-heal within failover timeout (§4 L1) + startup reconcile; graceful-shutdown clears URL |
+| pacport in use | bind next free, persist, reconcile OS URL to bound port (rev L2) |
 
-## §7. Testing
+**`gui status` (rev L1):** per allowlisted host report "last CONNECT seen" vs "last captured" — splits routing failure from capture/extractor/pin failure.
 
-**Unit (CI, all OSes):**
-- PAC generation: host-allowlist constant → correct `FindProxyForURL` output; AI hosts return `PROXY …; DIRECT`, others `DIRECT`.
-- Detect-and-don't-clobber: mocked existing-proxy states (empty slot / occupied slot) → correct set-vs-skip decision.
-- RoutingManager per-OS command construction with injected runners (mirrors existing `backends/*.test.ts` pattern) — assert exact `networksetup`/`certutil`/`gsettings` argv, no real syscalls.
-- Lifecycle rollback ordering: a mid-enable failure rolls back prior steps; teardown order is reverse of enable.
-- Crash reconciliation: simulate "auto-proxy set + GUI disabled in config" → daemon-startup clears it.
+**Testing:**
+- *Unit (CI):* `CAPTURE_HOSTS`→PAC output; PAC hosts ⊆ recognized+extractable (the anti-drift test); detect-and-don't-clobber; per-OS routing argv via injected runners; proxy allowlist enforcement (refuse-MITM non-allowlisted host); rollback ordering; startup reconcile.
+- *Integration:* Windows CI runner — `DefaultConnectionSettings` author/clear round-trip. (Linux deferred.)
+- *macOS:* manual smoke checklist per release (admin + GUI + reboot-persistence — rev H3), documented in E2E-PROTOCOL.md.
+- *Crash-safety e2e:* `gui enable` → `kill -9` daemon → assert direct fetch to a non-AI host works; → restart → assert reconcile.
 
-**Integration / e2e:**
-- Linux (CI Docker, extend the existing `proxy-linux-e2e` matrix): real `gsettings` set/clear + NSS db CA install/remove round-trip.
-- Windows (CI runner): registry `AutoConfigURL` set/clear round-trip.
-- macOS: can't run admin + GUI in GHA → **manual smoke checklist** per release, documented in E2E-PROTOCOL.md.
-- Crash-safety e2e: `gui enable` → `kill -9` daemon → assert (a) a direct fetch to a non-AI host still works, (b) next daemon start reconciles the auto-proxy URL.
+**BLOCKING pre-implementation spike (do first — reframed rev C1/C2/C3):**
+1. **Primary:** route `claude.ai`/`chatgpt.com` from a real browser through 7727 with the CA System-trusted — does traffic arrive, and is the web wire format recognizable + extractable? (If not parseable, browser capture needs a reconstruction redesign before building.)
+2. Claude Desktop macOS: does claude.ai 403 the Electron UA through the proxy?
+3. Windows: does Claude Desktop Electron honor CurrentUser Root, or bundle its own store?
 
-**Pre-implementation spike (BLOCKING — do first):**
-- Point a configured machine at the Claude Desktop app and the ChatGPT Desktop app; confirm capture actually lands. **If both must-capture native apps pin**, the feature's core value collapses and we rescope to browser-only before building. This spike gates the rest of the work — it is the single highest-risk unknown.
+If (1) fails, the whole feature is in question — it is the single highest-risk unknown, ahead of any routing/trust work.
 
 ## Open questions for review
 
-- Is the four-layer crash-safety model complete, or is there a gap (e.g. OS-level proxy persistence surviving a reboot with a dead daemon)?
-- Is detect-and-don't-clobber the right corporate posture, or should v1 attempt the PAC-merge for occupied slots?
-- Windows CurrentUser-Root trust: is it truly sufficient for the Claude Desktop Electron app, or does that app bundle its own cert store / pin?
-- Should the pacport (7728) be fixed or ephemeral-but-persisted?
+- Is "browser-first, native apps best-effort" the right v1 scope, or should native Claude Desktop be cut entirely too (simplest) or fought for (Cloudflare-403 workaround research)?
+- Separate-process PAC server (§4 layer 2b) — worth the complexity for reboot resilience, or is graceful-shutdown-clears-URL enough?
+- Web-session reconstruction (§5) is the biggest unknown — should the spike become its own throwaway prototype before this spec is even planned?
