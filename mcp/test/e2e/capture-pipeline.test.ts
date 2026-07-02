@@ -20,6 +20,7 @@ import { ClaudeCodeAdapter } from "../../src/capture/adapters/claude-code.js";
 import { CodexAdapter } from "../../src/capture/adapters/codex.js";
 import { CursorAdapter } from "../../src/capture/adapters/cursor.js";
 import { GeminiAdapter } from "../../src/capture/adapters/gemini.js";
+import { CloudSyncer } from "../../src/capture/cloud-sync.js";
 import { DaemonManager } from "../../src/capture/daemon.js";
 import { safeReadFile } from "../../src/capture/safe-read.js";
 import { SessionStore } from "../../src/capture/store.js";
@@ -1116,5 +1117,234 @@ suite("Capture Pipeline E2E", () => {
         expect(validateSession(session)).toBe(true);
       }
     });
+  });
+
+  /* ------------------------------------------------------------------ */
+  /*  15. Cloud Sync                                                      */
+  /* ------------------------------------------------------------------ */
+
+  const SYNC_KEY = process.env.TEST_SYNAPSE_API_KEY ?? "";
+  const syncSuite = SYNC_KEY ? describe : describe.skip;
+  const API_BASE = "https://api.synapsesync.app";
+
+  syncSuite("Cloud Sync", () => {
+    const originalApiKey = process.env.SYNAPSE_API_KEY;
+    let createdConversationIds: string[] = [];
+    let resolvedProjectId: string | null = null;
+
+    /** Fetch the first project ID from the Synapse API. */
+    async function fetchProjectId(): Promise<string | null> {
+      if (resolvedProjectId) return resolvedProjectId;
+      const res = await fetch(`${API_BASE}/api/projects`, {
+        headers: { Authorization: `Bearer ${SYNC_KEY}` },
+      });
+      if (!res.ok) return null;
+      const projects = (await res.json()) as Array<{ id: string }>;
+      resolvedProjectId = projects[0]?.id ?? null;
+      return resolvedProjectId;
+    }
+
+    /** Delete a conversation by ID. Logs if the endpoint is missing (404/405). */
+    async function deleteConversation(id: string): Promise<void> {
+      const res = await fetch(`${API_BASE}/api/conversations/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${SYNC_KEY}` },
+      });
+      // 404 means already gone; 405 means DELETE not supported — both are OK for cleanup
+      if (!res.ok && res.status !== 404 && res.status !== 405) {
+        console.warn(`Cloud Sync cleanup: DELETE /api/conversations/${id} returned ${res.status}`);
+      }
+    }
+
+    beforeEach(() => {
+      process.env.SYNAPSE_API_KEY = SYNC_KEY;
+    });
+
+    afterEach(() => {
+      if (originalApiKey === undefined) {
+        process.env.SYNAPSE_API_KEY = undefined;
+      } else {
+        process.env.SYNAPSE_API_KEY = originalApiKey;
+      }
+    });
+
+    afterAll(async () => {
+      // Best-effort cleanup of any conversations created during these tests
+      for (const id of createdConversationIds) {
+        await deleteConversation(id);
+      }
+      createdConversationIds = [];
+    });
+
+    /** Build a minimal CapturedSession with N messages for testing. */
+    function makeCloudSession(msgCount: number): CapturedSession {
+      const messages: CapturedSession["messages"] = [];
+      for (let i = 0; i < msgCount; i++) {
+        messages.push({
+          role: i % 2 === 0 ? "user" : "assistant",
+          content: `Message ${i + 1}`,
+          timestamp: `2026-04-02T10:00:0${i}Z`,
+        });
+      }
+      return {
+        id: `ses_cloudsync${String(Date.now()).slice(-6).padStart(10, "0")}`,
+        tool: "claude-code",
+        projectPath: "/tmp/cloud-sync-test",
+        startedAt: "2026-04-02T10:00:00Z",
+        updatedAt: "2026-04-02T10:00:05Z",
+        messages,
+      };
+    }
+
+    it("CloudSyncer with real API key is enabled", () => {
+      const syncer = new CloudSyncer();
+      expect(syncer.isEnabled()).toBe(true);
+    }, 30000);
+
+    it("first sync creates conversation and pushes messages", async () => {
+      const syncer = new CloudSyncer();
+      const session = makeCloudSession(3);
+
+      const ok = await syncer.sync(session);
+      expect(ok).toBe(true);
+
+      // Verify the conversation was created in the cloud
+      const projectId = await fetchProjectId();
+      expect(projectId).not.toBeNull();
+
+      const res = await fetch(`${API_BASE}/api/conversations?project_id=${projectId}`, {
+        headers: { Authorization: `Bearer ${SYNC_KEY}` },
+      });
+      expect(res.ok).toBe(true);
+
+      const convos = (await res.json()) as Array<{ id: string; working_context?: { capturedSessionId?: string } }>;
+      const match = convos.find((c) => c.working_context?.capturedSessionId === session.id);
+      expect(match).toBeDefined();
+
+      if (match) {
+        createdConversationIds.push(match.id);
+      }
+    }, 30000);
+
+    it("subsequent sync appends only new messages", async () => {
+      const syncer = new CloudSyncer();
+      const session = makeCloudSession(2);
+
+      // First sync — 2 messages
+      const ok1 = await syncer.sync(session);
+      expect(ok1).toBe(true);
+
+      // Add a third message and sync again
+      session.messages.push({
+        role: "user",
+        content: "Message 3",
+        timestamp: "2026-04-02T10:00:06Z",
+      });
+
+      const ok2 = await syncer.sync(session);
+      expect(ok2).toBe(true);
+
+      // Find the conversation and verify message count is 3
+      const projectId = await fetchProjectId();
+      expect(projectId).not.toBeNull();
+
+      const res = await fetch(`${API_BASE}/api/conversations?project_id=${projectId}`, {
+        headers: { Authorization: `Bearer ${SYNC_KEY}` },
+      });
+      expect(res.ok).toBe(true);
+
+      const convos = (await res.json()) as Array<{ id: string; working_context?: { capturedSessionId?: string } }>;
+      const match = convos.find((c) => c.working_context?.capturedSessionId === session.id);
+      expect(match).toBeDefined();
+
+      if (match) {
+        createdConversationIds.push(match.id);
+
+        // Fetch messages for this conversation
+        const msgRes = await fetch(`${API_BASE}/api/conversations/${match.id}/messages`, {
+          headers: { Authorization: `Bearer ${SYNC_KEY}` },
+        });
+        if (msgRes.ok) {
+          const msgs = (await msgRes.json()) as unknown[];
+          expect(msgs.length).toBe(3);
+        }
+      }
+    }, 30000);
+
+    it("sync disabled without API key", async () => {
+      // Temporarily unset the key
+      process.env.SYNAPSE_API_KEY = undefined;
+
+      const syncer = new CloudSyncer();
+      expect(syncer.isEnabled()).toBe(false);
+
+      const session = makeCloudSession(1);
+      const ok = await syncer.sync(session);
+      expect(ok).toBe(false);
+
+      // Restore for afterEach
+      process.env.SYNAPSE_API_KEY = SYNC_KEY;
+    }, 30000);
+
+    it("full pipeline: capture → idle → sync", async () => {
+      const pipelineTmp = fs.mkdtempSync(path.join(os.tmpdir(), "syn-cloud-pipe-"));
+
+      try {
+        const watchDir = path.join(pipelineTmp, "claude-projects");
+        fs.mkdirSync(watchDir, { recursive: true });
+        const storeDir = path.join(pipelineTmp, "sessions");
+
+        const adapter = new ClaudeCodeAdapter();
+        adapter.watchPaths = () => [watchDir];
+
+        const registry = new AdapterRegistry();
+        registry.register(adapter);
+        const store = new SessionStore(storeDir);
+        const syncer = new CloudSyncer();
+
+        const watcher = new CaptureWatcher(registry, 300);
+        const sessions: CapturedSession[] = [];
+        watcher.on("session", async (s: CapturedSession) => {
+          sessions.push(s);
+          store.save(s);
+          // Manually trigger sync instead of waiting for the 5-minute interval
+          await syncer.sync(s);
+        });
+
+        await watcher.start();
+
+        // Write a Claude Code JSONL file to trigger capture
+        const sessionFile = path.join(watchDir, "session.jsonl");
+        fs.writeFileSync(sessionFile, CLAUDE_CODE_JSONL);
+
+        await waitFor(() => sessions.length > 0, 15000);
+        await watcher.stop();
+
+        expect(sessions.length).toBe(1);
+        const capturedSession = sessions[0];
+
+        // Verify the session appears in the cloud
+        const projectId = await fetchProjectId();
+        expect(projectId).not.toBeNull();
+
+        const res = await fetch(`${API_BASE}/api/conversations?project_id=${projectId}`, {
+          headers: { Authorization: `Bearer ${SYNC_KEY}` },
+        });
+        expect(res.ok).toBe(true);
+
+        const convos = (await res.json()) as Array<{
+          id: string;
+          working_context?: { capturedSessionId?: string };
+        }>;
+        const match = convos.find((c) => c.working_context?.capturedSessionId === capturedSession.id);
+        expect(match).toBeDefined();
+
+        if (match) {
+          createdConversationIds.push(match.id);
+        }
+      } finally {
+        fs.rmSync(pipelineTmp, { recursive: true, force: true });
+      }
+    }, 30000);
   });
 });
