@@ -1,3 +1,5 @@
+// Last manually-triggered deploy: 2026-05-20 (defensive Promise.allSettled
+// swap from commit 16a4de1; CF git integration hadn't fired in 14h).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "synapse",
