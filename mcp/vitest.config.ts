@@ -9,6 +9,7 @@ export default defineConfig({
       "test/integration/**/*.test.ts",
       "test/e2e/**/*.test.ts",
       "test/capture/**/*.test.ts",
+      "test/hooks/**/*.test.ts",
     ],
     testTimeout: 30000,
   },
