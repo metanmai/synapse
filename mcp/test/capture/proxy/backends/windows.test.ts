@@ -53,20 +53,30 @@ function backendOpts(
 // ── installCa (bug classes a, b) ─────────────────────────────────────────
 
 describe("WindowsBackend.installCa", () => {
-  it("uses PowerShell X509Store.Add via inline PEM decode (PS 5.1-compatible) + certutil -store verify — bug class (a)", () => {
+  it("install script: suppresses Root trust dialog (HKCU flag) + inline PEM decode + X509Store.Add + certutil verify — bug class (a)", () => {
     const ps = makeRunner([okExit]); // X509Store.Add
     const cu = makeRunner([okExit]); // certutil -store verify
     const r = WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner));
 
-    // PowerShell-side: ONE call. Script must:
-    //   1. Read the PEM file (LiteralPath, single-quoted for backslashes)
-    //   2. Strip BEGIN/END armor + whitespace
-    //   3. Base64-decode to DER bytes
-    //   4. Construct X509Certificate2 from byte[] (.NET-Framework-portable
-    //      — Import-Certificate-via-PEM is PowerShell-7+ only)
-    //   5. Open Root/CurrentUser store ReadWrite and Add the cert
+    // PowerShell-side: ONE call. Script must, in order:
+    //   1. Set HKCU registry flag so Windows skips the "Do you want to
+    //      install this CA?" GUI dialog (the bug that hung CI in commit
+    //      9c92433 — `X509Store.Add` was hitting the SAME prompt as
+    //      `certutil -addstore`, because both call CertAddCertificate-
+    //      ContextToStore under the hood). HKCU = no admin needed.
+    //   2. Read the PEM file (LiteralPath, single-quoted for backslashes).
+    //   3. Strip BEGIN/END armor + whitespace.
+    //   4. Base64-decode to DER bytes.
+    //   5. Construct X509Certificate2 from byte[] (.NET-Framework-portable
+    //      — Import-Certificate-via-PEM is PowerShell-7+ only).
+    //   6. Open Root/CurrentUser store ReadWrite and Add the cert.
     expect(ps.calls).toHaveLength(1);
     const installScript = ps.calls[0][0];
+    // Registry suppression — without this Add() hangs on CI.
+    expect(installScript).toContain("HKCU:\\Software\\Microsoft\\SystemCertificates\\Root\\ProtectedRoots");
+    expect(installScript).toContain("'Flags'");
+    expect(installScript).toMatch(/-Value 1 -Type DWord/);
+    // PEM decode pipeline.
     expect(installScript).toContain(`Get-Content -LiteralPath '${FAKE_CA_PATH}'`);
     expect(installScript).toContain("-----[^-]+-----"); // armor-strip regex
     expect(installScript).toContain("[Convert]::FromBase64String");
@@ -82,6 +92,20 @@ describe("WindowsBackend.installCa", () => {
 
     expect(r.installed).toBe(true);
     expect(r.proxyPort).toBe(7727);
+  });
+
+  it("install script: registry suppression flag set BEFORE X509Store.Add (ordering matters — Add() prompts if flag not yet set)", () => {
+    const ps = makeRunner([okExit]);
+    const cu = makeRunner([okExit]);
+    WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner));
+    const s = ps.calls[0][0];
+    const flagSetIdx = s.indexOf("Set-ItemProperty");
+    const addIdx = s.indexOf("$store.Add");
+    expect(flagSetIdx).toBeGreaterThan(-1);
+    expect(addIdx).toBeGreaterThan(-1);
+    // Regression guard: flag must come first, else the prompt fires and the
+    // process hangs on CI.
+    expect(flagSetIdx).toBeLessThan(addIdx);
   });
 
   it("does NOT use Import-Certificate cmdlet — fails on Windows PowerShell 5.1 (DER-only) for PEM input", () => {
