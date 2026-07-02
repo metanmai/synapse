@@ -75,3 +75,21 @@ export interface ActivityLogEntry {
 }
 
 export type { Insight, InsightListItem, InsightType, InsightSource } from "./insights";
+
+export type {
+  CanonicalMessage,
+  ToolInteraction,
+  MessageSource,
+  MediaAttachment,
+  Conversation,
+  ConversationListItem,
+  ConversationMessage,
+  ConversationMediaRecord,
+  ConversationContext,
+  ConversationLimits,
+  ConversationStatus,
+  FidelityMode,
+  MessageRole,
+  MediaType,
+  ContextType,
+} from "./conversations";
