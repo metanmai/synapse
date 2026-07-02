@@ -3,6 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { synapseRoot } from "../capture/handoff-paths.js";
 import { writeServiceFile } from "../capture/os-service.js";
+// Namespace import so vi.spyOn(editorIo, "ensureGitignore") in init.test.ts
+// intercepts the call site (ESM bindings are immutable from the importer's
+// perspective when destructured).
+import * as editorIo from "./editors/io.js";
+import { PROXY_FALLBACK_WARNING, probeNpmRegistry, resolveSynapseMcpCommand } from "./util/mcp-command.js";
 
 interface InitArgs {
   api_key: string;
@@ -56,9 +61,30 @@ export async function runInit(a: InitArgs): Promise<void> {
   installHooks(bin);
   installSlashCommands(bin);
   writeConfig(a.api_key);
+
+  // BUG-04: write project-local `.mcp.json` so Claude Code in this cwd
+  // can reach the Synapse MCP server. `writeMcpJson` is merge-aware (preserves
+  // other server entries) and backs up unparseable JSON. `ensureGitignore`
+  // is mandatory — `.mcp.json` carries SYNAPSE_API_KEY in `env`.
+  const cwd = process.cwd();
+  const mcpPath = path.join(cwd, ".mcp.json");
+  editorIo.writeMcpJson(mcpPath, a.api_key);
+  editorIo.ensureGitignore(cwd, ".mcp.json");
+
   if (!a.skip_service) {
     const svc = writeServiceFile();
     console.log(`[synapse init] OS service registered: ${svc.path}`);
+  }
+
+  // BUG-03 wizard outro: if the resolver fell through to `npx synapsesync`
+  // AND the npm registry is unreachable from here, warn the user with the
+  // single-source-of-truth string. Quiet no-op on a clean network.
+  const resolved = resolveSynapseMcpCommand(a.api_key);
+  if (resolved.command === "npx") {
+    const reachable = await probeNpmRegistry();
+    if (!reachable) {
+      console.warn(`[synapse init] ${PROXY_FALLBACK_WARNING}`);
+    }
   }
 }
 

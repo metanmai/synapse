@@ -13,6 +13,10 @@ beforeEach(() => {
   originalCwd = process.cwd();
   process.env.HOME = tmp;
   process.env.SYNAPSE_HOME = path.join(tmp, ".synapse");
+  // Plan 01-04: runInit now writes `.mcp.json` and `.gitignore` to
+  // process.cwd(). Isolate every test in the tmpdir so those files don't
+  // leak into the mcp/ workspace.
+  process.chdir(tmp);
 });
 afterEach(() => {
   process.chdir(originalCwd);
@@ -124,6 +128,10 @@ describe("synapse init — BUG-04 cwd .mcp.json", () => {
 
     await runInit({ api_key: "sk-gitignore", skip_service: true });
 
-    expect(spy).toHaveBeenCalledWith(tmp, ".mcp.json");
+    // On macOS /tmp is a symlink to /private/tmp; process.cwd() returns the
+    // resolved path. Normalize the expected arg so the assertion is robust
+    // across platforms (Linux returns the unresolved path).
+    const resolvedTmp = fs.realpathSync(tmp);
+    expect(spy).toHaveBeenCalledWith(resolvedTmp, ".mcp.json");
   });
 });
