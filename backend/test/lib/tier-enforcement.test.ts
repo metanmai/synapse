@@ -8,7 +8,6 @@ import {
   enforceMemberLimit,
   getHistoryLimit,
   getTierLimits,
-  requireConversationSync,
   requirePlus,
 } from "../../src/lib/tier";
 
@@ -242,30 +241,6 @@ describe("getTierLimits", () => {
       maxHistoryVersions: -1,
       maxMembers: 0,
     });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// requireConversationSync — delegates to requirePlus
-// ---------------------------------------------------------------------------
-describe("requireConversationSync", () => {
-  it("throws for free tier (delegates to requirePlus)", () => {
-    const c = createMockContext("free");
-    expect(() => requireConversationSync(c)).toThrowError(AppError);
-
-    try {
-      requireConversationSync(c);
-    } catch (err) {
-      const e = err as AppError;
-      expect(e.status).toBe(403);
-      expect(e.code).toBe("TIER_LIMIT");
-      expect(e.message).toContain("Conversation sync");
-    }
-  });
-
-  it("does not throw for plus tier", () => {
-    const c = createMockContext("plus");
-    expect(() => requireConversationSync(c)).not.toThrow();
   });
 });
 
