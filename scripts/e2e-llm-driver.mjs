@@ -56,10 +56,24 @@ const DEFAULT_CLI_DRIVER = "claude -p";
  * @param {string} [opts.model]      - Anthropic model (direct-API mode only)
  * @param {string} [opts.apiKey]     - Override ANTHROPIC_API_KEY (forces direct-API mode)
  * @param {string} [opts.driverCmd]  - Override SYNAPSE_E2E_DRIVER (forces CLI mode if no apiKey)
+ * @param {boolean} [opts.forceCli]  - Use CLI-driver mode even if ANTHROPIC_API_KEY is set.
+ *                                     Required for tests that depend on the spawned CLI's
+ *                                     hook firing (e.g. multi-device's SYNAPSE_HOME swap
+ *                                     relies on the Claude Code SessionEnd hook running
+ *                                     in the spawned process's env — direct-API curl has
+ *                                     no hook).
  * @param {string} [opts.proxy]      - Proxy URL (default http://127.0.0.1:7727)
  * @param {string} [opts.caPath]     - Synapse CA pem path
  * @param {string} [opts.userAgent]  - UA header (direct-API mode only)
  * @param {string} [opts.cwd]        - Working dir for CLI-driver subprocess
+ * @param {Record<string,string>} [opts.extraEnv]
+ *                                   - Additional env vars merged into the spawned process's
+ *                                     env. Used by multi-device tests to pass SYNAPSE_HOME.
+ *                                     In CLI-driver mode the spawned tool inherits these;
+ *                                     in direct-API mode they're merged into curl's env
+ *                                     (mostly irrelevant since curl ignores most app vars,
+ *                                     but kept consistent for callers that don't know which
+ *                                     mode will fire).
  * @param {number} [opts.timeoutMs]  - Max wait (default 120s)
  * @returns {{ stdoutText: string, mode: "direct-api"|"cli-driver", driver: string, elapsedMs: number }}
  *   `stdoutText` is the assistant response text. `mode` tells the caller
@@ -73,10 +87,12 @@ export function generateSession(opts = {}) {
     model = "claude-haiku-4-5-20251001",
     apiKey = process.env.ANTHROPIC_API_KEY,
     driverCmd = process.env.SYNAPSE_E2E_DRIVER ?? DEFAULT_CLI_DRIVER,
+    forceCli = false,
     proxy = DEFAULT_PROXY,
     caPath = DEFAULT_CA_PATH,
     userAgent = "synapse-e2e-driver/1.0 (harness-agnostic-test)",
     cwd,
+    extraEnv,
     timeoutMs = 120_000,
   } = opts;
 
@@ -89,18 +105,20 @@ export function generateSession(opts = {}) {
 
   // Branch on what the env provides. ANTHROPIC_API_KEY wins because it's
   // the most portable (no CLI binary needed); CLI mode is the fallback
-  // that works whenever any AI CLI is installed.
-  if (apiKey) {
-    return callAnthropicViaProxy({ prompt, model, apiKey, proxy, caPath, userAgent, timeoutMs });
+  // that works whenever any AI CLI is installed. `forceCli` short-circuits
+  // to CLI mode regardless of apiKey — required for tests that rely on
+  // the CLI's hook firing (multi-device SYNAPSE_HOME swap).
+  if (apiKey && !forceCli) {
+    return callAnthropicViaProxy({ prompt, model, apiKey, proxy, caPath, userAgent, extraEnv, timeoutMs });
   }
-  return runCliDriver({ prompt, driverCmd, proxy, caPath, cwd, timeoutMs });
+  return runCliDriver({ prompt, driverCmd, proxy, caPath, cwd, extraEnv, timeoutMs });
 }
 
 /**
  * DIRECT-API path: curl posts a real Anthropic chat request through the
  * Synapse proxy. Requires ANTHROPIC_API_KEY.
  */
-export function callAnthropicViaProxy({ prompt, model, apiKey, proxy, caPath, userAgent, timeoutMs }) {
+export function callAnthropicViaProxy({ prompt, model, apiKey, proxy, caPath, userAgent, extraEnv, timeoutMs }) {
   const whichCmd = process.platform === "win32" ? "where" : "which";
   const which = spawnSync(whichCmd, ["curl"], { encoding: "utf-8" });
   if (which.status !== 0) {
@@ -138,7 +156,13 @@ export function callAnthropicViaProxy({ prompt, model, apiKey, proxy, caPath, us
       String(Math.ceil(timeoutMs / 1000)),
       "https://api.anthropic.com/v1/messages",
     ],
-    { encoding: "utf-8" },
+    {
+      encoding: "utf-8",
+      // Pass extraEnv through for consistency with CLI-driver mode. Curl
+      // itself doesn't care about most app vars, but callers shouldn't have
+      // to know which mode will fire to pass env.
+      env: extraEnv ? { ...process.env, ...extraEnv } : process.env,
+    },
   );
   const elapsedMs = Date.now() - started;
 
@@ -177,7 +201,7 @@ export function callAnthropicViaProxy({ prompt, model, apiKey, proxy, caPath, us
  *   "claude -p"   → spawn("claude", ["-p", "<prompt>"])
  *   "crush run"   → spawn("crush", ["run", "<prompt>"])
  */
-export function runCliDriver({ prompt, driverCmd, proxy, caPath, cwd, timeoutMs }) {
+export function runCliDriver({ prompt, driverCmd, proxy, caPath, cwd, extraEnv, timeoutMs }) {
   const tokens = driverCmd.trim().split(/\s+/).filter(Boolean);
   if (tokens.length === 0) {
     throw new Error(`SYNAPSE_E2E_DRIVER must be a command line (e.g. "claude -p" or "crush run"); got "${driverCmd}"`);
@@ -192,11 +216,15 @@ export function runCliDriver({ prompt, driverCmd, proxy, caPath, cwd, timeoutMs 
     );
   }
 
+  // extraEnv merged LAST so callers can override HTTPS_PROXY / SYNAPSE_HOME
+  // per-call without mutating process.env. Multi-device tests rely on this
+  // to swap SYNAPSE_HOME per spawned CLI.
   const env = {
     ...process.env,
     HTTPS_PROXY: proxy,
     HTTP_PROXY: proxy,
     NODE_EXTRA_CA_CERTS: caPath,
+    ...(extraEnv ?? {}),
   };
 
   const started = Date.now();

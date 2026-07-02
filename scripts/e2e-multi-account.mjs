@@ -61,6 +61,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { removeLocalProjectState, removeLocalProjectsByBasename, sweepArtifacts } from "./e2e-cleanup.mjs";
+import { generateSession } from "./e2e-llm-driver.mjs";
 
 // ── Configuration ────────────────────────────────────────────────────────
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -287,12 +288,21 @@ async function ma1_preflight() {
   }
   ok("MA1 distinct keys", "User A and User B have distinct API keys");
 
-  const claude = spawnSync("which", ["claude"], { encoding: "utf-8" });
-  if (claude.status !== 0) {
-    fail("MA1 claude", "claude CLI not on PATH");
+  // LLM-driver readiness: either ANTHROPIC_API_KEY (direct-API mode, curl)
+  // or a CLI tool on PATH. generateSession() picks per-call. Either path
+  // produces a real capture; the test doesn't care which.
+  const whichBin = process.platform === "win32" ? "where" : "which";
+  const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
+  const driverCmd = (process.env.SYNAPSE_E2E_DRIVER ?? "claude -p").split(/\s+/)[0];
+  const cliOk = spawnSync(whichBin, [driverCmd], { encoding: "utf-8" }).status === 0;
+  if (!hasApiKey && !cliOk) {
+    fail(
+      "MA1 LLM driver",
+      `no LLM driver — need ANTHROPIC_API_KEY (direct-API) OR a CLI on PATH (currently checked: "${driverCmd}"; override via SYNAPSE_E2E_DRIVER).`,
+    );
     return false;
   }
-  info(`claude at ${claude.stdout.trim()}`);
+  info(`LLM driver ready: ${hasApiKey ? "direct-API (ANTHROPIC_API_KEY set)" : `CLI (${driverCmd})`}`);
 
   // Discover User B's email + user_id from /api/account/me
   const me = await fetchJson("/api/account/me", {}, apiKeyB);
@@ -309,23 +319,24 @@ async function ma1_preflight() {
 
 // ── MA2: User A captures session, project materializes ────────────────────
 async function ma2_user_a_captures() {
-  header("MA2 · User A captures claude -p session, project materializes on backend");
+  header("MA2 · User A captures LLM session, project materializes on backend");
 
   deviceADir = path.join(tmpdir(), `synapse-ma-A-${RUN_ID}`, PROJECT_BASENAME);
   mkdirSync(deviceADir, { recursive: true });
   gitInit(deviceADir, SHARED_REMOTE);
   info(`User A cwd = ${deviceADir}`);
 
-  const cp = spawnSync("claude", ["-p", "E2E multi-account test, User A side. Reply 'noted' only."], {
-    cwd: deviceADir,
-    encoding: "utf-8",
-    timeout: 120_000,
-  });
-  if (cp.status !== 0) {
-    fail("MA2 claude -p", `exit ${cp.status}: ${(cp.stderr ?? "").slice(0, 200)}`);
+  try {
+    const result = generateSession({
+      prompt: "E2E multi-account test, User A side. Reply 'noted' only.",
+      cwd: deviceADir,
+      timeoutMs: 120_000,
+    });
+    ok("MA2 LLM capture", `session captured via ${result.mode} (${result.driver})`);
+  } catch (err) {
+    fail("MA2 LLM capture", `${err.message}`.slice(0, 300));
     return;
   }
-  ok("MA2 claude -p", "session captured");
 
   info(`Waiting ${SLEEP_DAEMON_SYNC_MS / 1000}s for daemon sync...`);
   await sleep(SLEEP_DAEMON_SYNC_MS);
