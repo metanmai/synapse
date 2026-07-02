@@ -9,6 +9,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const state = url.searchParams.get("state");
   const port = url.searchParams.get("port");
   const device = url.searchParams.get("device");
+  // Phase 03-05: per-machine UUID from the CLI's ~/.synapse/device.json.
+  // Forwarded to /auth/cli-session so the backend can return an existing
+  // rotated key on same-machine re-init instead of burning a device-cap slot.
+  const machineId = url.searchParams.get("machine_id");
   const hasCli = Boolean(challenge && state && port);
 
   return {
@@ -16,6 +20,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     state,
     port,
     device,
+    machine_id: machineId,
     hasCli,
     authenticated: Boolean(locals.user),
     email: locals.user?.email ?? null,
@@ -125,6 +130,12 @@ export const actions: Actions = {
       body: JSON.stringify({
         code_challenge: cli.challenge,
         ...(cli.device ? { device_name: cli.device } : {}),
+        // Phase 03-05: machine_id from the CLI's URL param, hidden form
+        // field, restored across the magic-link/OAuth round-trip via
+        // buildRedirect(). When set + already registered for the user,
+        // the backend rotates the existing api_keys row's hash instead
+        // of creating a duplicate row that burns a device-cap slot.
+        ...(cli.machine_id ? { machine_id: cli.machine_id } : {}),
       }),
     });
 

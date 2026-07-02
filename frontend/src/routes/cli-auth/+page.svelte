@@ -37,6 +37,7 @@ let loading = $state(false);
         <input type="hidden" name="cli_state" value={data.state ?? ""} />
         <input type="hidden" name="cli_port" value={data.port ?? ""} />
         <input type="hidden" name="cli_device" value={data.device ?? ""} />
+        <input type="hidden" name="cli_machine_id" value={data.machine_id ?? ""} />
         <button type="submit" disabled={loading} aria-label="Continue as {data.email}" class="btn-primary w-full cursor-pointer">
           {#if loading}
             <span class="flex items-center justify-center gap-2">
