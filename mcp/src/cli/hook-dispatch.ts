@@ -50,9 +50,8 @@ export async function readHookPayloadFromStdin(): Promise<AnyHookPayload> {
   for await (const chunk of process.stdin) raw += chunk;
   const parsed = JSON.parse(raw);
   const cwd: string = parsed.cwd ?? process.cwd();
-  // Until project-map.ts resolves a canonical id locally, derive a cwd hash so
-  // events still flow. The backend's auto-create flow (v1.1 Task 6) rewrites
-  // that placeholder to a canonical UUID using `git_basename` as the name.
+  // Derive a cwd-hash placeholder; the backend's auto-create flow rewrites
+  // it to a canonical UUID using `git_basename` as the project name.
   const project_id = hashCwd(cwd);
   const git_basename = getGitBasename(cwd) ?? path.basename(cwd);
   return {
