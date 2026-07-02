@@ -124,6 +124,7 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 |---|-------------|------|--------|-----------|
 | 260621-h13 | Billing/subscription test coverage (webhook transitions, gating filter, valid-HMAC dispatch) | 2026-06-21 | 89e0d875 | [260621-h13-billing-subscription-tests](./quick/260621-h13-billing-subscription-tests/) |
 | 260621-hsl | Neutralize CI migrate prod-wipe landmine (relocate teardown scripts, drop --include-all, 3-secret guard) | 2026-06-21 | 7395a0fe | [260621-hsl-neutralize-ci-migrate-prod-wipe-landmine](./quick/260621-hsl-neutralize-ci-migrate-prod-wipe-landmine/) |
+| 260621-jig | CI e2e driver prefers DeepSeek over OpenRouter (cheaper); cost-guard test; production unchanged | 2026-06-21 | 9fe1b84a | [260621-jig-ci-e2e-driver-prefer-deepseek-over-openr](./quick/260621-jig-ci-e2e-driver-prefer-deepseek-over-openr/) |
 
 ### Recent activity
 
