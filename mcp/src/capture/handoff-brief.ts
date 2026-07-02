@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ProjectStatus } from "@synapse/shared/handoff/types.js";
+import { readOrCreateDeviceId } from "./actor.js";
 import { briefCachePath, statusCachePath } from "./handoff-paths.js";
 
 const MAX_BRIEF_LINES = 30;
@@ -34,7 +35,17 @@ function render(s: ProjectStatus, viewer: string): string {
     const focus = mostRecent.current_focus ?? "(no focus)";
     const branch = mostRecent.branch ?? "(no branch)";
     if (mostRecent.actor.user_id === viewer) {
-      lines.push(`Your last activity: ${focus} on ${branch}`);
+      // Phase 2 (D-09): when the same user's most-recent activity came from a
+      // different device, surface the remote actor's hostname so the user can
+      // tell which machine they last used. Uses actor.hostname directly (per
+      // RESEARCH Open Question 2 resolution) instead of joining api_keys.label
+      // — that schema-based device-name lookup is deferred to a follow-up.
+      const localDeviceId = readOrCreateDeviceId();
+      if (mostRecent.actor.device_id !== localDeviceId && mostRecent.actor.hostname) {
+        lines.push(`Your last activity (on ${mostRecent.actor.hostname}): ${focus} on ${branch}`);
+      } else {
+        lines.push(`Your last activity: ${focus} on ${branch}`);
+      }
     } else {
       lines.push(
         `Most recent activity (${mostRecent.actor.user_id}, ${mostRecent.activity_state}): ${focus} on ${branch}`,
