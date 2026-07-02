@@ -184,21 +184,14 @@ async function pc2_reconcile_runs() {
   ok("PC2 reconcile", `reconciler ran: ${JSON.stringify(body.summary)}`);
 }
 
-// ── PC3: report provenance (info — embedding variance makes this non-asserting) ─
-async function pc3_provenance(conv) {
-  header("PC3 · Assignment provenance (info)");
+// ── PC3: grouping note (info; assignment_method is write-only, not in the API) ─
+async function pc3_grouping(conv) {
+  header("PC3 · Grouping (info)");
   if (!conv) {
     info("no conversation from PC1 — skipping");
     return;
   }
-  const method = conv.assignment_method ?? "(none)";
-  if (typeof method === "string" && method.startsWith("ai_")) {
-    info(`assignment_method=${method} — embeddings ACTIVE on this deployment (AI correlation engaged)`);
-  } else {
-    info(
-      `assignment_method=${method} — embeddings inactive here; capture fell back to the host bucket (still grouped)`,
-    );
-  }
+  info(`keyless capture grouped into project ${conv.project_id} (AI assign if embeddings active, else host bucket)`);
 }
 
 async function main() {
@@ -211,7 +204,7 @@ async function main() {
   try {
     const conv = await pc1_keyless_capture();
     await pc2_reconcile_runs();
-    await pc3_provenance(conv);
+    await pc3_grouping(conv);
   } catch (err) {
     log(`\n🚨 UNEXPECTED ERROR: ${err.message}\n${err.stack}`);
     results.push({ id: "uncaught", status: "FAIL", detail: err.message });

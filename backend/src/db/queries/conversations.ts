@@ -12,8 +12,11 @@ import type {
   ToolInteraction,
 } from "../types";
 
+// NB: assignment_method / assignment_confidence / embedding are intentionally NOT
+// selected here. They require migration 029; keeping them out of the read path
+// means conversation reads work even on a database where 029 isn't applied yet.
 const CONVERSATION_COLUMNS =
-  "id, project_id, user_id, title, status, fidelity_mode, system_prompt, working_context, forked_from, fork_point, message_count, media_size, metadata, encrypted, created_at, updated_at, compacted_summary, compacted_at, compaction_model, assignment_method, assignment_confidence";
+  "id, project_id, user_id, title, status, fidelity_mode, system_prompt, working_context, forked_from, fork_point, message_count, media_size, metadata, encrypted, created_at, updated_at, compacted_summary, compacted_at, compaction_model";
 
 const CONVERSATION_LIST_COLUMNS = "id, title, status, message_count, metadata, updated_at, compacted_at";
 
@@ -45,26 +48,29 @@ export async function createConversation(
     assignment_confidence?: number | null;
   },
 ): Promise<Conversation> {
-  const { data, error } = await db
-    .from("conversations")
-    .insert({
-      project_id: params.project_id,
-      user_id: params.user_id,
-      title: params.title ?? null,
-      status: params.status ?? "active",
-      fidelity_mode: params.fidelity_mode ?? "summary",
-      system_prompt: params.system_prompt ?? null,
-      working_context: params.working_context ?? null,
-      forked_from: params.forked_from ?? null,
-      fork_point: params.fork_point ?? null,
-      metadata: params.metadata ?? null,
-      encrypted: params.encrypted ?? false,
-      embedding: params.embedding ?? null,
-      assignment_method: params.assignment_method ?? "git",
-      assignment_confidence: params.assignment_confidence ?? null,
-    })
-    .select(CONVERSATION_COLUMNS)
-    .single();
+  const insert: Record<string, unknown> = {
+    project_id: params.project_id,
+    user_id: params.user_id,
+    title: params.title ?? null,
+    status: params.status ?? "active",
+    fidelity_mode: params.fidelity_mode ?? "summary",
+    system_prompt: params.system_prompt ?? null,
+    working_context: params.working_context ?? null,
+    forked_from: params.forked_from ?? null,
+    fork_point: params.fork_point ?? null,
+    metadata: params.metadata ?? null,
+    encrypted: params.encrypted ?? false,
+  };
+  // The AI-correlation columns require migration 029. Only the keyless AI path
+  // sets an embedding, so include the new columns ONLY then — the core (git)
+  // capture path keeps working even on a database where 029 isn't applied yet.
+  if (params.embedding != null) {
+    insert.embedding = params.embedding;
+    insert.assignment_method = params.assignment_method ?? "ai_assign";
+    insert.assignment_confidence = params.assignment_confidence ?? null;
+  }
+
+  const { data, error } = await db.from("conversations").insert(insert).select(CONVERSATION_COLUMNS).single();
   if (error) throw error;
   return data as Conversation;
 }
