@@ -1,0 +1,46 @@
+import { Hono } from "hono";
+import type { Env } from "../lib/env";
+import { authMiddleware } from "../lib/auth";
+import { createSupabaseClient } from "../db/client";
+import { getShareLinkByToken } from "../db/queries/share-links";
+import { addMember, getMemberRole } from "../db/queries/projects";
+import { logActivity } from "../db/activity-logger";
+import { AppError, NotFoundError } from "../lib/errors";
+
+const share = new Hono<{ Bindings: Env }>();
+
+// POST /api/share/:token/join — accept a share link
+share.post("/:token/join", authMiddleware, async (c) => {
+  const user = c.get("user");
+  const token = c.req.param("token") ?? "";
+
+  const db = createSupabaseClient(c.env);
+  const link = await getShareLinkByToken(db, token);
+
+  if (!link) throw new NotFoundError("Share link not found or expired");
+
+  // Check expiry
+  if (link.expires_at && new Date(link.expires_at) < new Date()) {
+    throw new AppError("Share link has expired", 410, "LINK_EXPIRED");
+  }
+
+  // Check if already a member
+  const existingRole = await getMemberRole(db, link.project_id, user.id);
+  if (existingRole) {
+    return c.json({ message: "You are already a member of this project", role: existingRole });
+  }
+
+  await addMember(db, link.project_id, user.id, link.role as "editor" | "viewer");
+  await logActivity(db, {
+    project_id: link.project_id,
+    user_id: user.id,
+    action: "member_added",
+    target_email: user.email,
+    source: "human",
+    metadata: { via: "share_link", role: link.role },
+  });
+
+  return c.json({ message: "Joined project", role: link.role }, 201);
+});
+
+export { share };
