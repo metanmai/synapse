@@ -32,9 +32,9 @@ onMount(() => {
         <span class="gradient-text">remembered and distilled</span>
       </h1>
       <p class="hero-sub">
-        Synapse automatically captures your AI coding sessions from Claude, Cursor, Codex, and
-        Gemini. When you go idle, it distills the valuable parts — decisions, architecture,
-        learnings — into a curated knowledge layer your next session opens with.
+        Synapse automatically captures your AI coding sessions across every tool you use. When
+        you go idle, it distills the valuable parts — decisions, architecture, learnings — into
+        a curated knowledge layer your next session opens with.
       </p>
       <div class="hero-actions">
         <a href="/signup" class="hero-primary">Get started — free</a>
@@ -87,11 +87,15 @@ onMount(() => {
           </div>
         </div>
 
-        <!-- Floating tool badges -->
+        <!-- Floating provider badges. Reflects the proxy's universal-capture
+             story: any tool talking to one of these provider APIs is
+             captured automatically. Specific tool names appear in the
+             FAQ + setup-guide; the headline visual stays provider-level
+             so we don't anchor on any single tool. -->
         <div class="connected-tools">
-          <div class="tool-badge tool-badge-1">Claude Code</div>
-          <div class="tool-badge tool-badge-2">Cursor</div>
-          <div class="tool-badge tool-badge-3">Codex</div>
+          <div class="tool-badge tool-badge-1">Anthropic</div>
+          <div class="tool-badge tool-badge-2">OpenAI</div>
+          <div class="tool-badge tool-badge-3">Google</div>
         </div>
       </div>
     </div>

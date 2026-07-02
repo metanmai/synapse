@@ -366,7 +366,7 @@ function handleActionResult(label: string) {
                 <div class="chat-bubble">
                   <div class="chat-header">
                     <span class="chat-role">{msg.role}</span>
-                    {#if msg.source_agent && msg.source_agent !== "claude-code"}
+                    {#if msg.source_agent && msg.source_agent !== "unknown"}
                       <span class="chat-agent">{msg.source_agent}</span>
                     {/if}
                     {#if msg.source_model}

@@ -10,7 +10,7 @@ const faqs: FaqItem[] = [
   {
     question: "How does session capture work?",
     answer:
-      "A lightweight background daemon watches where your AI tools store session data on disk (JSONL for Claude Code, JSON for Cursor, etc.). When files change, it parses them into a standard format. No plugins needed \u2014 it works by watching the filesystem.",
+      "Two paths. (1) A lightweight background daemon watches where AI tools store session data on disk and parses new files into a standard format \u2014 works for the tools we have file-watcher adapters for. (2) A built-in TLS-MITM forward proxy intercepts traffic to the Anthropic, OpenAI, and Google APIs \u2014 works for any tool that honors HTTPS_PROXY, with no per-tool adapter needed. No plugins, no manual saving.",
   },
   {
     question: "What does distillation do exactly?",
@@ -20,7 +20,7 @@ const faqs: FaqItem[] = [
   {
     question: "Which AI tools are supported?",
     answer:
-      "Capture works with Claude Code, Cursor, Codex CLI, and Gemini CLI. The knowledge workspace is accessible from any MCP-capable tool, including ChatGPT, Windsurf, VS Code, and GitHub Copilot.",
+      "Any tool that talks to the Anthropic, OpenAI, or Google API — Cline, Cursor, Codex, Claude Code, Gemini, OpenCode, Aider, custom scripts, and more — is captured via the built-in proxy with no per-tool setup. File-watcher adapters add an extra capture path for Claude Code (via hooks), Cline, Cursor, Codex, Gemini, GitHub Copilot CLI, and Roo Code. The knowledge workspace is accessible from any MCP-capable tool, including ChatGPT, Windsurf, and VS Code.",
   },
   {
     question: "Is my data private and encrypted?",

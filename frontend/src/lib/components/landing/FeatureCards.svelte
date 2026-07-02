@@ -5,7 +5,7 @@ const features = [
   {
     title: "Zero-effort capture",
     description:
-      "A background daemon watches Claude Code, Cursor, Codex, and Gemini. No plugins, no prompts, no manual saving.",
+      "A background daemon captures every AI session — across tools, through the proxy or per-tool file-watcher. No plugins, no prompts, no manual saving.",
     illustrationType: "timeline",
   },
   {
@@ -17,7 +17,7 @@ const features = [
   {
     title: "Cross-tool memory",
     description:
-      "Knowledge captured from Claude is available in Cursor. From your laptop to your desktop. Across your whole team.",
+      "Knowledge captured in one AI tool is available in every other. From your laptop to your desktop. Across your whole team.",
     illustrationType: "versions",
   },
   {

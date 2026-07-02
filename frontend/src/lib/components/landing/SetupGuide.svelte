@@ -34,7 +34,7 @@ async function copyCommand() {
             {copied ? "Copied!" : "Copy"}
           </button>
         </div>
-        <p class="card-hint">Works with Claude Code, Cursor, VS Code, Windsurf, and any MCP client.</p>
+        <p class="card-hint">Works with any AI coding tool that uses Anthropic, OpenAI, or Google APIs.</p>
       </div>
     </ScrollReveal>
 

@@ -152,7 +152,7 @@ function formatDate(dateStr: string | null): string {
     </div>
 
     <p class="section-desc">
-      Use API keys to connect Claude Code, Cursor, or other AI tools to Synapse.
+      Use API keys to connect your AI tools to Synapse.
     </p>
 
     {#if form?.error}
