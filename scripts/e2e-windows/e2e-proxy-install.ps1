@@ -82,6 +82,54 @@ if ($LASTEXITCODE -ne 0) {
 Remove-Item -ErrorAction SilentlyContinue $TmpKey, $TmpCrt
 Write-Host ""
 
+# Pinpoint test: call Node's execFileSync with the EXACT pattern the
+# daemon uses, in isolation. If this hangs, the bug is reproducible at
+# the Node-spawn-openssl level. If it's fast, the daemon's hang is in
+# code BEFORE/AFTER the openssl call (not in the spawn itself).
+Write-Host "-- Node-direct openssl test (mirrors tls.ts execFileSync) --"
+$NodeTestKey = "$env:TEMP\node-direct-test.key"
+Remove-Item -ErrorAction SilentlyContinue $NodeTestKey
+
+$nodeTestScript = @"
+import { execFileSync } from 'node:child_process';
+console.log('before-exec');
+const t0 = Date.now();
+try {
+    execFileSync('openssl', ['genrsa', '-out', '$($NodeTestKey -replace '\\','/')', '4096'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+        timeout: 30000,
+    });
+    console.log('after-exec elapsed_ms=' + (Date.now() - t0));
+} catch (e) {
+    console.log('exec-error elapsed_ms=' + (Date.now() - t0) + ' message=' + e.message);
+    process.exit(2);
+}
+"@
+$nodeTestFile = "$env:TEMP\node-direct-test.mjs"
+$nodeTestScript | Out-File -FilePath $nodeTestFile -Encoding utf8 -NoNewline
+
+$t3 = Get-Date
+$nodeJob = Start-Job -ScriptBlock {
+    param($scriptPath)
+    & node $scriptPath 2>&1
+    $LASTEXITCODE
+} -ArgumentList $nodeTestFile
+$nodeCompleted = Wait-Job $nodeJob -Timeout 45
+if (-not $nodeCompleted) {
+    Write-Host "  [node-direct] HUNG > 45s — confirms the bug is in Node's execFileSync of openssl on Windows"
+    Stop-Job $nodeJob -PassThru | Receive-Job
+    Remove-Job $nodeJob -Force
+    Remove-Item -ErrorAction SilentlyContinue $NodeTestKey, $nodeTestFile
+    exit 1
+}
+$nodeOut = Receive-Job $nodeJob
+$e3 = ((Get-Date) - $t3).TotalSeconds
+Write-Host "  [node-direct] output: $nodeOut"
+Write-Host ("  [node-direct] elapsed: {0:F2}s" -f $e3)
+Remove-Item -ErrorAction SilentlyContinue $NodeTestKey, $nodeTestFile
+Write-Host ""
+
 function Assert-CertInStore {
     param([string]$Stage)
     $output = & certutil -store -user Root $CN 2>&1
