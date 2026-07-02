@@ -63,6 +63,22 @@ A `happy-flow-e2e` job in `.github/workflows/ci.yml` runs `npm run test:e2e` on 
 
 ---
 
+### Real-tool roundtrip: 3 of 6 harnesses fail in the new test (env-bound, not Synapse bugs)
+
+`scripts/e2e-real-tool-roundtrip.mjs` runs each supported AI harness with fake credentials and asserts Synapse capture fires. As of commit (this one), 3 of 6 harnesses pass: claude-code, codex, gemini. The remaining 3 fail with distinct, mostly environmental causes:
+
+**copilot-cli** — `Error: Access denied by policy settings` from GitHub Copilot. The corporate Copilot policy on this account blocks third-party MCP servers AND non-allowed CLI invocations. Fix requires testing on a GitHub account with personal Copilot subscription (no enterprise policy). **No Synapse-side change can resolve this.**
+
+**opencode** — runs, hits real api.anthropic.com via HTTPS_PROXY, but Synapse's proxy doesn't record a capture. Likely opencode's Bun runtime doesn't honor `HTTPS_PROXY` env identically to Node, or the request uses HTTP/2 in a way the proxy's interception code doesn't fully support. Needs deeper probe with `mitmdump` or a TCP sniffer to confirm whether the request actually reaches Synapse's proxy port. **Out of scope for this commit.**
+
+**crush** — `tls: failed to verify` from Go's TLS stack. Go programs don't honor Node-specific `NODE_EXTRA_CA_CERTS`. We set `SSL_CERT_FILE` too but Go on macOS may prefer the system keychain. Workarounds: install Synapse's CA into the system trust store (admin-needed), or use crush's own `--insecure` flag (not safe for production), or add a Go-aware mechanism. **Tracked as future-work.**
+
+**Code locations:**
+- Test: `scripts/e2e-real-tool-roundtrip.mjs`
+- Run only the passing subset: `node scripts/e2e-real-tool-roundtrip.mjs --only=claude-code,codex,gemini`
+
+---
+
 ## P2 — Coverage gaps
 
 ### Creem webhook silently drops renewal events — `subscriptions` rows go stale after initial signup

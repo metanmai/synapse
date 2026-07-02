@@ -6,6 +6,10 @@ import { GeminiAdapter } from "../../../src/capture/adapters/gemini.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = path.join(__dirname, "../../fixtures/capture/gemini/sample-chat.json");
+// Real gemini-cli 0.45+ format: JSONL with session_meta + $set deltas.
+// Bug class: format-drift silently broke capture until the adapter
+// learned v2.
+const FIXTURE_V2 = path.join(__dirname, "../../fixtures/capture/gemini/sample-v2-session.jsonl");
 
 describe("GeminiAdapter", () => {
   const adapter = new GeminiAdapter();
@@ -60,5 +64,45 @@ describe("GeminiAdapter", () => {
 
   it("returns null for non-JSON files", () => {
     expect(adapter.parse("/some/file.txt")).toBeNull();
+  });
+
+  // ── v2 format (gemini-cli 0.45+) ────────────────────────────────────────
+
+  it("parses a v2 JSONL session file into CapturedSession", () => {
+    const session = adapter.parse(FIXTURE_V2);
+    expect(session).not.toBeNull();
+    expect(session?.tool).toBe("gemini");
+    expect(session?.id).toBe("ses_2c0f9bdbcf5f40b8");
+  });
+
+  it("v2: uses last $set as the authoritative messages snapshot (no dup accumulation)", () => {
+    const session = adapter.parse(FIXTURE_V2);
+    // Fixture has two $set lines: first with 1 message, second with 2.
+    // We should see exactly 2, not 3 (1 + 2).
+    expect(session?.messages.length).toBe(2);
+  });
+
+  it("v2: maps 'model' type to 'assistant'", () => {
+    const session = adapter.parse(FIXTURE_V2);
+    const roles = session?.messages.map((m) => m.role) ?? [];
+    expect(roles).toContain("assistant");
+    expect(roles).not.toContain("model");
+  });
+
+  it("v2: extracts toolName + input + output from content blocks", () => {
+    const session = adapter.parse(FIXTURE_V2);
+    const withTools = session?.messages.filter((m) => m.toolCalls && m.toolCalls.length > 0) ?? [];
+    expect(withTools.length).toBe(1);
+    expect(withTools[0].toolCalls?.[0].name).toBe("shell");
+  });
+
+  it("REGRESSION: a real gemini-cli 0.45+ session must parse, not silently return null", () => {
+    // Same regression-guard shape as the codex v2 test. If this ever
+    // goes red (e.g. gemini-cli changes format again), Synapse will
+    // silently lose every capture from current gemini users until the
+    // adapter is updated — failing fast here keeps the signal local.
+    const session = adapter.parse(FIXTURE_V2);
+    expect(session).not.toBeNull();
+    expect(session?.messages.length).toBeGreaterThan(0);
   });
 });
