@@ -17,26 +17,9 @@ export interface WriteResult {
   errors: { editor: string; error: string }[];
 }
 
-function detectProjectName(): string {
-  const cwd = process.cwd();
-  // Try package.json name
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(cwd, "package.json"), "utf-8")) as { name?: string };
-    if (pkg.name) return pkg.name.replace(/^@[^/]+\//, ""); // strip npm scope
-  } catch {
-    /* ignore */
-  }
-  // Fall back to directory name
-  return path.basename(cwd);
-}
-
-function buildSynapseInstructions(projectName: string): string {
-  return `# Synapse — Shared Context Layer
+const SYNAPSE_INSTRUCTIONS = `# Synapse — Shared Context Layer
 
 You have access to a Synapse MCP server — a remote workspace for storing and retrieving context across sessions.
-
-**Current project: ${projectName}**
-All writes for this project MUST go under \`projects/${projectName}/\`.
 
 ## Available Tools
 - search — Semantic search across all files (finds by meaning, not just keywords)
@@ -48,22 +31,20 @@ All writes for this project MUST go under \`projects/${projectName}/\`.
 - rm — Delete a file
 
 ## How to Use
-1. BEFORE starting any task, search Synapse for existing context: search({ query: "topic" })
-2. AFTER completing work, save context scoped to this project:
-   - write({ path: "projects/${projectName}/decisions/topic.md", content: "..." })
-   - write({ path: "projects/${projectName}/bugs/issue-name.md", content: "..." })
-   - write({ path: "projects/${projectName}/architecture/topic.md", content: "..." })
-   - write({ path: "projects/${projectName}/notes/meeting.md", content: "..." })
-3. For cross-project content, use root-level prefixes: decisions/, research/, retrospectives/
+1. BEFORE writing anything, run tree() to see the existing workspace structure
+2. BEFORE starting any task, search Synapse for existing context: search({ query: "topic" })
+3. AFTER completing work, save context to the RIGHT location by following the existing structure:
+   - Project-specific context (decisions, bugs, changelogs, architecture) → under the project's directory (e.g. projects/<name>/)
+   - Cross-project decisions, research, retrospectives → root-level directories
+   - Settings and configuration → settings/
+   - Determine the project name from the repo, codebase, or conversation context — not from a hardcoded value
 
 ## Key Behaviors
-- Always check Synapse before scanning the codebase — context may already exist
-- Save decisions, architecture notes, bug diagnoses, and session summaries to Synapse
+- Always check the tree FIRST to understand the existing directory layout before writing
+- Place files where they logically belong based on what already exists — don't create new top-level directories if a matching one exists
 - Use semantic search — "auth flow" will find documents about "login and session tokens"
 - Never write context to local files unless explicitly asked
-- Always scope project-specific writes under projects/${projectName}/
 `;
-}
 
 // --- Slash command / prompt definitions (shared across editors) ---
 
@@ -72,30 +53,28 @@ interface CommandDef {
   body: string;
 }
 
-function buildCommandDefs(projectName: string): Record<string, CommandDef> {
-  return {
-    "synapse-search": {
-      description: "Search the Synapse workspace using semantic search",
-      body: "Search the Synapse workspace using semantic search. Find files by meaning, not just keywords.\n\nUse the Synapse MCP `search` tool with the user's query. Display matching files with paths and relevant snippets.",
-    },
-    "synapse-tree": {
-      description: "Show the full Synapse workspace file tree",
-      body: "Show the full Synapse workspace file tree.\n\nUse the Synapse MCP `tree` tool and display the result in a readable format.",
-    },
-    "synapse-sync": {
-      description: `Sync ${projectName} project context to Synapse`,
-      body: `Sync project context to Synapse under projects/${projectName}/.\n\n1. Use the Synapse MCP \`tree\` tool to verify connection\n2. Check \`ls({ path: "projects/${projectName}" })\` for existing context\n3. Summarize recent git changes\n4. Write project overview to \`projects/${projectName}/overview.md\`\n5. Write recent changes to \`projects/${projectName}/recent-changes.md\``,
-    },
-    "synapse-whoami": {
-      description: "Show Synapse workspace info",
-      body: 'Show current Synapse workspace info.\n\n1. Use the Synapse MCP `ls` tool to verify connection\n2. Use the Synapse MCP `tree` tool to count files\n3. Report: "Connected to Synapse. [count] files in workspace."',
-    },
-    "synapse-clean": {
-      description: "Clean up the Synapse workspace",
-      body: "Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Use the Synapse MCP `tree` tool to list all files\n2. Identify duplicates, test files, empty entries\n3. Confirm with the user before deleting anything\n4. Delete confirmed entries using the Synapse MCP `rm` tool",
-    },
-  };
-}
+const SYNAPSE_COMMAND_DEFS: Record<string, CommandDef> = {
+  "synapse-search": {
+    description: "Search the Synapse workspace using semantic search",
+    body: "Search the Synapse workspace using semantic search. Find files by meaning, not just keywords.\n\nUse the Synapse MCP `search` tool with the user's query. Display matching files with paths and relevant snippets.",
+  },
+  "synapse-tree": {
+    description: "Show the full Synapse workspace file tree",
+    body: "Show the full Synapse workspace file tree.\n\nUse the Synapse MCP `tree` tool and display the result in a readable format.",
+  },
+  "synapse-sync": {
+    description: "Sync project context to Synapse",
+    body: "Sync project context to Synapse.\n\n1. Run `tree()` to see the existing workspace structure\n2. Determine the current project name from the repo/codebase\n3. Check `ls({ path: \"projects/<name>\" })` for existing context\n4. Summarize recent git changes\n5. Write overview and recent changes under the project's directory\n6. Place files where they fit the existing structure — don't create new top-level dirs if a matching one exists",
+  },
+  "synapse-whoami": {
+    description: "Show Synapse workspace info",
+    body: 'Show current Synapse workspace info.\n\n1. Use the Synapse MCP `ls` tool to verify connection\n2. Use the Synapse MCP `tree` tool to count files\n3. Report: "Connected to Synapse. [count] files in workspace."',
+  },
+  "synapse-clean": {
+    description: "Clean up the Synapse workspace",
+    body: "Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Use the Synapse MCP `tree` tool to list all files\n2. Identify duplicates, test files, empty entries\n3. Confirm with the user before deleting anything\n4. Delete confirmed entries using the Synapse MCP `rm` tool",
+  },
+};
 
 // --- Shared helpers ---
 
@@ -125,8 +104,7 @@ function appendInstructions(filePath: string): boolean {
     content = fs.readFileSync(filePath, "utf-8");
   }
   if (content.includes("Synapse")) return false;
-  const projectName = detectProjectName();
-  fs.appendFileSync(filePath, `\n${buildSynapseInstructions(projectName)}`);
+  fs.appendFileSync(filePath, `\n${SYNAPSE_INSTRUCTIONS}`);
   return true;
 }
 
@@ -174,7 +152,7 @@ function writeCursorCommandFiles(baseDir: string, pathPrefix: string): string[] 
   const written: string[] = [];
   const cmdDir = path.join(baseDir, "commands");
   fs.mkdirSync(cmdDir, { recursive: true });
-  for (const [name, def] of Object.entries(buildCommandDefs(detectProjectName()))) {
+  for (const [name, def] of Object.entries(SYNAPSE_COMMAND_DEFS)) {
     const filepath = path.join(cmdDir, `${name}.md`);
     if (!fs.existsSync(filepath)) {
       fs.writeFileSync(filepath, `${def.body}\n`);
@@ -189,7 +167,7 @@ function writeVSCodePromptFiles(cwd: string): string[] {
   const written: string[] = [];
   const promptDir = path.join(cwd, ".github", "prompts");
   fs.mkdirSync(promptDir, { recursive: true });
-  for (const [name, def] of Object.entries(buildCommandDefs(detectProjectName()))) {
+  for (const [name, def] of Object.entries(SYNAPSE_COMMAND_DEFS)) {
     const filepath = path.join(promptDir, `${name}.prompt.md`);
     if (!fs.existsSync(filepath)) {
       const content = `---\ndescription: "${def.description}"\nmode: "agent"\n---\n\n${def.body}\n`;
@@ -205,7 +183,7 @@ function writeWindsurfWorkflowFiles(cwd: string): string[] {
   const written: string[] = [];
   const workflowDir = path.join(cwd, ".windsurf", "workflows");
   fs.mkdirSync(workflowDir, { recursive: true });
-  for (const [name, def] of Object.entries(buildCommandDefs(detectProjectName()))) {
+  for (const [name, def] of Object.entries(SYNAPSE_COMMAND_DEFS)) {
     const filepath = path.join(workflowDir, `${name}.md`);
     if (!fs.existsSync(filepath)) {
       fs.writeFileSync(filepath, `${def.body}\n`);
@@ -311,11 +289,10 @@ function writeClaudeCodeLocal(apiKey: string, home: string, cwd: string): string
   }
   const cmdDir = path.join(claudeDir, "commands", "synapse");
   fs.mkdirSync(cmdDir, { recursive: true });
-  const pn = detectProjectName();
   const commands: Record<string, string> = {
     "search.md": `Search the Synapse workspace. The search query is: $ARGUMENTS\n\nUses semantic search — understands meaning, not just keywords.\n\nRun \`mcp__synapse__search({ query: "$ARGUMENTS" })\` and display results. If not connected, say "Not connected."\n`,
     "tree.md": `Show the full Synapse workspace file tree.\n\nRun \`mcp__synapse__tree()\` and display the tree. If not connected, say "Not connected."\n`,
-    "sync.md": `Sync ${pn} project context to Synapse under projects/${pn}/.\n\n1. Run \`mcp__synapse__tree()\` to check connection\n2. Run \`mcp__synapse__ls({ path: "projects/${pn}" })\` to see existing context\n3. Summarize recent git changes\n4. Write overview to \`projects/${pn}/overview.md\`\n5. Write recent changes to \`projects/${pn}/recent-changes.md\`\n`,
+    "sync.md": `Sync project context to Synapse.\n\n1. Run \`mcp__synapse__tree()\` to see existing workspace structure\n2. Determine the project name from the repo/codebase\n3. Run \`mcp__synapse__ls({ path: "projects/<name>" })\` to check existing context\n4. Summarize recent git changes\n5. Write overview and recent changes under the project's directory\n6. Place files where they fit the existing structure\n`,
     "whoami.md": `Show current Synapse account info.\n\n1. Run \`mcp__synapse__ls()\` to verify connection\n2. Run \`mcp__synapse__tree()\` to count files\n3. Show: "Connected. Files: [count]."\n`,
     "clean.md":
       "Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Run `mcp__synapse__tree()`\n2. Identify duplicates, test files, empty entries\n3. Confirm with user before deleting\n4. Delete confirmed entries with `mcp__synapse__rm()`\n",
@@ -349,7 +326,7 @@ function writeClaudeCodeGlobal(apiKey: string, home: string): string[] {
   const commands: Record<string, string> = {
     "search.md": `Search the Synapse workspace. The search query is: $ARGUMENTS\n\nUses semantic search — understands meaning, not just keywords.\n\nRun \`mcp__synapse__search({ query: "$ARGUMENTS" })\` and display results. If not connected, say "Not connected."\n`,
     "tree.md": `Show the full Synapse workspace file tree.\n\nRun \`mcp__synapse__tree()\` and display the tree. If not connected, say "Not connected."\n`,
-    "sync.md": `Sync project context to Synapse.\n\nDetect the project name from the current directory (package.json name or folder name), then:\n1. Run \`mcp__synapse__tree()\` to check connection\n2. Run \`mcp__synapse__ls({ path: "projects/<project-name>" })\` to see existing context\n3. Summarize recent git changes\n4. Write overview to \`projects/<project-name>/overview.md\`\n5. Write recent changes to \`projects/<project-name>/recent-changes.md\`\n\nAlways scope writes under \`projects/<project-name>/\`.\n`,
+    "sync.md": `Sync project context to Synapse.\n\n1. Run \`mcp__synapse__tree()\` to see existing workspace structure\n2. Determine the project name from the repo/codebase\n3. Run \`mcp__synapse__ls({ path: "projects/<name>" })\` to check existing context\n4. Summarize recent git changes\n5. Write overview and recent changes under the project's directory\n6. Place files where they fit the existing structure\n`,
     "whoami.md": `Show current Synapse account info.\n\n1. Run \`mcp__synapse__ls()\` to verify connection\n2. Run \`mcp__synapse__tree()\` to count files\n3. Show: "Connected. Files: [count]."\n`,
     "clean.md":
       "Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Run `mcp__synapse__tree()`\n2. Identify duplicates, test files, empty entries\n3. Confirm with user before deleting\n4. Delete confirmed entries with `mcp__synapse__rm()`\n",
