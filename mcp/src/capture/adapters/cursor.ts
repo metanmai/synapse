@@ -23,21 +23,23 @@ interface CursorChat {
  * Exported for unit-test use (test injects process.platform via vi.spyOn).
  */
 export function cursorWorkspaceStorageDir(platform: NodeJS.Platform = process.platform): string {
+  // Use platform-specific path joiners so the function returns paths
+  // shaped for the TARGET platform, not the runtime OS. This matters
+  // for unit tests on a Windows runner asserting the darwin branch:
+  // with `path.join`, `clineTasksDir("darwin")` on Windows would
+  // return backslash-separated paths. With `path.posix.join`, it
+  // correctly returns forward-slash paths matching macOS conventions.
   if (platform === "darwin") {
-    return path.join(os.homedir(), "Library", "Application Support", "Cursor", "User", "workspaceStorage");
+    return path.posix.join(os.homedir(), "Library", "Application Support", "Cursor", "User", "workspaceStorage");
   }
   if (platform === "win32") {
     // %APPDATA% on Windows is usually C:\Users\<user>\AppData\Roaming.
-    // Cursor (an Electron app) stores its user data under
-    // %APPDATA%\Cursor\User\workspaceStorage, same shape as VS Code.
-    // Fall back to ~/AppData/Roaming if APPDATA env isn't set — Node's
-    // os.homedir() always works on Windows, and AppData\Roaming is the
-    // standard location.
-    const appData = process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming");
-    return path.join(appData, "Cursor", "User", "workspaceStorage");
+    // Cursor stores its user data under %APPDATA%\Cursor\User\workspaceStorage.
+    const appData = process.env.APPDATA ?? path.win32.join(os.homedir(), "AppData", "Roaming");
+    return path.win32.join(appData, "Cursor", "User", "workspaceStorage");
   }
   // Linux / *BSD / anything else: VS-Code-style XDG layout under ~/.config.
-  return path.join(os.homedir(), ".config", "Cursor", "User", "workspaceStorage");
+  return path.posix.join(os.homedir(), ".config", "Cursor", "User", "workspaceStorage");
 }
 
 export class CursorAdapter implements ToolAdapter {

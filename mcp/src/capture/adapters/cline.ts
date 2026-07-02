@@ -47,17 +47,25 @@ function isToolResultOnly(msg: ClineMessage): boolean {
  * root. Exported for unit testing.
  */
 export function clineTasksDir(platform: NodeJS.Platform = process.platform): string {
-  const ext = path.join("Code", "User", "globalStorage", "saoudrizwan.claude-dev", "tasks");
+  // path.posix.join / path.win32.join: see cursor.ts for why this
+  // matters for unit testability across runtime OSes.
   if (platform === "darwin") {
-    return path.join(os.homedir(), "Library", "Application Support", ext);
+    return path.posix.join(
+      os.homedir(),
+      "Library",
+      "Application Support",
+      "Code",
+      "User",
+      "globalStorage",
+      "saoudrizwan.claude-dev",
+      "tasks",
+    );
   }
   if (platform === "win32") {
-    // VS Code on Windows stores user data under %APPDATA%\Code\...
-    const appData = process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming");
-    return path.join(appData, ext);
+    const appData = process.env.APPDATA ?? path.win32.join(os.homedir(), "AppData", "Roaming");
+    return path.win32.join(appData, "Code", "User", "globalStorage", "saoudrizwan.claude-dev", "tasks");
   }
-  // Linux: ~/.config/Code/...
-  return path.join(os.homedir(), ".config", ext);
+  return path.posix.join(os.homedir(), ".config", "Code", "User", "globalStorage", "saoudrizwan.claude-dev", "tasks");
 }
 
 export class ClineAdapter implements ToolAdapter {

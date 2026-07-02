@@ -1,5 +1,6 @@
 import child_process from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { probeNpmRegistry, resolveSynapseMcpCommand } from "../../src/cli/util/mcp-command.js";
 
@@ -48,7 +49,9 @@ describe("resolveSynapseMcpCommand (BUG-03)", () => {
 
     expect(cmd.command).toBe(process.execPath);
     expect(cmd.args).toHaveLength(1);
-    expect(cmd.args[0].endsWith("dist/index.js")).toBe(true);
+    // path.sep-aware endsWith: matches `dist/index.js` on POSIX and
+    // `dist\index.js` on Windows.
+    expect(cmd.args[0].endsWith(path.join("dist", "index.js"))).toBe(true);
     expect(cmd.env.SYNAPSE_API_KEY).toBe("sk-test-key");
   });
 

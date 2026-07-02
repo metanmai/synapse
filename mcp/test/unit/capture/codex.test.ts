@@ -16,7 +16,7 @@ describe("CodexAdapter", () => {
   it("returns watch paths under ~/.codex/sessions", () => {
     const paths = adapter.watchPaths();
     expect(paths.length).toBeGreaterThan(0);
-    expect(paths[0]).toContain(".codex/sessions");
+    expect(paths[0]).toContain(path.join(".codex", "sessions"));
   });
 
   it("honors SYNAPSE_TEST_CODEX_PATH override (test-affordance for E2E adapter-roundtrip)", () => {

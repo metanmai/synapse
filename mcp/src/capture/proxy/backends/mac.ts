@@ -20,7 +20,11 @@ import {
 const CA_COMMON_NAME = "Synapse Proxy CA";
 
 function loginKeychainPath(home: string): string {
-  return path.join(home, "Library/Keychains/login.keychain-db");
+  // macOS-only path — use path.posix.join so unit tests on a Windows
+  // runner asserting this string get forward-slash separators (matching
+  // the production-on-darwin output). path.join would produce backslashes
+  // on Windows runtime, breaking cross-OS unit assertions.
+  return path.posix.join(home, "Library/Keychains/login.keychain-db");
 }
 
 function defaultRunSecurity(args: string[]): CommandResult {
