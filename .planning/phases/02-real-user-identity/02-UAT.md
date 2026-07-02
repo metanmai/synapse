@@ -1,5 +1,5 @@
 ---
-status: testing
+status: partial
 phase: 02-real-user-identity
 source:
   - 02-01-SUMMARY.md
@@ -9,21 +9,19 @@ source:
   - 02-05-SUMMARY.md
   - 02-06-SUMMARY.md
 started: 2026-05-21T03:00:00Z
-updated: 2026-05-21T03:00:00Z
+updated: 2026-05-21T11:30:00Z
 scope: local-testable
 deferred:
-  - "Cross-device auto-link by git_remote_url end-to-end (needs supabase db push + wrangler deploy)"
-  - "Manual link merge via deployed Settings page (needs backend route deployed + frontend redeploy)"
-  - "Playwright e2e green in CI on metanmai/synapse (needs first CI run with Playwright steps)"
+  - "Cross-device auto-link by git_remote_url end-to-end (needs migration 019 applied + backend deployed if not already)"
+  - "Manual link merge happy path on prod (currently 5xx-ing because merge_projects function not applied to dogfood Supabase yet — refactored into supabase/migrations/019_merge_projects.sql, awaits the CI auto-migrate activation or one manual `supabase db push`)"
+  - "Playwright e2e fully green in CI on metanmai (2 of 7 tests fail: State E redirect-state-reuse + State F alert-not-appearing — both look like fixture-route client-side-nav artifacts, prod itself works per Phase 2 UAT prod walk-through)"
 ---
 
 ## Current Test
 
-number: 3
-name: Daemon emits real UUID, not "default" placeholder
-expected: |
-  Inspect a recent event: `tail -5 ~/.synapse/projects/<any-project-id>/events.jsonl | jq .actor`. Every event's `actor.user_id` should match the UUID in `~/.synapse/config.json`. Zero events with `actor.user_id == "default"`.
-awaiting: user response
+[testing paused — 5 of 7 outstanding, resume with /gsd-verify-work 2]
+
+Resumption note: walked Tests 1 (skipped — user deferred local cold-start), 2 (passed via "it just works" on user's `npm run build` local dev loop), and pivoted to prod E2E for Plan 02-05 (LinkPicker). Prod test confirmed: frontend deployed, backend route reachable, State A → C all render with locked copy, submit returns 5xx mapped to State F locked copy — exactly the predicted partial-deploy behavior. The deferred operator action (apply `merge_projects` SQL function via migration 019) is the only thing standing between the current 5xx and a working happy-path merge.
 
 ## Tests
 
@@ -102,10 +100,13 @@ blocked: 0
 
 ## Out-of-Scope Findings (UX, addressed inline)
 
-Found while clicking around prod for the UAT. NOT Phase 2 regressions — pre-existing UX issues fixed in the same window because the cost was trivial.
+Found while clicking around prod for the UAT. NOT Phase 2 regressions — pre-existing UX issues fixed in the same window because the cost was trivial and the user was looking at them live.
 
-- **fixed:** AppShell topbar showed "Select workspace ▼" / "My Workspaces" dropdown on the home page itself, duplicating the project picker that IS the home page. Fix: hide the entire switcher when `currentProject` is null (i.e., when not inside a `/projects/<name>/*` route). On `/home`, the cards are now the single project surface; the switcher only appears inside projects, where it's actually useful for fast cross-project jumps. Also renamed the dropdown group label "My Workspaces" → "My Projects" to align with the DB/API terminology (`projects` table).
-- **fixed:** "Projects: N / 50" rendered as its own div at the bottom of the home page. Fix: moved to a subtle pill next to the "Your Projects" heading; bottom usage-bar removed entirely. For free-tier users, the pill is clickable (→ /account) with hover tooltip ("Free tier supports up to N projects. Upgrade to Plus for 50."). For paid users, the pill is static with the same tooltip format minus the upgrade prompt.
+- **fixed (`5823cbe`):** AppShell topbar showed "Select workspace ▼" / "My Workspaces" dropdown on the home page itself, duplicating the project picker that IS the home page. Fix: hide the entire switcher when `currentProject` is null (i.e., when not inside a `/projects/<name>/*` route). On `/home`, the cards are now the single project surface; the switcher only appears inside projects, where it's actually useful for fast cross-project jumps. Also renamed the dropdown group label "My Workspaces" → "My Projects" to align with the DB/API terminology (`projects` table).
+- **fixed (`5823cbe`):** "Projects: N / 50" rendered as its own div at the bottom of the home page. Fix: moved to a subtle pill next to the "Your Projects" heading; bottom usage-bar removed entirely. For free-tier users, the pill is clickable (→ /account) with hover tooltip ("Free tier supports up to N projects. Upgrade to Plus for 50."). For paid users, the pill is static with the same tooltip format minus the upgrade prompt.
+- **fixed (`fbb4fee`):** Landing page setup code-block had three issues: (a) horizontal scroll because the 71-char install command exceeded the 640px card on narrow viewports; (b) copy button anchored to top, not vertically centered; (c) copy button overlapped the command text when scrolled. Fix: replaced absolute-positioned overlay button with a flex-row sibling layout, plus rendered the command across three visual lines via bash line-continuation (`\`). Clipboard still pastes a single-line executable command. Mobile breakpoint <600px flips the row to a column so the button drops below.
+- **fixed (`8da6ec5`):** Landing page "How it works" section had three illustrations that didn't match their step semantics. Capture step showed `.mcp.json` (which is retrieval-side plumbing for the Remember step, not capture). Distill step showed a Claude⇄ChatGPT split (which is cross-tool sharing, not LLM-extraction). Remember step showed two avatars sharing a folder (which is cross-USER collaboration — Phase 4 territory — not single-user context recall). Fix: rewrote all three illustrations as pure CSS to actually depict their step: Capture → live capture feed with 4 tool color-tags; Distill → transcript → Decision/Architecture/Learning insight pills (verbatim from the description); Remember → brief preview card showing "CONTEXT LOADED" + Last session + Next step.
+- **scaffolded (`239d1f0`):** Pre-emptive infra fix surfaced by the UAT — `merge_projects` SQL function couldn't be applied via `supabase db push` because it was appended to migration 018 (already in `schema_migrations`). Split it into a fresh `019_merge_projects.sql`. Also scaffolded a CI auto-migrate job in `.github/workflows/ci.yml` that gracefully skips until `SUPABASE_ACCESS_TOKEN` / `SUPABASE_PROJECT_REF` / `SUPABASE_DB_PASSWORD` are configured on metanmai. Logged the setup steps in `docs/BUGS.md` (P1 — Process gaps) so the configuration TODO doesn't get lost.
 
 ## Production E2E Findings (Plan 02-05)
 
