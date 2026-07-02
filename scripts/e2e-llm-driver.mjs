@@ -225,6 +225,7 @@ export function generateSession(opts = {}) {
         userAgent,
         extraEnv,
         timeoutMs,
+        cwd,
       });
     }
     // Legacy: explicit apiKey opt with no detected provider → Anthropic.
@@ -238,6 +239,7 @@ export function generateSession(opts = {}) {
       userAgent,
       extraEnv,
       timeoutMs,
+      cwd,
     });
   }
 
@@ -276,6 +278,7 @@ export function callProviderViaProxy({
   userAgent,
   extraEnv,
   timeoutMs,
+  cwd,
 }) {
   const whichCmd = process.platform === "win32" ? "where" : "which";
   const which = spawnSync(whichCmd, ["curl"], { encoding: "utf-8" });
@@ -296,6 +299,14 @@ export function callProviderViaProxy({
   // to skip the check; ignored as a no-op on OpenSSL-backed curls.
   const platformCurlFlags = process.platform === "win32" ? ["--ssl-no-revoke"] : [];
 
+  // `X-Synapse-Cwd` opts the captured session into cwd-based project
+  // routing. The proxy reads this header, strips it before forwarding
+  // upstream, and tags CapturedSession.projectPath with it so cloud-sync's
+  // findOrCreateProjectByGit lookup resolves to the user's real project
+  // instead of the phantom "unknown" bucket. Only sent when the caller
+  // supplied a cwd — preserves the "unknown" fallback for cwd-less callers.
+  const cwdHeader = cwd ? ["-H", `X-Synapse-Cwd: ${cwd}`] : [];
+
   const started = Date.now();
   const result = spawnSync(
     "curl",
@@ -312,6 +323,7 @@ export function callProviderViaProxy({
       `User-Agent: ${userAgent}`,
       "-H",
       "Content-Type: application/json",
+      ...cwdHeader,
       ...providerArgs,
       "--max-time",
       String(Math.ceil(timeoutMs / 1000)),

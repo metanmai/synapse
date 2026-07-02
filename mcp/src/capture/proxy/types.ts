@@ -43,6 +43,22 @@ export interface CapturedRequest {
    *  Cline, Aider, etc. — when no explicit `opts.tool` is supplied.
    *  Optional because pre-UA-classifier captures didn't populate it. */
   userAgent?: string;
+  /**
+   * Absolute path the client was running from, when the client opts in
+   * by setting the `X-Synapse-Cwd` request header. Used downstream by
+   * session-reconstruction to fill `CapturedSession.projectPath` so the
+   * cloud-sync POST can derive `git_origin_url` from THAT cwd's git
+   * config and route the conversation to the correct project — not the
+   * phantom "unknown" project that captures land in when no cwd hint
+   * was provided. Stripped from forwardHeaders by the proxy server so
+   * upstream providers never see it.
+   *
+   * Optional: real-world CLI tools (claude, crush, etc.) don't set this
+   * yet; their captures still land in projectPath="unknown". The header
+   * is the explicit-opt-in path for E2E harnesses + future
+   * cwd-aware clients.
+   */
+  clientCwd?: string;
 }
 
 /**

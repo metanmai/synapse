@@ -293,11 +293,27 @@ function handleRequest(
   const endpoint = recognizeEndpoint(host, pathAndQuery);
   const upstream = resolveUpstream(host, port, scheme, opts.upstreamMap);
 
-  // Filter hop-by-hop headers; preserve a clean Host header.
+  // `X-Synapse-Cwd` is a client-side opt-in: tools that know their
+  // working directory (the e2e harness, future cwd-aware CLI shims,
+  // direct curl callers in scripts) can tag captured chats with their
+  // origin path. session-reconstruction uses this to fill
+  // CapturedSession.projectPath, which cloud-sync then feeds into
+  // findOrCreateProjectByGit so the conversation routes to the user's
+  // real project instead of the phantom "unknown" bucket. The header
+  // is stripped from forwardHeaders below so upstream providers
+  // (Anthropic, OpenRouter, etc.) never see it.
+  const cwdHeader = clientReq.headers["x-synapse-cwd"];
+  const clientCwd = typeof cwdHeader === "string" ? cwdHeader : Array.isArray(cwdHeader) ? cwdHeader[0] : undefined;
+
+  // Filter hop-by-hop headers; preserve a clean Host header. Also
+  // strip x-synapse-* tagging headers (private to the proxy layer —
+  // upstream providers don't need to see them).
   const forwardHeaders: Record<string, string | string[]> = {};
   for (const [k, v] of Object.entries(clientReq.headers)) {
     if (v === undefined) continue;
-    if (HOP_BY_HOP.has(k.toLowerCase())) continue;
+    const lower = k.toLowerCase();
+    if (HOP_BY_HOP.has(lower)) continue;
+    if (lower.startsWith("x-synapse-")) continue;
     forwardHeaders[k] = v;
   }
   forwardHeaders.host = port === defaultPort(scheme) ? host : `${host}:${port}`;
@@ -350,6 +366,7 @@ function handleRequest(
             responseBody: parseBody(resBody, upstreamRes.headers["content-type"]),
             statusCode: upstreamRes.statusCode ?? 502,
             userAgent: typeof uaHeader === "string" ? uaHeader : uaHeader?.[0],
+            ...(clientCwd ? { clientCwd } : {}),
           };
           try {
             opts.onCaptured(captured);

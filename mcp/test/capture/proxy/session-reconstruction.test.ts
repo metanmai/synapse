@@ -379,4 +379,65 @@ describe("reconstructSessions", () => {
     expect(a[0].id).toBe(b[0].id);
     expect(a[0].id).toMatch(/^ses_[a-f0-9]{16}$/);
   });
+
+  // ── X-Synapse-Cwd → projectPath propagation (bug class guard) ──────────
+  //
+  // BUG CLASS: "captured sessions land in projectPath='unknown' even when
+  // the client gave the proxy a cwd hint." When clientCwd is present on
+  // any request in the session group, projectPath must reflect it so the
+  // downstream cloud-sync POST resolves to the user's real project rather
+  // than the phantom 'unknown' bucket.
+
+  it("uses clientCwd from the captured request as projectPath", () => {
+    const requests: CapturedRequest[] = [
+      {
+        ...mkAnthropic({
+          timestamp: "2026-05-30T01:00:00Z",
+          messages: [{ role: "user", content: "from a known cwd" }],
+          responseText: "got it",
+        }),
+        clientCwd: "/Users/somebody/work/real-project",
+      },
+    ];
+    const sessions = reconstructSessions(requests);
+    expect(sessions[0].projectPath).toBe("/Users/somebody/work/real-project");
+  });
+
+  it("falls back to projectPath='unknown' when no clientCwd is set (header-less clients)", () => {
+    // Real-world CLI tools (claude, crush, etc.) don't set X-Synapse-Cwd
+    // yet. Their captures still flow — they just land in 'unknown'. This
+    // is the documented fallback; do NOT regress to throwing or silently
+    // dropping the session.
+    const requests = [
+      mkAnthropic({
+        timestamp: "2026-05-30T01:00:00Z",
+        messages: [{ role: "user", content: "from an unknown cwd" }],
+        responseText: "fine",
+      }),
+    ];
+    const sessions = reconstructSessions(requests);
+    expect(sessions[0].projectPath).toBe("unknown");
+  });
+
+  it("uses the LAST request's clientCwd when a retry burst has different hints (latest wins)", () => {
+    // If the client sent retries with different X-Synapse-Cwd values for
+    // some reason (unlikely but possible if the user `cd`'d mid-session
+    // and a retry got a different cwd), the LAST request wins — same
+    // shape as how we pick the authoritative response body in retry
+    // collapse. Earlier guesses are superseded.
+    const userMsg = { role: "user", content: "stable prompt" };
+    const requests: CapturedRequest[] = [
+      {
+        ...mkAnthropic({ timestamp: "2026-05-30T01:00:00Z", messages: [userMsg], responseText: "r1" }),
+        clientCwd: "/old/cwd",
+      },
+      {
+        ...mkAnthropic({ timestamp: "2026-05-30T01:00:00.100Z", messages: [userMsg], responseText: "r2" }),
+        clientCwd: "/new/cwd",
+      },
+    ];
+    const sessions = reconstructSessions(requests);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].projectPath).toBe("/new/cwd");
+  });
 });

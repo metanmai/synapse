@@ -285,6 +285,56 @@ describe("HTTP forward-proxy server (Layer 2)", () => {
     expect(res.status).toBe(400);
   });
 
+  it("attaches X-Synapse-Cwd to CapturedRequest and strips it from the upstream-forwarded headers", async () => {
+    // BUG CLASS: "captured sessions land in a phantom 'unknown' project
+    // because the proxy can't learn the calling cwd from inside the
+    // TLS-MITM layer." The fix is the `X-Synapse-Cwd` opt-in header:
+    // clients that know their working directory tell the proxy, the
+    // proxy attaches it to CapturedRequest.clientCwd, and downstream
+    // session-reconstruction uses it for CapturedSession.projectPath.
+    // The header is private to the proxy layer — upstream providers
+    // (Anthropic, OpenRouter, etc.) must NOT see it leak through.
+    //
+    // Discovered 2026-06-07: Stage 4.1 of happy-flow-e2e on metanmai/
+    // synapse timed out polling for conversations under the test cwd's
+    // project because the proxy capture was being routed to "unknown".
+    await proxyRequest({
+      proxyPort: proxy.port,
+      url: "http://api.anthropic.com/v1/messages",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Synapse-Cwd": "/path/to/some/project",
+      },
+      body: JSON.stringify({ messages: [{ role: "user", content: "tagged" }] }),
+    });
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0].clientCwd).toBe("/path/to/some/project");
+
+    // Upstream must NOT see the x-synapse-* header — it's a proxy-private signal.
+    const upstreamSaw = fakeAnthropic.received[0];
+    expect(upstreamSaw.headers["x-synapse-cwd"]).toBeUndefined();
+  });
+
+  it("leaves clientCwd undefined when the client does NOT send X-Synapse-Cwd (backwards-compatible fallback)", async () => {
+    // Pre-header clients (claude CLI, crush, real-world CLI tools that
+    // don't know about the header) still get captured; their session
+    // just lands with projectPath="unknown" downstream. That's the
+    // documented fallback — not a regression — until the CLIs add
+    // support for the header themselves.
+    await proxyRequest({
+      proxyPort: proxy.port,
+      url: "http://api.anthropic.com/v1/messages",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "untagged" }] }),
+    });
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0].clientCwd).toBeUndefined();
+  });
+
   it("strips client-set hop-by-hop headers (Proxy-Connection) while forwarding end-to-end headers (Content-Type)", async () => {
     // The proxy must NOT blindly forward all client headers. Hop-by-hop
     // headers (Connection, Proxy-Connection, etc.) are meaningful only

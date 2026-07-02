@@ -118,11 +118,14 @@ export function reconstructSessions(
     sessions.push({
       id: `ses_${hash}`,
       tool: opts.tool ?? classifyUserAgent(first.userAgent),
-      // Project routing happens at the proxy server's working-context
-      // layer (a later slice). At this pure-function layer we don't
-      // know the cwd — emit "unknown" and let the proxy server fill
-      // it in before pushing to CloudSyncer.
-      projectPath: "unknown",
+      // Project routing: prefer the `X-Synapse-Cwd` header value the
+      // proxy server stashed in `clientCwd` (the last request wins —
+      // continuations may correct an earlier guess). Falling back to
+      // "unknown" preserves backwards compatibility for clients that
+      // don't set the header; cloud-sync routes those to a phantom
+      // "unknown" project and the user can still see the conversation,
+      // just not under the correct cwd-named project.
+      projectPath: last.clientCwd ?? first.clientCwd ?? "unknown",
       startedAt: first.timestamp,
       updatedAt: last.timestamp,
       messages,
