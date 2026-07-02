@@ -151,7 +151,7 @@ export function detectExistingSetup(): ExistingSetup {
     if (fs.existsSync(filePath)) {
       try {
         const content = fs.readFileSync(filePath, "utf-8");
-        if (content.includes("synapsesync-mcp") || content.includes("synapse")) {
+        if (content.includes("synapsesync") || content.includes("synapse")) {
           const key = extractApiKey(filePath);
           if (key) apiKeySet.add(key);
           locations.push({

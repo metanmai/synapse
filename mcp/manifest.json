@@ -1,6 +1,6 @@
 {
   "schema_version": "0.3",
-  "name": "synapsesync-mcp",
+  "name": "synapsesync",
   "description": "MCP server for Synapse — persistent, shared AI context across tools, sessions, and devices",
   "homepage": "https://synapsesync.app",
   "repository": "https://github.com/metanmai/synapse",
