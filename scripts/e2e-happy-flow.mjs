@@ -61,6 +61,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { removeLocalProjectState, removeLocalProjectsByBasename, sweepArtifacts } from "./e2e-cleanup.mjs";
 import { generateSession } from "./e2e-llm-driver.mjs";
 
@@ -73,7 +74,7 @@ import { generateSession } from "./e2e-llm-driver.mjs";
 process.env.SYNAPSE_DISPATCH_FORCE_ALLOW = "1";
 
 // ── Configuration ────────────────────────────────────────────────────────
-const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MCP_DIST = path.join(REPO_ROOT, "mcp", "dist", "index.js");
 const API_BASE = process.env.SYNAPSE_API_BASE ?? "https://api.synapsesync.app";
 
