@@ -178,6 +178,7 @@ This is sufficient for a solo-dev project. When the team grows or external contr
 | Stage 7 NOT IN BRIEF | Brief composition or fast-mode dropped the handoff | Check session-start.ts |
 | Stage 8 save_insight 403 | Tier gating misfiring | Check tier.ts requirePlus call sites |
 | Test hangs in stage 3 | claude -p stalled | Anthropic API issue or stale session lock |
+| Stage 6 / pull-compact: `Anthropic API 400: credit balance is too low` | External provider account at backend's COMPACTION_LLM_KEY ran out of credits | Set `ANTHROPIC_BASE_URL=http://127.0.0.1:<port>` (or `OPENROUTER_BASE_URL` / `DEEPSEEK_BASE_URL`) to a local stand-in (e.g. the repo's fake-LLM helper, a docker'd mock); local-compact will route there instead of hosted. Independently, the backend operator must top up the upstream account. |
 | Adapter-roundtrip `pipeline-{tool}` fail | Watcher didn't pick up the fixture OR backend POST failed silently | Check `~/.synapse/capture.log` for that run's `from {tool}` line |
 | Lifecycle preflight `port 17727 in use` | Orphan daemon from a previous lifecycle run | `lsof -nP -iTCP:17727 -sTCP:LISTEN` then `kill -9 <pid>` |
 | Lifecycle race-guard `EADDRINUSE` / port-never-bound | Real regression in `restartDaemon` polling | Check `cli.ts:restartDaemon` + `waitForProcessExit` — was the timeout shortened? |

@@ -48,13 +48,29 @@ export interface LLMProvider {
   call(prompt: string, apiKey: string, maxTokens: number): Promise<string>;
 }
 
+/**
+ * Resolve a provider's API base URL, honoring an env override
+ * (ANTHROPIC_BASE_URL / OPENROUTER_BASE_URL / DEEPSEEK_BASE_URL).
+ *
+ * Why: resilience against external-provider outages. When the hosted
+ * provider account is unusable (depleted credits, revoked key, regional
+ * block), tests and CI can point compaction at a LOCAL stand-in — a
+ * docker'd stub or the repo's fake-LLM test helper — instead of going
+ * red because an external system broke. Read at call time so a test can
+ * stub env without re-importing the module.
+ */
+function baseUrl(envName: string, fallback: string): string {
+  const v = process.env[envName];
+  return (v && v.trim() ? v.trim() : fallback).replace(/\/+$/, "");
+}
+
 const PROVIDERS: LLMProvider[] = [
   {
     name: "anthropic",
     envKey: "ANTHROPIC_API_KEY",
     defaultModel: "claude-haiku-4-5-20251001",
     async call(prompt, apiKey, maxTokens) {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch(`${baseUrl("ANTHROPIC_BASE_URL", "https://api.anthropic.com")}/v1/messages`, {
         method: "POST",
         headers: {
           "x-api-key": apiKey,
@@ -85,7 +101,7 @@ const PROVIDERS: LLMProvider[] = [
     // Stage-3 chat call that already exercised the same provider.
     defaultModel: "anthropic/claude-3.5-haiku",
     async call(prompt, apiKey, maxTokens) {
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      const res = await fetch(`${baseUrl("OPENROUTER_BASE_URL", "https://openrouter.ai/api")}/v1/chat/completions`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -109,7 +125,7 @@ const PROVIDERS: LLMProvider[] = [
     envKey: "DEEPSEEK_API_KEY",
     defaultModel: "deepseek-chat",
     async call(prompt, apiKey, maxTokens) {
-      const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+      const res = await fetch(`${baseUrl("DEEPSEEK_BASE_URL", "https://api.deepseek.com")}/v1/chat/completions`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,

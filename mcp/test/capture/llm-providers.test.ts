@@ -251,6 +251,66 @@ describe("compactLocally — end-to-end provider call", () => {
     }
   });
 
+  // ── Provider base-URL env override (Docker stand-in for outage resilience) ──
+  //
+  // BUG CLASS guarded: "the killer-feature handoff pipeline is bound to
+  // hard-coded provider URLs, so a hosted provider outage / credit-balance
+  // exhaustion (observed 2026-06-10 against api.anthropic.com) takes the
+  // whole pipeline red". With per-provider *_BASE_URL env overrides, an
+  // operator can point compaction at a docker'd stand-in (or the repo's
+  // fake-LLM helper) to keep the gate honest while the external provider
+  // is degraded. Test stubs fetch so it works offline.
+
+  it("honors ANTHROPIC_BASE_URL — Docker / fake-LLM redirection without code changes", async () => {
+    const longConversation = Array.from({ length: 11 }, (_, i) => ({
+      role: (i % 2 === 0 ? "user" : "assistant") as "user" | "assistant",
+      content: `message ${i}`,
+    }));
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ content: [{ type: "text", text: "from-local-stub" }] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("ANTHROPIC_BASE_URL", "http://127.0.0.1:9099");
+
+    try {
+      const result = await compactLocally(longConversation, null, { ANTHROPIC_API_KEY: "sk-ant-test" }, () => {});
+      expect(result?.text).toBe("from-local-stub");
+      expect(result?.provider).toBe("anthropic");
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://127.0.0.1:9099/v1/messages",
+        expect.objectContaining({ method: "POST" }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("trailing slashes on *_BASE_URL don't produce double slashes in the request URL", async () => {
+    const longConversation = Array.from({ length: 11 }, (_, i) => ({
+      role: (i % 2 === 0 ? "user" : "assistant") as "user" | "assistant",
+      content: `message ${i}`,
+    }));
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("OPENROUTER_BASE_URL", "http://127.0.0.1:9099/api///");
+
+    try {
+      await compactLocally(longConversation, null, { OPENROUTER_API_KEY: "sk-or-test" }, () => {});
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://127.0.0.1:9099/api/v1/chat/completions",
+        expect.objectContaining({ method: "POST" }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("returns null when the provider returns empty text (treats it as failure, not silent success)", async () => {
     // A defensive guard: if the LLM returns 200 with an empty content
     // field (e.g. content filter triggered, max_tokens=0, etc.), we
