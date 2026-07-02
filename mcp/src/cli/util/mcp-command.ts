@@ -15,7 +15,7 @@ export interface McpCommand {
 }
 
 export const PROXY_FALLBACK_WARNING =
-  "npm registry unreachable; the MCP server may fail to start; run `npm i -g synapsesync` from a non-proxied network and rerun `synapse init`.";
+  "npm registry unreachable; the MCP server may fail to start; run `npm i -g synapsesync` from a non-proxied network and rerun `synapsesync wizard`.";
 
 const WHICH_COMMAND = process.platform === "win32" ? "where synapsesync" : "which synapsesync";
 

@@ -140,7 +140,7 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
     const flagIdx = args.indexOf("--api-key");
     const api_key = flagIdx >= 0 ? (args[flagIdx + 1] ?? "") : (args.find((a) => !a.startsWith("--")) ?? "");
     if (!api_key) {
-      throw new Error('usage: synapse init --api-key "<your-api-key>" [--skip-service]');
+      throw new Error('usage: synapsesync init --api-key "<your-api-key>" [--skip-service]');
     }
     const skip_service = args.includes("--skip-service");
     await runInit({ api_key, skip_service });
@@ -172,7 +172,7 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
   invite: async (args) => {
     const email = args[0];
     if (!email || email.startsWith("--")) {
-      throw new Error("usage: synapse invite <email> [--project <id>]");
+      throw new Error("usage: synapsesync invite <email> [--project <id>]");
     }
     const projectIdx = args.indexOf("--project");
     const project_id = projectIdx >= 0 ? args[projectIdx + 1] : undefined;

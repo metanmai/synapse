@@ -193,7 +193,7 @@ export async function runTree(): Promise<void> {
 export async function runHook(args: string[]): Promise<void> {
   const kind = args[0];
   if (!kind) {
-    process.stderr.write("usage: synapse hook <kind>\n");
+    process.stderr.write("usage: synapsesync hook <kind>\n");
     process.exit(1);
   }
   try {

@@ -142,7 +142,7 @@ export function writeServiceFile(): { platform: string; path: string } {
     return { platform: "linux", path: p };
   }
   throw new Error(
-    `Unsupported platform: ${process.platform}. Run \`synapse daemon\` manually until Windows service support lands.`,
+    `Unsupported platform: ${process.platform}. Run \`synapsesync daemon\` manually until Windows service support lands.`,
   );
 }
 
