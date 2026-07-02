@@ -2,9 +2,14 @@
   "manifest_version": 3,
   "name": "Synapse Browser Capture",
   "version": "0.1.0",
-  "description": "Opt-in capture of your claude.ai and chatgpt.com conversations into your Synapse, via the local daemon. Default off.",
-  "permissions": ["storage"],
-  "host_permissions": ["https://claude.ai/*", "https://chatgpt.com/*"],
+  "description": "Opt-in capture of your claude.ai and chatgpt.com conversations into your Synapse — directly to your account, or via the local daemon. Default off.",
+  "permissions": ["storage", "identity"],
+  "host_permissions": [
+    "https://claude.ai/*",
+    "https://chatgpt.com/*",
+    "https://api.synapsesync.app/*",
+    "https://synapsesync.app/*"
+  ],
   "background": { "service_worker": "worker.js" },
   "options_page": "options.html",
   "action": { "default_title": "Synapse Capture" },

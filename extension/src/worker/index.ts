@@ -3,6 +3,8 @@
 // daemon ingest with the shared-secret token. Daemon-down → turns stay buffered
 // (cap + drop-oldest in CaptureBuffer); badge shows the backlog.
 
+import { scrubSecretValues } from "@synapse/shared/redact.js";
+import { API_URL } from "../config.js";
 import { type BufferedTurn, CaptureBuffer } from "./buffer.js";
 
 const DEFAULT_PORT = 7726;
@@ -18,11 +20,13 @@ interface RelayMessage {
   sampleHash?: string;
 }
 
-async function getConfig(): Promise<{ token?: string; port: number }> {
-  const data = await chrome.storage.local.get(["synapseToken", "synapsePort"]);
+async function getConfig(): Promise<{ token?: string; port: number; captureToken?: string }> {
+  const data = await chrome.storage.local.get(["synapseToken", "synapsePort", "synapseCaptureToken"]);
   return {
     token: typeof data.synapseToken === "string" ? data.synapseToken : undefined,
     port: typeof data.synapsePort === "number" ? data.synapsePort : DEFAULT_PORT,
+    captureToken:
+      typeof data.synapseCaptureToken === "string" && data.synapseCaptureToken ? data.synapseCaptureToken : undefined,
   };
 }
 
@@ -51,6 +55,32 @@ export async function postCapture(port: number, token: string, host: string, tur
     return res.ok;
   } catch {
     return false; // daemon unreachable
+  }
+}
+
+/**
+ * Slice C: direct-to-backend ingest. POSTs the capture-scoped key to /api/capture/browser.
+ * Content is scrubbed CLIENT-SIDE here (defense-in-depth — the backend scrubs again) so a
+ * secret never transits the wire. Backend-down → returns false → the worker falls back to
+ * the local daemon (if configured), else the turns stay buffered.
+ */
+export async function postCaptureToBackend(
+  captureToken: string,
+  host: string,
+  turns: BufferedTurn[],
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}/api/capture/browser`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${captureToken}` },
+      body: JSON.stringify({
+        host,
+        messages: turns.map((t) => ({ role: t.role, content: scrubSecretValues(t.content), ts: t.ts })),
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false; // backend unreachable
   }
 }
 
@@ -83,8 +113,8 @@ async function handleDrift(payload: {
 }
 
 async function flush(): Promise<void> {
-  const { token, port } = await getConfig();
-  if (!token) return; // not configured → opt-out
+  const { token, port, captureToken } = await getConfig();
+  if (!captureToken && !token) return; // neither backend nor daemon configured → opt-out
   const buffer = await loadBuffer();
   if (buffer.size === 0) return;
 
@@ -98,7 +128,10 @@ async function flush(): Promise<void> {
 
   const failed: BufferedTurn[] = [];
   for (const [host, hostTurns] of byHost) {
-    const ok = await postCapture(port, token, host, hostTurns);
+    // Slice C: backend-direct first (capture token), the local daemon as the fallback.
+    let ok = false;
+    if (captureToken) ok = await postCaptureToBackend(captureToken, host, hostTurns);
+    if (!ok && token) ok = await postCapture(port, token, host, hostTurns);
     if (!ok) failed.push(...hostTurns);
   }
 

@@ -6,7 +6,22 @@
   </head>
   <body>
     <h1>Synapse Browser Capture</h1>
-    <p>Paste the ingest token <code>synapsesync</code> printed when you enabled browser capture.</p>
+
+    <h2>Sign in</h2>
+    <p>Sign in to capture directly to your Synapse account — no local daemon required.</p>
+    <p>
+      <button id="signin" type="button">Sign in to Synapse</button>
+      <button id="signout" type="button">Sign out</button>
+      <span id="account"></span>
+    </p>
+
+    <hr />
+
+    <h2>Local daemon (fallback)</h2>
+    <p>
+      Optional. Paste the ingest token <code>synapsesync</code> printed when you enabled browser capture. Used as a
+      fallback when the direct connection is unavailable.
+    </p>
     <p>
       <label>Ingest token<br /><input id="token" type="password" size="60" /></label>
     </p>

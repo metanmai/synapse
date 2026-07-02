@@ -24,4 +24,11 @@ declare namespace chrome {
   namespace action {
     function setBadgeText(details: { text: string }): void;
   }
+
+  namespace identity {
+    /** Returns https://<extension-id>.chromiumapp.org/<path> — the OAuth redirect target. */
+    function getRedirectURL(path?: string): string;
+    /** Opens an auth window; resolves with the final redirect URL (undefined if the user closes it). */
+    function launchWebAuthFlow(details: { url: string; interactive?: boolean }): Promise<string | undefined>;
+  }
 }
