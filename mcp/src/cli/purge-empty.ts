@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { API_URL } from "./config.js";
+import { traceFetch } from "./util/trace-fetch.js";
 
 /**
  * `synapsesync purge-empty` — bulk-delete every project owned by the
@@ -60,13 +61,13 @@ function authHeaders(apiKey: string): Record<string, string> {
 }
 
 async function listProjects(apiKey: string): Promise<ProjectListItem[]> {
-  const res = await fetch(`${API_URL}/api/projects`, { headers: authHeaders(apiKey) });
+  const res = await traceFetch("purge:list", `${API_URL}/api/projects`, { headers: authHeaders(apiKey) });
   if (!res.ok) throw new Error(`GET /api/projects → ${res.status}`);
   return (await res.json()) as ProjectListItem[];
 }
 
 async function deleteProject(apiKey: string, projectId: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/projects/${projectId}`, {
+  const res = await traceFetch("purge:delete", `${API_URL}/api/projects/${projectId}`, {
     method: "DELETE",
     headers: authHeaders(apiKey),
   });

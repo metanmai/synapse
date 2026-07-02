@@ -114,6 +114,10 @@ function runCli(args, opts = {}) {
   // the api.ts layer instead.)
   env.SYNAPSE_HOME = opts.synapseHome ?? path.join(home, ".synapse");
   env.NO_COLOR = "1";
+  // DIAGNOSTIC (remove after rooting the Windows STATUS_STACK_BUFFER_OVERRUN):
+  // enable synchronous fetch tracing so we can see which fetch crashes the
+  // process on Windows (exit 3221226505 prevents normal stack-trace capture).
+  env.SYNAPSE_TRACE_FETCH = "1";
   if (opts.key) env.SYNAPSE_API_KEY = opts.key;
   if (opts.projectId) env.SYNAPSE_TEST_PROJECT_ID = opts.projectId;
   if (opts.env) Object.assign(env, opts.env);

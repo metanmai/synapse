@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { API_URL } from "../cli/config.js";
 import { readProjectMap, removeProjectMapping, upsertProjectMapping } from "../cli/project-map.js";
 import { type BackendResolveFn, type BackendResolveResponse, resolveProject } from "../cli/resolve-project.js";
+import { traceFetch } from "../cli/util/trace-fetch.js";
 import type { AdapterRegistry } from "./adapter-registry.js";
 import { resolveApiKey } from "./cloud-sync.js";
 import { defaultRegistry } from "./default-registry.js";
@@ -161,7 +162,7 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
       projectUuid = localMapping.project_id;
     } else {
       const resolveBackend: BackendResolveFn = async (signals) => {
-        const res = await fetch(`${apiUrl}/api/projects/resolve`, {
+        const res = await traceFetch("pull-compact:resolve", `${apiUrl}/api/projects/resolve`, {
           method: "POST",
           headers: { ...auth, "Content-Type": "application/json" },
           body: JSON.stringify(signals),
@@ -197,7 +198,8 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
   const LIST_BATCH = 5;
   let listed: ConversationListItem[];
   try {
-    const res = await fetch(
+    const res = await traceFetch(
+      "pull-compact:list",
       `${apiUrl}/api/conversations?project_id=${encodeURIComponent(projectUuid)}&limit=${LIST_BATCH}`,
       { headers: auth },
     );

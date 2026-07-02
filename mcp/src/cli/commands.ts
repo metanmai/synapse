@@ -11,6 +11,7 @@ import { globalConfigDir, removeDirIfExists, removeInstructions, removeSynapseFr
 import { dispatchHook, readHookPayloadFromStdin } from "./hook-dispatch.js";
 import { createGlyphSpinner } from "./spinner.js";
 import { accent, bold, muted, success, error as themeError } from "./theme.js";
+import { traceFetch } from "./util/trace-fetch.js";
 
 // biome-ignore lint/suspicious/noExplicitAny: API responses
 type R = Record<string, any>;
@@ -75,7 +76,11 @@ export function removeSynapseHooksFromClaudeSettings(settingsPath: string): bool
 
 async function apiFetch<T>(apiKey: string, path: string, method = "GET", body?: unknown): Promise<T> {
   const h: Record<string, string> = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
-  const res = await fetch(`${API_URL}${path}`, { method, headers: h, body: body ? JSON.stringify(body) : undefined });
+  const res = await traceFetch(`commands:${path}`, `${API_URL}${path}`, {
+    method,
+    headers: h,
+    body: body ? JSON.stringify(body) : undefined,
+  });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   return res.json() as Promise<T>;
 }
