@@ -60,14 +60,18 @@ Get an API key from **[synapsesync.app](https://synapsesync.app)** → **Account
 
 ## CLI commands
 
+Install once with `npm install -g synapsesync-mcp`, then run `synapsesync-mcp <command>`.
+
 | Command | Purpose |
 |--------|---------|
-| `npx synapsesync-mcp` | In a **TTY**: show command list. With **no TTY** + `SYNAPSE_API_KEY`: MCP server. |
-| `npx synapsesync-mcp --help` / `-h` / `help` | Show commands and usage. |
-| `login` | **Interactive**: sign in → writes configs. **Flags** `--email` / `--password`: print JSON only; then run `init --key`. |
-| `signup` | **Interactive**: new account → writes configs. **`--email`**: print JSON only; then `init --key`. |
-| `init` | **`--key`** or `SYNAPSE_API_KEY`: write configs. **Interactive** with no key: prompt for key. |
-| `wizard` | Interactive menu (signup / login / API key) → writes configs. Requires TTY. |
+| `synapsesync-mcp` | In a **TTY**: show interactive menu. With **no TTY** + `SYNAPSE_API_KEY`: MCP server. |
+| `synapsesync-mcp --help` / `-h` / `help` | Show commands and usage. |
+| `synapsesync-mcp wizard` | Interactive menu (signup / login / API key) → writes configs. Requires TTY. |
+| `synapsesync-mcp status` | Show connection health and which editor configs Synapse is configured in. |
+| `synapsesync-mcp refresh` | Rotate the API key and update all editor configs. |
+| `synapsesync-mcp whoami` | Show the signed-in account, tier, and file count. |
+| `synapsesync-mcp reset` | Wipe all workspace data (keeps account + subscription). |
+| `synapsesync-mcp uninstall` | Remove all Synapse configs from this machine. |
 
 ## Environment variables
 
