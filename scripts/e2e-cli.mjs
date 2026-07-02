@@ -89,21 +89,6 @@ function expect(id, cond, detail) {
   return cond;
 }
 
-// Windows-specific test skip with a clear reason. Used for the cluster
-// of native-fastfail (STATUS_STACK_BUFFER_OVERRUN, exit 3221226505)
-// failures that hit Node 24's native fetch on Windows before any
-// commands.ts apiFetch call site fires (proven by SYNAPSE_TRACE_FETCH
-// diagnostic run 27124042058 — no trace markers emitted by the failing
-// commands, so the crash is in api.ts validateApiKey or earlier).
-// Tracked separately; needs a Windows dev machine to root-cause.
-// Returns true when the test was skipped — callers should early-return.
-function skipOnWindows(id, reason) {
-  if (process.platform !== "win32") return false;
-  results.push({ id, status: "SKIP", detail: reason });
-  log(`  ⊖ ${id} — SKIP on Windows: ${reason}`);
-  return true;
-}
-
 function runCli(args, opts = {}) {
   const home = opts.home ?? sb.empty;
   const env = { ...process.env };
@@ -548,14 +533,12 @@ function section_destructive_guards() {
   // two-step interactive confirm; --dry-run skips the POST. Together
   // they prove the destructive path is reachable + the auth resolves +
   // the command exits cleanly, without ever touching account state.
-  if (!skipOnWindows("reset.happy", "Node 24 native fastfail before any commands.ts fetch — needs Windows dev repro")) {
-    r = runCli(["reset", "--yes", "--dry-run"], { home: sb.keyed, key: REAL_KEY });
-    expect(
-      "reset.happy",
-      r.code === 0 && r.all.includes("[dry-run]") && r.all.includes("/api/account/reset"),
-      `reset --yes --dry-run → exit 0 + dry-run notice (got exit ${r.code})`,
-    );
-  }
+  r = runCli(["reset", "--yes", "--dry-run"], { home: sb.keyed, key: REAL_KEY });
+  expect(
+    "reset.happy",
+    r.code === 0 && r.all.includes("[dry-run]") && r.all.includes("/api/account/reset"),
+    `reset --yes --dry-run → exit 0 + dry-run notice (got exit ${r.code})`,
+  );
 
   // refresh: no key → refuse. (Happy path SKIPPED — rotates the real key.)
   r = runCli(["refresh"], { home: sb.empty });
@@ -567,16 +550,12 @@ function section_destructive_guards() {
   // refresh --dry-run: confirms the existing-key validation path runs
   // (proving auth + detectExistingSetup work) WITHOUT POSTing to mint a
   // new key. The user's real API key remains valid after this test.
-  if (
-    !skipOnWindows("refresh.happy", "Node 24 native fastfail before any commands.ts fetch — needs Windows dev repro")
-  ) {
-    r = runCli(["refresh", "--dry-run"], { home: sb.keyed, key: REAL_KEY });
-    expect(
-      "refresh.happy",
-      r.code === 0 && r.all.includes("[dry-run]"),
-      `refresh --dry-run → exit 0 + dry-run notice (got exit ${r.code})`,
-    );
-  }
+  r = runCli(["refresh", "--dry-run"], { home: sb.keyed, key: REAL_KEY });
+  expect(
+    "refresh.happy",
+    r.code === 0 && r.all.includes("[dry-run]"),
+    `refresh --dry-run → exit 0 + dry-run notice (got exit ${r.code})`,
+  );
 
   // upgrade: no key → refuse. (Happy path SKIPPED — opens a browser checkout.)
   r = runCli(["upgrade"], { home: sb.empty });
@@ -642,19 +621,12 @@ function section_direct_fetch() {
   );
 
   // purge-empty: dry-run (no --yes) with real key → lists/▏nothing, deletes NOTHING
-  if (
-    !skipOnWindows(
-      "purgeEmpty.dryRun",
-      "Node 24 native fastfail before any commands.ts fetch — needs Windows dev repro",
-    )
-  ) {
-    r = runCli(["purge-empty"], { home: sb.keyed, key: REAL_KEY });
-    expect(
-      "purgeEmpty.dryRun",
-      r.code === 0 && (r.all.includes("dry-run") || r.all.includes("nothing to purge")),
-      `purge-empty (no --yes) → exit 0 + dry-run/nothing, deletes nothing (got exit ${r.code})`,
-    );
-  }
+  r = runCli(["purge-empty"], { home: sb.keyed, key: REAL_KEY });
+  expect(
+    "purgeEmpty.dryRun",
+    r.code === 0 && (r.all.includes("dry-run") || r.all.includes("nothing to purge")),
+    `purge-empty (no --yes) → exit 0 + dry-run/nothing, deletes nothing (got exit ${r.code})`,
+  );
   r = runCli(["purge-empty"], { home: sb.empty });
   expect("purgeEmpty.noKey", r.code === 1 && r.all.includes("no API key configured"), "purge-empty (no key) → exit 1");
   // purge-empty --yes: actually runs the destructive branch. By default
@@ -664,16 +636,12 @@ function section_direct_fetch() {
   // On an account with no untitled-empties this is a safe no-op; on an
   // account with them, it does what the user invoking this command
   // would want anyway.
-  if (
-    !skipOnWindows("purgeEmpty.yes", "Node 24 native fastfail before any commands.ts fetch — needs Windows dev repro")
-  ) {
-    r = runCli(["purge-empty", "--yes"], { home: sb.keyed, key: REAL_KEY, timeout: 30_000 });
-    expect(
-      "purgeEmpty.yes",
-      r.code === 0 && (r.all.includes("Deleted") || r.all.includes("nothing to purge")),
-      `purge-empty --yes → exit 0 + Deleted-or-nothing (got exit ${r.code})`,
-    );
-  }
+  r = runCli(["purge-empty", "--yes"], { home: sb.keyed, key: REAL_KEY, timeout: 30_000 });
+  expect(
+    "purgeEmpty.yes",
+    r.code === 0 && (r.all.includes("Deleted") || r.all.includes("nothing to purge")),
+    `purge-empty --yes → exit 0 + Deleted-or-nothing (got exit ${r.code})`,
+  );
 }
 
 // ── 8. init / pull-handoff / daemon / capture ──────────────────────────────
@@ -915,19 +883,15 @@ async function section_setup_and_capture() {
   // concern doesn't apply anymore (local-LLM provider abstraction added
   // 2026-06-07 makes the slow recompute optional + non-blocking), but
   // exercising the full path here would duplicate happy-flow's work.
-  if (
-    !skipOnWindows("pullHandoff.run", "Node 24 native fastfail before any commands.ts fetch — needs Windows dev repro")
-  ) {
-    const phSb = freshDir("pull-handoff");
-    plantKey(phSb, REAL_KEY);
-    const bogusProjectId = "00000000-0000-4000-8000-000000000000";
-    r = runCli(["pull-handoff", "--project-id", bogusProjectId], { home: phSb, timeout: 15_000 });
-    expect(
-      "pullHandoff.run",
-      r.code === 0 && r.all.includes("[pull-handoff]"),
-      `pull-handoff --project-id <bogus> → exit 0 + diagnostic log (got exit ${r.code})`,
-    );
-  }
+  const phSb = freshDir("pull-handoff");
+  plantKey(phSb, REAL_KEY);
+  const bogusProjectId = "00000000-0000-4000-8000-000000000000";
+  r = runCli(["pull-handoff", "--project-id", bogusProjectId], { home: phSb, timeout: 15_000 });
+  expect(
+    "pullHandoff.run",
+    r.code === 0 && r.all.includes("[pull-handoff]"),
+    `pull-handoff --project-id <bogus> → exit 0 + diagnostic log (got exit ${r.code})`,
+  );
 }
 
 // ── Main ────────────────────────────────────────────────────────────────

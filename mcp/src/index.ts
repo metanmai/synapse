@@ -152,15 +152,46 @@ function unknownSubcommand(cmd: string): never {
   process.exit(1);
 }
 
+/**
+ * Exit the CLI process cleanly across platforms.
+ *
+ * Node 24 + Windows has a libuv shutdown race: `process.exit()` triggers
+ * a synchronous handle teardown that asserts in `async.c:94`
+ * (`UV_HANDLE_CLOSING`) when there's a fetch keep-alive socket still in
+ * the closing state. Symptom: the command logic completes, prints its
+ * success output, and then the *process* aborts with
+ * STATUS_STACK_BUFFER_OVERRUN (exit 3221226505 / 0xC0000409), which the
+ * shell reports as exit 127. Affected every short-running command on
+ * the metanmai (windows-latest) runner that did at least one HTTPS
+ * fetch before returning — reset, refresh, purge-empty, pull-handoff —
+ * because they finish so fast their keep-alive sockets are still
+ * CLOSING at exit time.
+ *
+ * Fix: set `process.exitCode` and let the event loop drain naturally.
+ * No forced handle teardown → no libuv assertion. The unref'd 5s timer
+ * is a safety net: if some unexpected work keeps the loop alive past
+ * normal completion, fall back to `process.exit()` rather than hang
+ * indefinitely. The timer is unref'd so it doesn't keep the loop alive
+ * on its own — it only fires when the loop is already busy past the
+ * threshold, which in practice never happens for our commands.
+ */
+function exitCli(code: number): void {
+  process.exitCode = code;
+  // Fallback: force exit after 5s if the loop doesn't drain naturally.
+  // unref so the timer doesn't keep the loop alive on its own — only
+  // fires when there's other work keeping the loop busy past threshold.
+  setTimeout(() => process.exit(process.exitCode ?? code), 5_000).unref();
+}
+
 async function handleCli(raw: string[]): Promise<void> {
   if (isHelpArgv(raw)) {
     printHelp();
-    process.exit(0);
+    return exitCli(0);
   }
 
   if (isVersionArgv(raw)) {
     console.log(readPackageVersion());
-    process.exit(0);
+    return exitCli(0);
   }
 
   if (raw.length > 0 && raw[0].startsWith("-")) {
@@ -176,18 +207,18 @@ async function handleCli(raw: string[]): Promise<void> {
       unknownSubcommand(cmd);
     }
     await handler(raw.slice(1));
-    process.exit(0);
+    return exitCli(0);
   }
 
   // No subcommand in interactive mode → show menu
   if (isInteractiveTerminal()) {
     await runMenu();
-    process.exit(0);
+    return exitCli(0);
   }
 
   // Non-interactive + no MCP mode → show help
   printHelp();
-  process.exit(0);
+  return exitCli(0);
 }
 
 async function runMenu(): Promise<void> {
