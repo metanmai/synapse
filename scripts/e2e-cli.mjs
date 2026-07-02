@@ -95,6 +95,17 @@ function runCli(args, opts = {}) {
   env.SYNAPSE_API_KEY = undefined; // never leak the caller's key
   env.SYNAPSE_TEST_PROJECT_ID = undefined;
   env.HOME = home;
+  // Windows: os.homedir() reads USERPROFILE first (HOMEDRIVE+HOMEPATH as
+  // fallback), NOT HOME. Without setting USERPROFILE, init/wizard/uninstall
+  // write to (and read from) the REAL runner home — sandbox doesn't take
+  // effect for ~/.claude/settings.json, ~/.mcp.json, etc. The metanmai
+  // happy-flow-e2e (windows) run 27116735113 exposed this: init.happy ran
+  // exit-0 but the sandbox's settings.json never got written. We also
+  // null out HOMEDRIVE/HOMEPATH so the fallback chain doesn't leak the
+  // real home if USERPROFILE is somehow rejected.
+  env.USERPROFILE = home;
+  env.HOMEDRIVE = undefined;
+  env.HOMEPATH = undefined;
   env.SYNAPSE_HOME = opts.synapseHome ?? path.join(home, ".synapse");
   env.NO_COLOR = "1";
   if (opts.key) env.SYNAPSE_API_KEY = opts.key;
