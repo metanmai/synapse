@@ -2,9 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { EventKind } from "@synapse/shared/handoff/events.js";
-import { writeBrief } from "./handoff-brief.js";
 import { spawnInferNextStep } from "./daemon-cc.js";
 import { appendEvent, readEvents } from "./events-log.js";
+import { writeBrief } from "./handoff-brief.js";
 import { flushNowSignalPath, healthcheckPath, projectDir } from "./handoff-paths.js";
 import { runFlushCycle, runPullCycle } from "./handoff-sync.js";
 
@@ -90,9 +90,7 @@ export async function maybeFireInferNextStep(a: FireArgs): Promise<void> {
   const lastEventTime = new Date(lastEvent.occurred_at).getTime();
   if (Date.now() - lastEventTime < a.idle_threshold_ms) return;
 
-  const sinceIdle = events.filter(
-    (e) => new Date(e.occurred_at).getTime() >= lastEventTime - a.idle_threshold_ms,
-  );
+  const sinceIdle = events.filter((e) => new Date(e.occurred_at).getTime() >= lastEventTime - a.idle_threshold_ms);
   if (sinceIdle.some((e) => e.kind === EventKind.NextStepSet)) return;
 
   const summary = events
