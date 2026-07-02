@@ -1,0 +1,36 @@
+name: Publish to npm
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'mcp/**'
+    tags:
+      - 'mcp-v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Required for trusted publishing
+    environment: npm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Install and build
+        run: |
+          cd mcp
+          npm install
+          npm run build
+
+      - name: Publish to npm
+        run: |
+          cd mcp
+          npm publish --provenance --access public
