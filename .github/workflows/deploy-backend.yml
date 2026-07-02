@@ -1,0 +1,128 @@
+# Explicit, observable backend deploy path (docs/LAUNCH-READINESS.md #8).
+#
+# Why this exists alongside Cloudflare's git-integration auto-deploy:
+# CF auto-deploy IS wired and CAN work, but per docs/BUGS.md #10 the
+# integration has silently sat idle for 14h before — main can drift
+# from what's actually serving requests with no in-dashboard signal.
+# Per learning_cf_auto_deploy.md plus project_split_machine_wrangler.md,
+# the owner's primary device can't run `wrangler deploy` (corporate
+# proxy blocks the CF API). The combination of "no local fallback" +
+# "auto-deploy goes silent without warning" is exactly the scenario
+# that makes belt-and-suspenders worth the duplication. This workflow:
+#
+#   1. Coexists intentionally with CF auto-deploy. Wrangler deploys
+#      are idempotent — re-deploying the same artifact is a no-op on
+#      the CF side, so racing the auto-deploy is safe.
+#   2. Is the OBSERVABLE path. Every push-to-main produces an Actions
+#      run with a clear succeeded/failed state, unlike the CF
+#      integration which silently no-ops.
+#   3. Is the ONLY path forward when the auto-deploy stalls — the
+#      owner can no longer wake it up with a no-op commit from a
+#      machine where wrangler can't reach the CF API.
+#
+# Graceful-skip pattern (mirrors ci.yml's `migrate` job): the workflow
+# runs unconditionally on every push to main, but checks for the
+# CLOUDFLARE_API_TOKEN secret in a preflight step and skip-greens with
+# a ::notice if the secret isn't configured. This keeps the tanmain
+# mirror GREEN (the metanmai mirror has the secret and actually deploys).
+#
+# Secret required (one-time hands-on, repo Settings → Secrets):
+#   CLOUDFLARE_API_TOKEN  — scoped "Edit Cloudflare Workers" against
+#                           the synapsesync.app account. The token
+#                           carries the account ID inside its scope
+#                           claim, so we don't need a separate
+#                           CLOUDFLARE_ACCOUNT_ID secret here. (Same
+#                           token shape as `wrangler login` writes to
+#                           ~/.wrangler/config — re-use that one if it
+#                           already exists.)
+#
+# Wrangler version pinning: backend/package.json declares
+# `wrangler: ^4.75.0` as a devDependency. `npm install --no-audit
+# --no-fund` will install that exact major into backend/node_modules.
+# We invoke wrangler via `npx --no-install wrangler` so npx uses the
+# version we just installed rather than fetching a different one from
+# the registry. `--no-install` makes the failure mode loud (clear
+# error) if the install step silently dropped the binary — far
+# better than silently upgrading to wrangler@latest mid-deploy.
+
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  # Never kill a mid-flight deploy. cancel-in-progress: true would let
+  # rapid pushes-to-main interrupt an in-progress `wrangler deploy`,
+  # potentially leaving the Worker in a half-updated state (CF deploys
+  # are atomic at the version level, but the API request itself is not
+  # safe to interrupt). Serialize instead: the in-flight deploy finishes,
+  # then the queued one runs against the latest commit.
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: prod
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Match the rest of the CI matrix — Node 24 for native .ts
+          # type-stripping on @synapse/shared (consistent with ci.yml).
+          node-version: 24
+
+      - name: Check Cloudflare secret is configured
+        # Graceful-skip pattern copied verbatim from ci.yml `migrate`
+        # job: write configured=true/false to GITHUB_OUTPUT, gate every
+        # subsequent step on `if: steps.check.outputs.configured ==
+        # 'true'`. Keeps the workflow GREEN on the tanmain mirror where
+        # the secret doesn't exist — the metanmai mirror has the secret
+        # and actually deploys.
+        id: check
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::notice::Backend deploy skipped — CLOUDFLARE_API_TOKEN not configured in repo secrets. See docs/LAUNCH-READINESS.md #8 for setup."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies (root + backend workspace)
+        # `npm install --no-audit --no-fund` from the repo root installs
+        # all workspaces (mcp, backend, frontend, packages/shared). The
+        # backend workspace's devDependency on wrangler@^4.75.0 becomes
+        # available at backend/node_modules/.bin/wrangler. No separate
+        # build step required: wrangler bundles src/index.ts directly
+        # via the `main` field in backend/wrangler.jsonc.
+        if: steps.check.outputs.configured == 'true'
+        run: npm install --no-audit --no-fund
+
+      - name: Deploy to Cloudflare Workers
+        # `npx --no-install wrangler deploy` uses the wrangler binary
+        # already installed by the previous step (the @^4.75.0 pin in
+        # backend/package.json). The `--no-install` flag makes this
+        # explicit: if the install step silently failed to drop the
+        # binary, npx exits with a clear error instead of fetching
+        # `wrangler@latest` from the registry mid-deploy (which has
+        # bitten us before — silent major-version upgrade during a
+        # production push).
+        #
+        # working-directory: backend points wrangler at
+        # backend/wrangler.jsonc, which declares main=src/index.ts and
+        # the routes/durable_objects/triggers/observability config.
+        # All deploy-time secrets (SUPABASE_URL, SUPABASE_SERVICE_KEY,
+        # ADMIN_SECRET, CREEM_PRO_PRODUCT_ID, etc.) are pre-set on the
+        # Worker via `wrangler secret put`; this workflow does NOT
+        # touch them.
+        if: steps.check.outputs.configured == 'true'
+        working-directory: backend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx --no-install wrangler deploy
