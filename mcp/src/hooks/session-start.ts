@@ -6,6 +6,7 @@ import { appendEvent } from "../capture/events-log.js";
 import { briefCachePath, currentSessionPath, projectDir } from "../capture/handoff-paths.js";
 import { pullHandoffWithTimeout } from "../capture/pull-compact.js";
 import { pullInsightsSection } from "../capture/pull-insights.js";
+import { pullSyncErrorsSection } from "../capture/pull-sync-errors.js";
 import { canonicalCwd } from "../cli/hook-dispatch.js";
 
 const PULL_HANDOFF_TIMEOUT_MS = 10_000;
@@ -76,9 +77,17 @@ export async function runSessionStartHook(args: SessionStartArgs): Promise<void>
     insightsSection = "";
   }
 
+  // Phase 03-02: render any cached daemon sync errors (PROJECT_QUOTA_EXCEEDED
+  // etc.) so the next AI session sees an actionable note about why captures
+  // aren't reaching the backend. Synchronous + filesystem-only — never throws.
+  const syncErrorsSection = pullSyncErrorsSection();
+
   const parts = [brief.trim()];
   if (insightsSection) parts.push(insightsSection);
   if (handoff) parts.push(`## Last conversation handoff\n\n${handoff.trim()}`);
+  // Sync errors go LAST so they're the most prominent — they require user
+  // action and shouldn't be buried above unrelated insights/handoff.
+  if (syncErrorsSection) parts.push(syncErrorsSection);
   const composed = parts.join("\n\n");
   args.stdout.write(`<synapse-brief>\n${composed}\n</synapse-brief>\n`);
 
