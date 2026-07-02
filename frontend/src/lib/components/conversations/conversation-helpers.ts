@@ -57,8 +57,10 @@ export function getToolLabel(tool: string | undefined | null): string {
     "claude-code": "Claude Code",
     codex: "Codex",
     "copilot-cli": "GitHub Copilot CLI",
+    crush: "Crush",
     cursor: "Cursor",
     gemini: "Gemini",
+    opencode: "opencode",
     "roo-code": "Roo Code",
     unknown: "Unknown tool",
   };

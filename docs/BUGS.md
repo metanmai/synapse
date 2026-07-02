@@ -63,19 +63,23 @@ A `happy-flow-e2e` job in `.github/workflows/ci.yml` runs `npm run test:e2e` on 
 
 ---
 
-### Real-tool roundtrip: 3 of 6 harnesses fail in the new test (env-bound, not Synapse bugs)
+### Real-tool roundtrip: opencode FIXED; crush + copilot-cli still env-blocked
 
-`scripts/e2e-real-tool-roundtrip.mjs` runs each supported AI harness with fake credentials and asserts Synapse capture fires. As of commit (this one), 3 of 6 harnesses pass: claude-code, codex, gemini. The remaining 3 fail with distinct, mostly environmental causes:
+`scripts/e2e-real-tool-roundtrip.mjs` runs each supported AI harness with fake credentials and asserts Synapse capture fires. **Updated 2026-06-03:** 4 of 6 harnesses now pass: claude-code, codex, gemini, and **opencode** (newly fixed). Two remain env-blocked:
+
+**opencode — FIXED** by two changes: (1) `mcp/src/capture/proxy/session-reconstruction.ts` no longer filters `statusCode 200-299`, so 401 responses from fake-key tests are captured (this was also a real production bug — every failed chat on a flaky network was silently lost); (2) `NO_PROXY=github.com,objects.githubusercontent.com,models.dev` added to opencode's test env, because opencode does a network probe against GitHub on every run for ripgrep cache validation, and that probe hangs through the MITM proxy (Bun's BoringSSL doesn't auto-trust the Synapse CA). UA registered as `opencode` in `user-agent-classify.ts`.
 
 **copilot-cli** — `Error: Access denied by policy settings` from GitHub Copilot. The corporate Copilot policy on this account blocks third-party MCP servers AND non-allowed CLI invocations. Fix requires testing on a GitHub account with personal Copilot subscription (no enterprise policy). **No Synapse-side change can resolve this.**
 
-**opencode** — runs, hits real api.anthropic.com via HTTPS_PROXY, but Synapse's proxy doesn't record a capture. Likely opencode's Bun runtime doesn't honor `HTTPS_PROXY` env identically to Node, or the request uses HTTP/2 in a way the proxy's interception code doesn't fully support. Needs deeper probe with `mitmdump` or a TCP sniffer to confirm whether the request actually reaches Synapse's proxy port. **Out of scope for this commit.**
-
-**crush** — `tls: failed to verify` from Go's TLS stack. Go programs don't honor Node-specific `NODE_EXTRA_CA_CERTS`. We set `SSL_CERT_FILE` too but Go on macOS may prefer the system keychain. Workarounds: install Synapse's CA into the system trust store (admin-needed), or use crush's own `--insecure` flag (not safe for production), or add a Go-aware mechanism. **Tracked as future-work.**
+**crush** — `tls: failed to verify certificate: x509: "api.anthropic.com" certificate is not trusted`. Confirmed via mitmdump probe that crush DOES honor `HTTPS_PROXY` (request reaches the proxy), but brew-built Go binaries on macOS use Apple's `Security.framework` for TLS verification, which consults the **macOS keychain — not env-var CA pools**. So `SSL_CERT_FILE`, `SSL_CERT_DIR`, `GODEBUG=x509usefallbackroots=1` are all ignored. The only sustainable fix is installing the Synapse CA in the user's login keychain (`security add-trusted-cert -k ~/Library/Keychains/login.keychain-db ~/.synapse/proxy/ca.pem`), which on a corp-managed Mac requires an admin password the user does not have. **Environmental on this device; works fine on non-corp Macs and Linux/Windows CI runners with root.**
 
 **Code locations:**
 - Test: `scripts/e2e-real-tool-roundtrip.mjs`
-- Run only the passing subset: `node scripts/e2e-real-tool-roundtrip.mjs --only=claude-code,codex,gemini`
+- Run only the working subset on this device: `node scripts/e2e-real-tool-roundtrip.mjs --only=claude-code,codex,gemini,opencode`
+
+### Real-tool roundtrip POST_RUN_WAIT_MS is 40s (proxy-tier idle window)
+
+The roundtrip test waits 40s after a tool exits before scanning capture.log. Proxy-tier tools (opencode, crush) go through `ProxySource` which idle-flushes after `DEFAULT_IDLE_MS = 30s` of quiet — so a tool that fired one request and exited has its capture stuck in the buffer for ~30s. The 40s wait = 30s idle + 10s buffer for SSE response assembly and emit latency. Reducing this would require either: (a) shortening `DEFAULT_IDLE_MS` (production-affecting), (b) adding an external flush-now nudge mechanism (new code), or (c) test-only env override. Not worth the cost — 40s is acceptable for an end-to-end test.
 
 ---
 

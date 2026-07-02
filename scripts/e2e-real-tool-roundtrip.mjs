@@ -51,10 +51,14 @@ const RUN_ID = Date.now();
 const TEST_PROMPT = "Reply with only the word PING and nothing else.";
 const CAPTURE_LOG = path.join(homedir(), ".synapse", "capture.log");
 // How long to wait after spawning a tool before scanning capture.log.
-// File-watcher tier: chokidar scans every 5s plus the inner debounce.
-// Proxy tier: ProxySource buffers + idle-flushes (default 30s but we
-// override via env where supported). 20s is the safe upper bound.
-const POST_RUN_WAIT_MS = 20_000;
+// File-watcher tier: chokidar scans every 5s plus the inner debounce —
+// 15-20s is enough.
+// Proxy tier: ProxySource buffers + idle-flushes when no new requests
+// arrive for `idleMs` (default 30s — see proxy-source.ts:41). After the
+// tool exits, we have to wait the FULL idle window before the flush
+// fires. 40s = 30s idle + 10s buffer for SSE response assembly +
+// emit-to-log latency.
+const POST_RUN_WAIT_MS = 40_000;
 const TOOL_TIMEOUT_MS = 30_000;
 
 // ── Output helpers ───────────────────────────────────────────────────────
@@ -159,10 +163,19 @@ const HARNESSES = [
     tier: "proxy",
     binary: "opencode",
     // Proxy-tier tools have no file-watcher adapter; they're captured
-    // by the proxy intercepting api.anthropic.com (or whichever
-    // endpoint they use). The classifier tags them based on UA;
-    // opencode's UA may be something other than claude-code.
-    expectedTool: null, // accept any tool tag — proxy captures regardless
+    // by the proxy intercepting api.anthropic.com. UA-based classifier
+    // assigns the `opencode` tool tag (registered in
+    // mcp/src/capture/proxy/user-agent-classify.ts).
+    //
+    // Pollution-avoidance for first-run: opencode does a network probe
+    // against github.com / objects.githubusercontent.com (ripgrep cache
+    // validation) on every run. With HTTPS_PROXY set, that probe routes
+    // through the MITM proxy → Bun's BoringSSL doesn't trust the Synapse
+    // CA for github leaves → handshake stalls → opencode never reaches
+    // the LLM call. NO_PROXY for github keeps the cache check direct;
+    // the LLM call still routes through the proxy. Documented in
+    // BUGS.md.
+    expectedTool: "opencode",
     spawn(testDir) {
       return {
         cmd: "opencode",
@@ -172,7 +185,10 @@ const HARNESSES = [
           ANTHROPIC_API_KEY: `sk-ant-fake-real-${RUN_ID}`,
           HTTPS_PROXY: "http://127.0.0.1:7727",
           HTTP_PROXY: "http://127.0.0.1:7727",
+          NO_PROXY: "github.com,objects.githubusercontent.com,models.dev",
+          no_proxy: "github.com,objects.githubusercontent.com,models.dev",
           NODE_EXTRA_CA_CERTS: path.join(homedir(), ".synapse", "proxy", "ca.pem"),
+          SSL_CERT_FILE: path.join(homedir(), ".synapse", "proxy", "ca.pem"),
         },
       };
     },
@@ -181,7 +197,18 @@ const HARNESSES = [
     name: "crush",
     tier: "proxy",
     binary: "crush",
-    expectedTool: null,
+    // UA-based classifier assigns the `crush` tool tag (registered in
+    // user-agent-classify.ts). crush honors HTTPS_PROXY (probe confirmed
+    // it dials the proxy), BUT brew-built Go binaries on macOS use
+    // Apple's Security.framework for TLS verification, which consults
+    // the system keychain — NOT env-var CA pools. So SSL_CERT_FILE /
+    // SSL_CERT_DIR / GODEBUG=x509usefallbackroots=1 are all ignored.
+    // On a machine where the Synapse CA can be installed in the user's
+    // login keychain (or system keychain), this test PASSES. On a
+    // corporate-managed Mac where keychain modification is blocked, it
+    // fails with `tls: failed to verify certificate`. Documented in
+    // BUGS.md as a known environmental blocker; not a Synapse bug.
+    expectedTool: "crush",
     spawn(testDir) {
       return {
         cmd: "crush",
@@ -191,8 +218,10 @@ const HARNESSES = [
           ANTHROPIC_API_KEY: `sk-ant-fake-real-${RUN_ID}`,
           HTTPS_PROXY: "http://127.0.0.1:7727",
           HTTP_PROXY: "http://127.0.0.1:7727",
-          NODE_EXTRA_CA_CERTS: path.join(homedir(), ".synapse", "proxy", "ca.pem"),
+          // Best-effort CA env vars — some Go builds honor these.
+          // No-op on brew's macOS build (CGO_ENABLED=1 keychain path).
           SSL_CERT_FILE: path.join(homedir(), ".synapse", "proxy", "ca.pem"),
+          SSL_CERT_DIR: path.join(homedir(), ".synapse", "proxy"),
         },
       };
     },

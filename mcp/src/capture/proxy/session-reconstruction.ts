@@ -69,9 +69,19 @@ export function reconstructSessions(
   // No hardcoded "claude-code" default: an unknown UA gets "unknown" so
   // the dashboard surfaces the gap rather than silently mislabeling.
 
-  // Stage 1: filter to chat-capturable, 2xx requests only. Telemetry,
-  // registry, metrics, embeddings, etc. drop here.
-  const capturable = requests.filter((r) => r.endpoint.capture && r.statusCode >= 200 && r.statusCode < 300);
+  // Stage 1: filter to chat-capturable requests. Telemetry, registry,
+  // metrics, embeddings, etc. drop here via `endpoint.capture`. Status
+  // code is INTENTIONALLY not filtered — failed chats (401/429/503) are
+  // still real artifacts. The user's prompt was a real prompt even if
+  // the provider returned an error; preserving it is more valuable than
+  // a clean dashboard. The downstream `messages.length === 0` guard at
+  // line 106 protects against garbage bodies that don't parse into a
+  // chat shape.
+  //
+  // Design principle: capture-then-filter beats filter-then-capture when
+  // the filter has any false-positive rate on legitimate data. Polluted-
+  // but-visible captures are recoverable; silent loss is not.
+  const capturable = requests.filter((r) => r.endpoint.capture);
 
   if (capturable.length === 0) return [];
 

@@ -13,7 +13,17 @@ export interface SessionMessage {
 
 export interface CapturedSession {
   id: string;
-  tool: "claude-code" | "cursor" | "codex" | "gemini" | "copilot-cli" | "cline" | "roo-code" | "unknown";
+  tool:
+    | "claude-code"
+    | "cursor"
+    | "codex"
+    | "gemini"
+    | "copilot-cli"
+    | "cline"
+    | "roo-code"
+    | "opencode"
+    | "crush"
+    | "unknown";
   projectPath: string;
   startedAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
