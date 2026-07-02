@@ -153,7 +153,11 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
   reset: async () => runReset(),
   uninstall: async () => runUninstall(),
   init: async (args) => {
-    const api_key = args[0] ?? "";
+    const flagIdx = args.indexOf("--api-key");
+    const api_key = flagIdx >= 0 ? (args[flagIdx + 1] ?? "") : (args.find((a) => !a.startsWith("--")) ?? "");
+    if (!api_key) {
+      throw new Error('usage: synapse init --api-key "<your-api-key>" [--skip-service]');
+    }
     const skip_service = args.includes("--skip-service");
     await runInit({ api_key, skip_service });
   },

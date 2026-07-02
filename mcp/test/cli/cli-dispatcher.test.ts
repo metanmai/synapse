@@ -214,4 +214,46 @@ describe("CLI dispatcher — handoff layer subcommands", () => {
     expect(code).not.toBe(0);
     expect(stderr.toLowerCase()).toContain("usage");
   });
+
+  describe("`synapse init` argument parsing", () => {
+    // init writes to os.homedir(), so we override HOME for these cases.
+    let originalHome: string | undefined;
+    let initHome: string;
+
+    beforeEach(() => {
+      initHome = fs.mkdtempSync("/tmp/synapse-init-home-");
+      originalHome = process.env.HOME;
+      process.env.HOME = initHome;
+    });
+
+    afterEach(() => {
+      if (originalHome === undefined) {
+        // biome-ignore lint/performance/noDelete: real delete required
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = originalHome;
+      }
+      fs.rmSync(initHome, { recursive: true, force: true });
+    });
+
+    it("stores the value after --api-key (not the flag itself)", async () => {
+      const { code } = await runCli("init", "--api-key", "sk-test-flag-form", "--skip-service");
+      expect(code).toBe(0);
+      const config = JSON.parse(fs.readFileSync(path.join(initHome, ".synapse/config.json"), "utf-8"));
+      expect(config.api_key).toBe("sk-test-flag-form");
+    });
+
+    it("accepts a positional key", async () => {
+      const { code } = await runCli("init", "sk-test-positional", "--skip-service");
+      expect(code).toBe(0);
+      const config = JSON.parse(fs.readFileSync(path.join(initHome, ".synapse/config.json"), "utf-8"));
+      expect(config.api_key).toBe("sk-test-positional");
+    });
+
+    it("exits non-zero with a usage hint when no key is supplied", async () => {
+      const { code, stderr } = await runCli("init", "--skip-service");
+      expect(code).not.toBe(0);
+      expect(stderr.toLowerCase()).toContain("usage");
+    });
+  });
 });
