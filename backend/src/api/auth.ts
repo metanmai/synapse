@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 
 import { createSupabaseClient } from "../db/client";
-import { createUser, findUserByEmail } from "../db/queries";
+import { createUser, findUserByEmail, createApiKey, listApiKeys, deleteApiKey, countApiKeys } from "../db/queries";
 import { hashApiKey, authMiddleware } from "../lib/auth";
 import { AppError, ConflictError } from "../lib/errors";
 
@@ -22,10 +22,11 @@ auth.post("/signup", async (c) => {
     throw new ConflictError("User with this email already exists");
   }
 
+  const user = await createUser(db, body.email);
+
   const apiKey = crypto.randomUUID() + "-" + crypto.randomUUID();
   const apiKeyHash = await hashApiKey(apiKey);
-
-  const user = await createUser(db, body.email, apiKeyHash);
+  await createApiKey(db, user.id, apiKeyHash, "default");
 
   return c.json({
     id: user.id,
@@ -37,7 +38,6 @@ auth.post("/signup", async (c) => {
 // Google OAuth connect flow — requires auth so we know which user to link
 auth.get("/google/connect", authMiddleware, async (c) => {
   const user = c.get("user");
-  // Pass user ID in state so callback can associate tokens with the user
   const redirectUri = new URL("/auth/google/callback", c.req.url).href;
   const state = btoa(JSON.stringify({ userId: user.id }));
   const params = new URLSearchParams({
@@ -83,7 +83,6 @@ auth.get("/google/callback", async (c) => {
     throw new AppError("Failed to exchange code for tokens", 400, "OAUTH_ERROR");
   }
 
-  // Save tokens to the user record
   const db = createSupabaseClient(c.env);
   const { error } = await db
     .from("users")
@@ -106,22 +105,58 @@ auth.get("/google/callback", async (c) => {
 
 export { auth };
 
-// POST /api/account/regenerate-key — mounted separately in index.ts, not under /auth
+// Account routes — mounted at /api/account in index.ts
 export const account = new Hono<{ Bindings: Env }>();
 account.use("*", authMiddleware);
 
-account.post("/regenerate-key", async (c) => {
+// POST /api/account/keys — create a new API key
+account.post("/keys", async (c) => {
   const user = c.get("user");
+  const body = await c.req.json<{ label?: string; expires_at?: string | null }>();
+
+  if (!body.label || typeof body.label !== "string" || !body.label.trim()) {
+    throw new AppError("label is required", 400, "VALIDATION_ERROR");
+  }
+
+  const db = createSupabaseClient(c.env);
+
+  const keyCount = await countApiKeys(db, user.id);
+  if (keyCount >= 10) {
+    throw new AppError("API key limit reached (10). Revoke an existing key first.", 400, "KEY_LIMIT");
+  }
 
   const apiKey = crypto.randomUUID() + "-" + crypto.randomUUID();
   const apiKeyHash = await hashApiKey(apiKey);
 
-  const db = createSupabaseClient(c.env);
-  const { error } = await db
-    .from("users")
-    .update({ api_key_hash: apiKeyHash })
-    .eq("id", user.id);
-  if (error) throw error;
+  const created = await createApiKey(db, user.id, apiKeyHash, body.label.trim(), body.expires_at);
 
-  return c.json({ api_key: apiKey });
+  return c.json({
+    id: created.id,
+    label: created.label,
+    api_key: apiKey,
+    expires_at: created.expires_at,
+    created_at: created.created_at,
+  }, 201);
+});
+
+// GET /api/account/keys — list all keys
+account.get("/keys", async (c) => {
+  const user = c.get("user");
+  const db = createSupabaseClient(c.env);
+  const keys = await listApiKeys(db, user.id);
+  return c.json(keys);
+});
+
+// DELETE /api/account/keys/:id — revoke a key
+account.delete("/keys/:id", async (c) => {
+  const user = c.get("user");
+  const keyId = c.req.param("id");
+  const db = createSupabaseClient(c.env);
+
+  const deleted = await deleteApiKey(db, keyId, user.id);
+  if (!deleted) {
+    throw new AppError("API key not found", 404, "NOT_FOUND");
+  }
+
+  return c.json({ ok: true });
 });
