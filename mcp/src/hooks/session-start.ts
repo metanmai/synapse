@@ -13,6 +13,7 @@ export interface SessionStartArgs {
   stdout: NodeJS.WriteStream;
   skipFallback?: boolean;
   git_basename?: string;
+  git_remote_url?: string;
   cwd?: string;
 }
 
@@ -43,7 +44,11 @@ export async function runSessionStartHook(args: SessionStartArgs): Promise<void>
     attached_to: null,
     kind: EventKind.SessionOpened,
     occurred_at: new Date().toISOString(),
-    payload: { hostname: actor.hostname, ...(args.git_basename ? { git_basename: args.git_basename } : {}) },
+    payload: {
+      hostname: actor.hostname,
+      ...(args.git_basename ? { git_basename: args.git_basename } : {}),
+      ...(args.git_remote_url ? { git_remote_url: args.git_remote_url } : {}),
+    },
   });
 
   fs.mkdirSync(projectDir(args.project_id), { recursive: true });

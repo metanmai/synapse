@@ -55,6 +55,7 @@ export async function readHookPayloadFromStdin(): Promise<AnyHookPayload> {
   // it to a canonical UUID using `git_basename` as the project name.
   const project_id = hashCwd(cwd);
   const git_basename = getGitBasename(cwd) ?? path.basename(cwd);
+  const git_remote_url = getGitRemoteUrl(cwd);
   return {
     project_id,
     user_id: process.env.SYNAPSE_USER_ID ?? readUserIdFromConfig(),
@@ -65,6 +66,7 @@ export async function readHookPayloadFromStdin(): Promise<AnyHookPayload> {
     prompt: parsed.prompt,
     subagent: parsed.subagent_type,
     git_basename,
+    git_remote_url,
     stdout: process.stdout,
   };
 }
@@ -90,4 +92,33 @@ export function getGitBasename(cwd: string): string | null {
   } catch {
     return null;
   }
+}
+
+// Phase 2 (D-06): per-process cache so repeated hook fires in the same Claude
+// Code session don't re-shell-out for an unchanged remote URL. NOT persisted —
+// each process starts cold (which is fine; hooks are short-lived).
+const gitRemoteCache = new Map<string, string | undefined>();
+
+/**
+ * Resolve the git repository's origin remote URL from `cwd`. Returns `undefined`
+ * for non-git directories OR git repos without an `origin` remote. The matcher
+ * in events-batch.ts treats `undefined` as "no URL signal — fall back to name
+ * match," so this function is safe to call in environments without git.
+ */
+export function getGitRemoteUrl(cwd: string): string | undefined {
+  if (gitRemoteCache.has(cwd)) return gitRemoteCache.get(cwd);
+  let url: string | undefined;
+  try {
+    const out = execSync("git config --get remote.origin.url", {
+      cwd,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+    url = out || undefined;
+  } catch {
+    url = undefined;
+  }
+  gitRemoteCache.set(cwd, url);
+  return url;
 }

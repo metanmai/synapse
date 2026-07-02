@@ -8,7 +8,7 @@ import { spawnInferNextStep } from "./daemon-cc.js";
 import { appendEvent, readEvents } from "./events-log.js";
 import { writeBrief } from "./handoff-brief.js";
 import { flushNowSignalPath, healthcheckPath, projectDir } from "./handoff-paths.js";
-import { runFlushCycle, runPullCycle } from "./handoff-sync.js";
+import { runEagerPullCycle, runFlushCycle, runPullCycle } from "./handoff-sync.js";
 import { synthesizeHeuristicNextStep } from "./heuristic-synth.js";
 
 interface DaemonStatus {
@@ -148,6 +148,10 @@ export function startHandoffLoop(a: HandoffLoopArgs): () => void {
         const effectiveId = flush.canonical_project_id ?? project_id;
         if (flush.canonical_project_id) {
           a.projects[i] = flush.canonical_project_id;
+          // Phase 2 (D-08): first-time remap — eager-pull the project's
+          // recent events from the backend so machine-B sees machine-A's
+          // history immediately, not after a fresh round of activity.
+          await runEagerPullCycle({ project_id: effectiveId, api_key: a.api_key, api_url: a.api_url });
         }
         await runPullCycle({ project_id: effectiveId, api_key: a.api_key, api_url: a.api_url });
         if (a.user_id) writeBrief(effectiveId, a.user_id);
