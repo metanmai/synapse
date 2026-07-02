@@ -60,8 +60,8 @@ export interface LLMProvider {
  * stub env without re-importing the module.
  */
 function baseUrl(envName: string, fallback: string): string {
-  const v = process.env[envName];
-  return (v && v.trim() ? v.trim() : fallback).replace(/\/+$/, "");
+  const v = process.env[envName]?.trim();
+  return (v ? v : fallback).replace(/\/+$/, "");
 }
 
 const PROVIDERS: LLMProvider[] = [
