@@ -18,6 +18,40 @@ export interface SupervisorStatus {
 const LAUNCHCTL_PID_REGEX = /^\s*pid\s*=\s*(\d+)/m;
 
 /**
+ * Injectable subprocess runner. Mirrors `child_process.execSync(cmd, opts)`
+ * semantics: returns the stdout string on success, throws on non-zero exit.
+ * The thrown error may carry a `status` field (as execSync's does) so callers
+ * can distinguish exit-code reasons if needed.
+ */
+export type SupervisorExec = (cmd: string) => string;
+
+/**
+ * Dependency-injection seam for `checkSupervisor` — overridable for tests so
+ * darwin / linux / win32 branches can all be exercised on a single CI runner
+ * without `Object.defineProperty(process, "platform", …)` monkey-patching
+ * (which the previous test design used and which forced
+ * `it.skipIf(process.platform !== "darwin")` gates on every CI matrix entry
+ * that wasn't macOS).
+ *
+ * Defaults preserve production behavior byte-identically:
+ *   - `platform`: real `process.platform`
+ *   - `exec`: real `child_process.execSync` (returns stdout, throws on non-zero)
+ *   - `getUid`: real `process.getuid` (undefined on Windows, as documented)
+ */
+export interface CheckSupervisorOptions {
+  platform?: NodeJS.Platform;
+  exec?: SupervisorExec;
+  getUid?: () => number | undefined;
+}
+
+function defaultExec(cmd: string, options: child_process.ExecSyncOptions): string {
+  // Cast: encoding:"utf-8" guarantees a string return, but the overload set
+  // returns string | Buffer in the absence of the literal. The runtime is a
+  // string.
+  return child_process.execSync(cmd, options) as unknown as string;
+}
+
+/**
  * Synchronously check whether the Synapse capture daemon is currently running.
  * Pitfall 1: stdio is `["ignore","pipe","ignore"]` so we get exit-code semantics
  * without piping (piped exit codes mask the real exit and become 0).
@@ -33,18 +67,29 @@ const LAUNCHCTL_PID_REGEX = /^\s*pid\s*=\s*(\d+)/m;
  * ("already running") or, worse, kills it on `capture stop`. The bypass
  * is intentionally scoped to a single env var so it can never be set by
  * accident in normal use.
+ *
+ * `opts` is the unit-test injection seam — production callers omit it and the
+ * defaults wire the real OS. See the docstring on `CheckSupervisorOptions`.
  */
-export function checkSupervisor(): SupervisorStatus {
+export function checkSupervisor(opts: CheckSupervisorOptions = {}): SupervisorStatus {
   if (process.env.SYNAPSE_SKIP_SUPERVISOR_CHECK === "1") {
     return { running: false, pid: null, supervisor: null };
   }
-  const platform = process.platform;
+  const platform = opts.platform ?? process.platform;
+  // The default exec preserves `child_process.execSync` semantics including
+  // the `windowsHide`/`stdio` options. Tests inject a one-arg function (the
+  // command string) and the options arg is dropped — that's fine because the
+  // fake doesn't actually shell out.
+  const exec: (cmd: string, options: child_process.ExecSyncOptions) => string = opts.exec
+    ? (cmd) => (opts.exec as SupervisorExec)(cmd)
+    : defaultExec;
+  const getUid: () => number | undefined = opts.getUid ?? (() => process.getuid?.());
 
   if (platform === "darwin") {
-    const uid = process.getuid?.();
+    const uid = getUid();
     if (uid === undefined) return { running: false, pid: null, supervisor: null };
     try {
-      const stdout = child_process.execSync(`launchctl print gui/${uid}/${LAUNCHD_LABEL}`, {
+      const stdout = exec(`launchctl print gui/${uid}/${LAUNCHD_LABEL}`, {
         stdio: ["ignore", "pipe", "ignore"],
         encoding: "utf-8",
       });
@@ -58,20 +103,16 @@ export function checkSupervisor(): SupervisorStatus {
 
   if (platform === "linux") {
     try {
-      const active = child_process
-        .execSync("systemctl --user is-active synapsesync.service", {
-          stdio: ["ignore", "pipe", "ignore"],
-          encoding: "utf-8",
-        })
-        .trim();
+      const active = exec("systemctl --user is-active synapsesync.service", {
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf-8",
+      }).trim();
       if (active !== "active") return { running: false, pid: null, supervisor: null };
       try {
-        const pidStr = child_process
-          .execSync("systemctl --user show -p MainPID --value synapsesync.service", {
-            stdio: ["ignore", "pipe", "ignore"],
-            encoding: "utf-8",
-          })
-          .trim();
+        const pidStr = exec("systemctl --user show -p MainPID --value synapsesync.service", {
+          stdio: ["ignore", "pipe", "ignore"],
+          encoding: "utf-8",
+        }).trim();
         const pid = Number.parseInt(pidStr, 10);
         return {
           running: true,
@@ -94,13 +135,11 @@ export function checkSupervisor(): SupervisorStatus {
     // doesn't expose the spawned PID; getting it would require WMI which
     // is heavier than the value justifies for a status display.
     try {
-      const out = child_process
-        .execSync(`schtasks /Query /TN "${WINDOWS_TASK_NAME}" /FO LIST`, {
-          stdio: ["ignore", "pipe", "ignore"],
-          encoding: "utf-8",
-          windowsHide: true,
-        })
-        .toString();
+      const out = exec(`schtasks /Query /TN "${WINDOWS_TASK_NAME}" /FO LIST`, {
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf-8",
+        windowsHide: true,
+      }).toString();
       const isRunning = /^Status:\s*Running\s*$/im.test(out);
       return { running: isRunning, pid: null, supervisor: "taskscheduler" };
     } catch {
