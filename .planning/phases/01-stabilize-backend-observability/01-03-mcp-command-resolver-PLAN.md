@@ -17,10 +17,11 @@ must_haves:
     - "When `which` fails but `<package-root>/dist/index.js` exists, the emitted command is `process.execPath` + `[<abs-dist-path>]` — bypasses npm and PATH `synapsesync` lookup."
     - "Only when neither resolves does the resolver fall back to `npx synapsesync` — preserving the legacy shape as last resort."
     - "Existing `writeMcpJson(filePath, apiKey)` signature unchanged; callers (Cursor, Windsurf, Claude Code adapters) receive the new command shape transparently."
+    - "The wizard-outro warning string is exported as a single constant `PROXY_FALLBACK_WARNING` from `mcp/src/cli/util/mcp-command.ts` — Plan 04 imports it; no duplication."
   artifacts:
     - path: "mcp/src/cli/util/mcp-command.ts"
-      provides: "Sync resolveSynapseMcpCommand(apiKey) + async probeNpmRegistry(timeoutMs)"
-      exports: ["resolveSynapseMcpCommand", "probeNpmRegistry", "McpCommand"]
+      provides: "Sync resolveSynapseMcpCommand(apiKey) + async probeNpmRegistry(timeoutMs) + exported `PROXY_FALLBACK_WARNING` string constant"
+      exports: ["resolveSynapseMcpCommand", "probeNpmRegistry", "McpCommand", "PROXY_FALLBACK_WARNING"]
     - path: "mcp/src/cli/editors/io.ts"
       provides: "synapseMcpServer (or equivalent at line 94-96) delegates to resolveSynapseMcpCommand"
       contains: "resolveSynapseMcpCommand"
@@ -33,6 +34,10 @@ must_haves:
       to: "mcp/dist/index.js (built artifact)"
       via: "fileURLToPath(import.meta.url) + path.resolve('../../index.js')"
       pattern: "import\\.meta\\.url"
+    - from: "Plan 01-04 (`init.ts` runInit)"
+      to: "mcp/src/cli/util/mcp-command.ts (PROXY_FALLBACK_WARNING)"
+      via: "import — single source of truth for the wizard-outro warning text"
+      pattern: "PROXY_FALLBACK_WARNING"
 ---
 
 <objective>
@@ -40,7 +45,7 @@ Close BUG-03: wizard's MCP configs must work on proxy-restricted networks (Netsk
 
 Purpose: Today's `.mcp.json` files contain `{ "command": "npx", "args": ["synapsesync"] }`. On a Netskope-restricted network, `npx` fails with 403. The MCP server never starts; the user sees no error; Synapse looks broken (Pitfall 3 — verified empirically). After this plan, the same wizard run on a clean network produces an absolute-path command that runs on any network (including the proxy network, after the binary is installed once).
 
-Output: `mcp-command.ts` filled in with the three-tier fallback chain from RESEARCH §"Pattern 4"; `editors/io.ts` line 94-96 delegates to it. 4 RED tests turn GREEN. Zero new dependencies (per RESEARCH §"Standard Stack" "No new dependencies for the mcp workspace").
+Output: `mcp-command.ts` filled in with the three-tier fallback chain from RESEARCH §"Pattern 4", an exported `PROXY_FALLBACK_WARNING` constant (single source of truth for the wizard warning string consumed by Plan 04); `editors/io.ts` line 94-96 delegates to `resolveSynapseMcpCommand`. 4 RED tests turn GREEN. Zero new dependencies (per RESEARCH §"Standard Stack" "No new dependencies for the mcp workspace").
 
 User-observable outcome: a user re-running `synapse init` on this dev machine gets a `.mcp.json` whose `command` is `/Users/Tanmai.N/.../node_modules/.bin/synapsesync` (or `node <abs>/dist/index.js`), not `npx synapsesync`. Re-running the wizard later from a Netskope-restricted network produces the same shape (no proxy lookup needed at runtime).
 </objective>
@@ -65,6 +70,7 @@ User-observable outcome: a user re-running `synapse init` on this dev machine ge
 - `export interface McpCommand { command: string; args: string[]; env: Record<string, string> }`
 - `export function resolveSynapseMcpCommand(apiKey: string): McpCommand` — SYNC per RESEARCH §"Open Questions" #3 (resolver itself is sync; probe is separate)
 - `export async function probeNpmRegistry(timeoutMs?: number): Promise<boolean>` — 2-second AbortController on `https://registry.npmjs.org/-/ping`
+- `export const PROXY_FALLBACK_WARNING: string` — the single-source-of-truth warning text the wizard surfaces when the resolver falls back to `npx` AND the registry is unreachable. Plan 04's `runInit` imports it (see "Wizard outro warning" below).
 
 Decision tree (RESEARCH §"Pattern 4" lines 396-403, locked by D-11):
   1. Try `which synapsesync` (or `where synapsesync` on Windows) → if exits 0 AND `fs.existsSync(path)` is true → emit `{ command: <abs-bin-path>, args: [], env: { SYNAPSE_API_KEY } }`.
@@ -82,16 +88,17 @@ LANDMINES (RESEARCH §"Common Pitfalls"):
 - Pitfall 3: `npx synapsesync` works for the dev (cached) and fails on user's proxy network. Prefer absolute paths UNCONDITIONALLY — don't gate on "is proxy reachable?". The probe is only for wizard outro warnings, NOT for resolution.
 - Wave 0 test `probeNpmRegistry returns false on 2s timeout` uses `vi.useFakeTimers()` + a never-settling fetch mock.
 
-Wizard outro warning (per CONTEXT.md `<specifics>` + RESEARCH §"Pitfall 3"):
-- After resolveSynapseMcpCommand returns, IF the result is the `npx` fallback (tier 3) AND `probeNpmRegistry()` resolves to false within 2s, the wizard surface should warn: "npm registry unreachable; the MCP server may fail to start; run `npm i -g synapsesync` from a non-proxied network and rerun `synapse init`".
-- The warning surface lives in the wizard runner — which for this slice is `mcp/src/cli/init.ts` (BUG-04 plan touches this too, and reads runInit). To minimize file conflict with Plan 04, THIS plan only authors the resolver + io.ts wiring. The wizard warning (the conditional `probeNpmRegistry` call after resolution) is OUT OF SCOPE for this plan; Plan 04 owns `runInit` and is the natural home. Add a `// TODO(BUG-03): wizard outro warning when tier-3 fallback emitted and probe fails` comment in `init.ts` only if Plan 04 hasn't merged yet — otherwise let Plan 04 handle it. (Coordination note: Plan 04's action references this; the warning lives in Plan 04.)
+Wizard outro warning (per CONTEXT.md `<specifics>` + RESEARCH §"Pitfall 3" + WARNING #11 fix):
+- The warning STRING is owned by this plan and exported as a constant:
+    `export const PROXY_FALLBACK_WARNING = "npm registry unreachable; the MCP server may fail to start; run `npm i -g synapsesync` from a non-proxied network and rerun `synapse init`.";`
+- The warning SURFACE (the conditional `probeNpmRegistry` call + `clack` print at the end of `runInit`) is owned EXCLUSIVELY by Plan 04. THIS PLAN MUST NOT TOUCH `mcp/src/cli/init.ts` UNDER ANY CONDITION (BLOCKER #3 fix). Plan 04 imports `PROXY_FALLBACK_WARNING` from `./util/mcp-command` and renders it via `@clack/prompts`.
 </interfaces>
 </context>
 
 <tasks>
 
 <task type="auto" tdd="true">
-  <name>Task 1: Implement resolveSynapseMcpCommand + probeNpmRegistry in mcp-command.ts</name>
+  <name>Task 1: Implement resolveSynapseMcpCommand + probeNpmRegistry + PROXY_FALLBACK_WARNING in mcp-command.ts</name>
   <files>mcp/src/cli/util/mcp-command.ts</files>
   <read_first>
     - mcp/src/cli/util/mcp-command.ts (Wave 0 stub — full)
@@ -114,16 +121,31 @@ Wizard outro warning (per CONTEXT.md `<specifics>` + RESEARCH §"Pitfall 3"):
       - `await fetch("https://registry.npmjs.org/-/ping", { signal: ctrl.signal })`.
       - Return `res.ok` on success, `false` on any throw (including abort).
       - `finally` clears the timeout.
+
+    `PROXY_FALLBACK_WARNING` exported string constant — exact text:
+      `npm registry unreachable; the MCP server may fail to start; run \`npm i -g synapsesync\` from a non-proxied network and rerun \`synapse init\`.`
+      Plan 04 imports this verbatim — DO NOT change the wording in Plan 04, change it here if needed.
   </behavior>
   <action>
-    Replace the Wave 0 stub body of `resolveSynapseMcpCommand` with the three-tier dispatch from `<behavior>`. Replace the stub body of `probeNpmRegistry` with the AbortController fetch. Imports: `execSync` from `node:child_process`, `fs` from `node:fs`, `path` from `node:path`, `fileURLToPath` from `node:url`. Mirror the dist-resolution shape from `mcp/src/capture/os-service.ts:113-116` per RESEARCH §"Pattern 4" line 460. DO NOT install any dependency (mcp workspace gets zero new deps).
+    Replace the Wave 0 stub body of `resolveSynapseMcpCommand` with the three-tier dispatch from `<behavior>`. Replace the stub body of `probeNpmRegistry` with the AbortController fetch. Add the `export const PROXY_FALLBACK_WARNING = "..."` line near the other exports (top of the file, after the `McpCommand` interface). Imports: `execSync` from `node:child_process`, `fs` from `node:fs`, `path` from `node:path`, `fileURLToPath` from `node:url`. Mirror the dist-resolution shape from `mcp/src/capture/os-service.ts:113-116` per RESEARCH §"Pattern 4" line 460. DO NOT install any dependency (mcp workspace gets zero new deps).
 
-    Add a JSDoc-free named-export comment block at the top citing `RESEARCH.md §"Pattern 4"` for future readers (3-line comment max).
+    Add a 3-line comment block at the top of the file citing `RESEARCH.md §"Pattern 4"` for future readers (no JSDoc).
+
+    DO NOT touch `mcp/src/cli/init.ts` in this task — the wizard-outro warning surface is owned exclusively by Plan 04 (BLOCKER #3). This plan only AUTHORS the warning string constant.
   </action>
   <verify>
     <automated>cd mcp && npx vitest run test/cli/mcp-command.test.ts</automated>
   </verify>
-  <done>All 4 BUG-03 rows in 01-VALIDATION.md "Per-Task Verification Map" flip from ⬜ to ✅; `npm run lint && npm run typecheck` exit 0 from repo root.</done>
+  <acceptance_criteria>
+    - VALIDATION row: BUG-03 / "resolves to absolute bin path when `which synapsesync` succeeds" → `cd mcp && npx vitest run test/cli/mcp-command.test.ts -t "resolves to absolute bin path when"` exits 0.
+    - VALIDATION row: BUG-03 / "resolves to `node <abs>/dist/index.js` when which fails but dist exists" → `cd mcp && npx vitest run test/cli/mcp-command.test.ts -t "resolves to .node"` exits 0.
+    - VALIDATION row: BUG-03 / "returns `npx synapsesync` last-resort when neither resolves" → `cd mcp && npx vitest run test/cli/mcp-command.test.ts -t "returns .npx synapsesync. last-resort"` exits 0.
+    - VALIDATION row: BUG-03 / "probeNpmRegistry returns false on 2s timeout" → `cd mcp && npx vitest run test/cli/mcp-command.test.ts -t "probeNpmRegistry returns false on 2s timeout"` exits 0.
+    - `PROXY_FALLBACK_WARNING` is exported and contains the exact key tokens: `grep -nE "^export const PROXY_FALLBACK_WARNING" mcp/src/cli/util/mcp-command.ts | grep -q "npm registry unreachable" && grep -q "npm i -g synapsesync" mcp/src/cli/util/mcp-command.ts && grep -q "rerun" mcp/src/cli/util/mcp-command.ts`.
+    - This plan does NOT touch `init.ts`: `git diff --name-only HEAD~1..HEAD mcp/src/cli/init.ts 2>/dev/null | wc -l` returns 0 in this plan's commit (Plan 04's commit owns `init.ts` changes).
+    - `npm run lint && npm run typecheck` exit 0 from repo root.
+  </acceptance_criteria>
+  <done>All 4 BUG-03 rows in 01-VALIDATION.md "Per-Task Verification Map" flip from ⬜ to ✅; `PROXY_FALLBACK_WARNING` exported; `npm run lint && npm run typecheck` exit 0 from repo root.</done>
 </task>
 
 <task type="auto" tdd="true">
@@ -144,13 +166,21 @@ Wizard outro warning (per CONTEXT.md `<specifics>` + RESEARCH §"Pitfall 3"):
     - All adapter callers (`claude-code.ts`, `cursor.ts`, `windsurf.ts`) unchanged.
   </behavior>
   <action>
-    In `mcp/src/cli/editors/io.ts`, edit the body of `synapseMcpServer` at line ~94-96: replace the hard-coded `{ command: "npx", args: ["synapsesync"], env: { ... } }` literal with `return resolveSynapseMcpCommand(apiKey)`. Add `import { resolveSynapseMcpCommand } from "../util/mcp-command"` at the top of the file. Verify (via grep / re-read) that `writeMcpJson` at lines 98-112 still references `synapseMcpServer(apiKey)` — do NOT rewrite `writeMcpJson`.
+    In `mcp/src/cli/editors/io.ts`, edit the body of `synapseMcpServer` at line ~94-96: replace the hard-coded `{ command: "npx", args: ["synapsesync"], env: { ... } }` literal with `return resolveSynapseMcpCommand(apiKey)`. Add `import { resolveSynapseMcpCommand } from "../util/mcp-command"` at the top of the file (match the existing extension convention — `.js` or no extension). Verify (via grep / re-read) that `writeMcpJson` at lines 98-112 still references `synapseMcpServer(apiKey)` — do NOT rewrite `writeMcpJson`.
   </action>
   <verify>
     <automated>cd mcp && npx vitest run test/cli/mcp-command.test.ts test/cli/init.test.ts</automated>
     <automated>cd mcp && npx vitest run</automated>
   </verify>
-  <done>Existing init/mcp-command tests still pass (no regression); io.ts now delegates to the resolver; `grep -v '^//' mcp/src/cli/editors/io.ts | grep -c 'npx'` shows the `npx` literal lives only in `mcp-command.ts` (tier-3 fallback), not in io.ts; `npm run lint && npm run typecheck` exit 0.</done>
+  <acceptance_criteria>
+    - `synapseMcpServer` delegates: `grep -nE "synapseMcpServer\\s*\\(" mcp/src/cli/editors/io.ts | head -1` followed by inspecting the function body shows `return resolveSynapseMcpCommand(apiKey)` (or near-equivalent) and NOT the literal `"npx"`.
+    - Import present: `grep -nE "^import .*resolveSynapseMcpCommand.*from .*util/mcp-command" mcp/src/cli/editors/io.ts` returns exactly 1 hit.
+    - `npx` literal moved out of `io.ts`: after stripping line comments, the `npx` literal lives only in `mcp-command.ts`. Verify: `grep -v '^[[:space:]]*//' mcp/src/cli/editors/io.ts | grep -cE '"npx"' ` returns 0.
+    - `writeMcpJson` body unchanged: `grep -nA 14 "^export function writeMcpJson" mcp/src/cli/editors/io.ts | grep -q "synapseMcpServer(apiKey)"` exits 0.
+    - Full mcp suite still green: `cd mcp && npx vitest run` exits 0.
+    - `npm run lint && npm run typecheck` exit 0.
+  </acceptance_criteria>
+  <done>Existing init/mcp-command tests still pass (no regression); io.ts now delegates to the resolver; `grep -v '^[[:space:]]*//' mcp/src/cli/editors/io.ts | grep -c 'npx'` returns 0 (no `npx` literal outside comments in io.ts); `npm run lint && npm run typecheck` exit 0.</done>
 </task>
 
 </tasks>
@@ -176,16 +206,19 @@ Wizard outro warning (per CONTEXT.md `<specifics>` + RESEARCH §"Pitfall 3"):
 1. `cd mcp && npx vitest run test/cli/mcp-command.test.ts` — all 4 BUG-03 tests green
 2. `cd mcp && npx vitest run` — full mcp suite green (init.test.ts must still pass since the merge tests live there)
 3. `npm run lint && npm run typecheck` from repo root — exit 0
-4. Inspect a freshly-written `.mcp.json` (post `synapse init`) on the dev machine: `command` should be an absolute path, not `npx`. (Manual; this is the BUG-03 SC#3 surface — full Netskope verification is deferred to slice 1b per VALIDATION.md "Manual-Only Verifications".)
+4. `git diff --stat` after this plan's commit shows only `mcp/src/cli/util/mcp-command.ts` and `mcp/src/cli/editors/io.ts` modified — NO change to `mcp/src/cli/init.ts` (BLOCKER #3 enforcement; Plan 04 owns init.ts).
+5. Inspect a freshly-written `.mcp.json` (post `synapse init`) on the dev machine: `command` should be an absolute path, not `npx`. (Manual; this is the BUG-03 SC#3 surface — full Netskope verification is deferred to slice 1b per VALIDATION.md "Manual-Only Verifications".)
 </verification>
 
 <success_criteria>
 - BUG-03 acceptance criteria in REQUIREMENTS.md becomes verifiable: the wizard emits an absolute-path command instead of `npx synapsesync`.
 - 4 RED tests turn GREEN.
 - Zero new mcp-workspace dependencies (per RESEARCH §"Standard Stack" — the corp-proxy constraint is honored).
+- `PROXY_FALLBACK_WARNING` exported as single source of truth — Plan 04 imports it; no duplicated string literal.
 - All adapters (Cursor / Windsurf / Claude Code) inherit the fix transparently because they call `synapseMcpServer` / `writeMcpJson` which now delegates.
+- This plan touches ONLY `mcp/src/cli/util/mcp-command.ts` and `mcp/src/cli/editors/io.ts` — `mcp/src/cli/init.ts` remains exclusively owned by Plan 04.
 </success_criteria>
 
 <output>
-Create `.planning/phases/01-stabilize-backend-observability/01-03-SUMMARY.md` when done. Summary MUST update VALIDATION.md "Per-Task Verification Map" 4 BUG-03 rows from ⬜ → ✅, and note whether the wizard outro warning (TODO comment in `init.ts` if Plan 04 hasn't landed) was handed off to Plan 04 or implemented inline.
+Create `.planning/phases/01-stabilize-backend-observability/01-03-SUMMARY.md` when done. Summary MUST update VALIDATION.md "Per-Task Verification Map" 4 BUG-03 rows from ⬜ → ✅, and confirm `PROXY_FALLBACK_WARNING` is exported for Plan 04 consumption.
 </output>
