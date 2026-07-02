@@ -106,19 +106,12 @@ function runCli(args, opts = {}) {
   env.USERPROFILE = home;
   env.HOMEDRIVE = undefined;
   env.HOMEPATH = undefined;
-  // Bypass HTTPS_PROXY/HTTP_PROXY inherited from the parent process. When
-  // e2e-cli.mjs runs in the merge gate, the preceding e2e-happy-flow.mjs
-  // enables the Synapse capture proxy (Stage 0) which sets HTTPS_PROXY
-  // pointing at 127.0.0.1:PORT. By the time we run, the proxy has been
-  // up for several minutes — and on Windows + Node 24, routing CLI fetch
-  // calls through it can crash the child with exit 3221226505
-  // (STATUS_STACK_BUFFER_OVERRUN), apparently from a proxy-pipe state
-  // that Node's native HTTPS doesn't handle gracefully. The CLI's
-  // backend calls don't need the capture proxy — bypass it.
-  env.HTTPS_PROXY = undefined;
-  env.HTTP_PROXY = undefined;
-  env.https_proxy = undefined;
-  env.http_proxy = undefined;
+  // (HTTPS_PROXY unset removed — the GitHub Actions Ubuntu runner
+  // apparently needs the Synapse capture proxy from happy-flow Stage 0
+  // to reach api.synapsesync.app. Direct backend calls 401 without it,
+  // breaking whoami/tree/stats. The Windows exit-3221226505 crash is a
+  // different bug — AbortSignal.timeout in validateApiKey — fixed at
+  // the api.ts layer instead.)
   env.SYNAPSE_HOME = opts.synapseHome ?? path.join(home, ".synapse");
   env.NO_COLOR = "1";
   if (opts.key) env.SYNAPSE_API_KEY = opts.key;
