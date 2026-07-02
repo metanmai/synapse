@@ -268,21 +268,19 @@ VALIDATION row mapping:
   <verify>
     <automated>cd backend && npx vitest run test/lib/observability-wiring.test.ts</automated>
     <automated>cd backend && npx vitest run</automated>
-    <automated>grep -nE "app\\.use\\(sentry\\(" backend/src/index.ts</automated>
     <automated>grep -v "^//" backend/wrangler.jsonc | grep -E '"SENTRY_DSN"\s*:' | wc -l</automated>
   </verify>
   <acceptance_criteria>
     - VALIDATION row: OBS-01 (wiring) / "backend/src/index.ts calls app.use(sentry(...)) BEFORE CORS and any other middleware" → `cd backend && npx vitest run test/lib/observability-wiring.test.ts` exits 0.
-    - `app.use(sentry(` appears exactly once in `index.ts`: `grep -cE "app\\.use\\(sentry\\(" backend/src/index.ts` returns exactly 1.
     - Sentry middleware is FIRST: the line number of the first `app.use(sentry(` match equals the line number of the first `app.use(` match. Verify: `[ "$(grep -nE 'app\\.use\\(sentry\\(' backend/src/index.ts | head -1 | cut -d: -f1)" = "$(grep -nE 'app\\.use\\(' backend/src/index.ts | head -1 | cut -d: -f1)" ]` exits 0.
     - Defensive `Sentry.captureException(err)` present in onError: `grep -nE "Sentry\\.captureException\\(err\\)" backend/src/index.ts` returns at least 1 hit.
     - `wrangler.jsonc` has no literal DSN: `grep -v '^[[:space:]]*//' backend/wrangler.jsonc | grep -cE '"SENTRY_DSN"\\s*:' ` returns 0 (the only place SENTRY_DSN appears outside comments is nowhere — the comment about it is fine, the literal value is forbidden).
     - `nodejs_compat` still present: `grep -cE '"nodejs_compat"' backend/wrangler.jsonc` returns ≥ 1.
-    - SENTRY_DSN comment present in wrangler.jsonc: `grep -nE "//.*SENTRY_DSN.*wrangler secret put" backend/wrangler.jsonc` returns at least 1 hit.
+    - **Reviewer-checklist item (manual, not automated — per `feedback_test_generality.md`: comment-text greps are instance-only theater):** Reviewer confirms `backend/wrangler.jsonc` includes a single-line comment near the `vars` block explaining that SENTRY_DSN is set via `wrangler secret put` (slice 1b). The class-correct guard for the bug class "secret leaked into git" is the `wrangler.jsonc` no-literal-DSN acceptance criterion above (no `"SENTRY_DSN"` literal outside comments) — that catches any drift regardless of comment wording.
     - Full backend suite green: `cd backend && npx vitest run` exits 0.
     - `npm run lint && npm run typecheck` exit 0 from repo root.
   </acceptance_criteria>
-  <done>The OBS-01 wiring row in 01-VALIDATION.md flips from ⬜ to ✅; full `backend` test suite green; `npm run lint && npm run typecheck` exit 0 from repo root; grep confirms `app.use(sentry(` appears in `backend/src/index.ts` and there is NO literal SENTRY_DSN value in `wrangler.jsonc`.</done>
+  <done>The OBS-01 wiring row in 01-VALIDATION.md flips from ⬜ to ✅; full `backend` test suite green; `npm run lint && npm run typecheck` exit 0 from repo root; the wiring test confirms `app.use(sentry(` is the first `app.use` in `backend/src/index.ts` and there is NO literal SENTRY_DSN value in `wrangler.jsonc`.</done>
 </task>
 
 </tasks>
@@ -312,7 +310,7 @@ VALIDATION row mapping:
 1. `cd backend && npx vitest run` — full backend suite green (5 OBS-01 RED tests now GREEN)
 2. `cd backend && node -e "require('@sentry/cloudflare'); require('@sentry/hono'); console.log('ok')"` prints `ok`
 3. `npm run lint && npm run typecheck` from repo root — exit 0
-4. `grep -n 'app.use(sentry(' backend/src/index.ts` returns exactly 1 match on a line that PRECEDES any other `app.use(` line in the file
+4. `backend/test/lib/observability-wiring.test.ts` passes — proves `app.use(sentry(` is wired AND is the first `app.use(` in `backend/src/index.ts` (class-correct behavioral guard; replaces the prior count-based grep)
 5. `grep -E '"SENTRY_DSN"\\s*:' backend/wrangler.jsonc` returns NO matches (no literal DSN in git)
 6. `grep -n 'SENTRY_DSN' backend/src/lib/env.ts` returns 1+ matches (the type declaration)
 7. Manual (slice 1b): SC#4 deliberate-throw verification deferred — confirmed in slice 1b on the CF machine.

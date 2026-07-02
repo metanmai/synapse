@@ -15,11 +15,12 @@ requirements: [BUG-02, BUGS-MD-12]
 
 must_haves:
   truths:
-    - "When the launchd-supervised daemon is running on macOS, `synapse capture status` reports 'Daemon: running' and tags 'supervised by launchd' with the launchd-reported PID."
+    - "When the launchd-supervised daemon is running on macOS, `synapse capture status` reports 'Daemon: running' and surfaces the supervisor name ('launchd') and the launchd-reported PID — distinguishably from systemd and PID-only outputs (exact phrasing free to drift)."
     - "When the daemon is unsupervised (or launchctl reports the label is not loaded), `isRunning()` falls back to the existing PID-file check — no regression."
     - "On flush failure the next cycle waits at least 10s and at most 300s with ±25% jitter; on success the next cycle waits 10s ±25%."
     - "Process restart resets backoff to base (10s) — no persisted backoff state."
     - "Backoff math lives in a pure helper `computeNextDelay(prevDelayMs, lastSucceeded)` in `mcp/src/capture/daemon-backoff.ts` — tested without timers."
+    - "`daemon-supervisor.ts` invokes `launchctl` using the `LAUNCHD_LABEL` runtime constant imported from `mcp/src/capture/os-service` — not a redefined string literal. Verified by a sentinel-mock behavioral test."
   artifacts:
     - path: "mcp/src/cli/util/daemon-supervisor.ts"
       provides: "checkSupervisor() — two-tier exit-code probe (launchctl print on macOS; systemctl --user is-active on Linux); returns SupervisorStatus"
@@ -31,8 +32,8 @@ must_haves:
       provides: "DaemonManager.isRunning() with supervisor-first detection; startHandoffLoop with self-rescheduling setTimeout that calls computeNextDelay"
       contains: "checkSupervisor"
     - path: "mcp/src/cli/commands.ts"
-      provides: "runCaptureStatus output that distinguishes supervised vs PID-only daemons"
-      contains: "supervised by"
+      provides: "runCaptureStatus output that distinguishes supervised vs PID-only daemons (verified by behavioral distinguishability test in status.test.ts, not by source-text phrasing greps)"
+      contains: "checkSupervisor"
   key_links:
     - from: "mcp/src/capture/daemon.ts (DaemonManager)"
       to: "mcp/src/cli/util/daemon-supervisor.ts (checkSupervisor)"
@@ -53,9 +54,9 @@ Close BUG-02 (daemon detection under launchd / systemd) and BUGS.md #12 (exponen
 
 Purpose: After this plan, `synapse capture status` reports honest state for launchd-supervised daemons (closing the BUG-02 Acceptance row in REQUIREMENTS.md), and `~/.synapse/daemon.log` stops growing 6 lines/min during the current 1101 outage (closing BUGS.md #12).
 
-Output: `daemon-supervisor.ts` filled in; `daemon-backoff.ts` filled in with the pure `computeNextDelay` math; `daemon.ts` rewired in two places (`isRunning()` body + `startHandoffLoop` body — the latter now calls `computeNextDelay`); `commands.ts` updated to surface "supervised by launchd|systemd" in the status output. 13 RED tests (4 BUG-02 + 5 BUGS.md #12 against the pure helper + 4 reused in `status.test.ts`) turn GREEN.
+Output: `daemon-supervisor.ts` filled in; `daemon-backoff.ts` filled in with the pure `computeNextDelay` math; `daemon.ts` rewired in two places (`isRunning()` body + `startHandoffLoop` body — the latter now calls `computeNextDelay`); `commands.ts` updated to surface the supervisor name + PID in the status output (phrasing is free; the behavioral distinguishability test in `status.test.ts` is the contract). 13 RED tests (5 BUG-02 incl. the LAUNCHD_LABEL-sentinel test + 5 BUGS.md #12 against the pure helper + 4 reused in `status.test.ts`) turn GREEN.
 
-User-observable outcome (per MVP_MODE for a stabilization phase): a user runs `synapse capture status` on this dev machine and gets `Daemon: running · supervised by launchd · PID 96819` (or current PID), and `~/.synapse/daemon.log` stops growing during the 1101 outage.
+User-observable outcome (per MVP_MODE for a stabilization phase): a user runs `synapse capture status` on this dev machine and gets an output that includes both "launchd" and the current PID (e.g., `Daemon: running · supervised by launchd · PID 96819`), and `~/.synapse/daemon.log` stops growing during the 1101 outage.
 </objective>
 
 <execution_context>
@@ -98,7 +99,7 @@ Existing `startHandoffLoop` body (BUGS.md #12 fix site — `mcp/src/capture/daem
 - Currently `setInterval(cycle, Math.min(pull_ms, flush_ms))`. Replace the main interval with a self-rescheduling `setTimeout` that delegates the delay math to `computeNextDelay`. The `flush-now` signal `setInterval(_, 100)` and the healthcheck `setInterval(_, hc_ms)` stay UNCHANGED — per RESEARCH §"Pattern 5" + Anti-Pattern "DON'T re-add backoff state to `runFlushCycle`". This is why the helper is pure: testing it does not need to drive or mock either preserved interval.
 
 Existing `runCaptureStatus` (BUG-02 surface — `mcp/src/cli/commands.ts`):
-- Greps for the function definition; the current implementation prints "Daemon: running" / "Daemon: stopped" based on `isRunning()`. Extend output to print the supervisor tag and PID when available (use the new `status()` accessor — see action).
+- Greps for the function definition; the current implementation prints "Daemon: running" / "Daemon: stopped" based on `isRunning()`. Extend output to print the supervisor name and PID when available (use the new `status()` accessor — see action). The exact output phrasing is free to drift; the `status.test.ts` "distinguishes launchd, systemd, and PID-only outputs from each other" behavioral test is the contract.
 
 Existing capture tests that MUST remain green after this plan (from `ls mcp/test/capture/*.test.ts`):
 - `mcp/test/capture/crash-resilience.test.ts`
@@ -110,13 +111,13 @@ Existing capture tests that MUST remain green after this plan (from `ls mcp/test
 - `mcp/test/capture/handoff-sync.test.ts`
 - `mcp/test/capture/heuristic-synth.test.ts`
 - `mcp/test/capture/idle-trigger.test.ts`
-- `mcp/test/capture/os-service.test.ts` (already verifies the LAUNCHD_LABEL refactor from Plan 01-01)
+- `mcp/test/capture/os-service.test.ts` (already verifies the LAUNCHD_LABEL refactor from Plan 01-01 via the runtime-invariant + render-equivalence assertions added in Plan 01-01 Task 2)
 - `mcp/test/capture/sandbox.test.ts`
 
 LANDMINES (RESEARCH §"Common Pitfalls"):
 - Pitfall 1: DO NOT pipe `launchctl print` output — execSync must run the command directly to get the real exit code. Verified empirically.
 - Pitfall 5: `process.getuid()` is undefined on Windows. Guard with `process.platform === "darwin"` first.
-- Pitfall 4: Backoff at 5-min cap can mask a real outage. Out of scope for this plan (D-10 defers log surfacing); leave a code comment near `MAX_DELAY_MS` referencing BUGS.md #12 follow-up so slice 1b reviewers see it. WARNING #10 fix: the comment MUST contain BOTH the string `MAX_DELAY` (or `max delay`) AND a reference to either `deliberate` or `BUGS.md #12`, so a grep can verify the rationale survives future refactors.
+- Pitfall 4: Backoff at 5-min cap can mask a real outage. Out of scope for this plan (D-10 defers log surfacing); leave a code comment near `MAX_DELAY_MS` referencing BUGS.md #12 follow-up so slice 1b reviewers see it. **The comment is for human readers — not for grep-checked automation.** Per `feedback_test_generality.md`, instance-only grep assertions on comment text are theater. The reviewer-checklist item below catches drift in the comment; the runtime behavior is guarded by the `computeNextDelay` cap test.
 </interfaces>
 </context>
 
@@ -130,7 +131,7 @@ LANDMINES (RESEARCH §"Common Pitfalls"):
     - mcp/src/capture/os-service.ts (full — read the LAUNCHD_LABEL export established by Plan 01-01 Task 3, and the `resolveDaemonScriptPath` pattern for style reference)
     - .planning/phases/01-stabilize-backend-observability/01-RESEARCH.md §"Pattern 3" (lines 317-390)
     - .planning/phases/01-stabilize-backend-observability/01-RESEARCH.md §"Common Pitfalls" (Pitfall 1, Pitfall 5)
-    - mcp/test/cli/status.test.ts (full — Wave 0 extensions describe expected behavior)
+    - mcp/test/cli/status.test.ts (full — Wave 0 extensions describe expected behavior, including the LAUNCHD_LABEL-sentinel test)
     - .planning/codebase/CONVENTIONS.md
   </read_first>
   <behavior>
@@ -138,7 +139,7 @@ LANDMINES (RESEARCH §"Common Pitfalls"):
     - On `process.platform === "linux"`: call `execSync("systemctl --user is-active synapsesync.service", ...)`. If stdout trim is exactly `"active"`, query `systemctl --user show -p MainPID --value synapsesync.service` for the PID, parse, return `{ running: true, pid, supervisor: "systemd" }`. Otherwise / on throw, return `{ running: false, pid: null, supervisor: null }`.
     - On any other platform (`win32`, etc.): return `{ running: false, pid: null, supervisor: null }` without invoking `process.getuid` (Pitfall 5 guard).
     - DO NOT pipe (Pitfall 1). Use execSync directly with stdio config above.
-    - Import `LAUNCHD_LABEL` from `../../capture/os-service` (single source of truth — Plan 01-01 Task 3 guarantees it exists). DO NOT redefine the literal in this file.
+    - Import `LAUNCHD_LABEL` from `../../capture/os-service` (single source of truth — Plan 01-01 Task 3 guarantees it exists). DO NOT redefine the literal in this file. The `status.test.ts` "daemon-supervisor invokes launchctl with the LAUNCHD_LABEL imported from os-service" test mocks the os-service module with a sentinel value and asserts the execSync call uses the sentinel — if you inline the literal `app.synapsesync.daemon`, the test fails.
   </behavior>
   <action>
     Replace the Wave 0 stub body of `checkSupervisor()` with the platform-dispatch logic described under `<behavior>`. Reference RESEARCH §"Pattern 3" for the exact shape; do not inline that pattern's code block here — write it once in this source file. Import `execSync` from `node:child_process` and `LAUNCHD_LABEL` from `../../capture/os-service` (match existing import-path conventions in the mcp workspace — `.js` extension or no extension as the rest of the file uses). Wrap each execSync call in try/catch — never let an exception escape `checkSupervisor`.
@@ -150,11 +151,10 @@ LANDMINES (RESEARCH §"Common Pitfalls"):
     - VALIDATION row: BUG-02 / "returns true when launchctl print reports the label loaded" → `cd mcp && npx vitest run test/cli/status.test.ts -t "returns true when launchctl print reports the label loaded"` exits 0.
     - VALIDATION row: BUG-02 / "returns false when launchctl print throws (service not loaded)" → `cd mcp && npx vitest run test/cli/status.test.ts -t "returns false when launchctl print throws"` exits 0.
     - VALIDATION row: BUG-02 / "falls back to PID-file check on non-supervisor platforms" → `cd mcp && npx vitest run test/cli/status.test.ts -t "falls back to PID-file check"` exits 0.
-    - Import correctness: `grep -nE "from .*os-service" mcp/src/cli/util/daemon-supervisor.ts | grep -q "LAUNCHD_LABEL"` exits 0 (the file imports the named export, does not redefine the literal).
-    - No redefined label: `grep -cE '"app\.synapsesync\.daemon"' mcp/src/cli/util/daemon-supervisor.ts` returns exactly 0.
+    - **Behavioral class-guard for "imports the label, does not redefine it"** (replaces the prior `grep -cE '"app\.synapsesync\.daemon"'` source-text check, which was theater): `cd mcp && npx vitest run test/cli/status.test.ts -t "daemon-supervisor invokes launchctl with the LAUNCHD_LABEL imported from os-service"` exits 0. The test `vi.mock`s `os-service` to return `LAUNCHD_LABEL: "TEST_SENTINEL_LABEL"`, spies on `execSync`, calls `checkSupervisor()` on a darwin-mocked platform, and asserts the execSync invocation contains the sentinel. If the supervisor inlined the real literal, the assertion fails. This catches the bug class — rename the constant, swap the literal, refactor — all caught.
     - `npm run lint && npm run typecheck` exit 0 from repo root.
   </acceptance_criteria>
-  <done>4 BUG-02 rows in 01-VALIDATION.md "Per-Task Verification Map" flip from ⬜ to ✅; the launchd success / failure / fallback / output-tagging tests pass; `npm run lint && npm run typecheck` exit 0 from repo root.</done>
+  <done>4 BUG-02 rows in 01-VALIDATION.md "Per-Task Verification Map" PLUS the LAUNCHD_LABEL-sentinel behavioral test flip from ⬜ to ✅; `npm run lint && npm run typecheck` exit 0 from repo root.</done>
 </task>
 
 <task type="auto" tdd="true">
@@ -166,31 +166,31 @@ LANDMINES (RESEARCH §"Common Pitfalls"):
     - mcp/src/cli/util/daemon-supervisor.ts (now-implemented checkSupervisor)
     - .planning/phases/01-stabilize-backend-observability/01-RESEARCH.md §"Pattern 3" lines 374-390 (status() accessor shape)
     - .planning/phases/01-stabilize-backend-observability/01-CONTEXT.md §"specifics" — output format guidance
-    - mcp/test/cli/status.test.ts (Wave 0 extensions — read the assertions verbatim)
+    - mcp/test/cli/status.test.ts (Wave 0 extensions — read the assertions verbatim, especially the "distinguishes launchd, systemd, and PID-only outputs" behavioral test)
   </read_first>
   <behavior>
     - Add a new method `DaemonManager.status(): { running: boolean; pid: number | null; supervisor: Supervisor }` that calls `checkSupervisor()` first; if `running` is true, returns it; otherwise falls back to the existing PID-file + `process.kill(pid, 0)` check (current `isRunning()` body) and returns `{ running, pid, supervisor: null }`.
     - Refactor `isRunning(): boolean` to delegate: `return this.status().running`.
-    - In `mcp/src/cli/commands.ts:runCaptureStatus`, switch from `isRunning()` to `status()` and format the output: when `supervisor === "launchd"` print "Daemon: running · supervised by launchd · PID <n>"; same for `systemd`. When `supervisor === null` and `running === true` print "Daemon: running · PID <n>". When `running === false` keep the existing "Daemon: stopped" message.
+    - In `mcp/src/cli/commands.ts:runCaptureStatus`, switch from `isRunning()` to `status()` and produce three observably-distinct outputs for the three states: launchd-supervised, systemd-supervised, and PID-only (`supervisor === null` with `running === true`). The launchd output MUST include both the supervisor name "launchd" and the PID. The systemd output MUST include "systemd" and the PID. The PID-only output MUST include the PID and MUST NOT include either supervisor name. When `running === false` keep the existing "Daemon: stopped" message. The exact phrasing is your choice (e.g., "Daemon: running · supervised by launchd · PID <n>" matches the project's current style and is recommended) — the `status.test.ts` behavioral distinguishability test enforces the invariants, not the exact phrasing.
     - Per D-09, leave a single-line TODO comment near the `runCaptureStatus` output referencing "BUGS.md #12 follow-up: surface last successful flush + current backoff once daemon.log readback lands" — explicitly OUT of scope here.
   </behavior>
   <action>
     Edit `mcp/src/capture/daemon.ts`: add the new `status()` method to `DaemonManager` (signature in `<behavior>`), refactor `isRunning()` to return `this.status().running`. Preserve the existing PID-file cleanup behavior (`this.cleanup()` when `process.kill(pid, 0)` throws) inside the tier-2 branch. Import `checkSupervisor` and `Supervisor` from `../cli/util/daemon-supervisor`.
 
-    Edit `mcp/src/cli/commands.ts`: in `runCaptureStatus`, replace the `isRunning()` call with `status()`, format the three output cases per `<behavior>`. Use existing logger / `console.log` pattern already in that function (do not introduce a new logger). Add the one-line BUGS.md #12 follow-up TODO comment.
+    Edit `mcp/src/cli/commands.ts`: in `runCaptureStatus`, replace the `isRunning()` call with `status()`, produce the three-state output per `<behavior>`. Use existing logger / `console.log` pattern already in that function (do not introduce a new logger). Add the one-line BUGS.md #12 follow-up TODO comment.
   </action>
   <verify>
     <automated>cd mcp && npx vitest run test/cli/status.test.ts</automated>
   </verify>
   <acceptance_criteria>
-    - VALIDATION row: BUG-02 / "capture status output distinguishes 'supervised by launchd/systemd' from 'alive via PID'" → `cd mcp && npx vitest run test/cli/status.test.ts -t "supervised by launchd"` exits 0.
-    - `DaemonManager.isRunning()` retains boolean return: `grep -nE "isRunning\\(\\):\\s*boolean" mcp/src/capture/daemon.ts` returns exactly 1 hit (callers in hook-dispatch.ts etc. need no change).
-    - `DaemonManager.status()` method exists: `grep -nE "status\\(\\):\\s*\\{" mcp/src/capture/daemon.ts` returns at least 1 hit.
-    - Output strings present: `grep -cE "supervised by launchd" mcp/src/cli/commands.ts` returns ≥ 1; `grep -cE "supervised by systemd" mcp/src/cli/commands.ts` returns ≥ 1.
-    - Follow-up TODO: `grep -nE "BUGS\\.md #12" mcp/src/cli/commands.ts` returns at least 1 hit (the deferred-log-surfacing comment).
+    - VALIDATION row: BUG-02 / "capture status distinguishes launchd, systemd, and PID-only outputs from each other" → `cd mcp && npx vitest run test/cli/status.test.ts -t "distinguishes launchd, systemd, and PID-only outputs from each other"` exits 0. This is the class-correct guard: the test mocks the supervisor module with three different return shapes, captures stdout, and asserts (a) all three outputs are pairwise distinct, (b) the launchd output contains "launchd" + its PID, (c) the systemd output contains "systemd" + its PID, (d) the PID-only output contains its PID and NO supervisor name. Future phrasing drift is fine; the invariants catch the bug class "all three states render indistinguishably." (Replaces the prior `grep -cE "supervised by launchd" ... ≥ 1; grep -cE "supervised by systemd" ... ≥ 1` source-text checks, which were instance-only theater.)
+    - `DaemonManager.isRunning()` retains boolean return: `grep -nE "isRunning\\(\\):\\s*boolean" mcp/src/capture/daemon.ts` returns exactly 1 hit (callers in hook-dispatch.ts etc. need no change). This grep guards a TypeScript signature shape, not a comment string — it's a structural invariant.
+    - `DaemonManager.status()` method exists with the correct return type shape: `grep -nE "status\\(\\):\\s*\\{" mcp/src/capture/daemon.ts` returns at least 1 hit (also structural — it's checking the method signature).
+    - Follow-up TODO comment (for reviewers, not for automated drift detection): the reviewer-checklist item below catches this. NO automated grep on the literal comment text — that would be theater per `feedback_test_generality.md`.
     - All existing tests pass: `cd mcp && npx vitest run` exits 0 (after Tasks 1+2+3 — but partial verify after Task 2 is acceptable if Task 3 hasn't landed yet; the wave-end check covers full).
+    - **Reviewer-checklist item (manual, not automated):** Confirm `runCaptureStatus` in `mcp/src/cli/commands.ts` has a single-line TODO/FIXME comment near its output block referencing BUGS.md #12 follow-up. The behavioral distinguishability test catches the runtime contract; this checklist item catches drift in the human-readable rationale comment without inventing ceremonial grep coverage.
   </acceptance_criteria>
-  <done>Status test BUG-02 row 4 (output distinguishes supervised vs PID) flips ✅. `isRunning()` retains backwards-compatible boolean return so other callers (existing tests, hook-dispatch.ts, etc.) need no change.</done>
+  <done>Status test BUG-02 distinguishability row flips ✅. `isRunning()` retains backwards-compatible boolean return so other callers (existing tests, hook-dispatch.ts, etc.) need no change.</done>
 </task>
 
 <task type="auto" tdd="true">
@@ -214,7 +214,7 @@ LANDMINES (RESEARCH §"Common Pitfalls"):
         - Apply jitter: `return target * (0.75 + Math.random() * 0.5)` (multiplicative ±25%).
     - No side effects. No timers. No I/O. Only `Math.random()` for jitter.
     - Constants `BASE_DELAY_MS = 10_000` and `MAX_DELAY_MS = 300_000` are already exported by the Wave 0 stub — confirm and keep.
-    - Add a code comment IMMEDIATELY above `export const MAX_DELAY_MS = 300_000;` reading exactly: `// MAX_DELAY_MS is the deliberate 5-minute ceiling; masks long outages by design (BUGS.md #12 follow-up: surface backoff state via daemon.log readback in slice 1b).` This comment is the WARNING #10 grep target — it must contain BOTH `MAX_DELAY` AND either `deliberate` or `BUGS.md #12`.
+    - Add a code comment IMMEDIATELY above `export const MAX_DELAY_MS = 300_000;` reading something like: `// MAX_DELAY_MS is the deliberate 5-minute ceiling; masks long outages by design (BUGS.md #12 follow-up: surface backoff state via daemon.log readback in slice 1b).` This comment is for **human reviewers**, not for automated grep verification — instance-grep on comment text is theater (`feedback_test_generality.md`). The runtime cap behavior is fully guarded by the `computeNextDelay` cap test in `daemon-backoff.test.ts`; future drift of the comment wording is caught by the reviewer-checklist item, not by a self-invalidating grep on header prose.
 
     Part B — wire into `startHandoffLoop` in `daemon.ts`:
     - Replace `setInterval(cycle, Math.min(pull_ms, flush_ms))` with a closure-scoped `scheduleNext()` chain:
@@ -230,29 +230,28 @@ LANDMINES (RESEARCH §"Common Pitfalls"):
     - Returned cleanup function must clear `nextTimer` (via `clearTimeout`) AND both interval handles, AND set `stopped = true` so any in-flight `scheduleNext` exits early.
   </behavior>
   <action>
-    Edit `mcp/src/capture/daemon-backoff.ts`: replace the Wave 0 stub body of `computeNextDelay` with the pure-math implementation from `<behavior>` Part A. Confirm `BASE_DELAY_MS` and `MAX_DELAY_MS` exports are present and unchanged. Insert the rationale comment immediately above `MAX_DELAY_MS` exactly as specified.
+    Edit `mcp/src/capture/daemon-backoff.ts`: replace the Wave 0 stub body of `computeNextDelay` with the pure-math implementation from `<behavior>` Part A. Confirm `BASE_DELAY_MS` and `MAX_DELAY_MS` exports are present and unchanged. Insert the rationale comment immediately above `MAX_DELAY_MS` (wording per `<behavior>`).
 
     Edit `mcp/src/capture/daemon.ts`: import `computeNextDelay`, `BASE_DELAY_MS` from `./daemon-backoff`. Replace `startHandoffLoop` body per RESEARCH §"Pattern 5" code shape (lines 488-558) but delegate the delay math to `computeNextDelay`. Preserve the existing per-project flush/pull/writeBrief logic inside `cycle()` (lines ~138-160 of current body). Preserve the canonical_project_id swap. Preserve `flushNowSignalPath()` and `healthcheckPath()` usage. The pre-existing `setInterval(_, 100)` and `setInterval(_, hc_ms)` calls stay textually identical; only the main scheduling loop changes.
   </action>
   <verify>
     <automated>cd mcp && npx vitest run test/capture/daemon-backoff.test.ts</automated>
     <automated>cd mcp && npx vitest run test/capture/</automated>
-    <automated>grep -E "MAX_DELAY|max.*delay" mcp/src/capture/daemon-backoff.ts | grep -E "deliberate|BUGS.md #12"</automated>
   </verify>
   <acceptance_criteria>
     - VALIDATION row: BUGS.md #12 / "Backoff starts at base delay (10s)" → `cd mcp && npx vitest run test/capture/daemon-backoff.test.ts -t "returns BASE_DELAY_MS"` exits 0.
     - VALIDATION row: BUGS.md #12 / "Backoff doubles on each failure (10→20→40→80→160→300)" → `cd mcp && npx vitest run test/capture/daemon-backoff.test.ts -t "doubles prevDelayMs"` exits 0.
-    - VALIDATION row: BUGS.md #12 / "Backoff caps at MAX_DELAY (300s)" → `cd mcp && npx vitest run test/capture/daemon-backoff.test.ts -t "caps at MAX_DELAY_MS"` exits 0.
+    - VALIDATION row: BUGS.md #12 / "Backoff caps at MAX_DELAY (300s)" → `cd mcp && npx vitest run test/capture/daemon-backoff.test.ts -t "caps at MAX_DELAY_MS"` exits 0. The cap behavior is the runtime contract — this test fires on ANY future drift of the cap, regardless of comment text.
     - VALIDATION row: BUGS.md #12 / "Backoff resets to base on first success" → `cd mcp && npx vitest run test/capture/daemon-backoff.test.ts -t "resets to BASE_DELAY_MS"` exits 0.
     - VALIDATION row: BUGS.md #12 / "Jitter is within ±25% of the current delay" → `cd mcp && npx vitest run test/capture/daemon-backoff.test.ts -t "jitter is multiplicative"` exits 0.
-    - Rationale comment survives: `grep -E "MAX_DELAY|max.*delay" mcp/src/capture/daemon-backoff.ts | grep -qE "deliberate|BUGS.md #12"` exits 0.
     - All other capture tests still green: `cd mcp && npx vitest run test/capture/` exits 0 (covers `crash-resilience.test.ts`, `daemon-cc.test.ts`, `daemon.test.ts`, `events-log.test.ts`, `handoff-brief.test.ts`, `handoff-paths.test.ts`, `handoff-sync.test.ts`, `heuristic-synth.test.ts`, `idle-trigger.test.ts`, `os-service.test.ts`, `sandbox.test.ts` — enumerated from `ls mcp/test/capture/*.test.ts`).
-    - `computeNextDelay` is pure: `grep -E "setTimeout|setInterval|Date\\.now|process\\." mcp/src/capture/daemon-backoff.ts | grep -v '^//'` returns 0 lines (no side-effect APIs in the backoff module body, ignoring comments).
-    - `startHandoffLoop` uses it: `grep -nE "computeNextDelay\\(" mcp/src/capture/daemon.ts` returns at least 1 hit.
-    - Preserved intervals: `grep -cE "setInterval\\(" mcp/src/capture/daemon.ts` returns exactly 2 (the flush-now signal poll and the healthcheck — NOT a third for the main loop).
+    - `computeNextDelay` is pure (class-correct structural invariant — catches "backoff helper became impure"): `grep -E "setTimeout|setInterval|Date\\.now|process\\." mcp/src/capture/daemon-backoff.ts | grep -v '^//'` returns 0 lines (no side-effect APIs in the backoff module body, ignoring comments).
+    - `startHandoffLoop` uses the helper (class-correct integration check): `grep -nE "computeNextDelay\\(" mcp/src/capture/daemon.ts` returns at least 1 hit.
+    - **Preserved intervals — count rationale:** `grep -cE "setInterval\\(" mcp/src/capture/daemon.ts` returns exactly 2. The count of 2 corresponds to the two intentionally-preserved intervals: (i) the flush-now signal-file poll (`setInterval(_, 100)`) and (ii) the healthcheck timer (`setInterval(_, hc_ms)`). The main handoff loop is now a self-rescheduling `setTimeout`, not an interval. If a future change accidentally re-introduces a third `setInterval` (e.g., resurrecting the old loop), this count fails — that is the bug class this gate catches. (Borderline-class-correct: still partially count-shaped, but the rationale is anchored to specific subsystem semantics, not to a literal string.)
     - `npm run lint && npm run typecheck` exit 0.
+    - **Reviewer-checklist item (manual, not automated — replaces three prior comment-text greps that were pure theater):** Confirm a single-line rationale comment exists immediately above `export const MAX_DELAY_MS` in `mcp/src/capture/daemon-backoff.ts` explaining the deliberate 5-minute ceiling and pointing to BUGS.md #12. The reviewer must also confirm: "any change to the value of `MAX_DELAY_MS` is intentional, justified, and reflected in the cap test bands in `daemon-backoff.test.ts`." This catches "future dev raises the cap blindly" — the actual bug class the prior grep theater was trying (and failing) to guard.
   </acceptance_criteria>
-  <done>All 5 BUGS.md #12 rows in 01-VALIDATION.md flip ✅; existing capture tests in `mcp/test/capture/` (enumerated above: crash-resilience, daemon-cc, daemon, events-log, handoff-brief, handoff-paths, handoff-sync, heuristic-synth, idle-trigger, os-service, sandbox) still pass; `npm run lint && npm run typecheck` exit 0; the rationale comment near MAX_DELAY_MS contains both `MAX_DELAY` and `BUGS.md #12`.</done>
+  <done>All 5 BUGS.md #12 rows in 01-VALIDATION.md flip ✅; existing capture tests in `mcp/test/capture/` (enumerated above: crash-resilience, daemon-cc, daemon, events-log, handoff-brief, handoff-paths, handoff-sync, heuristic-synth, idle-trigger, os-service, sandbox) still pass; `npm run lint && npm run typecheck` exit 0; the rationale comment near MAX_DELAY_MS is present (reviewer-verified).</done>
 </task>
 
 </tasks>
@@ -269,27 +268,27 @@ LANDMINES (RESEARCH §"Common Pitfalls"):
 | Threat ID | Category | Component | Disposition | Mitigation Plan |
 |-----------|----------|-----------|-------------|-----------------|
 | T-01-02-01 | Information Disclosure | `checkSupervisor` execSync stderr | mitigate | `stdio: ["ignore", "pipe", "ignore"]` discards stderr — no daemon-log noise from probe failures. |
-| T-01-02-02 | Tampering | LAUNCHD_LABEL constant injection | accept | LAUNCHD_LABEL is a compile-time string literal exported from `os-service.ts` (established in Plan 01-01 Task 3); not user-controllable. |
+| T-01-02-02 | Tampering | LAUNCHD_LABEL constant injection | accept | LAUNCHD_LABEL is a compile-time string literal exported from `os-service.ts` (established in Plan 01-01 Task 3); not user-controllable. The `status.test.ts` sentinel-mock behavioral test catches accidental re-inlining of the literal. |
 | T-01-02-03 | Denial of Service | Thundering-herd retry against backend on recovery | mitigate | ±25% jitter on each `computeNextDelay` return (per RESEARCH §"Pattern 5" — AWS Architecture Blog 2015 reference). |
-| T-01-02-04 | Repudiation | Silent flush failures during backoff | accept | D-10 defers log surfacing; rationale comment near MAX_DELAY_MS documents the deliberate-ceiling behavior. Slice 1b adds health surfacing. |
+| T-01-02-04 | Repudiation | Silent flush failures during backoff | accept | D-10 defers log surfacing; rationale comment near MAX_DELAY_MS documents the deliberate-ceiling behavior (reviewer-checklist guarded). Slice 1b adds health surfacing. |
 </threat_model>
 
 <verification>
 1. `cd mcp && npx vitest run test/cli/status.test.ts test/capture/daemon-backoff.test.ts test/capture/handoff-sync.test.ts` — all green
 2. `cd mcp && npx vitest run` — full mcp suite green (no regression in existing tests: `daemon.test.ts`, `daemon-cc.test.ts`, `handoff-sync.test.ts`, `crash-resilience.test.ts`, `events-log.test.ts`, `handoff-brief.test.ts`, `handoff-paths.test.ts`, `heuristic-synth.test.ts`, `idle-trigger.test.ts`, `os-service.test.ts`, `sandbox.test.ts`)
 3. `npm run lint && npm run typecheck` from repo root — exit 0
-4. `grep -E "MAX_DELAY|max.*delay" mcp/src/capture/daemon.ts mcp/src/capture/daemon-backoff.ts | grep -E "deliberate|BUGS.md #12"` — at least 1 match in `daemon-backoff.ts` (the rationale comment)
-5. Manual (not blocking, but the project intends this): run `synapse capture status` on the dev machine; expect `Daemon: running · supervised by launchd · PID <n>` (matches BUG-02 SC#2 from REQUIREMENTS.md, deferred manual verification per VALIDATION.md "Manual-Only Verifications").
+4. Reviewer confirms (manual checklist, not automated grep): rationale comment near MAX_DELAY_MS is present in `mcp/src/capture/daemon-backoff.ts`, and the BUGS.md #12 follow-up TODO is present in `mcp/src/cli/commands.ts` near `runCaptureStatus`.
+5. Manual (not blocking, but the project intends this): run `synapse capture status` on the dev machine; expect output that includes both "launchd" and the current PID (matches BUG-02 SC#2 from REQUIREMENTS.md, deferred manual verification per VALIDATION.md "Manual-Only Verifications").
 </verification>
 
 <success_criteria>
 - BUG-02 acceptance row in REQUIREMENTS.md is closable: `synapse capture status` reports "Daemon: running" with launchd-supervised PID when the daemon is alive under launchd.
 - BUGS.md #12 fix sketch implemented; daemon log no longer grows ~6 lines/min during a backend outage (verifiable post-merge by tailing `~/.synapse/daemon.log` for 5min during the current 1101 outage — manual).
-- 9 RED tests turn GREEN (4 BUG-02 + 5 BUGS.md #12). The BUGS.md #12 tests run against the pure `computeNextDelay` helper, not the full `startHandoffLoop` — no fake-timer collision with preserved `setInterval` calls.
+- 10 RED tests turn GREEN (4 BUG-02 + 1 LAUNCHD_LABEL-sentinel + 5 BUGS.md #12). The BUGS.md #12 tests run against the pure `computeNextDelay` helper, not the full `startHandoffLoop` — no fake-timer collision with preserved `setInterval` calls. The BUG-02 distinguishability test guards the runtime output invariants without depending on specific phrasing.
 - No new disk artifacts under `~/.synapse/` (per D-10).
-- The rationale comment near `MAX_DELAY_MS` survives — grep-checkable per acceptance criteria of Task 3.
+- The rationale comment near `MAX_DELAY_MS` is guarded by a reviewer-checklist item, not by a grep on its literal text (per `feedback_test_generality.md`: no grep-test theater).
 </success_criteria>
 
 <output>
-Create `.planning/phases/01-stabilize-backend-observability/01-02-SUMMARY.md` when done. Summary MUST update VALIDATION.md row statuses (4 BUG-02 + 5 BUGS.md #12 rows from ⬜ → ✅) and note the BUG-02 manual verification (`synapse capture status` output) was/wasn't performed on the dev machine.
+Create `.planning/phases/01-stabilize-backend-observability/01-02-SUMMARY.md` when done. Summary MUST update VALIDATION.md row statuses (4 BUG-02 + 1 LAUNCHD_LABEL-sentinel + 5 BUGS.md #12 rows from ⬜ → ✅) and note the BUG-02 manual verification (`synapse capture status` output) was/wasn't performed on the dev machine.
 </output>
