@@ -49,6 +49,10 @@ None of these were caught by 437 passing unit tests. **Unit tests verify code, E
 **Not yet in the merge gate:**
 - Layer 8 install/status/uninstall CLI E2E (`e2e-proxy-install.mjs`). Deferred 2026-05-30 because `security add-trusted-cert -r trustRoot` triggers an MDM-protected `TrustStore.sqlite3` update prompt on the maintainer's corporate-managed Mac (see Synapse action_item: "Pick up Layer 8 install/status/uninstall E2E on non-MDM Mac"). The 14-test unit suite at `mcp/test/unit/capture/proxy/onboarding.test.ts` still covers function-level behavior.
 
+**Platform-matrix E2E (runs in CI only):**
+- `proxy-linux-e2e` (5 distros: debian / ubuntu / fedora / rockylinux / arch). Full install → status → uninstall round-trip against real `update-ca-certificates` / `update-ca-trust extract`. Runs in Docker on `ubuntu-latest`.
+- `proxy-windows-e2e` (`windows-latest`). **Validates the install pipeline up to but not including the final trust-prompt step.** Asserts the daemon's PowerShell script reaches the X509Store layer (`step6:open-store` in the `[windows-debug]` trace). Does NOT assert the cert lands in the user's Root store — the Win32 trust-confirmation dialog (`CertAddCertificateContextToStore` on Root) requires an interactive desktop that GHA runners don't have, and Windows' documented registry bypasses (`HKCU\...\ProtectedRoots\Flags=1`, `HKLM\...\Flags=0x20`) don't reliably suppress the dialog on Server 2022. Final store-state validation requires manual smoke test on a real Windows desktop.
+
 ### Happy-flow detail (script 1 of 5)
 
 Concrete stages, in order:
