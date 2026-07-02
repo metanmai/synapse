@@ -14,6 +14,7 @@ Synapse is a context management tool that captures AI coding sessions and surfac
 - **Backend deploy is manual**: No auto-deploy GitHub Action; `wrangler deploy` runs from a machine with the Cloudflare API token. Production can drift from main if deploy is forgotten (BUGS.md #10).
 - **Corporate network proxy**: Netskope blocks some npm / pypi / npx egress. `npx synapsesync` fails on this network (REQ-BUG-03). Bypass requires tethering or a different network.
 - **Pre-push hook runs full verify** (`npm run lint && npm run typecheck && npm run test`) — adds ~25s per push but catches regressions.
+- **E2E happy-flow is the merge gate** (`npm run test:e2e`) — strict protocol per `docs/E2E-PROTOCOL.md`. Must pass before merging any change to `mcp/`, `backend/`, or `supabase/migrations/`. Takes ~3-5 min, costs ~$0.01-0.05 in tokens, exercises live backend + daemon. Unit tests catch code regressions; E2E catches *product* regressions — both are required.
 
 ## Synapse MCP — Read-Through Pattern (BLOCKING)
 
