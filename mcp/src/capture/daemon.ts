@@ -227,6 +227,20 @@ export function spawnPrewarm(
         SYNAPSE_DAEMON_PREWARM: "1",
       },
     });
+    // Defensive: a spawn failure (missing dist/, bad PATH, AV blocking on
+    // Windows) emits an async 'error' event. Without a listener, Node's
+    // default behavior is to throw "Unhandled 'error' event" — which kills
+    // the daemon process AND, in test runs, kills the vitest worker mid-
+    // suite (causing "Worker exited unexpectedly"). Log and swallow; the
+    // next cycle's debounce check will retry if appropriate.
+    child.on("error", (err) => {
+      try {
+        fs.appendFileSync(
+          path.join(synapseRoot(), "daemon-prewarm.log"),
+          `[${new Date().toISOString()}] spawn ERROR project=${projectId} err=${err instanceof Error ? err.message : err}\n`,
+        );
+      } catch {}
+    });
     child.unref();
   } catch (err) {
     try {

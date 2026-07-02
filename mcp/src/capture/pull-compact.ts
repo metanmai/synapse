@@ -471,6 +471,11 @@ function spawnBackgroundRecompute(cwd: string, log: (msg: string) => void): void
       stdio: ["ignore", out, out],
       env: { ...process.env, SYNAPSE_PULL_COMPACT_BG: "1" },
     });
+    // Defensive: unhandled 'error' on a detached spawn kills the parent
+    // (see daemon.spawnPrewarm comment for the bug-class explanation).
+    child.on("error", (err) => {
+      log(`pull-compact: background spawn error: ${err instanceof Error ? err.message : err}`);
+    });
     child.unref();
     log(`pull-compact: spawned background recompute for ${cwd} (pid=${child.pid})`);
   } catch (err) {
