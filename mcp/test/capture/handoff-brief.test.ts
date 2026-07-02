@@ -1,11 +1,12 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { renderBriefFromCache } from "../../src/capture/handoff-brief.js";
 
 let tmp: string;
 beforeEach(() => {
-  tmp = fs.mkdtempSync("/tmp/synapse-brief-");
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-brief-"));
   process.env.SYNAPSE_HOME = tmp;
 });
 afterEach(() => {

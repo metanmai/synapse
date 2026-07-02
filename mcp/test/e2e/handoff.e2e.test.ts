@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { writeBrief } from "../../src/capture/handoff-brief.js";
@@ -15,8 +16,11 @@ let alexHome: string;
 
 beforeEach(async () => {
   ({ url: stubUrl, stop } = await startStubBackend());
-  tanmaiHome = fs.mkdtempSync("/tmp/syn-tanmai-");
-  alexHome = fs.mkdtempSync("/tmp/syn-alex-");
+  // `os.tmpdir()` returns the platform-appropriate temp root:
+  // `/tmp` on Linux/macOS, `%TEMP%` (usually `C:\Users\<u>\AppData\Local\Temp`)
+  // on Windows. Hardcoding `/tmp/` made these tests ENOENT on Windows.
+  tanmaiHome = fs.mkdtempSync(path.join(os.tmpdir(), "syn-tanmai-"));
+  alexHome = fs.mkdtempSync(path.join(os.tmpdir(), "syn-alex-"));
 });
 
 afterEach(() => {

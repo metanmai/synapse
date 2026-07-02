@@ -1,10 +1,12 @@
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { spawnInferNextStep, writeDaemonCcProfile } from "../../src/capture/daemon-cc.js";
 
 let tmp: string;
 beforeEach(() => {
-  tmp = fs.mkdtempSync("/tmp/synapse-cc-");
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-cc-"));
   process.env.SYNAPSE_HOME = tmp;
 });
 afterEach(() => {
