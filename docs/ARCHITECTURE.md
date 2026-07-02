@@ -9,7 +9,7 @@ High-level map of the monorepo. For setup, see [SELF_HOSTING.md](SELF_HOSTING.md
 | `@synapse/backend` | `backend/` | Cloudflare Worker: Hono HTTP API, auth, context CRUD, search, sharing, billing hooks, Google sync, MCP-related Durable Object code |
 | `@synapse/frontend` | `frontend/` | SvelteKit 5 app: dashboard, projects, entries, account, server-side API proxy via `API_URL` |
 | `@synapse/shared` | `packages/shared/` | Shared TypeScript types for API-shaped data |
-| `synapsesync-mcp` | `mcp/` | Node MCP server: `ls`, `read`, `write`, `search`, `tree`, `history`, CLI login/signup |
+| `synapsesync-mcp` | `mcp/` | Node CLI + capture/handoff daemon; ships a deprecated MCP server exposing only `save_insight` and `list_insights`. CLI subcommands: `init`, `handoff`, `set-focus`, `note`, `issue`, `invite`, `status`, `doctor`, plus the `hook <kind>` dispatcher |
 
 ## Request flow (simplified)
 
@@ -60,11 +60,18 @@ Claude Code hooks ──▶ ~/.synapse/projects/<id>/events.jsonl
                                   as <synapse-brief>…</synapse-brief>
 ```
 
+- **Events** — every event is a typed record (`packages/shared/src/handoff/events.ts`, `types.ts`) appended to `~/.synapse/projects/<project_id>/events.jsonl`. Project IDs start as `cwd_<sha256-of-cwd-prefix>` placeholders; the backend resolves them to canonical UUIDs on first sync and returns a `canonical_project_ids` mapping the local dispatcher writes back to disk.
 - **Hooks** (`mcp/src/hooks/`) write structured events for `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `PreCompact`, `SessionEnd`, `SubagentStop`. Dispatched by `synapse hook <kind>` (`mcp/src/cli/hook-dispatch.ts`).
-- **Daemon** (`mcp/src/capture/daemon.ts`) flushes events to the Worker, refreshes the brief cache, and optionally spawns Claude Code itself for opt-in AI tasks (`daemon.ai_enabled`).
+- **Slash commands & CLI** — `synapse init` installs six slash commands into `~/.claude/commands/synapse/` (`handoff`, `focus`, `issue`, `status`, `doctor`, `invite`). Each command body runs the matching `synapse <cmd>` CLI (`mcp/src/cli/handoff-commands.ts`, `invite.ts`), which appends a typed event and signals the daemon to flush.
+- **Daemon** (`mcp/src/capture/daemon.ts`, started via `startHandoffLoop`) batches local events and `POST`s them to the Worker at `/api/events/batch`; the Worker auto-creates a `projects` row on first contact, runs the reducer to materialize a `ProjectStatus`, and the daemon refreshes the brief cache. The daemon can optionally spawn Claude Code itself for opt-in AI tasks (`daemon.ai_enabled`).
+- **Reducer & ProjectStatus** — server-side, events are folded into a per-project state document (focus, open issues, recent handoffs, contributors). The brief renderer turns that state into a `<synapse-brief>` block tailored to the viewer.
 - **Brief** (`mcp/src/capture/handoff-brief.ts`) renders the cached project state into the SessionStart prompt — same shape on every device.
 
-See [docs/superpowers/specs/2026-05-11-claude-code-handoff-layer-design.md](superpowers/specs/2026-05-11-claude-code-handoff-layer-design.md) for the design and [docs/superpowers/plans/2026-05-11-claude-code-handoff-layer.md](superpowers/plans/2026-05-11-claude-code-handoff-layer.md) for the implementation plan.
+### Invite flow
+
+`synapse invite <email>` (or `/synapse:invite <email>`) calls `POST /api/projects/:id/invites { email }`, which mints a crypto-random base64url token and returns a join URL. The recipient opens the URL, signs in, and the frontend calls `POST /api/invites/:token/accept` to redeem the token and insert a `project_members` row. From then on, both users see the same brief.
+
+See [docs/superpowers/specs/2026-05-14-handoff-layer-v1.1-design.md](superpowers/specs/2026-05-14-handoff-layer-v1.1-design.md) for the v1.1 design (current shape), [docs/superpowers/specs/2026-05-11-claude-code-handoff-layer-design.md](superpowers/specs/2026-05-11-claude-code-handoff-layer-design.md) for the original v1 design with the full user-flow narrative, and [docs/superpowers/plans/2026-05-14-handoff-layer-v1.1.md](superpowers/plans/2026-05-14-handoff-layer-v1.1.md) for the v1.1 implementation plan.
 
 ## CI
 
