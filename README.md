@@ -17,7 +17,7 @@ Synapse is a **handoff layer** for AI-assisted work. It records what you and you
 
 ## Claude Code handoff
 
-**Tanmai** pairs with Claude Code on her laptop; she has to stop mid-feature. **Alex** picks the same project up on a different machine an hour later — Claude Code opens, reads the project brief, and Alex continues from where Tanmai left off without re-briefing.
+**Tanmai** pairs with Claude Code on his laptop; he has to stop mid-feature. **Alex** picks the same project up on a different machine an hour later — Claude Code opens, reads the project brief, and Alex continues from where Tanmai left off without re-briefing.
 
 Synapse makes that work by recording Claude Code session events to a local log, syncing them through a background daemon, and injecting a `<synapse-brief>` summary on every `SessionStart`. The brief is generated from real events (edits, prompts, commits, handoffs) — not from chat summarisation.
 
