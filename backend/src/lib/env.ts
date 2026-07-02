@@ -34,6 +34,10 @@ export interface Env {
 
   // Activity log defaults
   ACTIVITY_PAGE_LIMIT?: string; // Default: "50"
+
+  // Embedding service (optional — semantic search degrades gracefully without it)
+  EMBEDDING_SERVICE_URL?: string;
+  EMBEDDING_SERVICE_KEY?: string;
 }
 
 // Helper to read env with defaults
