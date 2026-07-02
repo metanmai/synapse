@@ -772,7 +772,16 @@ async function stage9_cli() {
   for (const cmd of ["status", "stats"]) {
     const r = spawnSync("node", [MCP_DIST, cmd], { encoding: "utf-8", timeout: 30_000 });
     if (r.status !== 0 || !r.stdout || r.stdout.includes("Error:")) {
-      fail(`9.${cmd}`, `exit ${r.status}: ${(r.stdout ?? r.stderr ?? "").slice(0, 120)}`);
+      // Show stderr always (it usually has the actual error when the
+      // process exits abnormally); `??` would skip it whenever stdout
+      // had any spinner content. Slice each separately so neither
+      // half is lost to truncation.
+      const out = (r.stdout ?? "").slice(0, 200);
+      const err = (r.stderr ?? "").slice(0, 300);
+      fail(
+        `9.${cmd}`,
+        `exit ${r.status} (signal=${r.signal ?? "none"}): stdout=${JSON.stringify(out)} stderr=${JSON.stringify(err)}`,
+      );
     } else {
       ok(`9.${cmd}`, `non-error output (${r.stdout.length} bytes)`);
     }
