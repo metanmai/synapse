@@ -46,6 +46,7 @@
 import { createHash } from "node:crypto";
 import type { CapturedSession, SessionMessage, ToolCall } from "../types.js";
 import type { CapturedRequest, ReconstructionOptions } from "./types.js";
+import { classifyUserAgent } from "./user-agent-classify.js";
 
 const DEFAULT_IDLE_MS = 5 * 60 * 1000;
 
@@ -62,11 +63,11 @@ export function reconstructSessions(
   opts: ReconstructionOptions & { tool?: CapturedSession["tool"] } = {},
 ): CapturedSession[] {
   const idleMs = opts.idleMs ?? DEFAULT_IDLE_MS;
-  // Tool tagging: at this layer we don't know which client (claude CLI,
-  // codex, cursor) produced the request — only the upstream provider.
-  // Default to claude-code as the most common observed client; later
-  // slices will refine via User-Agent header inspection.
-  const tool = opts.tool ?? "claude-code";
+  // Tool tagging: classify per-session from the first request's User-Agent
+  // header (set by server.ts when intercepting). `opts.tool` overrides
+  // the classifier — used by tests + a future explicit-override surface.
+  // No hardcoded "claude-code" default: an unknown UA gets "unknown" so
+  // the dashboard surfaces the gap rather than silently mislabeling.
 
   // Stage 1: filter to chat-capturable, 2xx requests only. Telemetry,
   // registry, metrics, embeddings, etc. drop here.
@@ -106,7 +107,7 @@ export function reconstructSessions(
 
     sessions.push({
       id: `ses_${hash}`,
-      tool,
+      tool: opts.tool ?? classifyUserAgent(first.userAgent),
       // Project routing happens at the proxy server's working-context
       // layer (a later slice). At this pure-function layer we don't
       // know the cwd — emit "unknown" and let the proxy server fill

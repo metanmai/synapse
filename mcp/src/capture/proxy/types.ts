@@ -38,6 +38,11 @@ export interface CapturedRequest {
   /** HTTP status code from upstream. Non-2xx requests are dropped during
    *  reconstruction (a failed call didn't produce a complete turn). */
   statusCode: number;
+  /** Value of the request's `User-Agent` header (if any). Used by
+   *  session-reconstruction to classify the client tool — Claude Code,
+   *  Cline, Aider, etc. — when no explicit `opts.tool` is supplied.
+   *  Optional because pre-UA-classifier captures didn't populate it. */
+  userAgent?: string;
 }
 
 /**

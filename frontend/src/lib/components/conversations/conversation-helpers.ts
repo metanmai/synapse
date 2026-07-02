@@ -53,10 +53,14 @@ export function getToolBadge(tool: string | undefined | null): { bg: string; tex
 export function getToolLabel(tool: string | undefined | null): string {
   if (!tool) return "Unknown";
   const labels: Record<string, string> = {
+    cline: "Cline",
     "claude-code": "Claude Code",
-    cursor: "Cursor",
     codex: "Codex",
+    "copilot-cli": "GitHub Copilot CLI",
+    cursor: "Cursor",
     gemini: "Gemini",
+    "roo-code": "Roo Code",
+    unknown: "Unknown tool",
   };
   return labels[tool] ?? tool;
 }
