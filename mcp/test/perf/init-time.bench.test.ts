@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runInit } from "../../src/cli/init.js";
 
 let tmp: string;
@@ -16,6 +16,16 @@ beforeEach(() => {
   // Plan 01-04: runInit writes `.mcp.json` and `.gitignore` to process.cwd().
   // Isolate in tmp so those files don't leak into the mcp/ workspace.
   process.chdir(tmp);
+  // Phase 2 (Plan 02-02): runInit calls fetchMe() before any disk write.
+  // Mock fetch so the perf test measures local install time, not network latency.
+  vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+    Promise.resolve(
+      new Response(JSON.stringify({ user_id: "perf-test-uuid", email: "perf@example.com" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+  );
 });
 afterEach(() => {
   process.chdir(origCwd);
@@ -28,6 +38,7 @@ afterEach(() => {
   }
   // biome-ignore lint/performance/noDelete: real delete required
   delete process.env.SYNAPSE_HOME;
+  vi.restoreAllMocks();
 });
 
 describe("synapse init time", () => {

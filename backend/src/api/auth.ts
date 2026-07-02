@@ -515,6 +515,15 @@ account.patch("/keys/:id", async (c) => {
   return c.json({ ok: true, label: newLabel });
 });
 
+// GET /api/account/me — return the authenticated user's canonical identity.
+// Used by `synapse init` (Phase 2 D-02) to bootstrap ~/.synapse/config.json
+// with the real public.users.id + email instead of the legacy "default" placeholder.
+account.get("/me", async (c) => {
+  const user = c.get("user");
+  const tier = c.get("tier");
+  return c.json({ user_id: user.id, email: user.email, tier });
+});
+
 // POST /api/account/reset — wipe all user data but keep the auth user alive
 account.post("/reset", async (c) => {
   const user = c.get("user");

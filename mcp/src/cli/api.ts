@@ -44,3 +44,49 @@ export async function cliExchangeCode(code: string, codeVerifier: string): Promi
   }
   return { ok: true, data: (await res.json()) as ExchangeResponse };
 }
+
+export interface MeResponse {
+  user_id: string;
+  email: string;
+  tier?: "free" | "plus";
+}
+
+/**
+ * Phase 2 (D-02): fetch the authenticated user's canonical identity from the
+ * backend. Called by `synapse init` BEFORE any disk write so that on /me
+ * failure, we fail-fast (D-05) without leaving a half-configured config.json.
+ *
+ * Error messages are user-facing (init flow surfaces them via clack.log.error).
+ * 10s timeout — longer than validateApiKey's 5s because init is interactive
+ * and Netskope-proxy first-connect can take noticeably longer.
+ */
+export async function fetchMe(apiKey: string): Promise<MeResponse> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/api/account/me`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    throw new Error(
+      `Could not reach ${API_URL}/api/account/me. Check your network — if you're on a proxy (Netskope, corporate firewall), tether to a different network and retry.`,
+    );
+  }
+  if (res.status === 401) {
+    throw new Error("API key rejected by server (401). Run 'synapse login' or paste a fresh key from synapsesync.app.");
+  }
+  if (!res.ok) {
+    throw new Error(`/api/account/me returned ${res.status} ${res.statusText} — cannot proceed.`);
+  }
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    throw new Error("/api/account/me returned non-JSON body — cannot proceed.");
+  }
+  const b = body as Partial<MeResponse>;
+  if (typeof b.user_id !== "string" || typeof b.email !== "string") {
+    throw new Error(`/api/account/me returned invalid shape: ${JSON.stringify(body)}`);
+  }
+  return { user_id: b.user_id, email: b.email, tier: b.tier };
+}

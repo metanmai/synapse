@@ -16,6 +16,7 @@ import path from "node:path";
 
 import { runCapture } from "../capture/cli.js";
 import { renderBriefFromCache } from "../capture/handoff-brief.js";
+import { readUserIdFromConfig } from "../capture/identity.js";
 import {
   runHook,
   runStatus as runLegacyStatus,
@@ -85,21 +86,6 @@ function resolveProjectFromCwd(cwd: string): string {
     /* fall through to cwd_hash */
   }
   return `cwd_${hashCwdShort(cwd)}`;
-}
-
-function readUserIdFromConfig(): string {
-  try {
-    const root = process.env.SYNAPSE_HOME ?? path.join(process.env.HOME ?? "", ".synapse");
-    const configPath = path.join(root, "config.json");
-    if (!fs.existsSync(configPath)) return "local-user";
-    const c = JSON.parse(fs.readFileSync(configPath, "utf-8")) as {
-      user_id?: string;
-      email?: string;
-    };
-    return c.user_id ?? c.email ?? "local-user";
-  } catch {
-    return "local-user";
-  }
 }
 
 function handlerContext(): HandlerContext {

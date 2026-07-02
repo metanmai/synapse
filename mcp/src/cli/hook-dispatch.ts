@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import path from "node:path";
+import { readUserIdFromConfig } from "../capture/identity.js";
 import { runPostToolUseHook } from "../hooks/post-tool-use.js";
 import { runPreCompactHook } from "../hooks/pre-compact.js";
 import { runSessionEndHook } from "../hooks/session-end.js";
@@ -56,7 +57,7 @@ export async function readHookPayloadFromStdin(): Promise<AnyHookPayload> {
   const git_basename = getGitBasename(cwd) ?? path.basename(cwd);
   return {
     project_id,
-    user_id: process.env.SYNAPSE_USER_ID ?? "default",
+    user_id: process.env.SYNAPSE_USER_ID ?? readUserIdFromConfig(),
     session_id: parsed.session_id,
     tool: parsed.tool_name,
     input: parsed.tool_input,

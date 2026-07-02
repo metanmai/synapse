@@ -13,7 +13,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HANDLERS } from "../../src/cli/handlers.js";
 
@@ -229,6 +229,17 @@ describe("CLI dispatcher — handoff layer subcommands", () => {
       initHome = fs.mkdtempSync("/tmp/synapse-init-home-");
       originalHome = process.env.HOME;
       process.env.HOME = initHome;
+      // Phase 2 (Plan 02-02): runInit calls fetchMe() before any disk write.
+      // Default-mock fetch so init-argument-parsing tests don't hit the network.
+      // Use mockImplementation so each fetch call gets a fresh Response (single-use bodies).
+      vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ user_id: "dispatcher-test-uuid", email: "dispatcher@example.com" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      );
     });
 
     afterEach(() => {
@@ -239,6 +250,7 @@ describe("CLI dispatcher — handoff layer subcommands", () => {
         process.env.HOME = originalHome;
       }
       fs.rmSync(initHome, { recursive: true, force: true });
+      vi.restoreAllMocks();
     });
 
     // The cli-dispatcher beforeEach sets SYNAPSE_HOME=tmp, so config.json
