@@ -466,11 +466,12 @@ describe("projects queries", () => {
       expect(tier2.maybeSingle).toHaveBeenCalled();
     });
 
-    it("falls through to INSERT when both tiers miss", async () => {
+    it("falls through to INSERT when all tiers miss", async () => {
       const db = createSequentialMockDb(
         { data: [{ project_id: "proj_z" }], error: null }, // memberships
         { data: null, error: null }, // Tier 1 miss
         { data: null, error: null }, // Tier 2 miss
+        { data: null, error: null }, // Tier 1b unscoped owner miss
         { data: { id: "proj_new" }, error: null }, // INSERT
         { data: null, error: null }, // member INSERT
       );
@@ -481,6 +482,38 @@ describe("projects queries", () => {
       });
 
       expect(result).toBe("proj_new");
+    });
+
+    // Regression guard for the silent-memberships-miss bug class —
+    // discovered 2026-05-24 via wrangler tail when POST /api/conversations
+    // for /Users/Tanmai.N/Documents/synapse 500'd with "duplicate key
+    // value violates unique constraint projects_user_remote_url_uniq_idx"
+    // despite the canonical synapse project existing and being owned by
+    // the user. Root: when the memberships SELECT returns null (RLS,
+    // transient DB error, etc.), memberProjectIds is empty, Tiers 1+2
+    // short-circuit, Tier 3 INSERT triggers the unique constraint, and
+    // Fix #2's recovery — which ALSO depends on memberProjectIds — also
+    // misses, ending in throw. The Tier 1b unscoped owner fallback below
+    // catches the case BEFORE the INSERT fires, regardless of memberships.
+    it("Tier 1b unscoped owner fallback catches canonical when memberships is empty", async () => {
+      const db = createSequentialMockDb(
+        { data: [], error: null }, // memberships silently empty (the bug condition)
+        // Tier 1 + Tier 2 are SKIPPED by the `memberProjectIds.length > 0`
+        // guards — no mock entries consumed for them.
+        { data: { id: "canonical_synapse" }, error: null }, // Tier 1b owner+URL hit
+      );
+
+      const result = await findOrCreateProjectByGit(db as unknown as SupabaseClient, "u1", {
+        git_remote_url: "https://github.com/tanmain/synapse.git",
+        git_basename: "synapse",
+      });
+
+      // No INSERT happened — function returned the existing project_id from
+      // Tier 1b. If this regresses, expect to see "duplicate key value
+      // violates unique constraint" 500s on every cold-write again.
+      expect(result).toBe("canonical_synapse");
+      // Exactly 2 from() calls: memberships + Tier 1b.
+      expect(db.from).toHaveBeenCalledTimes(2);
     });
 
     // Regression guard for Fix #2 — bug class: "two concurrent Tier 3
@@ -500,7 +533,8 @@ describe("projects queries", () => {
         { data: [{ project_id: "proj_winner" }], error: null }, // memberships
         { data: null, error: null }, // Tier 1 miss
         { data: null, error: null }, // Tier 2 miss
-        { data: null, error: uniqueViolation }, // INSERT raises 23505
+        { data: null, error: null }, // Tier 1b miss (URL not yet on backend at lookup time)
+        { data: null, error: uniqueViolation }, // INSERT raises 23505 (race winner inserted between Tier 1b and our INSERT)
         { data: { id: "proj_winner" }, error: null }, // retry Tier 1 finds winner
       );
 
@@ -528,6 +562,7 @@ describe("projects queries", () => {
         { data: [{ project_id: "stale" }], error: null }, // memberships (stale)
         { data: null, error: null }, // Tier 1 miss
         { data: null, error: null }, // Tier 2 miss
+        { data: null, error: null }, // Tier 1b miss (race winner inserts between this lookup and INSERT)
         { data: null, error: uniqueViolation }, // INSERT raises 23505
         { data: null, error: null }, // scoped retry: still misses (winner not in memberships snapshot)
         { data: { id: "proj_unscoped" }, error: null }, // unscoped owner lookup finds it
@@ -552,10 +587,12 @@ describe("projects queries", () => {
         hint: "",
       };
       // Empty memberships → Tier 1 + Tier 2 skipped (their guards check
-      // memberProjectIds.length > 0). The next from("projects") is the INSERT,
-      // which is mock-index 1.
+      // memberProjectIds.length > 0). Tier 1b STILL runs (it only requires
+      // gitRemoteUrl); we mock it as a miss so the function falls through
+      // to the INSERT.
       const db = createSequentialMockDb(
         { data: [], error: null }, // memberships (empty user)
+        { data: null, error: null }, // Tier 1b unscoped owner miss
         { data: null, error: otherError }, // INSERT fails for a non-race reason
       );
 
