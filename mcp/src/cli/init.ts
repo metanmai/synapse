@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { synapseRoot } from "../capture/handoff-paths.js";
 import { writeServiceFile } from "../capture/os-service.js";
-import { fetchMe, type MeResponse } from "./api.js";
+import { type MeResponse, fetchMe } from "./api.js";
 // Namespace import so vi.spyOn(editorIo, "ensureGitignore") in init.test.ts
 // intercepts the call site (ESM bindings are immutable from the importer's
 // perspective when destructured).
