@@ -68,7 +68,7 @@ Result: the 402 quota failure class is foreclosed in CI. Local sweep on the main
 
 **What shipped (2026-06-10)**:
 - `scripts/e2e-insight-roundtrip.mjs` appended to root `package.json` `test:e2e`. Now ALSO hardened: forces flush via `synapsesync sync` instead of blanket-sleeping, and IR3 polls (12 × 5s) instead of one-shot retry.
-- `e2e-multi-device.mjs` NOT in the gate yet — preflight tightened to require direct-API mode (cli-driver can't pass; X-Synapse-Cwd attribution gap documented inline). MD3 also polls. Can be added once OPENROUTER_API_KEY (or equivalent) is in CI secrets for the happy-flow leg (ANTHROPIC_API_KEY already is). Optional: add a `needs: cleanup-e2e-account` job that runs it standalone.
+- `e2e-multi-device.mjs` NOT in the gate yet — preflight tightened to require direct-API mode (cli-driver can't pass; X-Synapse-Cwd attribution gap documented inline). MD3 also polls. **No secret blocker exists**: the happy-flow CI env already has `OPENROUTER_API_KEY` + `DEEPSEEK_API_KEY` configured on metanmai (confirmed via run 27285825740 env block — `ANTHROPIC_API_KEY` is the only provider NOT set). The remaining caveat is the same Windows proxy-capture tail latency that pushed `insight-roundtrip-e2e` to ubuntu-only, so add multi-device as an ubuntu-only job too rather than into the cross-OS merge gate.
 
 ### 7. ✅ DONE — `e2e-project-cap.mjs` in CI as serial post-matrix job
 
@@ -169,6 +169,6 @@ Result: **all 14 metanmai jobs green with zero skipped tests** in CI run `272814
 1. **#3 Apply migration 027 to PROD** + **#10 apply migration 028 to PROD** — same `supabase db push` from a credentialed machine, run the two `curl` checks for 027 + a `SELECT prune_activity_log();` smoke for 028. Owner-side; ~10 min.
 2. **Configure CI secrets**: `CLOUDFLARE_API_TOKEN` (activates `deploy-backend.yml` from #8), `SUPABASE_ACCESS_TOKEN`+`SUPABASE_PROJECT_REF`+`SUPABASE_DB_PASSWORD` (activates the `migrate` job — already scaffolded, currently gracefully skipping). Both ~5 min in GitHub repo settings.
 3. **#11 disk-IO investigation** — pull the Supabase Query Performance screenshot. With migration 028 applied, the composite index should have shifted the top query; act on whatever's now #1.
-4. **Add `multi-device` to the merge gate** (was #6's second half): need a provider key in the happy-flow CI env (ANTHROPIC_API_KEY already is); 1-line `package.json` append.
+4. **Add `multi-device` as an ubuntu-only CI job** (was #6's second half): the provider keys are already there (`OPENROUTER_API_KEY` + `DEEPSEEK_API_KEY` on metanmai; `ANTHROPIC_API_KEY` is NOT set but isn't needed). Model it on the `insight-roundtrip-e2e` job — ubuntu-only because of the Windows proxy-capture tail latency, `needs: [verify, cleanup-e2e-account]`. No secret config required.
 5. **#2 Cloudflare rate limit** — block on owner's dashboard access; agent can draft the WAF expression text.
 6. **#4 backend security review** — multi-hour, do last with focused effort.
