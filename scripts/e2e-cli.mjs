@@ -41,10 +41,18 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { sweepArtifacts } from "./e2e-cleanup.mjs";
 
 // ── Config ────────────────────────────────────────────────────────────────
-const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+// Windows ESM gotcha: `new URL(import.meta.url).pathname` produces
+// `/C:/path/...` (with a leading slash before the drive letter), so the
+// resulting absolute path fails existsSync and breaks every dist-path
+// lookup. fileURLToPath handles the drive-letter case correctly on every
+// OS. The other e2e scripts (proxy-layer5/source) already do this; the
+// merge gate's Windows happy-flow-e2e job on metanmai (run 27115590661)
+// caught the gap in e2e-cli.mjs the moment it was wired into the chain.
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MCP_DIST = path.join(REPO_ROOT, "mcp", "dist", "index.js");
 const RUN = Date.now();
 
