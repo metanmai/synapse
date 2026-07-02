@@ -341,7 +341,7 @@ async function stageF2_4_stale_project_map() {
   );
   withConfig(home, { api_key: apiKey, user_id: "test", email: "test@test" });
 
-  const { code, stdout, elapsed } = fireHook(
+  const { code, elapsed } = fireHook(
     "session-start",
     { session_id: "f2-4", cwd: canonicalCwd, source: "startup" },
     { SYNAPSE_HOME: home },

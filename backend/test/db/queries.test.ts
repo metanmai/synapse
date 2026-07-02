@@ -75,7 +75,7 @@ function createSequentialMockDb(...responses: { data?: unknown; error?: unknown;
     // biome-ignore lint/suspicious/noThenProperty: intentional thenable mock
     (chainable as Record<string, unknown>).then = (resolve: (v: unknown) => void) => resolve(resp);
 
-    chains.push(chainable as any);
+    chains.push(chainable as Record<string, unknown>);
     return chainable;
   });
 

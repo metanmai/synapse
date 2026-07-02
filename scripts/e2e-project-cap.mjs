@@ -170,7 +170,10 @@ async function main() {
     return;
   }
   if (!overflow) {
-    fail("saturate", `cap never fired after ${SATURATION_BUDGET} successful creates — backend cap may be misconfigured or higher than expected`);
+    fail(
+      "saturate",
+      `cap never fired after ${SATURATION_BUDGET} successful creates — backend cap may be misconfigured or higher than expected`,
+    );
     for (const p of created) await api("DELETE", `/api/projects/${p}?force=true`, key);
     return;
   }
