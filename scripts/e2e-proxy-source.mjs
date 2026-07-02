@@ -33,6 +33,10 @@ import path from "node:path";
 import { rootCertificates } from "node:tls";
 import { fileURLToPath } from "node:url";
 
+// Opt-out of the daemon's skip-ephemeral-cwd predicate — tests use
+// tmpdir() paths that the predicate normally drops.
+process.env.SYNAPSE_DISPATCH_FORCE_ALLOW = "1";
+
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DIST_PROXY_SOURCE = path.join(REPO_ROOT, "mcp/dist/capture/proxy/proxy-source.js");
 const DIST_TLS = path.join(REPO_ROOT, "mcp/dist/capture/proxy/tls.js");

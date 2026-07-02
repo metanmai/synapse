@@ -124,7 +124,14 @@ export function shouldSkipDispatch(
   env: NodeJS.ProcessEnv,
   opts: SkipDispatchOpts = {},
 ): SkipDispatchResult {
-  // (d) env var — cheapest check, do first.
+  // (e) Force-allow override — wins over EVERYTHING. Used by E2E tests
+  // that intentionally run in tmp dirs and need capture to fire there.
+  // Production users never set this; tests opt-in explicitly.
+  if (env.SYNAPSE_DISPATCH_FORCE_ALLOW === "1") {
+    return { skip: false };
+  }
+
+  // (d) env var — cheapest check after the override, do first.
   if (env.SYNAPSE_SKIP_DISPATCH === "1") {
     return { skip: true, reason: "SYNAPSE_SKIP_DISPATCH=1" };
   }

@@ -56,6 +56,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// Opt-out of the daemon's skip-ephemeral-cwd predicate — tests use
+// tmpdir() paths that the predicate normally drops.
+process.env.SYNAPSE_DISPATCH_FORCE_ALLOW = "1";
+
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // The package entry — dispatches to runCapture(). Invoking
 // mcp/dist/capture/cli.js directly is a no-op (only exports runCapture).
