@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { API_URL } from "../cli/config.js";
 import { upsertProjectMapping } from "../cli/project-map.js";
+import { synapseRoot } from "./handoff-paths.js";
 import { type SyncState, loadSyncStates, saveSyncStates } from "./sync-state-store.js";
 import type { CapturedSession, SessionMessage } from "./types.js";
 
@@ -26,7 +27,26 @@ export function resolveApiKey(): string | null {
 
   // 3. ~/.mcp.json
   const homeConfig = path.join(os.homedir(), ".mcp.json");
-  return readKeyFromMcpJson(homeConfig);
+  const homeKey = readKeyFromMcpJson(homeConfig);
+  if (homeKey) return homeKey;
+
+  // 4. ~/.synapse/config.json — the canonical location written by
+  //    `synapse init`. Hooks fire from arbitrary project directories with
+  //    no local .mcp.json, so falling back to the daemon's config is what
+  //    lets pull-compact reach the API at all.
+  return readKeyFromSynapseConfig();
+}
+
+function readKeyFromSynapseConfig(): string | null {
+  try {
+    const p = path.join(synapseRoot(), "config.json");
+    if (!fs.existsSync(p)) return null;
+    const raw = JSON.parse(fs.readFileSync(p, "utf-8"));
+    const v = raw?.api_key;
+    return typeof v === "string" && v.length > 0 ? v : null;
+  } catch {
+    return null;
+  }
 }
 
 function readKeyFromMcpJson(filePath: string): string | null {
