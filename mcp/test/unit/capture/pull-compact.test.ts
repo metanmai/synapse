@@ -226,34 +226,121 @@ describe("pullHandoff", () => {
   // Real-world symptom: SessionStart hook surfaces a bare STATE.md brief
   // with no `## Last conversation handoff` section, even after a productive
   // prior session compacted and pushed its handoff to the backend.
-  it("falls back to an older conversation's handoff when the newest row has no handoff", async () => {
+  it("falls back to an older conversation's handoff when the newest row has no handoff and can't recompute", async () => {
     writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
-    fetchSpy.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          conversations: [
-            // Newest: session-started-but-not-compacted. No handoff_markdown,
-            // no handoff_at. Pre-fix this row was the only thing fetched.
-            { id: "conv_newest_empty", updated_at: "2026-05-24T05:00:00Z", metadata: {} },
-            // Middle: also empty (e.g. another short subprocess).
-            { id: "conv_middle_empty", updated_at: "2026-05-24T04:30:00Z", metadata: {} },
-            // Older but holds a real, fresh handoff — this is what the
-            // SessionStart hook should surface.
-            {
-              id: "conv_older_handoff",
-              updated_at: "2026-05-24T04:00:00Z",
-              metadata: { handoff_markdown: "## real prior work", handoff_at: "2026-05-24T04:00:01Z" },
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversations: [
+              // Newest: session-started-but-not-compacted. No handoff_markdown,
+              // no handoff_at. Pre-fix this row was the only thing fetched.
+              { id: "conv_newest_empty", updated_at: "2026-05-24T05:00:00Z", metadata: {} },
+              // Middle: also empty (e.g. another short subprocess).
+              { id: "conv_middle_empty", updated_at: "2026-05-24T04:30:00Z", metadata: {} },
+              // Older but holds a real, fresh handoff — this is what the
+              // SessionStart hook should surface when conv[0] can't recompute.
+              {
+                id: "conv_older_handoff",
+                updated_at: "2026-05-24T04:00:00Z",
+                metadata: { handoff_markdown: "## real prior work", handoff_at: "2026-05-24T04:00:01Z" },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      // Recompute path tries conv[0] first: GET full conversation.
+      // It has no capturedSessionId so recompute aborts and we fall back
+      // to staleFallback (the older conv's cached handoff).
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversation: {
+              id: "conv_newest_empty",
+              updated_at: "2026-05-24T05:00:00Z",
+              metadata: {},
+              working_context: {},
             },
-          ],
-        }),
-        { status: 200 },
-      ),
-    );
+          }),
+          { status: 200 },
+        ),
+      );
 
     const result = await pullHandoff({ cwd: CWD });
     expect(result).toBe("## real prior work");
-    // No recompute round-trip — the cache hit on the older row short-circuits.
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Critical priority rule: conv[0] is the ACTIVE session. If it has
+  // capturedSessionId we MUST attempt recompute against it rather than
+  // serve an older cached handoff — the older one is likely from a
+  // subprocess or unrelated short session, and serving it surfaces the
+  // WRONG "where I left off" to the next agent.
+  //
+  // Bug class verified 2026-05-24: pull-compact picked subprocess
+  // `60028d3b`'s handoff over main session `9a621a5c`'s in-progress
+  // work, because the subprocess had a fresh cache and we scanned
+  // for "first fresh cache anywhere" instead of prioritizing conv[0].
+  it("recomputes conv[0] before returning a cached handoff from older conversations", async () => {
+    writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
+
+    const watchDir = fs.mkdtempSync(path.join(os.tmpdir(), "priority-test-"));
+    const filePath = path.join(watchDir, "ses_main.jsonl");
+    fs.writeFileSync(filePath, "doesn't matter — adapter.parse is stubbed");
+    const parsedFor = new Map<string, CapturedSession>([[filePath, session("ses_main")]]);
+    const compactFn = vi.fn(async () => ({
+      summary: "main session summary",
+      handoff: "## active main session work",
+      model: "claude-code:local-haiku",
+    }));
+    const adapter = makeAdapter({ tool: "claude-code", watchDir, parsedFor, compact: compactFn });
+    const registry = new AdapterRegistry();
+    registry.register(adapter);
+
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversations: [
+              // Newest: main session, empty handoff but has captured session.
+              { id: "conv_main", updated_at: "2026-05-24T05:00:00Z", metadata: {} },
+              // Older: short subprocess with FRESH cached handoff. Pre-fix
+              // this is what we'd have returned.
+              {
+                id: "conv_subprocess",
+                updated_at: "2026-05-24T04:30:00Z",
+                metadata: {
+                  handoff_markdown: "## subprocess trivia output",
+                  handoff_at: "2026-05-24T04:30:01Z",
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      // GET full conv_main → returns capturedSessionId so recompute proceeds.
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversation: {
+              id: "conv_main",
+              updated_at: "2026-05-24T05:00:00Z",
+              metadata: {},
+              working_context: { capturedSessionId: "ses_main" },
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+      // POST /compact succeeds.
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+    const result = await pullHandoff({ cwd: CWD, registry });
+    expect(result).toBe("## active main session work");
+    expect(compactFn).toHaveBeenCalledTimes(1);
+
+    fs.rmSync(watchDir, { recursive: true, force: true });
   });
 
   // Companion to the above: when no conversation in the batch has a FRESH

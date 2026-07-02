@@ -11,6 +11,8 @@ interface Args {
   tool: string;
   input: Record<string, unknown>;
   output: Record<string, unknown>;
+  git_basename?: string;
+  git_remote_url?: string;
 }
 
 export function runPostToolUseHook(a: Args): void {
@@ -24,6 +26,16 @@ export function runPostToolUseHook(a: Args): void {
     occurred_at: new Date().toISOString(),
   };
   const dir = projectDir(a.project_id);
+
+  // Routing fields — appended to every event's payload below. See
+  // pre-compact.ts for full motivation. Each event flushed to
+  // /api/events/batch needs git_basename + git_remote_url so the
+  // backend's cwd_<hash> → canonical-uuid remap doesn't fall back to
+  // "untitled" when this batch lacks a SessionStart event.
+  const routing: Record<string, string> = {
+    ...(a.git_basename ? { git_basename: a.git_basename } : {}),
+    ...(a.git_remote_url ? { git_remote_url: a.git_remote_url } : {}),
+  };
 
   const events: Array<{ kind: Kind; payload: Record<string, unknown> }> = [];
 
@@ -74,5 +86,5 @@ export function runPostToolUseHook(a: Args): void {
     events.push({ kind: EventKind.ToolUsed, payload: { tool: a.tool } });
   }
 
-  for (const e of events) appendEvent(dir, { ...base, ...e });
+  for (const e of events) appendEvent(dir, { ...base, ...e, payload: { ...e.payload, ...routing } });
 }
