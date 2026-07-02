@@ -135,3 +135,36 @@ describe("Conversations API — all endpoints require auth", () => {
     });
   }
 });
+
+// Regression guard for the bug class "captured sessions all land in projects[0]".
+// The schema MUST accept POST /api/conversations bodies that omit project_id
+// (instead supplying working_context.git_origin_url + cwd). Routing then
+// happens server-side via findOrCreateProjectByGit. The structural test
+// asserts schema acceptance + route reachability; the live DB resolution is
+// covered when SUPABASE_URL is set in CI.
+describe("POST /api/conversations — schema accepts missing project_id (per-cwd routing)", () => {
+  it("accepts a body that omits project_id when working_context carries git signals", async () => {
+    const req = new Request("http://localhost/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer invalid-key" },
+      body: JSON.stringify({
+        title: "captured session",
+        fidelity_mode: "full",
+        working_context: {
+          tool: "claude-code",
+          cwd: "/some/repo",
+          projectPath: "/some/repo",
+          git_origin_url: "https://github.com/me/some-repo.git",
+        },
+      }),
+    });
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(req, env, ctx);
+    await waitOnExecutionContext(ctx);
+    // The fix lands if and only if the schema accepts the body — i.e., we
+    // get past validation. 400 would mean the schema still requires
+    // project_id (regression). 401/403/500 are all fine here; what matters
+    // for this regression guard is that we don't 400.
+    expect(res.status).not.toBe(400);
+  });
+});

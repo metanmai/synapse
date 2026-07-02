@@ -153,16 +153,9 @@ describe("CloudSyncer", () => {
 
     it("creates conversation and pushes messages on first sync", async () => {
       fetchSpy
-        // GET /api/projects
+        // POST /api/conversations — backend auto-routes via working_context.git_origin_url
         .mockResolvedValueOnce(
-          new Response(JSON.stringify([{ id: "proj_1", name: "My Project" }]), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        )
-        // POST /api/conversations
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ id: "conv_1" }), {
+          new Response(JSON.stringify({ id: "conv_1", project_id: "proj_resolved", project_name: "My Project" }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           }),
@@ -175,17 +168,20 @@ describe("CloudSyncer", () => {
       const result = await syncer.sync(session);
 
       expect(result).toBe(true);
-      expect(fetchSpy).toHaveBeenCalledTimes(3);
+      // No projects-list fetch any more — just create + append.
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
 
-      // Verify conversation creation
-      const createCall = fetchSpy.mock.calls[1];
+      // Verify conversation creation — body has NO project_id; routing is
+      // server-side based on working_context.git_origin_url + cwd basename.
+      const createCall = fetchSpy.mock.calls[0];
       expect(createCall[0]).toContain("/api/conversations");
       const createBody = JSON.parse(createCall[1]?.body as string);
-      expect(createBody.project_id).toBe("proj_1");
+      expect(createBody.project_id).toBeUndefined();
       expect(createBody.fidelity_mode).toBe("full");
+      expect(createBody.working_context.projectPath).toBe("/home/user/project");
 
       // Verify messages push
-      const msgCall = fetchSpy.mock.calls[2];
+      const msgCall = fetchSpy.mock.calls[1];
       expect(msgCall[0]).toContain("/api/conversations/conv_1/messages");
       const msgBody = JSON.parse(msgCall[1]?.body as string);
       expect(msgBody.messages).toHaveLength(2);
@@ -195,15 +191,9 @@ describe("CloudSyncer", () => {
 
     it("appends only new messages on subsequent syncs", async () => {
       fetchSpy
-        // First sync: GET projects, POST conversation, POST messages
+        // First sync: POST conversation, POST messages (no projects-list).
         .mockResolvedValueOnce(
-          new Response(JSON.stringify([{ id: "proj_1", name: "P" }]), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        )
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ id: "conv_1" }), {
+          new Response(JSON.stringify({ id: "conv_1", project_id: "proj_1", project_name: "P" }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           }),
@@ -225,10 +215,11 @@ describe("CloudSyncer", () => {
 
       const result = await syncer.sync(updatedSession);
       expect(result).toBe(true);
-      expect(fetchSpy).toHaveBeenCalledTimes(4);
+      // 2 (create + append) for first sync + 1 (append) for second = 3.
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
 
-      // Verify only 1 new message was sent
-      const lastCall = fetchSpy.mock.calls[3];
+      // Verify only 1 new message was sent. Total = 2 (first sync) + 1 (append) = 3.
+      const lastCall = fetchSpy.mock.calls[2];
       const body = JSON.parse(lastCall[1]?.body as string);
       expect(body.messages).toHaveLength(1);
       expect(body.messages[0].content).toBe("Follow up");
@@ -237,13 +228,7 @@ describe("CloudSyncer", () => {
     it("skips sync when no new messages on subsequent syncs", async () => {
       fetchSpy
         .mockResolvedValueOnce(
-          new Response(JSON.stringify([{ id: "proj_1", name: "P" }]), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        )
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ id: "conv_1" }), {
+          new Response(JSON.stringify({ id: "conv_1", project_id: "proj_1", project_name: "P" }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           }),
@@ -254,12 +239,11 @@ describe("CloudSyncer", () => {
       const session = makeSession();
 
       await syncer.sync(session);
-      // Same session, no new messages
+      // Same session, no new messages — should NOT call fetch again.
       const result = await syncer.sync(session);
 
       expect(result).toBe(true);
-      // Should NOT have made a 4th fetch call
-      expect(fetchSpy).toHaveBeenCalledTimes(3);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
     });
 
     it("returns false when no API key", async () => {
@@ -302,13 +286,7 @@ describe("CloudSyncer", () => {
     it("includes cwd in working_context matching session projectPath", async () => {
       fetchSpy
         .mockResolvedValueOnce(
-          new Response(JSON.stringify([{ id: "proj_1", name: "P" }]), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        )
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ id: "conv_1" }), {
+          new Response(JSON.stringify({ id: "conv_1", project_id: "proj_1", project_name: "my-project" }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           }),
@@ -319,7 +297,7 @@ describe("CloudSyncer", () => {
       const session = makeSession({ projectPath: "/home/user/my-project" });
       await syncer.sync(session);
 
-      const createCall = fetchSpy.mock.calls[1];
+      const createCall = fetchSpy.mock.calls[0];
       const createBody = JSON.parse(createCall[1]?.body as string);
       expect(createBody.working_context.cwd).toBe("/home/user/my-project");
       expect(createBody.working_context.projectPath).toBe("/home/user/my-project");
@@ -333,28 +311,16 @@ describe("CloudSyncer", () => {
     // cloudConversationId mapping alive across restarts.
     describe("syncStates persistence (restart-duplication guard)", () => {
       it("does NOT recreate the conversation when a new CloudSyncer restarts and re-syncs", async () => {
-        // First instance: full first-sync sequence (GET projects, POST conv, POST messages).
+        // First instance: POST conv (auto-routed), POST messages.
         fetchSpy
           .mockResolvedValueOnce(
-            new Response(JSON.stringify([{ id: "proj_1", name: "P" }]), {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            }),
-          )
-          .mockResolvedValueOnce(
-            new Response(JSON.stringify({ id: "conv_persist_1" }), {
+            new Response(JSON.stringify({ id: "conv_persist_1", project_id: "proj_1", project_name: "P" }), {
               status: 200,
               headers: { "Content-Type": "application/json" },
             }),
           )
           .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
-          // Second instance: only GET projects + POST messages (NO conv create).
-          .mockResolvedValueOnce(
-            new Response(JSON.stringify([{ id: "proj_1", name: "P" }]), {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            }),
-          )
+          // Second instance: ONLY POST messages (no recreation).
           .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
 
         const session = makeSession();
@@ -372,9 +338,9 @@ describe("CloudSyncer", () => {
         });
         await second.sync(updated);
 
-        // 5 fetches total, NOT 6. A 6th call would mean second instance
-        // POSTed to /api/conversations again — the regression we're guarding.
-        expect(fetchSpy).toHaveBeenCalledTimes(5);
+        // 3 fetches total. A 4th would mean second instance POSTed to
+        // /api/conversations again — the regression we're guarding.
+        expect(fetchSpy).toHaveBeenCalledTimes(3);
         const allUrls = fetchSpy.mock.calls.map((c) => String(c[0]));
         const conversationPosts = allUrls.filter(
           (u) => u.endsWith("/api/conversations") && !u.includes("/api/conversations/"),
@@ -382,10 +348,10 @@ describe("CloudSyncer", () => {
         expect(conversationPosts).toHaveLength(1);
 
         // Verify the second instance's append went to the SAME cloud id.
-        const lastBody = JSON.parse(fetchSpy.mock.calls[4][1]?.body as string);
+        const lastBody = JSON.parse(fetchSpy.mock.calls[2][1]?.body as string);
         expect(lastBody.messages).toHaveLength(1);
         expect(lastBody.messages[0].content).toBe("After restart");
-        expect(String(fetchSpy.mock.calls[4][0])).toContain("/api/conversations/conv_persist_1/messages");
+        expect(String(fetchSpy.mock.calls[2][0])).toContain("/api/conversations/conv_persist_1/messages");
       });
 
       it("starts fresh and does not crash when sync-state.json is corrupt", async () => {
@@ -394,13 +360,7 @@ describe("CloudSyncer", () => {
 
         fetchSpy
           .mockResolvedValueOnce(
-            new Response(JSON.stringify([{ id: "proj_1", name: "P" }]), {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            }),
-          )
-          .mockResolvedValueOnce(
-            new Response(JSON.stringify({ id: "conv_after_corrupt" }), {
+            new Response(JSON.stringify({ id: "conv_after_corrupt", project_id: "proj_1", project_name: "P" }), {
               status: 200,
               headers: { "Content-Type": "application/json" },
             }),
@@ -420,13 +380,7 @@ describe("CloudSyncer", () => {
     it("maps tool calls to tool_interaction", async () => {
       fetchSpy
         .mockResolvedValueOnce(
-          new Response(JSON.stringify([{ id: "proj_1", name: "P" }]), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        )
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ id: "conv_1" }), {
+          new Response(JSON.stringify({ id: "conv_1", project_id: "proj_1", project_name: "P" }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           }),
@@ -450,12 +404,39 @@ describe("CloudSyncer", () => {
 
       await syncer.sync(session);
 
-      const msgCall = fetchSpy.mock.calls[2];
+      const msgCall = fetchSpy.mock.calls[1];
       const body = JSON.parse(msgCall[1]?.body as string);
       expect(body.messages[0].tool_interaction).toEqual({
         name: "Read",
         summary: "Read + 1 more",
       });
+    });
+
+    // Regression guard for the bug class "captured sessions all land in
+    // projects[0] regardless of cwd". The fix moved routing to the backend
+    // by passing working_context.git_origin_url + cwd basename; the worker
+    // must NOT send a project_id, and must respect the project_id returned
+    // by the backend (which is the per-cwd resolution).
+    it("sends no project_id on create — routing is server-side via working_context", async () => {
+      fetchSpy
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ id: "conv_routed", project_id: "proj_routed", project_name: "RoutedRepo" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+        .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+      const syncer = new CloudSyncer();
+      await syncer.sync(makeSession({ projectPath: "/some/repo" }));
+
+      const createCall = fetchSpy.mock.calls[0];
+      const createBody = JSON.parse(createCall[1]?.body as string);
+      // Body must NOT carry project_id — that's the whole point.
+      expect("project_id" in createBody).toBe(false);
+      // But it MUST carry the routing signals the backend needs.
+      expect(createBody.working_context.cwd).toBe("/some/repo");
+      expect(createBody.working_context.projectPath).toBe("/some/repo");
     });
   });
 });

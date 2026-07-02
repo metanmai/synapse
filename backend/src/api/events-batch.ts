@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { findOrCreateProjectByGit } from "../db/queries/projects";
 import { authMiddleware } from "../lib/auth";
 import type { Env } from "../lib/env";
 import { recomputeProjectStatus } from "../lib/handoff-reducer";
@@ -76,76 +77,14 @@ eventsBatch.post("/batch", async (c) => {
   const idMapping = new Map<string, string>();
 
   if (cwdHashIds.length > 0) {
-    const { data: memberships } = await db.from("project_members").select("project_id").eq("user_id", user.id);
-    const memberProjectIds = (memberships ?? []).map((m: { project_id: string }) => m.project_id);
-
     for (const cwdHash of cwdHashIds) {
       const sample = body.events.find((e) => String(e.project_id) === cwdHash);
       const payload = (sample?.payload ?? {}) as { git_basename?: string; git_remote_url?: string };
-      const gitBasename = payload.git_basename ?? "untitled";
-      const gitRemoteUrl = payload.git_remote_url ?? null;
-
-      let existingId: string | null = null;
-      let matchedByUrl = false;
-
-      // Phase 2 (D-06): try git_remote_url match FIRST. It's globally unique
-      // per the user's clones — when present it's a strictly better signal
-      // than basename, which collides on common repo names like "scratch".
-      if (gitRemoteUrl && memberProjectIds.length > 0) {
-        const { data: byUrl } = await db
-          .from("projects")
-          .select("id")
-          .eq("git_remote_url", gitRemoteUrl)
-          .in("id", memberProjectIds)
-          .maybeSingle();
-        existingId = (byUrl as { id: string } | null)?.id ?? null;
-        matchedByUrl = !!existingId;
-      }
-
-      // Fall back to name-match (status quo) when no URL match.
-      if (!existingId && memberProjectIds.length > 0) {
-        const { data: existing } = await db
-          .from("projects")
-          .select("id, git_remote_url")
-          .eq("name", gitBasename)
-          .in("id", memberProjectIds)
-          .maybeSingle();
-        const existingRow = existing as { id: string; git_remote_url: string | null } | null;
-        existingId = existingRow?.id ?? null;
-
-        // Opportunistic backfill: if we matched by name AND the existing row
-        // has no git_remote_url AND this event carries one, populate it so
-        // future events from any device hit the (faster, more correct)
-        // URL-match branch above. Idempotent under the `IS NULL` guard.
-        if (existingId && gitRemoteUrl && !existingRow?.git_remote_url) {
-          await db
-            .from("projects")
-            .update({ git_remote_url: gitRemoteUrl })
-            .eq("id", existingId)
-            .is("git_remote_url", null);
-        }
-      }
-
-      if (existingId) {
-        idMapping.set(cwdHash, existingId);
-        // matchedByUrl is informational only; keeping the variable reference
-        // for future expansion (e.g., telemetry on match-source distribution).
-        void matchedByUrl;
-        continue;
-      }
-
-      const { data: created, error: createErr } = await db
-        .from("projects")
-        .insert({ name: gitBasename, owner_id: user.id, git_remote_url: gitRemoteUrl })
-        .select("id")
-        .single();
-      if (createErr) throw createErr;
-      const createdId = (created as { id: string }).id;
-      const { error: memberErr } = await db
-        .from("project_members")
-        .insert({ project_id: createdId, user_id: user.id, role: "owner" });
-      if (memberErr) throw memberErr;
-      idMapping.set(cwdHash, createdId);
+      const resolvedId = await findOrCreateProjectByGit(db, user.id, {
+        git_basename: payload.git_basename,
+        git_remote_url: payload.git_remote_url,
+      });
+      idMapping.set(cwdHash, resolvedId);
     }
 
     for (const r of rows) {

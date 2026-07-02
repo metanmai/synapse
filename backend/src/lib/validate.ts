@@ -121,9 +121,14 @@ export const schemas = {
       .optional(),
   }),
 
-  // Conversations
+  // Conversations.
+  // project_id is OPTIONAL — when missing, the route auto-resolves it from
+  // working_context.git_remote_url + git_basename via findOrCreateProjectByGit,
+  // mirroring the events-batch auto-create flow. This is what lets the
+  // capture-worker stop hardcoding `projects[0]` and route each session to
+  // its own per-cwd project.
   createConversation: z.object({
-    project_id: z.string().uuid("Valid project ID is required"),
+    project_id: z.string().uuid("Valid project ID is required").optional(),
     title: z.string().nullable().optional(),
     fidelity_mode: z.enum(["summary", "full"]).optional(),
     system_prompt: z.string().nullable().optional(),

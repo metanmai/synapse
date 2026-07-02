@@ -8,11 +8,6 @@ import { synapseRoot } from "./handoff-paths.js";
 import { type SyncState, loadSyncStates, saveSyncStates } from "./sync-state-store.js";
 import type { CapturedSession, SessionMessage } from "./types.js";
 
-interface Project {
-  id: string;
-  name: string;
-}
-
 export function resolveApiKey(): string | null {
   // 1. Environment variable
   const envKey = process.env.SYNAPSE_API_KEY;
@@ -89,8 +84,6 @@ function mapMessages(messages: SessionMessage[]): Array<{
 export class CloudSyncer {
   private apiKey: string | null;
   private syncStates: Map<string, SyncState>;
-  private projectId: string | null = null;
-  private projectName: string | null = null;
   private log: (msg: string) => void;
 
   constructor(log?: (msg: string) => void) {
@@ -115,42 +108,48 @@ export class CloudSyncer {
   /**
    * Sync a session to the cloud. Just pushes messages — compaction is owned
    * by the pull path (handoff-brief / SessionStart), not by this hot loop.
+   *
+   * Per-cwd routing: each captured session creates (or appends to) a
+   * conversation on the backend. The conversation's project is determined
+   * server-side from working_context.git_origin_url + cwd basename via the
+   * shared findOrCreateProjectByGit helper — this is the same auto-create
+   * flow that the events-batch route uses, so a session captured in
+   * /path/to/repo lands in the SAME project as that repo's handoff events.
    */
   async sync(session: CapturedSession): Promise<boolean> {
     if (!this.apiKey) return false;
 
     try {
-      const projectId = await this.resolveProjectId();
-      if (!projectId) return false;
-
       const existing = this.syncStates.get(session.id);
 
       if (existing) {
-        // Subsequent sync -- only append new messages
         const newMessages = session.messages.slice(existing.lastSyncedMessageCount);
-        if (newMessages.length === 0) return true; // Nothing new
+        if (newMessages.length === 0) return true;
 
         const ok = await this.appendMessages(existing.cloudConversationId, newMessages);
         if (ok) {
           existing.lastSyncedMessageCount = session.messages.length;
           saveSyncStates(this.syncStates, this.log);
-          this.updateProjectMap(session.projectPath, projectId);
+          if (existing.projectId) {
+            this.updateProjectMap(session.projectPath, existing.projectId, existing.projectName ?? null);
+          }
         }
         return ok;
       }
 
-      // First sync -- create conversation and push all messages
-      const conversationId = await this.createConversation(projectId, session);
-      if (!conversationId) return false;
+      const created = await this.createConversation(session);
+      if (!created) return false;
 
-      const ok = await this.appendMessages(conversationId, session.messages);
+      const ok = await this.appendMessages(created.id, session.messages);
       if (ok) {
         this.syncStates.set(session.id, {
-          cloudConversationId: conversationId,
+          cloudConversationId: created.id,
           lastSyncedMessageCount: session.messages.length,
+          projectId: created.project_id,
+          projectName: created.project_name,
         });
         saveSyncStates(this.syncStates, this.log);
-        this.updateProjectMap(session.projectPath, projectId);
+        this.updateProjectMap(session.projectPath, created.project_id, created.project_name);
       }
       return ok;
     } catch (err) {
@@ -159,37 +158,12 @@ export class CloudSyncer {
     }
   }
 
-  private async resolveProjectId(): Promise<string | null> {
-    if (this.projectId) return this.projectId;
-
+  private async createConversation(session: CapturedSession): Promise<{
+    id: string;
+    project_id: string;
+    project_name: string | null;
+  } | null> {
     try {
-      const res = await fetch(`${API_URL}/api/projects`, {
-        headers: this.authHeaders(),
-      });
-
-      if (!res.ok) {
-        this.log(`Failed to fetch projects: ${res.status}`);
-        return null;
-      }
-
-      const projects = (await res.json()) as Project[];
-      if (projects.length > 0) {
-        this.projectId = projects[0].id;
-        this.projectName = projects[0].name;
-        return this.projectId;
-      }
-
-      this.log("No projects found, cannot sync");
-      return null;
-    } catch (err) {
-      this.log(`Failed to resolve project: ${err}`);
-      return null;
-    }
-  }
-
-  private async createConversation(projectId: string, session: CapturedSession): Promise<string | null> {
-    try {
-      // Build working_context with cwd and optional git_origin_url
       const workingContext: Record<string, string> = {
         tool: session.tool,
         projectPath: session.projectPath,
@@ -208,14 +182,16 @@ export class CloudSyncer {
           workingContext.git_origin_url = url;
         }
       } catch {
-        // Not a git repo or no remote — omit git_origin_url
+        // Not a git repo or no remote — omit git_origin_url. Backend falls
+        // back to basename match.
       }
 
       const res = await fetch(`${API_URL}/api/conversations`, {
         method: "POST",
         headers: this.authHeaders(),
         body: JSON.stringify({
-          project_id: projectId,
+          // Intentionally NO project_id — backend auto-routes via
+          // working_context.git_origin_url + cwd basename.
           title: `[${session.tool}] ${session.projectPath.split("/").pop() ?? "session"} — ${session.startedAt}`,
           fidelity_mode: "full",
           system_prompt: null,
@@ -228,8 +204,19 @@ export class CloudSyncer {
         return null;
       }
 
-      const data = (await res.json()) as { id: string };
-      return data.id;
+      // Response is the full Conversation row — includes the resolved
+      // project_id (filled in by the backend's auto-routing when we sent
+      // none) and the project_name when the backend embedded it.
+      const data = (await res.json()) as {
+        id: string;
+        project_id: string;
+        project_name?: string | null;
+      };
+      return {
+        id: data.id,
+        project_id: data.project_id,
+        project_name: data.project_name ?? null,
+      };
     } catch (err) {
       this.log(`Failed to create conversation: ${err}`);
       return null;
@@ -258,14 +245,12 @@ export class CloudSyncer {
     }
   }
 
-  private updateProjectMap(projectPath: string, projectId: string): void {
+  private updateProjectMap(projectPath: string, projectId: string, projectName: string | null): void {
     try {
-      if (this.projectName) {
-        upsertProjectMapping(projectPath, {
-          project_id: projectId,
-          project_name: this.projectName,
-        });
-      }
+      upsertProjectMapping(projectPath, {
+        project_id: projectId,
+        project_name: projectName ?? projectPath.split("/").pop() ?? "untitled",
+      });
     } catch {
       /* map is best-effort cache; never fail a sync for it */
     }
