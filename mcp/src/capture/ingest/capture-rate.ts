@@ -14,7 +14,7 @@ interface CaptureRateOptions {
   windowMs: number;
 }
 
-type RateKind = "heartbeat" | "capture";
+type RateKind = "heartbeat" | "capture" | "drift";
 
 interface RateEvent {
   host: string;
@@ -61,5 +61,20 @@ export class CaptureRateTracker {
       else captureHosts.add(e.host);
     }
     return [...heartbeatHosts].filter((h) => !captureHosts.has(h));
+  }
+
+  /** The extension detected matched-but-unparseable completions for this host. */
+  drift(host: string, ts: number): void {
+    this.record(host, ts, "drift");
+  }
+
+  /** Hosts with ≥1 drift event within the rolling window ending at `now`. */
+  driftHosts(now: number): string[] {
+    this.prune(now);
+    const hosts = new Set<string>();
+    for (const e of this.events) {
+      if (e.ts <= now && e.kind === "drift") hosts.add(e.host);
+    }
+    return [...hosts];
   }
 }
