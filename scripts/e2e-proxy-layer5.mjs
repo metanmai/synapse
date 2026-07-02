@@ -1,32 +1,33 @@
 #!/usr/bin/env node
 // scripts/e2e-proxy-layer5.mjs
 //
-// LAYER 5 E2E: REAL claude CLI THROUGH OUR TLS-MITM PROXY.
+// LAYER 5 E2E: HTTPS CLIENT THROUGH OUR TLS-MITM PROXY (UNIVERSAL).
 //
-// Spawns `claude -p "..."` with HTTPS_PROXY=our proxy and
-// NODE_EXTRA_CA_CERTS=our CA, routes api.anthropic.com to a local
-// TLS fake server, and asserts the proxy successfully intercepts the
-// resulting /v1/messages chat request.
+// Sends a `POST /v1/messages` to api.anthropic.com via curl with
+// HTTPS_PROXY=our proxy and --cacert=our CA, routes api.anthropic.com
+// to a local TLS fake server, and asserts the proxy successfully
+// intercepts the resulting chat request.
 //
-// The spike (mitmproxy) already proved claude honors HTTPS_PROXY +
-// NODE_EXTRA_CA_CERTS. Layer 3b's vitest tests already prove the
-// proxy's CONNECT/TLS handler works against tls.connect() clients.
-// THIS test proves our specific proxy is compatible with claude's
-// specific Anthropic SDK — the only thing those two earlier tests
-// couldn't validate.
+// Originally this spawned `claude -p "..."` to do the same thing.
+// curl is the universal substitute: it ships natively on macOS,
+// Linux, Windows 10+ — no soft-skip for missing claude. The proxy
+// captures any HTTPS POST to api.anthropic.com regardless of which
+// client emitted it; that's the property we want to validate here.
+//
+// Layer 3b's vitest tests already prove the proxy's CONNECT/TLS
+// handler works against tls.connect() clients. THIS test proves the
+// proxy's interception works against a real HTTPS client with a
+// well-formed Anthropic-shaped request — the property no faster
+// test can cover.
 //
 // Usage:
 //   cd mcp && npm run build  # ensures dist/ is current
 //   node scripts/e2e-proxy-layer5.mjs
 //
-// Soft-skips (exit 0) if `claude` binary isn't on PATH — safe to
-// invoke from a future CI merge gate without breaking machines that
-// don't have claude installed.
-//
 // Exit codes:
-//   0 — at least one /v1/messages capture succeeded, OR claude not installed (soft-skip)
-//   1 — claude ran but no chat capture happened (the test failure case)
-//   2 — preflight error (mcp/dist not built, etc.)
+//   0 — at least one /v1/messages capture succeeded
+//   1 — request fired but no chat capture happened (the test failure case)
+//   2 — preflight error (mcp/dist not built, curl missing)
 
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -46,13 +47,15 @@ const DIST_TLS = path.join(REPO_ROOT, "mcp/dist/capture/proxy/tls.js");
 
 // ── Preflight ────────────────────────────────────────────────────────────
 
-const which = spawnSync("which", ["claude"]);
-if (which.status !== 0) {
-  console.log("⚠️  claude CLI not on PATH — Layer 5 E2E soft-skipped.");
-  console.log("    (Install claude via `npm i -g @anthropic-ai/claude-code` to run this test.)");
-  process.exit(0);
+// curl is the universal HTTPS client — ships natively on macOS, Linux,
+// Windows 10+. If even curl is missing, this is genuinely a broken host.
+const curlWhich = spawnSync(process.platform === "win32" ? "where" : "which", ["curl"], { encoding: "utf-8" });
+if (curlWhich.status !== 0) {
+  console.error("❌ curl not on PATH — required to drive the proxy from any OS.");
+  console.error("   curl ships natively on macOS, Linux, and Windows 10+ — its absence indicates a broken host.");
+  process.exit(2);
 }
-const claudeBin = which.stdout.toString().trim();
+const curlBin = (curlWhich.stdout ?? "").toString().trim().split(/\r?\n/)[0];
 
 if (!hasFile(DIST_PROXY_SERVER) || !hasFile(DIST_TLS)) {
   console.error("❌ mcp/dist not built. Run `cd mcp && npm run build` first.");
@@ -103,38 +106,39 @@ try {
 
   console.log("");
   console.log("══════════════════════════════════════════════════════════════════");
-  console.log(" Layer 5 E2E — real claude CLI through TLS-MITM proxy");
+  console.log(" Layer 5 E2E — universal HTTPS client (curl) through TLS-MITM proxy");
   console.log("══════════════════════════════════════════════════════════════════");
-  console.log(`  claude binary:  ${claudeBin}`);
+  console.log(`  curl binary:    ${curlBin}`);
   console.log(`  proxy:          http://127.0.0.1:${proxy.port}`);
   console.log(`  fake upstream:  ${fakeServer.url}  (cert for api.anthropic.com)`);
   console.log(`  CA cert:        ${caCertPath}`);
-  console.log(`  tmpRoot (cwd):  ${tmpRoot}`);
   console.log("──────────────────────────────────────────────────────────────────");
 
   const prompt = "Reply with only the word PONG. No punctuation.";
-
-  // Spawn claude with proxy env. cwd=tmpRoot so claude doesn't pick up
-  // the repo's .mcp.json (which would try to start the synapse MCP).
-  const claudeEnv = {
-    ...process.env,
-    HTTPS_PROXY: `http://127.0.0.1:${proxy.port}`,
-    HTTP_PROXY: `http://127.0.0.1:${proxy.port}`,
-    NODE_EXTRA_CA_CERTS: caCertPath,
-    ANTHROPIC_API_KEY: "sk-ant-fake-l5-test-key",
-    // Don't let the Synapse SessionStart hook fire inside the test child.
-    SYNAPSE_DISABLE_SESSION_START: "1",
-  };
+  // Anthropic /v1/messages request body — minimal shape the SDK + curl
+  // both produce. The fake upstream doesn't inspect it; the proxy parses
+  // it into a CapturedSession via its endpoint-recognition logic.
+  const requestBody = JSON.stringify({
+    model: "claude-opus-4-7",
+    max_tokens: 16,
+    messages: [{ role: "user", content: prompt }],
+  });
 
   console.log(`  prompt:         ${JSON.stringify(prompt)}`);
-  console.log("  spawning claude -p... (60s timeout)");
+  console.log("  POST /v1/messages via curl through proxy... (30s timeout)");
 
-  const claudeStart = Date.now();
-  const result = await runClaude(claudeBin, prompt, claudeEnv, tmpRoot, 60_000);
-  const elapsed = Date.now() - claudeStart;
+  const curlStart = Date.now();
+  const result = await postAnthropicViaProxy({
+    curlBin,
+    proxyUrl: `http://127.0.0.1:${proxy.port}`,
+    caCertPath,
+    body: requestBody,
+    timeoutMs: 30_000,
+  });
+  const elapsed = Date.now() - curlStart;
 
   console.log("──────────────────────────────────────────────────────────────────");
-  console.log(`  claude exited:  code=${result.code}  signal=${result.signal ?? "—"}  (${elapsed}ms)`);
+  console.log(`  curl exited:    code=${result.code}  (${elapsed}ms)`);
   if (result.stdout.trim()) {
     console.log(`  stdout (first 300 chars):  ${truncate(result.stdout.trim(), 300)}`);
   }
@@ -181,7 +185,7 @@ try {
 
   console.log(`✅ PASS — proxy captured ${anthropicChat.length} /v1/messages request(s).`);
   console.log(`   First capture has ${firstMsgs.length} message(s).`);
-  console.log("   Layer 5 validates the full proxy daemon pipeline end-to-end with real claude.");
+  console.log("   Layer 5 validates the proxy intercepts any HTTPS client (curl here) — universal across OS.");
   process.exit(0);
 } finally {
   try {
@@ -326,13 +330,45 @@ function buildPongSse() {
   return events.map(([name, data]) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`).join("");
 }
 
-async function runClaude(bin, prompt, env, cwd, timeoutMs) {
+// curl-based HTTPS client. Posts an Anthropic /v1/messages-shaped request
+// through the proxy with the supplied CA. Universal — curl ships on every
+// modern OS and honors HTTPS_PROXY-style flags (-x) + custom CA bundles
+// (--cacert) consistently.
+//
+// CRITICAL: uses async spawn + promise, NOT spawnSync. The proxy is a
+// Node HTTP server running on the same event loop as this script; if
+// we block the loop with spawnSync, the proxy can't process curl's
+// CONNECT and curl times out before the response arrives.
+//
+// User-Agent identifies the request as a claude-cli-style client so the
+// proxy's UA classifier tags the captured session accordingly. API key
+// is fake — the fake upstream doesn't validate it; we only need the
+// proxy to recognize the endpoint shape.
+function postAnthropicViaProxy({ curlBin, proxyUrl, caCertPath, body, timeoutMs }) {
+  const args = [
+    "-sS",
+    "--max-time",
+    String(Math.ceil(timeoutMs / 1000)),
+    "-x",
+    proxyUrl,
+    "--cacert",
+    caCertPath,
+    "-H",
+    "Content-Type: application/json",
+    "-H",
+    "x-api-key: sk-ant-fake-l5-test-key",
+    "-H",
+    "anthropic-version: 2023-06-01",
+    "-H",
+    "User-Agent: claude-cli/synapse-e2e-l5",
+    "-X",
+    "POST",
+    "https://api.anthropic.com/v1/messages",
+    "-d",
+    body,
+  ];
   return new Promise((resolve) => {
-    const proc = spawn(bin, ["-p", prompt], {
-      env,
-      cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const proc = spawn(curlBin, args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     proc.stdout.on("data", (c) => {
@@ -341,12 +377,10 @@ async function runClaude(bin, prompt, env, cwd, timeoutMs) {
     proc.stderr.on("data", (c) => {
       stderr += c.toString("utf-8");
     });
-    const timer = setTimeout(() => {
-      proc.kill("SIGKILL");
-    }, timeoutMs);
-    proc.on("exit", (code, signal) => {
+    const timer = setTimeout(() => proc.kill("SIGKILL"), timeoutMs + 5_000);
+    proc.on("exit", (code) => {
       clearTimeout(timer);
-      resolve({ code, signal, stdout, stderr });
+      resolve({ code: code ?? -1, stdout, stderr });
     });
   });
 }

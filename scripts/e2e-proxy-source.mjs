@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // scripts/e2e-proxy-source.mjs
 //
-// LAYER 7 E2E: real claude CLI through ProxySource (the production wrapper)
-// → asserts a CapturedSession is emitted.
+// LAYER 7 E2E: universal HTTPS client (curl) through ProxySource (the
+// production wrapper) → asserts a CapturedSession is emitted.
 //
 // Layer 5's e2e validates the proxy primitive directly. This script
 // validates one layer up: the ProxySource adapter that the capture-worker
@@ -10,20 +10,22 @@
 // event that, in production, gets fed to `store.save()` + `syncer.sync()`.
 //
 // What this proves vs Layer 5:
-//   Layer 5:  proxy intercepts claude's chat → onCaptured fires.
+//   Layer 5:  proxy intercepts an HTTPS POST → onCaptured fires.
 //   Layer 7:  proxy intercepts → buffer → idle flush → reconstructSessions
 //             → 'session' event → SAME shape the file watcher emits.
+//
+// curl is the universal substitute for `claude -p` — ships on macOS,
+// Linux, Windows 10+. No soft-skip for missing claude; the property
+// under test is the ProxySource pipeline, not the client.
 //
 // Usage:
 //   cd mcp && npm run build  # ensures dist/ is current
 //   node scripts/e2e-proxy-source.mjs
 //
-// Soft-skips if `claude` not on PATH (matches Layer 5).
-//
 // Exit codes:
-//   0 — ≥1 CapturedSession emitted from ProxySource, OR claude not installed
-//   1 — claude ran but ProxySource emitted zero sessions
-//   2 — preflight error (mcp/dist not built)
+//   0 — ≥1 CapturedSession emitted from ProxySource
+//   1 — request fired but ProxySource emitted zero sessions
+//   2 — preflight error (mcp/dist not built, curl missing)
 
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -43,12 +45,13 @@ const DIST_TLS = path.join(REPO_ROOT, "mcp/dist/capture/proxy/tls.js");
 
 // ── Preflight ────────────────────────────────────────────────────────────
 
-const which = spawnSync("which", ["claude"]);
-if (which.status !== 0) {
-  console.log("⚠️  claude CLI not on PATH — Layer 7 E2E soft-skipped.");
-  process.exit(0);
+const curlWhich = spawnSync(process.platform === "win32" ? "where" : "which", ["curl"], { encoding: "utf-8" });
+if (curlWhich.status !== 0) {
+  console.error("❌ curl not on PATH — required to drive the proxy from any OS.");
+  console.error("   curl ships natively on macOS, Linux, and Windows 10+ — its absence indicates a broken host.");
+  process.exit(2);
 }
-const claudeBin = which.stdout.toString().trim();
+const curlBin = (curlWhich.stdout ?? "").toString().trim().split(/\r?\n/)[0];
 
 if (!hasFile(DIST_PROXY_SOURCE) || !hasFile(DIST_TLS)) {
   console.error("❌ mcp/dist not built. Run `cd mcp && npm run build` first.");
@@ -104,9 +107,9 @@ try {
 
   console.log("");
   console.log("══════════════════════════════════════════════════════════════════");
-  console.log(" Layer 7 E2E — real claude CLI through ProxySource");
+  console.log(" Layer 7 E2E — universal HTTPS client (curl) through ProxySource");
   console.log("══════════════════════════════════════════════════════════════════");
-  console.log(`  claude binary:  ${claudeBin}`);
+  console.log(`  curl binary:    ${curlBin}`);
   console.log(`  proxy:          http://127.0.0.1:${proxyPort}`);
   console.log(`  fake upstream:  ${fakeServer.url}  (cert for api.anthropic.com)`);
   console.log(`  CA cert:        ${caCertPath}`);
@@ -114,25 +117,27 @@ try {
   console.log("──────────────────────────────────────────────────────────────────");
 
   const prompt = "Reply with only the word PONG. No punctuation.";
-
-  const claudeEnv = {
-    ...process.env,
-    HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
-    HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
-    NODE_EXTRA_CA_CERTS: caCertPath,
-    ANTHROPIC_API_KEY: "sk-ant-fake-l7-test-key",
-    SYNAPSE_DISABLE_SESSION_START: "1",
-  };
+  const requestBody = JSON.stringify({
+    model: "claude-opus-4-7",
+    max_tokens: 16,
+    messages: [{ role: "user", content: prompt }],
+  });
 
   console.log(`  prompt:         ${JSON.stringify(prompt)}`);
-  console.log("  spawning claude -p... (60s timeout)");
+  console.log("  POST /v1/messages via curl through proxy... (30s timeout)");
 
-  const claudeStart = Date.now();
-  const result = await runClaude(claudeBin, prompt, claudeEnv, tmpRoot, 60_000);
-  const elapsed = Date.now() - claudeStart;
+  const curlStart = Date.now();
+  const result = await postAnthropicViaProxy({
+    curlBin,
+    proxyUrl: `http://127.0.0.1:${proxyPort}`,
+    caCertPath,
+    body: requestBody,
+    timeoutMs: 30_000,
+  });
+  const elapsed = Date.now() - curlStart;
 
   console.log("──────────────────────────────────────────────────────────────────");
-  console.log(`  claude exited:  code=${result.code}  signal=${result.signal ?? "—"}  (${elapsed}ms)`);
+  console.log(`  curl exited:    code=${result.code}  (${elapsed}ms)`);
   if (result.stdout.trim()) {
     console.log(`  stdout:         ${truncate(result.stdout.trim(), 200)}`);
   }
@@ -170,7 +175,7 @@ try {
 
   console.log(`✅ PASS — ProxySource emitted ${sessionsEmitted.length} session(s).`);
   console.log(`   First session has ${session.messages.length} message(s), tool=${session.tool}.`);
-  console.log("   Layer 7 validates the proxy → buffer → reconstruct → 'session' event pipeline.");
+  console.log("   Layer 7 validates the proxy → buffer → reconstruct → 'session' event pipeline (universal).");
   process.exit(0);
 } finally {
   try {
@@ -282,13 +287,38 @@ function buildPongSse() {
   return events.map(([name, data]) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`).join("");
 }
 
-async function runClaude(bin, prompt, env, cwd, timeoutMs) {
+// Universal HTTPS client — see e2e-proxy-layer5.mjs for the same helper.
+// Kept inline (not extracted to a shared module) so each Layer-N script
+// reads stand-alone and is independent of the others.
+//
+// CRITICAL: async spawn, not spawnSync — the proxy + ProxySource run on
+// the same event loop as this script. spawnSync would block the loop
+// and curl's CONNECT would time out before the proxy could respond.
+function postAnthropicViaProxy({ curlBin, proxyUrl, caCertPath, body, timeoutMs }) {
+  const args = [
+    "-sS",
+    "--max-time",
+    String(Math.ceil(timeoutMs / 1000)),
+    "-x",
+    proxyUrl,
+    "--cacert",
+    caCertPath,
+    "-H",
+    "Content-Type: application/json",
+    "-H",
+    "x-api-key: sk-ant-fake-l7-test-key",
+    "-H",
+    "anthropic-version: 2023-06-01",
+    "-H",
+    "User-Agent: claude-cli/synapse-e2e-l7",
+    "-X",
+    "POST",
+    "https://api.anthropic.com/v1/messages",
+    "-d",
+    body,
+  ];
   return new Promise((resolve) => {
-    const proc = spawn(bin, ["-p", prompt], {
-      env,
-      cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const proc = spawn(curlBin, args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     proc.stdout.on("data", (c) => {
@@ -297,10 +327,10 @@ async function runClaude(bin, prompt, env, cwd, timeoutMs) {
     proc.stderr.on("data", (c) => {
       stderr += c.toString("utf-8");
     });
-    const timer = setTimeout(() => proc.kill("SIGKILL"), timeoutMs);
-    proc.on("exit", (code, signal) => {
+    const timer = setTimeout(() => proc.kill("SIGKILL"), timeoutMs + 5_000);
+    proc.on("exit", (code) => {
       clearTimeout(timer);
-      resolve({ code, signal, stdout, stderr });
+      resolve({ code: code ?? -1, stdout, stderr });
     });
   });
 }

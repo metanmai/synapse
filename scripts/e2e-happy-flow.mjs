@@ -19,14 +19,17 @@
 //      fast-mode; background recompute spawns
 //   6. Background recompute completes; conv.metadata.handoff_markdown is
 //      posted and contains the test phrases
-//   7. CRITICAL INTEGRATION TEST (claude required): a NEW `claude -p`
-//      session in the same cwd asks for the prior session's facts —
-//      agent must recall them from the brief, NOT from `git log` or any
-//      tool call. Tests the Claude-Code-specific hook protocol. Soft-
-//      skips when claude isn't on PATH; Stage 7b covers the content side.
-//   7b. CRITICAL CONTENT TEST (universal): /api/projects/:id/brief
-//      returns content containing the test phrase. Runs everywhere
-//      regardless of claude availability.
+//   7. CRITICAL RECALL TEST (universal): fires the SessionStart hook to
+//      get the brief content, feeds it into the universal LLM driver,
+//      asks for the prior session's facts. Agent must recall them from
+//      the brief, NOT from `git log` or any tool call. Runs on any OS
+//      via direct-API (curl + ANTHROPIC_API_KEY) or any CLI driver
+//      (claude/crush/etc via SYNAPSE_E2E_DRIVER). No soft-skip — same
+//      LLM driver Stage 3 uses.
+//   7b. CRITICAL CONTENT TEST (universal, no LLM): fires the SessionStart
+//      hook and asserts the resulting <synapse-brief> tag contains the
+//      test phrases. Fast deterministic check; complements Stage 7 by
+//      isolating brief-generation correctness from LLM behavior.
 //   8. `save_insight` + `list_insights` roundtrip works
 //   9. CLI surface commands (`status`, `stats`) all return non-error
 //
@@ -44,12 +47,10 @@
 //   - synapsesync daemon running (launchd / systemd / Task Scheduler)
 //   - SYNAPSE_API_KEY resolvable from ~/.synapse/config.json or env
 //   - Network access to api.synapsesync.app + api.anthropic.com
-//   - OPTIONAL: claude on PATH for Stage 7's integration test (otherwise
-//     Stage 7 soft-skips; Stage 7b still runs and catches content bugs)
 //
-// Cost per run: ~$0.01-0.05 in Anthropic tokens (1 driver-driven Anthropic
-// call + 1 server-side recompute via claude-haiku + 1 Stage-7 claude -p
-// if installed).
+// Cost per run: ~$0.02-0.10 in Anthropic tokens (2 driver-driven Anthropic
+// calls — Stage 3 capture + Stage 7 recall — plus 1 server-side recompute
+// via claude-haiku).
 //
 // Exit codes:
 //   0 — all stages passed
@@ -584,41 +585,77 @@ async function stage6_handoff_lands() {
   }
 }
 
-// ── Stage 7: NEW session recalls prior facts via brief (THE test) ─────────
+// ── Stage 7: NEW session recalls prior facts via brief (universal) ────────
 //
-// This stage tests the BRIEF INJECTION integration — that a new session
-// receives the <synapse-brief> tag via the Claude Code hook protocol and
-// can answer questions using ONLY the brief's content. The hook protocol
-// is Claude-Code-specific by design (no universal equivalent exists). On
-// systems without claude on PATH (notably Linux/Windows CI), we soft-skip
-// with a clear message; Stage 7b below covers the content side of the
-// same assertion via a direct brief-endpoint check, which IS universal.
+// This stage tests the recall property: an agent given the brief can use
+// it to answer questions about prior sessions. To stay agent-agnostic
+// we drive it via the universal LLM driver — the same one Stage 3 uses
+// (direct-API curl OR a configurable CLI harness via SYNAPSE_E2E_DRIVER).
+// We fire the SessionStart hook ourselves to get the brief content, then
+// inject it into the prompt. This decouples the recall test from any
+// specific harness's hook-protocol implementation.
+//
+// What this covers vs Stage 7b:
+//   Stage 7b: brief content correct (no LLM call)
+//   Stage 7:  LLM given the brief answers the recall question correctly
 async function stage7_recall() {
-  header("STAGE 7 · NEW claude -p recalls prior session facts (THE CRITICAL TEST)");
+  header("STAGE 7 · NEW session recalls prior facts via brief (universal)");
 
-  const claudeOnPath = spawnSync(process.platform === "win32" ? "where" : "which", ["claude"], { encoding: "utf-8" });
-  if (claudeOnPath.status !== 0) {
-    info("claude CLI not on PATH — skipping the integration-level recall test (Stage 7b covers brief content)");
-    ok("7.1 recall (skipped)", "no claude binary; Claude-Code-specific hook protocol can't be exercised here");
+  // Step 1: get the brief that any harness would see by firing the
+  // SessionStart hook directly. This is the source of truth — same
+  // text Claude Code (or any other hook-protocol harness) would
+  // prepend to the agent's context.
+  const {
+    stdout: hookStdout,
+    code: hookCode,
+    stderr: hookErr,
+  } = fireHook("session-start", {
+    session_id: "e2e-s7-recall",
+    cwd: testDir,
+    source: "startup",
+    hook_event_name: "SessionStart",
+  });
+  if (hookCode !== 0) {
+    fail("7.1 brief from hook", `hook exit ${hookCode}: ${(hookErr ?? "").slice(0, 200)}`);
     return;
   }
+  const briefMatch = hookStdout.match(/<synapse-brief>([\s\S]*?)<\/synapse-brief>/);
+  if (!briefMatch) {
+    fail("7.1 brief from hook", "no <synapse-brief> tag in hook output");
+    return;
+  }
+  const brief = briefMatch[0]; // include the tags so the agent sees them verbatim
 
-  const recallPrompt = `Strict context-only mode. Use ONLY your <synapse-brief> tag content. Do NOT use Read, Bash, Grep, git, or ANY tool.
+  // Step 2: build the recall prompt. We give the agent the brief and ask
+  // for the two facts; we explicitly forbid tool use so the answer comes
+  // from the brief content, not from a side channel.
+  const recallPrompt = `Below is your <synapse-brief> for the current project (the same content a harness would inject into your context):
+
+${brief}
+
+Strict context-only mode. Use ONLY the brief above. Do NOT use Read, Bash, Grep, git, or ANY tool.
 
 Question: A previous session in this cwd recorded two test facts. What were they? Specifically, what was the test_id and the secret_phrase?
 
 If your brief doesn't have this, say 'NOT IN BRIEF'.`;
 
-  info("Running claude -p with recall question…");
-  const cp = spawnSync("claude", ["-p", recallPrompt], { cwd: testDir, encoding: "utf-8", timeout: 120_000 });
-  if (cp.status !== 0) {
-    fail("7.1 claude -p", `claude exit ${cp.status}: ${(cp.stderr ?? "").slice(0, 200)}`);
+  info("Running the universal LLM driver with the recall question…");
+  let driverResult;
+  try {
+    driverResult = await generateSession({
+      prompt: recallPrompt,
+      userAgent: "claude-cli/synapse-e2e-recall",
+      cwd: testDir,
+      timeoutMs: 120_000,
+    });
+  } catch (e) {
+    fail("7.1 recall (THE TEST)", `driver error: ${e.message}`);
     return;
   }
+  info(`Driver mode=${driverResult.mode} driver=${driverResult.driver}`);
+  info(`Agent response (first 400 chars):\n  ${(driverResult.stdoutText ?? "").slice(0, 400).replace(/\n/g, "\n  ")}`);
 
-  const reply = cp.stdout ?? "";
-  info(`Agent response (first 400 chars):\n  ${reply.slice(0, 400).replace(/\n/g, "\n  ")}`);
-
+  const reply = driverResult.stdoutText ?? "";
   const recalledId = reply.includes(TEST_ID);
   const recalledPhrase = reply.includes(TEST_PHRASE);
   if (recalledId && recalledPhrase) {
