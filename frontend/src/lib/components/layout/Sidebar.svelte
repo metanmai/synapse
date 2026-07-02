@@ -5,23 +5,12 @@ let { projectName } = $props<{ projectName: string }>();
 
 const navSections = $derived([
   {
-    heading: "Feed",
-    items: [{ href: `/projects/${encodeURIComponent(projectName)}/activity`, label: "Activity", icon: "📋" }],
-  },
-  {
-    heading: "Sessions",
-    items: [{ href: `/projects/${encodeURIComponent(projectName)}/conversations`, label: "Sessions", icon: "💬" }],
-  },
-  {
-    heading: "Knowledge",
     items: [
-      { href: `/projects/${encodeURIComponent(projectName)}/insights`, label: "Insights", icon: "💡" },
-      { href: `/projects/${encodeURIComponent(projectName)}`, label: "Workspace", icon: "📁", exact: true },
+      { href: `/projects/${encodeURIComponent(projectName)}`, label: "Overview", icon: "📋", exact: true },
+      { href: `/projects/${encodeURIComponent(projectName)}/conversations`, label: "Conversations", icon: "💬" },
+      { href: `/projects/${encodeURIComponent(projectName)}/context`, label: "Context", icon: "🧠" },
+      { href: `/projects/${encodeURIComponent(projectName)}/settings`, label: "Settings", icon: "⚙️" },
     ],
-  },
-  {
-    heading: "Project",
-    items: [{ href: `/projects/${encodeURIComponent(projectName)}/settings`, label: "Settings", icon: "⚙️" }],
   },
 ]);
 </script>
@@ -29,7 +18,6 @@ const navSections = $derived([
 <nav class="sidebar">
   {#each navSections as section}
     <div class="sidebar-section">
-      <div class="sidebar-heading">{section.heading}</div>
       {#each section.items as link}
         {@const isActive = link.exact
           ? $page.url.pathname === link.href
@@ -66,16 +54,6 @@ const navSections = $derived([
 
   .sidebar-section {
     margin-bottom: 1.25rem;
-  }
-
-  .sidebar-heading {
-    font-size: 0.6875rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-text-muted);
-    margin-bottom: 0.5rem;
-    padding-left: 0.5rem;
   }
 
   .sidebar-item {
