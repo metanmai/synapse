@@ -8,7 +8,7 @@ import { z } from "zod";
 
 import * as clack from "@clack/prompts";
 import { runCapture } from "./capture/cli.js";
-import { runRefresh, runReset, runStatus, runTree, runUpgrade, runWhoami } from "./cli/commands.js";
+import { runRefresh, runReset, runStatus, runTree, runUninstall, runUpgrade, runWhoami } from "./cli/commands.js";
 import { API_URL } from "./cli/config.js";
 import { runStats } from "./cli/stats.js";
 import { accent, bold, muted } from "./cli/theme.js";
@@ -254,6 +254,10 @@ async function handleCli(raw: string[]): Promise<void> {
 
   if (cmd === "distill") {
     await runDistill(raw.slice(1));
+    process.exit(0);
+  }
+  if (cmd === "uninstall") {
+    await runUninstall();
     process.exit(0);
   }
 
