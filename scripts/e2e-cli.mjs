@@ -132,6 +132,18 @@ function runCli(args, opts = {}) {
   });
   const stdout = stripAnsi(r.stdout);
   const stderr = stripAnsi(r.stderr);
+  // DIAGNOSTIC (remove after rooting whoami/tree exit-1 + Windows fastfail):
+  // surface every child's stderr so SYNAPSE_TRACE_FETCH lines + the actual
+  // failure cause reach the GHA log. spawnSync's stderr is captured (not
+  // inherited), so without this echo the test framework swallows the
+  // diagnostic completely on failure paths.
+  const stderrTrim = stderr.trim();
+  if (stderrTrim) {
+    process.stderr.write(
+      `[runCli ${args.join(" ")}] code=${r.status} signal=${r.signal}\n` +
+        `${stderrTrim.slice(0, 1500)}\n${stderrTrim.length > 1500 ? "...(truncated)\n" : ""}---\n`,
+    );
+  }
   return { code: r.status, signal: r.signal, stdout, stderr, all: `${stdout}\n${stderr}` };
 }
 
