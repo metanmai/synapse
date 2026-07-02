@@ -206,19 +206,19 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
 
   // 3a. FAST MODE shortcut. SessionStart hook can't afford the 30-60s
   //     recompute (it has a 10s budget before the brief is emitted).
-  //     If we have any cached content (fresh enough to be worth showing,
-  //     or stale-but-from-the-active-session), serve it NOW and spawn a
-  //     detached `synapsesync pull-handoff` process to do the slow
-  //     recompute in the background. The next session will hit a fresh
-  //     cache.
+  //     Spawn a detached `synapsesync pull-handoff` process for the
+  //     slow recompute, then return immediately:
+  //       - With cachedHandoff if we have one (fresh OR stale)
+  //       - With null if not (first session in a fresh project)
   //
-  //     Subtle: we only enter the fast-bg-spawn path when we actually
-  //     have something to serve (cachedHandoff non-null). If everything
-  //     is empty we fall through to inline recompute — fast mode without
-  //     any cache to serve would emit a bare brief anyway, so blocking
-  //     on the inline path is the same outcome but with a slight chance
-  //     of completing within budget for small sessions.
-  if (opts.fast && cachedHandoff) {
+  //     Even when there's nothing to serve, we MUST spawn the background
+  //     recompute so the NEXT session has a fresh handoff. Without this,
+  //     the first new session in a fresh project would never trigger
+  //     compaction — and the hook would fall through to inline recompute,
+  //     hit the 10s timeout, return null anyway. Net result: two sessions
+  //     in a row see bare briefs. Spawn unconditionally so the SECOND
+  //     session always wins.
+  if (opts.fast) {
     spawnBackgroundRecompute(canonicalCwd, log);
     return cachedHandoff;
   }
