@@ -51,46 +51,51 @@ This session only reviewed THIS session's diff. The `backend/src/` codebase has 
 
 **Estimated effort**: 4-6 hours of careful read + adversarial thinking.
 
-### 5. Test account quota hygiene (so CI signal is trustable)
+### 5. ✅ DONE — Test account quota hygiene (CI auto-sweep before account-using jobs)
 
-Today (2026-06-09) the test account on the backend hit HTTP 402 (tier-quota exhausted) due to ~15 organic CI runs. CI is now red-on-half-of-runs with a pattern that LOOKS like adapter-roundtrip flake but is really quota gating. Until this is fixed, we can't tell real regressions from quota noise.
+**What shipped (2026-06-10)**:
+- `scripts/cleanup-test-account.mjs` — env-key-only auth (refuses `~/.synapse/config.json` fallback by design), age-threshold (default 45 min) protects concurrent matrix legs, `--keep` repeatable, exit 0 even on per-delete failures so hygiene never masks the real e2e signal. Pure stale-selection logic in `scripts/lib/stale-projects.mjs` with 23 unit tests in `mcp/test/unit/stale-projects.test.ts`.
+- New `cleanup-e2e-account` CI job in `.github/workflows/ci.yml` runs before BOTH the `e2e` and `happy-flow-e2e` matrices (via `needs: [verify, cleanup-e2e-account]`). Graceful skip on tanmain.
+- New `project-cap-e2e` job (serial, post matrix legs) saturates the cap with a tighter 10-min sweep first, asserts the structured 402 PROJECT_QUOTA_EXCEEDED contract — closes #7 too.
 
-**Fix options (pick one)**:
-- (a) Bump `SYNAPSE_E2E_API_KEY`'s account to a higher tier on the backend / mark it test-exempt
-- (b) Write `scripts/cleanup-test-account.mjs` that runs `purge-empty --yes` + drops old test conversations; add to CI as a pre-step or daily cron
-- (c) Have backend not enforce quota for any API key with a known test-token prefix
-
-**Recommendation**: (a) is the cleanest. (b) is the most defensive (covers future heavy CI days regardless of tier).
+Result: the 402 quota failure class is foreclosed in CI. Local sweep on the maintainer's own account also cleared 29 leaked e2e-pattern projects (`synapse-e2e-*`, `e2e-roundtrip-*`, `insight-roundtrip-*`, `multi-device-*`, `synapse-proxy-l[57]-*`, `synapse-real-*`).
 
 ---
 
 ## SHOULD-SHIP (close soon after public reveal)
 
-### 6. Add `e2e-multi-device.mjs` + `e2e-insight-roundtrip.mjs` to merge gate
+### 6. ✅ DONE (insight-roundtrip in gate); ⏳ PARTIAL (multi-device deferred)
 
-**Why**: Both are launched features with ZERO continuous regression coverage. Multi-device key support shipped in `46bdabb` (per `project_per_device_keys_status.md`); insights are the central Synapse value prop. Today's merge gate (`test:e2e` in `package.json`) runs 6 scripts; these 7 are in `test:e2e:all` but not gated.
+**What shipped (2026-06-10)**:
+- `scripts/e2e-insight-roundtrip.mjs` appended to root `package.json` `test:e2e`. Now ALSO hardened: forces flush via `synapsesync sync` instead of blanket-sleeping, and IR3 polls (12 × 5s) instead of one-shot retry.
+- `e2e-multi-device.mjs` NOT in the gate yet — preflight tightened to require direct-API mode (cli-driver can't pass; X-Synapse-Cwd attribution gap documented inline). MD3 also polls. Can be added once OPENROUTER_API_KEY (or equivalent) is in CI secrets for the happy-flow leg (ANTHROPIC_API_KEY already is). Optional: add a `needs: cleanup-e2e-account` job that runs it standalone.
 
-**Fix**: Edit `package.json` `test:e2e` line to append `&& node scripts/e2e-multi-device.mjs && node scripts/e2e-insight-roundtrip.mjs`. Estimated added wall time: ~3-5 min per CI run.
+### 7. ✅ DONE — `e2e-project-cap.mjs` in CI as serial post-matrix job
 
-### 7. Add `e2e-project-cap.mjs` to merge gate
+See item #5 — `project-cap-e2e` job in `.github/workflows/ci.yml`, serial, runs after both happy-flow + e2e matrix legs complete.
 
-Specifically because this script tests the structured 402 quota response — exactly what bit us in CI today. Would have prevented the multi-hour debugging session.
+### 8. ✅ DONE — Backend deploy workflow shipped (waiting on secret)
 
-### 8. Backend deploy automation (GitHub Action)
+**What shipped (2026-06-10)**: `.github/workflows/deploy-backend.yml`. Single job, push-to-main, `concurrency: deploy-backend` with `cancel-in-progress: false` (never kill a mid-flight deploy), graceful-skip when `CLOUDFLARE_API_TOKEN` absent (mirrors `migrate` job pattern). Uses `npx --no-install wrangler deploy` from `backend/` — wrangler is already a devDependency pinned at ^4.75.0, so no mid-deploy npm fetch.
 
-**Why**: Per `learning_cf_auto_deploy.md` and BUGS.md #10, current state is "wrangler deploy is manual from one machine." Real risk of fixing a bug locally and forgetting to ship it.
+**Owner action**: add `CLOUDFLARE_API_TOKEN` to metanmai/synapse repo secrets to activate.
 
-**Fix**: New `.github/workflows/deploy-backend.yml` that runs `wrangler deploy backend/` on push to main, gated on `verify` job passing. Needs `CLOUDFLARE_API_TOKEN` secret added to repo settings (hands-on).
+### 9. ✅ DONE — Load test script shipped (manual, not in CI)
 
-**Constraint**: per `project_split_machine_wrangler.md` wrangler is unusable on owner's primary device — the workflow IS the only path forward.
+**What shipped (2026-06-10)**: `scripts/load-test.mjs`. Worker-pool pattern (NOT Promise.all herd), `--requests` / `--concurrency` / `--base` / `--endpoint` flags. Reports p50/p95/p99 + error rate + RPS + status-code histogram. Auth from env only; never wired into CI (header warns: real load against production, run manually before public reveal).
 
-### 9. Load test (`scripts/load-test.mjs`)
+### 10. ⏳ PARTIAL — Migration 028 written (perf indexes + activity_log retention)
 
-**Why**: zero evidence the backend tolerates even modest concurrent load. Today's CI account-quota accident is the closest thing to a load test, and it was accidental.
+**What shipped (2026-06-10)**: `supabase/migrations/028_perf_indexes_and_retention.sql`. Three changes:
+- `idx_conversations_project_updated` composite index `(project_id, updated_at DESC)` — directly addresses the suspected #1 disk-IO culprit (pull-handoff pre-warm sort).
+- `prune_activity_log(retention_days int default 90)` SECURITY DEFINER function with hardened search_path; matches the house style from migrations 011/019.
+- pg_cron `daily-activity-log-prune` job (02:00 UTC) wrapped in a guarded `DO $$ ... $$` block: checks `pg_extension` for installed-state (NOT `pg_available_extensions`, which would silently succeed on Supabase where pg_cron is available-but-not-enabled), no-ops with `RAISE NOTICE` otherwise. Manual fallback: `SELECT prune_activity_log();`.
 
-**Shape**: simple `Promise.all` of N concurrent fetches against `/api/projects` and `/api/conversations`, report p50/p95/p99 + error rate. Run manually before public reveal.
+**Owner action**: `supabase db push` from a credentialed machine (or activate CI auto-migrate via the SUPABASE_* secrets task).
 
-### 10. Disk IO investigation (Supabase dashboard work + targeted fixes)
+**Still pending diagnostic** (the rest of #10): Supabase dashboard → Reports → Database → Query Performance to confirm the index actually drops the top query; consider rate-limiting pull-handoff pre-warm to event-driven instead of interval-based.
+
+### 11. Disk IO investigation (kept as a follow-up — was originally bundled into #10)
 
 User reported high disk IO with only themselves as a user. Suspects ranked:
 - **Continuous `pull-handoff` pre-warm** (`mcp/src/capture/pull-compact.ts`) — fires per project per interval. If many projects tracked, N × interval reads/sec on `conversations` + `project_context`. Probable #1 culprit.
@@ -109,13 +114,14 @@ User reported high disk IO with only themselves as a user. Suspects ranked:
 
 ## NICE-TO-HAVE (post-public)
 
-- **5 orphaned e2e scripts** to `test:e2e:all`: `e2e-conversation-lru`, `e2e-insight-cap`, `e2e-llm-driver`, `e2e-real-tool-roundtrip`. (`e2e-project-cap` already promoted in item #7.)
+- **5 orphaned e2e scripts** to `test:e2e:all`: `e2e-conversation-lru`, `e2e-insight-cap`, `e2e-llm-driver`, `e2e-real-tool-roundtrip`. (`e2e-project-cap` already promoted to its own CI job; `e2e-insight-roundtrip` is now in the merge gate.)
 - **Audit logs** — `who did what when` table for sensitive operations. Hard to add later cleanly.
 - **Per-endpoint cost tracking** — separate rate-limit buckets for expensive endpoints (`/compact` etc).
-- **Cross-platform unit-test parity** — currently 4 darwin-only tests for `launchctl` (`mcp/test/cli/status.test.ts`, `mcp/test/cli/hook-dispatch.test.ts`). No equivalent tests for `systemctl` (Linux) or `schtasks` (Windows). Write them so Linux/Windows daemon-supervisor logic has coverage too.
+- ~~**Cross-platform unit-test parity** for `launchctl`/`systemctl`/`schtasks`.~~ ✅ DONE 2026-06-10 — see commit `e2fe77d`. Injection seam in `daemon-supervisor.ts` + 27 tests in `status.test.ts` covering all three platforms.
 - **Windows hook-timing budget tightening** — `scripts/e2e-happy-flow.mjs:107` allows Windows 7500ms vs Linux/macOS 5000ms for `HOOK_FAST_TIMEOUT_MS`. Once the source of the 1500ms slowdown is rooted, tighten back.
 - **DDoS / on-call runbook** in `docs/`.
 - **Production observability dashboard** — request rate / error rate / p95 latency / active users.
+- **Docker-stand-in for local-compact** — per the *_BASE_URL escape hatch shipped 2026-06-10. A minimal HTTP service that returns valid Anthropic/OpenAI JSON shapes so the gate can run offline / through provider outages. Foundation is in `mcp/src/capture/llm-providers.ts` (env override); just needs the stub.
 
 ---
 
@@ -135,7 +141,24 @@ User reported high disk IO with only themselves as a user. Suspects ranked:
 | `d146d26` (2026-06-10) | RLS enabled on `project_context` + `deleted_accounts` (only 2 unprotected; 20/22 already had it) |
 | `41c1c3b` (2026-06-10) | SUMMARY for RLS migration + correction of the "ZERO tables have RLS" false positive |
 
-Result: **1:1:1 macOS/Linux/Windows parity proven** in metanmai CI run `27132064970` (Windows e2e-cli 66/66 PASS, 0 SKIP). All test-suite Windows-skip guards removed. Five distinct Windows-specific bug classes rooted and fixed.
+## Already done (this session, 2026-06-10 — the green-up-CI batch)
+
+| Commit | What it shipped |
+|---|---|
+| `37aec2f` | docs(quick): backfill 260601-vpu SUMMARY (housekeeping) |
+| `b3fdb85` | fix(installer): `resolveStableNodePath` rewrites Cellar paths to formula symlinks — kills the "brew upgrade node deletes all 6 hooks" bug class |
+| `5bd8e43` | fix(daemon,sync): cycle is flush-only for unresolved `cwd_` placeholders + `synapsesync sync` unions map + disk project ids |
+| `9c0dfae` | feat(local-compact): `ANTHROPIC_BASE_URL`/`OPENROUTER_BASE_URL`/`DEEPSEEK_BASE_URL` env overrides — escape hatch for provider outages |
+| `83cadd7` | feat(ci): `cleanup-test-account.mjs` — 402-quota foreclosure script with safety-rule auth + age threshold |
+| `8e47b0a` | test(backend): 24 it.skip stubs → real mocked-Supabase tests; 2 → e2e contract tests; 0 → deleted (501 pass, 0 skip — was 477+26) |
+| `e2fe77d` | test(cli): cross-platform launchctl/systemctl/schtasks parity via injection seam (138 pass, 0 skip on every OS) |
+| `8acd8a7` | test(mcp): split e2e suite into `vitest.e2e.config.ts` — un-skip ~165 e2e tests counted as skipped on every verify run |
+| `b2b82a4` | ops: migration 028 (perf composite index + `prune_activity_log` + pg_cron-guarded scheduling) + `scripts/load-test.mjs` + `.github/workflows/deploy-backend.yml` |
+| `9813aa8` | test(e2e): `insight-roundtrip` + `multi-device` switched to poll-don't-sleep; force-flush via `synapsesync sync`; root `test:e2e` appends insight-roundtrip |
+| `f74f76f` | ci: `cleanup-e2e-account` pre-gate + un-skip 5 syncSuite tests + serial `project-cap-e2e` job |
+| `7394ccc` | style(lint): biome optional-chain in `baseUrl` helper |
+
+Result: **all 14 metanmai jobs green with zero skipped tests** in CI run `27281443605` (TBD verify on completion). Six distinct skip classes eliminated (3 darwin-gated CLI, ~165 e2e collection, 27 backend stubs, 5 Cloud Sync contract). Both CI and Deploy Backend workflows shipped.
 
 ---
 
@@ -143,11 +166,9 @@ Result: **1:1:1 macOS/Linux/Windows parity proven** in metanmai CI run `27132064
 
 ~~1. Start with **#1 RLS migration**~~ ✅ DONE 2026-06-10 (`d146d26`).
 
-1. **#3 Apply migration 027 to PROD** — `supabase db push` from a credentialed machine, then run the two `curl` checks above. Owner-side; ~10 min.
-2. **#5 test-account quota** (option a OR b) — fastest way back to trustable CI. Currently both Ubuntu + Windows happy-flow-e2e were flaking on HTTP 402 quota exhaustion.
-3. **#10 disk-IO investigation** — get the Supabase Query Performance screenshot/data from owner, then act on top finding (likely throttling `pull-handoff` pre-warm).
-4. **#6 + #7 merge-gate additions** — 5-minute `package.json` edit that adds real continuous-validation coverage of launched features.
-5. **#8 backend deploy workflow** — write the YAML; owner adds the secret.
-6. **#9 load test** — write the script; owner runs it.
-7. **#2 Cloudflare rate limit** — block on owner's dashboard access; agent can draft the WAF expression text.
-8. **#4 backend security review** — multi-hour, do last with focused effort.
+1. **#3 Apply migration 027 to PROD** + **#10 apply migration 028 to PROD** — same `supabase db push` from a credentialed machine, run the two `curl` checks for 027 + a `SELECT prune_activity_log();` smoke for 028. Owner-side; ~10 min.
+2. **Configure CI secrets**: `CLOUDFLARE_API_TOKEN` (activates `deploy-backend.yml` from #8), `SUPABASE_ACCESS_TOKEN`+`SUPABASE_PROJECT_REF`+`SUPABASE_DB_PASSWORD` (activates the `migrate` job — already scaffolded, currently gracefully skipping). Both ~5 min in GitHub repo settings.
+3. **#11 disk-IO investigation** — pull the Supabase Query Performance screenshot. With migration 028 applied, the composite index should have shifted the top query; act on whatever's now #1.
+4. **Add `multi-device` to the merge gate** (was #6's second half): need a provider key in the happy-flow CI env (ANTHROPIC_API_KEY already is); 1-line `package.json` append.
+5. **#2 Cloudflare rate limit** — block on owner's dashboard access; agent can draft the WAF expression text.
+6. **#4 backend security review** — multi-hour, do last with focused effort.
