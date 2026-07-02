@@ -35,3 +35,43 @@ ${existingSection}
 
 ${summariesSection}`;
 }
+
+// --- Phase 03-04: Plus insight LLM consolidation ---
+
+export interface InsightForConsolidation {
+  id: string;
+  type: string;
+  summary: string;
+  detail: string | null;
+  updated_at: string;
+}
+
+/**
+ * Prompt for the Plus-tier insight consolidation pass. Given N oldest active
+ * insights, produces 3-5 merged replacements (each ≤12-word summary, ≤2-
+ * sentence detail). The output contract is JSON ONLY — no preamble, no
+ * postamble, no markdown fence — because parseConsolidationResponse parses
+ * it directly via JSON.parse. The parser strips a fence defensively, but
+ * the cleanest path is no fence at all.
+ */
+export function buildInsightConsolidationPrompt(insights: InsightForConsolidation[]): string {
+  const lines = insights.map(
+    (i, idx) => `${idx + 1}. [${i.type}] ${i.summary}${i.detail ? ` — ${i.detail}` : ""} (updated ${i.updated_at})`,
+  );
+
+  return `You are consolidating ${insights.length} older insights from an AI coding project into 3-5 merged replacements. Preserve the load-bearing facts; drop transient or already-completed items.
+
+RULES (HARD):
+- Output ONLY a JSON array. No preamble. No postamble. No markdown code fence.
+- Maximum 5 items. Minimum 3 (unless the source genuinely collapses to fewer distinct facts).
+- Each item: {"type": "<one of: decision, learning, preference, architecture, action_item>", "summary": "<string, ≤12 words>", "detail": "<string, ≤2 sentences — OR omit the field entirely if no detail needed>"}
+- Combine near-duplicates into a single entry.
+- If multiple older insights point to the same fact, keep one merged version.
+- If an action_item is now complete (referenced by a later decision), drop it.
+- Be concise — these appear in every future SessionStart brief, so every word costs context budget.
+
+INPUT INSIGHTS:
+${lines.join("\n")}
+
+OUTPUT (JSON array only, starting with '['):`;
+}

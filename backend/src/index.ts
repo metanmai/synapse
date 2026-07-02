@@ -15,6 +15,7 @@ import { projects } from "./api/projects";
 import { projectsResolve } from "./api/projects-resolve";
 import { share } from "./api/share";
 import { runDailyAggregation } from "./cron/aggregate";
+import { runDailyConsolidationRetry } from "./cron/retry-consolidations";
 import { CompactionScheduler } from "./durable-objects/compaction-scheduler";
 import type { Env } from "./lib/env";
 import { envList } from "./lib/env";
@@ -95,6 +96,10 @@ export default {
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     if (event.cron === "0 3 * * *") {
       ctx.waitUntil(runDailyAggregation(env));
+      // Phase 03-04: catch up Plus projects whose POST-time consolidation
+      // failed (LLM outage). Independent waitUntil so a failure in one
+      // job doesn't poison the other; both share the 30s wall-clock budget.
+      ctx.waitUntil(runDailyConsolidationRetry(env));
     }
   },
 };

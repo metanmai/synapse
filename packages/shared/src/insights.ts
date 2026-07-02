@@ -1,7 +1,7 @@
 export type InsightType = "decision" | "learning" | "preference" | "architecture" | "action_item";
 
 export interface InsightSource {
-  type: "conversation" | "session" | "manual";
+  type: "conversation" | "session" | "manual" | "consolidation";
   id?: string;
   agent?: string;
 }
