@@ -19,6 +19,19 @@ export function readOrCreateDeviceId(): string {
   return id;
 }
 
-export function resolveActor(user_id: string, kind: Actor["kind"] = "human"): Actor {
-  return { user_id, kind, device_id: readOrCreateDeviceId(), hostname: os.hostname(), client: "claude-code" };
+/**
+ * Build an Actor record for an event being emitted from THIS process.
+ *
+ * `client` identifies the surface the event originated from. Pass:
+ *   - "claude-code"     — Claude Code hook handlers (hooks/*.ts)
+ *   - "synapsesync-cli" — interactive CLI commands (cli/handoff-commands.ts)
+ *   - "synapse-daemon"  — daemon-emitted events (daemon.ts inferral path)
+ *   - actual tool tag   — proxy-source emitted sessions (per-UA-classifier)
+ *
+ * Default "unknown" only fires when a caller doesn't pass anything;
+ * production sites should always be explicit. The previous default
+ * was "claude-code" — that mislabeled every CLI invocation.
+ */
+export function resolveActor(user_id: string, kind: Actor["kind"] = "human", client = "unknown"): Actor {
+  return { user_id, kind, device_id: readOrCreateDeviceId(), hostname: os.hostname(), client };
 }

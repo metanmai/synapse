@@ -15,7 +15,7 @@ export function runSessionEndHook(a: {
   appendEvent(projectDir(a.project_id), {
     project_id: a.project_id,
     session_id: a.session_id,
-    actor: resolveActor(a.user_id),
+    actor: resolveActor(a.user_id, "human", "claude-code"),
     attached_to: null,
     kind: EventKind.SessionClosed,
     occurred_at: new Date().toISOString(),

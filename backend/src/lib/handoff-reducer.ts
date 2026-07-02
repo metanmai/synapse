@@ -124,7 +124,7 @@ function rowToEvent(r: Record<string, unknown>): Event {
       kind: r.actor_kind as "human" | "synapse-daemon",
       device_id: String(r.actor_device_id),
       hostname: "",
-      client: "claude-code",
+      client: "unknown",
     },
     attached_to: r.attached_to as Event["attached_to"],
     kind: r.kind as Event["kind"],

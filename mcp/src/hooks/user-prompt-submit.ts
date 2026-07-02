@@ -20,7 +20,7 @@ interface Args {
 
 export function runUserPromptSubmitHook(a: Args): void {
   if (process.env.SYNAPSE_DAEMON_SESSION === "1") return;
-  const actor = resolveActor(a.user_id);
+  const actor = resolveActor(a.user_id, "human", "claude-code");
   appendEvent(projectDir(a.project_id), {
     project_id: a.project_id,
     session_id: a.session_id,

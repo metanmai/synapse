@@ -20,7 +20,7 @@ export async function runHandoffCmd(a: Base & { text: string }): Promise<void> {
   appendEvent(projectDir(a.project_id), {
     project_id: a.project_id,
     session_id: a.session_id,
-    actor: resolveActor(a.user_id),
+    actor: resolveActor(a.user_id, "human", "synapsesync-cli"),
     attached_to: null,
     kind: EventKind.NextStepSet,
     occurred_at: new Date().toISOString(),
@@ -33,7 +33,7 @@ export async function runSetFocusCmd(a: Base & { text: string }): Promise<void> 
   appendEvent(projectDir(a.project_id), {
     project_id: a.project_id,
     session_id: a.session_id,
-    actor: resolveActor(a.user_id),
+    actor: resolveActor(a.user_id, "human", "synapsesync-cli"),
     attached_to: null,
     kind: EventKind.FocusSet,
     occurred_at: new Date().toISOString(),
@@ -46,7 +46,7 @@ export async function runNoteCmd(a: Base & { target: string; text: string }): Pr
   appendEvent(projectDir(a.project_id), {
     project_id: a.project_id,
     session_id: a.session_id,
-    actor: resolveActor(a.user_id),
+    actor: resolveActor(a.user_id, "human", "synapsesync-cli"),
     attached_to: parseRef(a.target),
     kind: EventKind.IssueNoted,
     occurred_at: new Date().toISOString(),
@@ -71,7 +71,7 @@ export async function runIssueCreate(
   appendEvent(projectDir(a.project_id), {
     project_id: a.project_id,
     session_id: a.session_id,
-    actor: resolveActor(a.user_id),
+    actor: resolveActor(a.user_id, "human", "synapsesync-cli"),
     attached_to: { type: "issue", id },
     kind: EventKind.IssueCreated,
     occurred_at: new Date().toISOString(),
@@ -84,7 +84,7 @@ export async function runIssueResolve(a: Base & { issue_id: string; resolution: 
   appendEvent(projectDir(a.project_id), {
     project_id: a.project_id,
     session_id: a.session_id,
-    actor: resolveActor(a.user_id),
+    actor: resolveActor(a.user_id, "human", "synapsesync-cli"),
     attached_to: { type: "issue", id: a.issue_id },
     kind: EventKind.IssueStateChanged,
     occurred_at: new Date().toISOString(),
@@ -97,7 +97,7 @@ export async function runIssueSupersede(a: Base & { issue_id: string; superseded
   appendEvent(projectDir(a.project_id), {
     project_id: a.project_id,
     session_id: a.session_id,
-    actor: resolveActor(a.user_id),
+    actor: resolveActor(a.user_id, "human", "synapsesync-cli"),
     attached_to: { type: "issue", id: a.issue_id },
     kind: EventKind.IssueStateChanged,
     occurred_at: new Date().toISOString(),
