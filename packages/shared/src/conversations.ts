@@ -58,6 +58,9 @@ export interface Conversation {
   media_size: number;
   metadata: Record<string, unknown> | null;
   encrypted: boolean;
+  compacted_summary: string | null;
+  compacted_at: string | null;
+  compaction_model: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -68,6 +71,7 @@ export interface ConversationListItem {
   status: ConversationStatus;
   message_count: number;
   metadata: Record<string, unknown> | null;
+  compacted_at: string | null;
   updated_at: string;
 }
 
