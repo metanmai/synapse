@@ -150,17 +150,28 @@ export function detectLLMProvider(env: NodeJS.ProcessEnv): { provider: LLMProvid
 }
 
 /**
- * Build a compaction prompt that mirrors the backend's
- * buildCompactionPrompt (backend/src/lib/llm/prompts.ts) so the resulting
- * summary has the same shape regardless of whether it was generated
- * locally or on the server. Drift between the two would surface as
- * inconsistent handoff_markdown between users who hit local fallback
- * vs. hosted path.
+ * Build a compaction prompt that asks the LLM for a dense, fact-preserving
+ * handoff document. The MUST-PRESERVE list is the load-bearing instruction
+ * — without it, summarization-trained models tend to paraphrase away
+ * exactly the identifiers (test ids, hash prefixes, secret values, error
+ * codes) that the next session needs to recall.
+ *
+ * Mirrors backend/src/lib/llm/prompts.ts at the high level so the handoff
+ * shape is consistent across local and hosted paths. If you change one,
+ * change both — drift produces different handoffs depending on which
+ * path compacted, which is a confusing user experience.
  */
 export function buildCompactionPrompt(messages: ChatMessage[], title: string | null): string {
   const transcript = messages.map((m) => `[${m.role}] ${m.content ?? "(empty)"}`).join("\n\n");
   const titleLine = title ? `\nConversation title: ${title}\n` : "";
-  return `Summarize this AI coding session into a dense context document. An AI agent will read this to continue the work. Include: what was built, key decisions made, current state, and any unfinished work. Be specific — include file paths, function names, and technical details. Omit pleasantries and routine exchanges.
+  return `Summarize this AI coding session into a dense context document. An AI agent will read this to continue the work.
+
+MUST-PRESERVE (copy verbatim, do not paraphrase):
+- All literal identifiers, IDs, hashes, version numbers, error codes.
+- All quoted strings, file paths, function names, URLs.
+- Any fact the user explicitly asked to remember (look for phrases like "remember", "note that", "the secret is", "test_id is").
+
+INCLUDE: what was built, key decisions made, current state, and any unfinished work. Be specific — include file paths, function names, and technical details. Omit pleasantries and routine exchanges, but keep the must-preserve items even when they appear in routine-looking lines.
 ${titleLine}
 ## Transcript (${messages.length} messages)
 

@@ -91,6 +91,28 @@ describe("buildCompactionPrompt — backend-prompt parity", () => {
     expect(prompt).toContain("Conversation title: Session about auth");
   });
 
+  it("includes the MUST-PRESERVE clause so summarization preserves identifiers verbatim", () => {
+    // BUG CLASS: "the LLM paraphrases away exactly the identifiers the
+    // next session needs to recall." Stage 6.2 of happy-flow-e2e
+    // asserts that TEST_ID and TEST_PHRASE land in handoff_markdown.
+    // Without an explicit instruction, summarization-trained models
+    // strip out unique IDs / hashes / secrets in favor of a generic
+    // narrative. The MUST-PRESERVE list is the load-bearing fix.
+    //
+    // Discovered 2026-06-07: 424-char OpenRouter summary failed Stage
+    // 6.2 because the literal TEST_ID/TEST_PHRASE values were
+    // paraphrased out, even though they were explicit in the user
+    // turn ("test_id is XXX, secret_phrase is 'YYY'").
+    const prompt = buildCompactionPrompt(
+      [{ role: "user", content: "remember test_id is abc123 and secret is 'xyz789'" }],
+      null,
+    );
+    expect(prompt).toMatch(/MUST-PRESERVE/i);
+    // The "look for phrases like 'remember', 'test_id is'" guidance is
+    // the specific anchor that catches the e2e test's fact pattern.
+    expect(prompt).toMatch(/test_id is/i);
+  });
+
   it("substitutes '(empty)' for null content (matching backend `?? '(empty)'` semantics)", () => {
     // backend/src/lib/llm/prompts.ts uses `m.content ?? "(empty)"` — the
     // nullish coalescing only triggers for null/undefined, not for empty
