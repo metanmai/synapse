@@ -18,14 +18,39 @@ interface CursorChat {
   lastMessageDate: number;
 }
 
+/**
+ * Resolve the per-platform Cursor `User/workspaceStorage` directory.
+ * Exported for unit-test use (test injects process.platform via vi.spyOn).
+ */
+export function cursorWorkspaceStorageDir(platform: NodeJS.Platform = process.platform): string {
+  if (platform === "darwin") {
+    return path.join(os.homedir(), "Library", "Application Support", "Cursor", "User", "workspaceStorage");
+  }
+  if (platform === "win32") {
+    // %APPDATA% on Windows is usually C:\Users\<user>\AppData\Roaming.
+    // Cursor (an Electron app) stores its user data under
+    // %APPDATA%\Cursor\User\workspaceStorage, same shape as VS Code.
+    // Fall back to ~/AppData/Roaming if APPDATA env isn't set — Node's
+    // os.homedir() always works on Windows, and AppData\Roaming is the
+    // standard location.
+    const appData = process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming");
+    return path.join(appData, "Cursor", "User", "workspaceStorage");
+  }
+  // Linux / *BSD / anything else: VS-Code-style XDG layout under ~/.config.
+  return path.join(os.homedir(), ".config", "Cursor", "User", "workspaceStorage");
+}
+
 export class CursorAdapter implements ToolAdapter {
   tool = "cursor";
 
   watchPaths(): string[] {
     const override = process.env.SYNAPSE_TEST_CURSOR_PATH;
     if (override) return [override];
-    const base = path.join(os.homedir(), "Library", "Application Support", "Cursor", "User", "workspaceStorage");
-    return [base];
+    // Cursor's workspace-storage layout is platform-specific:
+    //   - macOS   → ~/Library/Application Support/Cursor/User/workspaceStorage
+    //   - Linux   → ~/.config/Cursor/User/workspaceStorage
+    //   - Windows → %APPDATA%\Cursor\User\workspaceStorage  (typically C:\Users\<u>\AppData\Roaming\Cursor\...)
+    return [cursorWorkspaceStorageDir()];
   }
 
   parse(filePath: string): CapturedSession | null {

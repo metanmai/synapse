@@ -40,26 +40,31 @@ function isToolResultOnly(msg: RooCodeMessage): boolean {
   return msg.role === "user" && msg.content.every((c) => c.type === "tool_result");
 }
 
+/**
+ * Resolve the per-platform Roo Code extension storage path.
+ * Roo Code (vscode-extension `rooveterinaryinc.roo-cline`) writes
+ * task data under VS Code's globalStorage, same layout shape as Cline.
+ * Exported for unit testing.
+ */
+export function rooCodeTasksDir(platform: NodeJS.Platform = process.platform): string {
+  const ext = path.join("Code", "User", "globalStorage", "rooveterinaryinc.roo-cline", "tasks");
+  if (platform === "darwin") {
+    return path.join(os.homedir(), "Library", "Application Support", ext);
+  }
+  if (platform === "win32") {
+    const appData = process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming");
+    return path.join(appData, ext);
+  }
+  return path.join(os.homedir(), ".config", ext);
+}
+
 export class RooCodeAdapter implements ToolAdapter {
   tool = "roo-code";
 
   watchPaths(): string[] {
     const override = process.env.SYNAPSE_TEST_ROO_PATH;
     if (override) return [override];
-    const base =
-      process.platform === "darwin"
-        ? path.join(
-            os.homedir(),
-            "Library",
-            "Application Support",
-            "Code",
-            "User",
-            "globalStorage",
-            "rooveterinaryinc.roo-cline",
-            "tasks",
-          )
-        : path.join(os.homedir(), ".config", "Code", "User", "globalStorage", "rooveterinaryinc.roo-cline", "tasks");
-    return [base];
+    return [rooCodeTasksDir()];
   }
 
   parse(filePath: string): CapturedSession | null {
