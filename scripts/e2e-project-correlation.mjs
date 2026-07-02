@@ -11,8 +11,9 @@
 //
 // Stages:
 //   PC1  POST a keyless browser conversation → 201 + auto-assigned project_id
+//   PC3  near-duplicate captures group together + unrelated stays separate
+//        (real embeddings); self-skips green when embeddings are inactive
 //   PC2  (if INTERNAL_TRIGGER_TOKEN set) POST /internal/reconcile → 200 {ok}
-//   PC3  (info) report assignment_method (ai_* = embeddings active, else fallback)
 //
 // Self-skips green when SYNAPSE_API_KEY is absent. The merge/grouping LOGIC is
 // covered deterministically by the unit suite; here we keep assertions to what
@@ -184,14 +185,55 @@ async function pc2_reconcile_runs() {
   ok("PC2 reconcile", `reconciler ran: ${JSON.stringify(body.summary)}`);
 }
 
-// ── PC3: grouping note (info; assignment_method is write-only, not in the API) ─
-async function pc3_grouping(conv) {
-  header("PC3 · Grouping (info)");
-  if (!conv) {
-    info("no conversation from PC1 — skipping");
-    return;
+// ── PC3: REAL semantic grouping — the production assertion ──────────────────
+// Against the deployed backend + real Supabase + real embeddings: two
+// near-duplicate captures must land in the SAME project; an unrelated capture
+// in a DIFFERENT one. Self-gates — if all three share a project, embeddings
+// aren't active in this env (host-bucket fallback) → skip green.
+async function pc3_semantic_grouping() {
+  header("PC3 · Real semantic grouping (deployed backend + real embeddings)");
+  const a = await createBrowserConversation(
+    `How do I refactor OAuth2 login and session-token rotation in our auth service? [${RUN_ID}]`,
+  );
+  const b = await createBrowserConversation(
+    `How should I refactor OAuth2 login and session-token rotation in our auth service? [${RUN_ID}]`,
+  );
+  const c = await createBrowserConversation(
+    `What are some good vegetarian recipes for a weekend dinner party? [${RUN_ID}]`,
+  );
+  for (const x of [a, b, c]) {
+    if (x._err || !x.project_id) {
+      fail("PC3 setup", `create failed: ${JSON.stringify(x).slice(0, 150)}`);
+      return;
+    }
+    createdProjects.add(x.project_id);
   }
-  info(`keyless capture grouped into project ${conv.project_id} (AI assign if embeddings active, else host bucket)`);
+  info(`A=${a.project_id.slice(0, 8)} B=${b.project_id.slice(0, 8)} C=${c.project_id.slice(0, 8)}`);
+
+  const abSame = a.project_id === b.project_id;
+  const allSame = abSame && b.project_id === c.project_id;
+  const cDistinct = c.project_id !== a.project_id;
+
+  if (abSame && cDistinct) {
+    ok(
+      "PC3 semantic grouping",
+      "near-duplicate captures grouped together; unrelated capture kept separate — AI correlation works end-to-end",
+    );
+  } else if (allSame) {
+    info(
+      "all three share one project → embeddings inactive here (host-bucket fallback); set EMBEDDING_SERVICE_URL/_KEY in prod to engage AI grouping — assertion skipped",
+    );
+  } else if (!abSame) {
+    fail(
+      "PC3 semantic grouping",
+      `near-duplicate captures landed in DIFFERENT projects (A=${a.project_id}, B=${b.project_id}) — embeddings active but grouping is wrong`,
+    );
+  } else {
+    fail(
+      "PC3 semantic grouping",
+      `unrelated capture grouped with the auth captures (over-grouping): C=${c.project_id} == A=${a.project_id}`,
+    );
+  }
 }
 
 async function main() {
@@ -202,9 +244,9 @@ async function main() {
   if (!preflight()) process.exit(process.exitCode ?? 2);
 
   try {
-    const conv = await pc1_keyless_capture();
+    await pc1_keyless_capture();
+    await pc3_semantic_grouping();
     await pc2_reconcile_runs();
-    await pc3_grouping(conv);
   } catch (err) {
     log(`\n🚨 UNEXPECTED ERROR: ${err.message}\n${err.stack}`);
     results.push({ id: "uncaught", status: "FAIL", detail: err.message });
