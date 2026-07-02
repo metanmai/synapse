@@ -10,6 +10,7 @@ export default defineConfig({
       "$lib/*": "/src/lib/*",
       "$app/environment": "/src/test-mocks/app-environment.ts",
       "$env/static/private": "/src/test-mocks/env-private.ts",
+      "$env/dynamic/private": "/src/test-mocks/env-dynamic-private.ts",
     },
   },
 });
