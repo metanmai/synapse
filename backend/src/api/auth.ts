@@ -334,7 +334,11 @@ account.post("/keys", async (c) => {
 
   const keyCount = await countApiKeys(db, user.id);
   if (keyCount >= API_KEY_MAX_PER_USER) {
-    throw new AppError(`API key limit reached (${API_KEY_MAX_PER_USER}). Revoke an existing key first.`, 400, "KEY_LIMIT");
+    throw new AppError(
+      `API key limit reached (${API_KEY_MAX_PER_USER}). Revoke an existing key first.`,
+      400,
+      "KEY_LIMIT",
+    );
   }
 
   const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;

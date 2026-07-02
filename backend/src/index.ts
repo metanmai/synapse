@@ -10,10 +10,10 @@ import { share } from "./api/share";
 import { sync } from "./api/sync";
 import type { Env } from "./lib/env";
 import { envList } from "./lib/env";
-import { dbMiddleware } from "./middleware/db";
 import { AppError } from "./lib/errors";
 import { rateLimit } from "./lib/rate-limit";
 import { SynapseAgent } from "./mcp/agent";
+import { dbMiddleware } from "./middleware/db";
 import { runScheduledGoogleSync } from "./sync/from-google";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -35,7 +35,9 @@ app.use("*", (c, next) => {
 
 // Rate limiting — 120 requests per minute per key/IP
 app.use("*", rateLimit(120, 60000));
-app.use("*", dbMiddleware);
+// DB middleware — scoped to routes that need it (not /health or /mcp)
+app.use("/auth/*", dbMiddleware);
+app.use("/api/*", dbMiddleware);
 
 app.onError((err, c) => {
   if (err instanceof AppError) {

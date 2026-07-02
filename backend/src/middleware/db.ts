@@ -12,8 +12,11 @@ declare module "hono" {
 /**
  * Attaches a Supabase client to the Hono context.
  * All downstream handlers use c.get("db") instead of creating their own.
+ * Skips creation if Supabase env vars aren't configured (e.g., test environment).
  */
 export async function dbMiddleware(c: Context<{ Bindings: Env }>, next: Next): Promise<void> {
-  c.set("db", createSupabaseClient(c.env));
+  if (c.env.SUPABASE_URL && c.env.SUPABASE_SERVICE_KEY) {
+    c.set("db", createSupabaseClient(c.env));
+  }
   await next();
 }
