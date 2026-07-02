@@ -139,3 +139,34 @@ export function handleHeartbeat(body: unknown, ctx: Omit<IngestContext, "sync">)
   if (typeof host !== "string" || !isCaptureHost(host)) return { ok: false, status: 400 };
   return { ok: true, host };
 }
+
+export interface DriftResult {
+  ok: boolean;
+  status?: number;
+  host?: CaptureHost;
+  eventNames?: string[];
+  byteLength?: number;
+  sampleHash?: string;
+}
+
+/**
+ * Wire-format drift signal (Layer 1). Same transport guards as ingest. Allowlist
+ * schema: host + structural shape only (eventNames, byteLength, sampleHash). No
+ * message content is ever read or echoed — that is the privacy contract.
+ */
+export function handleDrift(body: unknown, ctx: Omit<IngestContext, "sync">): DriftResult {
+  const rejected = checkGuards(ctx);
+  if (rejected !== null) return { ok: false, status: rejected };
+  const b = (body ?? {}) as { host?: unknown; eventNames?: unknown; byteLength?: unknown; sampleHash?: unknown };
+  if (typeof b.host !== "string" || !isCaptureHost(b.host)) return { ok: false, status: 400 };
+  const eventNames = Array.isArray(b.eventNames)
+    ? b.eventNames.filter((n): n is string => typeof n === "string").slice(0, 20)
+    : [];
+  return {
+    ok: true,
+    host: b.host,
+    eventNames,
+    byteLength: typeof b.byteLength === "number" ? b.byteLength : 0,
+    sampleHash: typeof b.sampleHash === "string" ? b.sampleHash : "",
+  };
+}

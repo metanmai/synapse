@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleHeartbeat, handleIngest } from "../../src/capture/ingest/ingest-route.js";
+import { handleDrift, handleHeartbeat, handleIngest } from "../../src/capture/ingest/ingest-route.js";
 
 const ok = { remoteAddress: "127.0.0.1", token: "T", expectedToken: "T", origin: "chrome-extension://abc" };
 
@@ -63,5 +63,29 @@ describe("handleHeartbeat", () => {
 
   it("rejects a non-allowlisted host", () => {
     expect(handleHeartbeat({ host: "evil.com" }, ok).status).toBe(400);
+  });
+});
+
+describe("handleDrift", () => {
+  it("accepts a valid drift event and echoes only the structural shape", () => {
+    const r = handleDrift({ host: "claude.ai", eventNames: ["unknown"], byteLength: 42, sampleHash: "deadbeef" }, ok);
+    expect(r).toEqual({ ok: true, host: "claude.ai", eventNames: ["unknown"], byteLength: 42, sampleHash: "deadbeef" });
+  });
+
+  it("rejects non-loopback (403)", () => {
+    expect(handleDrift({ host: "claude.ai" }, { ...ok, remoteAddress: "10.0.0.5" }).status).toBe(403);
+  });
+
+  it("rejects a bad token (401)", () => {
+    expect(handleDrift({ host: "claude.ai" }, { ...ok, token: "WRONG" }).status).toBe(401);
+  });
+
+  it("rejects a non-allowlisted host (400)", () => {
+    expect(handleDrift({ host: "evil.com" }, ok).status).toBe(400);
+  });
+
+  it("reads only allowlisted fields — extra keys never survive", () => {
+    const r = handleDrift({ host: "claude.ai", cookie: "LEAK", eventNames: ["x"] }, ok);
+    expect(JSON.stringify(r)).not.toContain("LEAK");
   });
 });
