@@ -179,3 +179,34 @@ jobs:
 
       - name: Run E2E
         run: docker run --rm synapse-e2e-${{ matrix.distro }}:ci
+
+  proxy-windows-e2e:
+    # Windows trust-store install gate (Slice B). Mirror of the Linux
+    # Docker matrix shape but runs natively on windows-latest because
+    # (a) Windows containers are heavier than the test value justifies,
+    # (b) GHA's windows-latest already ships Git-for-Windows (which
+    # provides openssl on PATH) + certutil (builtin since Vista) — the
+    # two tools the daemon's openssl-spawn + WindowsBackend need.
+    # Validates `synapsesync capture proxy install/status/uninstall`
+    # against the real CurrentUser Root certificate store.
+    runs-on: windows-latest
+    timeout-minutes: 15
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies (workspace root)
+        run: npm install --no-audit --no-fund
+
+      - name: Build mcp CLI
+        run: npm run build --workspace=mcp
+
+      - name: Run Windows proxy E2E
+        shell: powershell
+        run: ./scripts/e2e-windows/e2e-proxy-install.ps1
