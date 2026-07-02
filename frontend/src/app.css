@@ -15,12 +15,32 @@
   --color-success: #2d5016;
   --color-danger: #8b0000;
   --color-success-bg: #e8f0d8;
+  --shadow-sm: 0 2px 8px rgba(86, 28, 36, 0.06);
+  --shadow-md: 0 8px 32px rgba(86, 28, 36, 0.08);
+  --shadow-lg: 0 12px 40px rgba(86, 28, 36, 0.12);
+  --shadow-xl: 0 20px 60px rgba(86, 28, 36, 0.12);
+  --blur-sm: blur(12px);
+  --blur-md: blur(20px);
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-pill: 9999px;
+  --transition-base: all 150ms ease;
+}
+
+.glass {
+  background: rgba(255, 253, 248, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
 }
 
 body {
   font-family: "Lato", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   background-color: var(--color-bg);
   color: var(--color-text);
+  font-size: 15px;
 }
 
 .prose h1,
@@ -68,9 +88,9 @@ body {
   font-size: 0.9em;
 }
 .prose pre {
-  background-color: var(--color-bg-muted);
+  background-color: rgba(86, 28, 36, 0.04);
   padding: 1em;
-  border-radius: 8px;
+  border-radius: 16px;
   overflow-x: auto;
   margin-bottom: 0.75em;
 }
@@ -112,5 +132,42 @@ body {
 h1,
 h2,
 h3 {
-  letter-spacing: -0.3px;
+  letter-spacing: -0.02em;
+}
+
+@keyframes float-orb {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.05); }
+  66% { transform: translate(-20px, 15px) scale(0.95); }
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--color-pink-dark), var(--color-pink));
+  color: white;
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 12px 28px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: var(--transition-base);
+}
+.btn-primary:hover {
+  transform: scale(1.03);
+  box-shadow: 0 8px 32px rgba(109, 41, 50, 0.35);
+}
+
+.btn-secondary {
+  background: rgba(86, 28, 36, 0.06);
+  color: var(--color-pink-dark);
+  border: 1px solid var(--color-pink);
+  border-radius: var(--radius-pill);
+  padding: 10px 24px;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  transition: var(--transition-base);
+}
+.btn-secondary:hover {
+  background: rgba(86, 28, 36, 0.1);
 }
