@@ -29,10 +29,16 @@ let html = $derived(marked.parse(entry.content, { async: false }) as string);
         {/each}
       </div>
     </div>
-    <button onclick={() => onEdit()}
-      class="btn-secondary cursor-pointer">
-      Edit
-    </button>
+    <div class="flex items-center gap-2">
+      <a href="/projects/{encodeURIComponent(projectName)}/history/{encodeURIComponent(entry.path)}"
+        class="btn-secondary cursor-pointer" style="text-decoration: none;">
+        History
+      </a>
+      <button onclick={() => onEdit()}
+        class="btn-secondary cursor-pointer">
+        Edit
+      </button>
+    </div>
   </div>
   <div class="prose rounded-xl p-5 text-sm"
     style="background-color: var(--color-bg-raised); border: 1px solid var(--color-border); line-height: 1.7;">
