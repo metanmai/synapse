@@ -30,4 +30,15 @@
   :global(.landing *) {
     font-family: 'Lato', sans-serif;
   }
+
+  /* Smooth scrolling for anchor links */
+  :global(html) {
+    scroll-behavior: smooth;
+  }
+
+  /* Ensure images don't overflow on mobile */
+  .landing :global(img) {
+    max-width: 100%;
+    height: auto;
+  }
 </style>
