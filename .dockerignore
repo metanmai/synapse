@@ -1,0 +1,38 @@
+# Docker build-context exclusions. Honored when `docker build` is invoked
+# with the repo root as context (`docker build -f scripts/e2e-linux/Dockerfile.<distro> .`).
+#
+# Without these, COPY . /repo pulls multi-GB of node_modules + lock files
+# carrying corporate-proxy-rewritten tarball URLs (Netskope on the
+# maintainer's machine), and `npm install` inside the container fails
+# with SELF_SIGNED_CERT_IN_CHAIN against the corporate registry.
+
+# Bulk artifacts — would balloon the build context to multi-GB.
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.github
+coverage
+**/coverage
+frontend/.svelte-kit
+frontend/build
+frontend/test-results
+frontend/playwright-report
+.planning
+docs/superpowers
+*.log
+.DS_Store
+
+# Host-generated lock files carry corporate-proxy-rewritten tarball URLs
+# (e.g. pkgproxy-uat.coinswitch.co) that the Linux containers don't trust.
+# Let `npm install` in the container generate a fresh lock against the
+# default public registry instead.
+package-lock.json
+**/package-lock.json
+npm-shrinkwrap.json
+
+# Local .npmrc may also pin a corporate registry — exclude defensively
+# so containers always use the public registry.
+.npmrc
+**/.npmrc

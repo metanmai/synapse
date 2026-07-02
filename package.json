@@ -20,6 +20,7 @@
     "test:e2e:proxy-layer5": "node scripts/e2e-proxy-layer5.mjs",
     "test:e2e:proxy-source": "node scripts/e2e-proxy-source.mjs",
     "test:e2e:proxy-lifecycle": "node scripts/e2e-proxy-lifecycle.mjs",
+    "test:e2e:proxy-linux": "node scripts/e2e-proxy-install-linux.mjs",
     "test:e2e:all": "node scripts/e2e-happy-flow.mjs && node scripts/e2e-failure-cases.mjs && node scripts/e2e-multi-device.mjs && node scripts/e2e-insight-roundtrip.mjs && node scripts/e2e-insight-supersede.mjs && node scripts/e2e-multi-account.mjs && node scripts/e2e-resilience.mjs && node scripts/e2e-cli.mjs && node scripts/e2e-smoke.mjs && node scripts/e2e-adapter-roundtrip.mjs && node scripts/e2e-proxy-layer5.mjs && node scripts/e2e-proxy-source.mjs && node scripts/e2e-proxy-lifecycle.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "biome check .",

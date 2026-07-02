@@ -1,0 +1,23 @@
+# Synapse proxy Layer 8 E2E — Fedora 40 trust-store install test.
+# Spec §4.2: rhel-family install to /etc/pki/ca-trust/source/anchors/synapse.pem
+# + update-ca-trust extract → cert merged into /etc/pki/ca-trust/extracted/.
+FROM fedora:40
+
+RUN dnf install -y \
+      ca-certificates \
+      sudo \
+      openssl \
+      curl \
+ && curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - \
+ && dnf install -y nodejs \
+ && dnf clean all
+
+WORKDIR /repo
+COPY . /repo
+
+RUN npm install --workspace=mcp --include-workspace-root=false --no-audit --no-fund
+
+WORKDIR /repo/mcp
+RUN npm run build
+
+ENTRYPOINT ["/bin/sh", "/repo/scripts/e2e-linux/e2e-proxy-install.sh"]

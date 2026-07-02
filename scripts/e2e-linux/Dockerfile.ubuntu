@@ -1,0 +1,26 @@
+# Synapse proxy Layer 8 E2E — Ubuntu 24.04 trust-store install test.
+# Spec §4.2: debian-family via ID_LIKE=debian inheritance — exercises the
+# os-release parser's whitespace + quote handling against a real distro
+# that doesn't have `ID=debian` but inherits the family.
+FROM ubuntu:24.04
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      gnupg \
+      sudo \
+      openssl \
+ && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /repo
+COPY . /repo
+
+RUN npm install --workspace=mcp --include-workspace-root=false --no-audit --no-fund
+
+WORKDIR /repo/mcp
+RUN npm run build
+
+ENTRYPOINT ["/bin/sh", "/repo/scripts/e2e-linux/e2e-proxy-install.sh"]
