@@ -9,7 +9,9 @@ if (!file) {
 }
 
 let fd;
-try { fd = openSync(file, "r"); } catch {
+try {
+  fd = openSync(file, "r");
+} catch {
   console.error(`Cannot open: ${file}`);
   process.exit(1);
 }
