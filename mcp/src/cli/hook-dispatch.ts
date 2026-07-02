@@ -1,4 +1,6 @@
+import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import path from "node:path";
 import { runPostToolUseHook } from "../hooks/post-tool-use.js";
 import { runPreCompactHook } from "../hooks/pre-compact.js";
 import { runSessionEndHook } from "../hooks/session-end.js";
@@ -47,9 +49,12 @@ export async function readHookPayloadFromStdin(): Promise<AnyHookPayload> {
   let raw = "";
   for await (const chunk of process.stdin) raw += chunk;
   const parsed = JSON.parse(raw);
-  // TODO: integrate with project-map.ts when resolveProjectIdFromCwd lands.
-  // For now, derive a deterministic id from the cwd hash so events still flow.
-  const project_id = hashCwd(parsed.cwd ?? process.cwd());
+  const cwd: string = parsed.cwd ?? process.cwd();
+  // Until project-map.ts resolves a canonical id locally, derive a cwd hash so
+  // events still flow. The backend's auto-create flow (v1.1 Task 6) rewrites
+  // that placeholder to a canonical UUID using `git_basename` as the name.
+  const project_id = hashCwd(cwd);
+  const git_basename = getGitBasename(cwd) ?? path.basename(cwd);
   return {
     project_id,
     user_id: process.env.SYNAPSE_USER_ID ?? "default",
@@ -59,6 +64,7 @@ export async function readHookPayloadFromStdin(): Promise<AnyHookPayload> {
     output: parsed.tool_response,
     prompt: parsed.prompt,
     subagent: parsed.subagent_type,
+    git_basename,
     stdout: process.stdout,
   };
 }
@@ -66,4 +72,22 @@ export async function readHookPayloadFromStdin(): Promise<AnyHookPayload> {
 /** First 12 hex chars of cwd's sha1, prefixed with `cwd_`. */
 export function hashCwd(cwd: string): string {
   return `cwd_${createHash("sha1").update(cwd).digest("hex").slice(0, 12)}`;
+}
+
+/**
+ * Resolve a git repository's basename from `cwd`. Falls back to `null` when
+ * cwd is not inside a git repo; callers should default to `path.basename(cwd)`.
+ */
+export function getGitBasename(cwd: string): string | null {
+  try {
+    const root = execSync("git rev-parse --show-toplevel", {
+      cwd,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+    return root ? path.basename(root) : null;
+  } catch {
+    return null;
+  }
 }
