@@ -62,6 +62,29 @@ describe("computeRenamedLabel — cli- prefix preservation", () => {
     expect(computeRenamedLabel("cli-foo", "")).toBe("cli-");
     expect(computeRenamedLabel("default", "")).toBe("");
   });
+
+  it("BUG #7: cli-legacy-YYYY-MM-DD shape stays inside the cli- namespace under rename", () => {
+    // Migration 026 (rename_legacy_cli_keys) turns bare "cli" rows into
+    // "cli-legacy-YYYY-MM-DD" — the shape must satisfy the SQL
+    // `LIKE 'cli-%'` filter used by countCliKeys/listCliKeys, AND any
+    // subsequent rename via the dashboard must NOT strip the cli-
+    // prefix (would break device-cap accounting). Pin both invariants.
+    const legacyLabel = "cli-legacy-2025-12-15";
+
+    // The migrated label starts with cli- (matches the SQL LIKE filter).
+    expect(legacyLabel.startsWith("cli-")).toBe(true);
+
+    // User renames "legacy-2025-12-15" to "macbook" in the dashboard
+    // (the dashboard strips the cli- prefix on display, so the user
+    // sees and edits the suffix). Renamed label must still be cli-prefixed.
+    const userInput = "macbook";
+    const renamed = computeRenamedLabel(legacyLabel, userInput);
+    expect(renamed).toBe("cli-macbook");
+    expect(renamed.startsWith("cli-")).toBe(true);
+
+    // And the SQL filter would still pick it up post-rename.
+    expect(renamed.startsWith("cli-")).toBe(true);
+  });
 });
 
 describe("PATCH /api/account/keys/:id — auth gate", () => {

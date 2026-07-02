@@ -85,14 +85,6 @@ The churned row (`bd5be0f2`) updated once — almost certainly on the `subscript
 
 ---
 
-## P2 — Per-device CLI keys (a8ecf98 scope completion)
-
-### 7. Legacy `cli`-labeled keys never get migrated to `cli-<device>` shape
-
-Accounts that predate the per-device feature have keys labeled just `cli` (or worse, ad-hoc names like `M4 Pro` from manual creation). They show up in the dashboard as an indistinguishable pile.
-
-**Phase 5 of original plan:** a one-shot rename script that turns legacy `cli` labels into `cli-legacy-<created_date>` so they're identifiable. Could be a SQL migration or a self-service "clean up old keys" button in the dashboard.
-
 ---
 
 ## P3 — Repo hygiene
@@ -154,6 +146,7 @@ Fixed in the 2026-05-30 session (post-Windows-readiness backlog sweep):
 
 - **#5 409 `DEVICE_LIMIT_REACHED` has no UI in frontend** — added `POST /auth/cli-revoke-and-session` backend endpoint + `revokeAndContinue` frontend action + picker UI in `cli-auth/+page.svelte`. Free-tier users hitting the 3-device cap now see a list of their devices (with last-used relative time) and can revoke one to make room for the new sign-in. Commit `89e2a69`.
 - **#6 Dashboard rename UI for `cli-*` keys not built** — Added `PATCH /api/account/keys/:id` backend endpoint with pure `computeRenamedLabel` helper that preserves the `cli-` prefix invariant, plus inline-edit UI in `ApiKeysCard.svelte` (Rename button next to Revoke). Works for ALL keys, not just cli-prefixed ones. Commit `76aa43f`.
+- **#7 Legacy `cli`-labeled keys never migrated** — `supabase/migrations/026_rename_legacy_cli_keys.sql` renames bare `cli` labels to `cli-legacy-YYYY-MM-DD` (date from created_at). Only touches labels equal to exactly `cli` — ad-hoc names like "M4 Pro" are left alone since they're indistinguishable from intentional non-CLI keys. The new shape still matches countCliKeys/listCliKeys' `LIKE 'cli-%'` filter (device-cap accounting unchanged) and is renameable via the dashboard inline-edit shipped in #6. Migration is idempotent + atomic single UPDATE. Will auto-apply on metanmai/synapse via the `migrate` CI job once the SUPABASE_* secrets are configured (P1 above) — until then, requires manual `supabase db push` from a CF-enabled machine.
 - **#13 Frontend svelte-check warnings (4 a11y + 8 unused-CSS)** — unused-CSS already cleared in an earlier commit; the 4 a11y warnings (AppShell switcher-wrapper div, two `autofocus` inputs) fixed with role="presentation" + svelte-ignore directives that document the intent inline. svelte-check now reports 0 warnings.
 
 Fixed in the 2026-05-19 to 2026-05-20 sessions (Phase 1, slice 1a-prime + 1b):
