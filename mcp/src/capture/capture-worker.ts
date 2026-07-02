@@ -130,6 +130,12 @@ async function main(): Promise<void> {
           `WARNING: browser capture produced zero turns for active host(s): ${stale.join(", ")} — adapter may be broken`,
         );
       }
+      const drifted = rateTracker.driftHosts(Date.now());
+      if (drifted.length > 0) {
+        log(
+          `DRIFT: host(s) changed wire format and capture is failing: ${drifted.join(", ")} — re-run scripts/e2e-browser-live.mjs, then patch the adapter + golden fixture`,
+        );
+      }
     }, 60 * 1000);
     if (typeof staleTimer.unref === "function") staleTimer.unref();
   }

@@ -8,7 +8,7 @@
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
 import type { CapturedSession } from "../types.js";
 import type { CaptureRateTracker } from "./capture-rate.js";
-import { handleHeartbeat, handleIngest } from "./ingest-route.js";
+import { handleDrift, handleHeartbeat, handleIngest } from "./ingest-route.js";
 
 const MAX_BODY_BYTES = 1_000_000; // 1 MB — conversations, not uploads
 
@@ -87,6 +87,19 @@ export async function startIngestServer(opts: IngestServerOptions): Promise<Runn
       if (r.ok) {
         const host = (body as { host?: unknown }).host;
         if (typeof host === "string") opts.rateTracker.capture(host, now());
+      }
+      res.writeHead(r.ok ? 200 : (r.status ?? 400));
+      res.end();
+      return;
+    }
+
+    if (url.startsWith("/drift")) {
+      const r = handleDrift(body, guards);
+      if (r.ok && r.host) {
+        opts.rateTracker.drift(r.host, now());
+        opts.log(
+          `⚠ capture drift on ${r.host}: events=[${(r.eventNames ?? []).join(",")}] bytes=${r.byteLength} hash=${r.sampleHash}`,
+        );
       }
       res.writeHead(r.ok ? 200 : (r.status ?? 400));
       res.end();

@@ -85,6 +85,30 @@ describe("ingest server (loopback)", () => {
     }
   });
 
+  it("routes /drift with a valid token and records a drift host on the tracker", async () => {
+    const rateTracker = new CaptureRateTracker({ windowMs: 5 * 60 * 1000 });
+    const srv = await startIngestServer({
+      port: 0,
+      token: "secret",
+      sync: vi.fn().mockResolvedValue(true),
+      rateTracker,
+      log: () => {},
+      now: () => 1000,
+    });
+    try {
+      const status = await post(
+        srv.port,
+        "/drift",
+        { host: "claude.ai", eventNames: ["unknown"], byteLength: 10, sampleHash: "ab" },
+        { "x-synapse-ingest-token": "secret", origin: "chrome-extension://abc" },
+      );
+      expect(status).toBe(200);
+      expect(rateTracker.driftHosts(1000)).toEqual(["claude.ai"]);
+    } finally {
+      await srv.close();
+    }
+  });
+
   it("404s an unknown path", async () => {
     const rateTracker = new CaptureRateTracker({ windowMs: 60_000 });
     const srv = await startIngestServer({
