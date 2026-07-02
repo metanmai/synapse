@@ -119,6 +119,17 @@ export class CloudSyncer {
   async sync(session: CapturedSession): Promise<boolean> {
     if (!this.apiKey) return false;
 
+    // Canonicalize once at the top so the project-map key and the routing
+    // signals sent to the backend always agree. If we canonicalized only
+    // inside createConversation but stored the project-map under the raw
+    // path, pull-compact's later cwd lookup would miss.
+    let canonicalPath = session.projectPath;
+    try {
+      canonicalPath = fs.realpathSync(session.projectPath);
+    } catch {
+      /* dir gone — use recorded path */
+    }
+
     try {
       const existing = this.syncStates.get(session.id);
 
@@ -131,7 +142,7 @@ export class CloudSyncer {
           existing.lastSyncedMessageCount = session.messages.length;
           saveSyncStates(this.syncStates, this.log);
           if (existing.projectId) {
-            this.updateProjectMap(session.projectPath, existing.projectId, existing.projectName ?? null);
+            this.updateProjectMap(canonicalPath, existing.projectId, existing.projectName ?? null);
           }
         }
         return ok;
@@ -149,7 +160,7 @@ export class CloudSyncer {
           projectName: created.project_name,
         });
         saveSyncStates(this.syncStates, this.log);
-        this.updateProjectMap(session.projectPath, created.project_id, created.project_name);
+        this.updateProjectMap(canonicalPath, created.project_id, created.project_name);
       }
       return ok;
     } catch (err) {
@@ -164,16 +175,26 @@ export class CloudSyncer {
     project_name: string | null;
   } | null> {
     try {
+      // Resolve symlinks so a user who entered claude via `~/work/proj`
+      // (symlinked to `~/Documents/proj`) and another who entered via the
+      // target directly route to the SAME backend project. Falls back to
+      // session.projectPath if the dir no longer exists.
+      let canonicalProjectPath = session.projectPath;
+      try {
+        canonicalProjectPath = fs.realpathSync(session.projectPath);
+      } catch {
+        /* dir gone — use the recorded path as-is */
+      }
       const workingContext: Record<string, string> = {
         tool: session.tool,
-        projectPath: session.projectPath,
-        cwd: session.projectPath,
+        projectPath: canonicalProjectPath,
+        cwd: canonicalProjectPath,
         capturedSessionId: session.id,
       };
 
       try {
         const url = execSync("git config --get remote.origin.url", {
-          cwd: session.projectPath,
+          cwd: canonicalProjectPath,
           stdio: ["ignore", "pipe", "ignore"],
         })
           .toString()

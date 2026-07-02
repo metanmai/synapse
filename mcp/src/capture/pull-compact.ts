@@ -50,13 +50,24 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
     return null;
   }
 
+  // Canonicalize cwd so symlinked entry paths route to the same project as
+  // the canonical target. cloud-sync stores project-map keys post-realpath;
+  // a mismatch here would silently miss for symlink users. Falls back to
+  // the raw cwd if the path no longer exists.
+  let canonicalCwd = opts.cwd;
+  try {
+    canonicalCwd = fs.realpathSync(opts.cwd);
+  } catch {
+    /* path gone — use raw */
+  }
+
   // The hook hands us cwd_<hash>; only the cloud syncer knows the
   // canonical project UUID, and it stashes that mapping in project-map.json
   // as a side-effect of the first successful sync.
   const map = readProjectMap();
-  const mapping = map[opts.cwd];
+  const mapping = map[canonicalCwd] ?? map[opts.cwd];
   if (!mapping) {
-    log(`pull-compact: no project-map entry for cwd=${opts.cwd}`);
+    log(`pull-compact: no project-map entry for cwd=${canonicalCwd}`);
     return null;
   }
   const projectUuid = mapping.project_id;
