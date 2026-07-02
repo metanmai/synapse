@@ -44,6 +44,8 @@ export class RooCodeAdapter implements ToolAdapter {
   tool = "roo-code";
 
   watchPaths(): string[] {
+    const override = process.env.SYNAPSE_TEST_ROO_PATH;
+    if (override) return [override];
     const base =
       process.platform === "darwin"
         ? path.join(

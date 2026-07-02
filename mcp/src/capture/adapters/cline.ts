@@ -44,6 +44,8 @@ export class ClineAdapter implements ToolAdapter {
   tool = "cline";
 
   watchPaths(): string[] {
+    const override = process.env.SYNAPSE_TEST_CLINE_PATH;
+    if (override) return [override];
     const base =
       process.platform === "darwin"
         ? path.join(
