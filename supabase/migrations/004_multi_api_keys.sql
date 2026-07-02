@@ -20,12 +20,3 @@ create policy "api_keys_read_own" on api_keys for select
 
 create policy "api_keys_delete_own" on api_keys for delete
   using (user_id = auth.uid());
-
--- Migrate existing keys from users table
-insert into api_keys (user_id, key_hash, label)
-select id, api_key_hash, 'default'
-from users
-where api_key_hash is not null;
-
--- Drop the old column
-alter table users drop column api_key_hash;
