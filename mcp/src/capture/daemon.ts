@@ -2,6 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { EventKind } from "@synapse/shared/handoff/events.js";
+import { type Supervisor, checkSupervisor } from "../cli/util/daemon-supervisor.js";
+import { BASE_DELAY_MS, computeNextDelay } from "./daemon-backoff.js";
 import { spawnInferNextStep } from "./daemon-cc.js";
 import { appendEvent, readEvents } from "./events-log.js";
 import { writeBrief } from "./handoff-brief.js";
@@ -12,6 +14,7 @@ import { synthesizeHeuristicNextStep } from "./heuristic-synth.js";
 interface DaemonStatus {
   running: boolean;
   pid: number | null;
+  supervisor: Supervisor;
 }
 
 export class DaemonManager {
@@ -38,15 +41,7 @@ export class DaemonManager {
   }
 
   isRunning(): boolean {
-    const pid = this.readPid();
-    if (pid === null) return false;
-    try {
-      process.kill(pid, 0); // Signal 0 = check if process exists
-      return true;
-    } catch {
-      this.cleanup();
-      return false;
-    }
+    return this.status().running;
   }
 
   cleanup(): void {
@@ -54,9 +49,18 @@ export class DaemonManager {
   }
 
   status(): DaemonStatus {
+    const sup = checkSupervisor();
+    if (sup.running) return sup;
+    // Tier-2 fallback: PID file + signal-0 check.
     const pid = this.readPid();
-    const running = this.isRunning();
-    return { running, pid: running ? pid : null };
+    if (pid === null) return { running: false, pid: null, supervisor: null };
+    try {
+      process.kill(pid, 0);
+      return { running: true, pid, supervisor: null };
+    } catch {
+      this.cleanup();
+      return { running: false, pid: null, supervisor: null };
+    }
   }
 
   getLogFile(): string {
@@ -129,13 +133,14 @@ export async function maybeFireInferNextStep(a: FireArgs): Promise<void> {
 }
 
 export function startHandoffLoop(a: HandoffLoopArgs): () => void {
-  const pull_ms = a.pull_ms ?? 15000;
-  const flush_ms = a.flush_ms ?? 10000;
   const hc_ms = a.healthcheck_ms ?? 10000;
   let stopped = false;
+  let currentDelay = BASE_DELAY_MS;
+  let nextTimer: ReturnType<typeof setTimeout> | null = null;
 
-  async function cycle() {
-    if (stopped) return;
+  async function cycle(): Promise<boolean> {
+    if (stopped) return true;
+    let ok = true;
     for (let i = 0; i < a.projects.length; i++) {
       const project_id = a.projects[i];
       try {
@@ -148,10 +153,22 @@ export function startHandoffLoop(a: HandoffLoopArgs): () => void {
         if (a.user_id) writeBrief(effectiveId, a.user_id);
       } catch (err) {
         console.error("[handoff] cycle error", project_id, err);
+        ok = false;
       }
     }
+    return ok;
   }
 
+  async function scheduleNext(): Promise<void> {
+    if (stopped) return;
+    const ok = await cycle();
+    if (stopped) return;
+    currentDelay = computeNextDelay(currentDelay, ok);
+    nextTimer = setTimeout(scheduleNext, currentDelay);
+  }
+
+  // Flush-now signal poll — UNCHANGED. User-initiated; does NOT participate
+  // in backoff (per RESEARCH §"Pattern 5").
   const signalCheck = setInterval(async () => {
     if (fs.existsSync(flushNowSignalPath())) {
       try {
@@ -161,19 +178,19 @@ export function startHandoffLoop(a: HandoffLoopArgs): () => void {
     }
   }, 100);
 
-  const cycleTimer = setInterval(cycle, Math.min(pull_ms, flush_ms));
-
+  // Healthcheck timer — UNCHANGED.
   const hcTimer = setInterval(() => {
     fs.mkdirSync(path.dirname(healthcheckPath()), { recursive: true });
     fs.writeFileSync(healthcheckPath(), new Date().toISOString());
   }, hc_ms);
 
-  cycle();
+  // Self-rescheduling backoff chain replaces the previous `setInterval(cycle, ...)`.
+  scheduleNext();
 
   return () => {
     stopped = true;
     clearInterval(signalCheck);
-    clearInterval(cycleTimer);
+    if (nextTimer) clearTimeout(nextTimer);
     clearInterval(hcTimer);
   };
 }

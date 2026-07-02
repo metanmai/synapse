@@ -1,23 +1,13 @@
-// Wave 0 stub — fill in Plan 01-02 (BUG-02 — supervisor-aware daemon detection).
-// Exports the type contract that Wave 2 production code will implement and Wave 1
-// RED tests can import. Calling `checkSupervisor` at runtime throws "not implemented
-// — Wave 2" so any premature use surfaces loudly.
-//
-// Plan 01-02's implementation MUST import `LAUNCHD_LABEL` from
-// `../../capture/os-service.js` rather than redefining the literal — the
-// LAUNCHD_LABEL invariant test (in `mcp/test/cli/status.test.ts`) uses
-// `vi.mock` with a sentinel value to catch hard-coded duplicates.
+import child_process from "node:child_process";
+import { LAUNCHD_LABEL } from "../../capture/os-service.js";
 
 /** Supervisor kinds Synapse can interrogate. `null` means "no supervisor — PID-file fallback". */
 export type Supervisor = "launchd" | "systemd" | null;
 
 /**
  * Result of querying the OS service supervisor about the Synapse daemon.
- * Wave 2 fills this with two-tier semantics:
- *   1. supervisor (launchd / systemd) is asked first
- *   2. PID file (`~/.synapse/capture.pid`) is the tier-2 fallback
- * `running === true` AND `supervisor === null` means the daemon is alive
- * but not under a supervisor (e.g. `synapse capture start` was run manually).
+ * Two-tier semantics: supervisor (launchd / systemd) is asked first; the PID
+ * file fallback lives in `DaemonManager.status()`, not here.
  */
 export interface SupervisorStatus {
   running: boolean;
@@ -25,13 +15,58 @@ export interface SupervisorStatus {
   supervisor: Supervisor;
 }
 
+const LAUNCHCTL_PID_REGEX = /^\s*pid\s*=\s*(\d+)/m;
+
 /**
  * Synchronously check whether the Synapse capture daemon is currently running.
- * Wave 2 (Plan 01-02) fills the body with platform-dispatch logic:
- *   - darwin: `launchctl print gui/$UID/${LAUNCHD_LABEL}` exit code 0 == running
- *   - linux:  `systemctl --user is-active synapsesync.service` stdout "active" == running
- *   - other:  fall through to PID-file check
+ * Pitfall 1: stdio is `["ignore","pipe","ignore"]` so we get exit-code semantics
+ * without piping (piped exit codes mask the real exit and become 0).
+ * Pitfall 5: `process.getuid()` is undefined on Windows — guard before use.
  */
 export function checkSupervisor(): SupervisorStatus {
-  throw new Error("not implemented — Wave 2");
+  const platform = process.platform;
+
+  if (platform === "darwin") {
+    const uid = process.getuid?.();
+    if (uid === undefined) return { running: false, pid: null, supervisor: null };
+    try {
+      const stdout = child_process.execSync(`launchctl print gui/${uid}/${LAUNCHD_LABEL}`, {
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf-8",
+      });
+      const m = LAUNCHCTL_PID_REGEX.exec(stdout);
+      const pid = m ? Number.parseInt(m[1], 10) : null;
+      return { running: true, pid: Number.isNaN(pid as number) ? null : pid, supervisor: "launchd" };
+    } catch {
+      return { running: false, pid: null, supervisor: null };
+    }
+  }
+
+  if (platform === "linux") {
+    try {
+      const active = child_process.execSync("systemctl --user is-active synapsesync.service", {
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf-8",
+      }).trim();
+      if (active !== "active") return { running: false, pid: null, supervisor: null };
+      try {
+        const pidStr = child_process.execSync("systemctl --user show -p MainPID --value synapsesync.service", {
+          stdio: ["ignore", "pipe", "ignore"],
+          encoding: "utf-8",
+        }).trim();
+        const pid = Number.parseInt(pidStr, 10);
+        return {
+          running: true,
+          pid: Number.isNaN(pid) || pid === 0 ? null : pid,
+          supervisor: "systemd",
+        };
+      } catch {
+        return { running: true, pid: null, supervisor: "systemd" };
+      }
+    } catch {
+      return { running: false, pid: null, supervisor: null };
+    }
+  }
+
+  return { running: false, pid: null, supervisor: null };
 }

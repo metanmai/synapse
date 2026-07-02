@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { healthcheckPath, synapseRoot } from "../capture/handoff-paths.js";
+import { checkSupervisor } from "./util/daemon-supervisor.js";
 
 export async function runStatus(): Promise<string> {
+  // Primary line: existing healthcheck-age semantics (preserves backwards compat).
   const hcPath = healthcheckPath();
   let line = "Daemon: not running";
   if (fs.existsSync(hcPath)) {
@@ -10,6 +12,28 @@ export async function runStatus(): Promise<string> {
     const age = Date.now() - ts;
     line = age < 60_000 ? "Daemon: healthy" : "Daemon: STALE";
   }
+
+  // Additive supervisor context (BUG-02): when checkSupervisor reports a
+  // running supervised process, append the supervisor name + PID. When it
+  // reports running but unsupervised (PID-only), append only the PID. When
+  // running:false, append nothing — line above already says "not running"
+  // or healthcheck state. Each branch produces an observably distinct
+  // output so the three states are pairwise distinguishable (the bug class
+  // BUG-02 closes).
+  //
+  // TODO: BUGS.md #12 follow-up — surface last successful flush + current
+  // backoff state once daemon.log readback lands in slice 1b.
+  const sup = checkSupervisor();
+  if (sup.running) {
+    if (sup.supervisor === "launchd") {
+      line += ` · supervised by launchd · PID ${sup.pid ?? "unknown"}`;
+    } else if (sup.supervisor === "systemd") {
+      line += ` · supervised by systemd · PID ${sup.pid ?? "unknown"}`;
+    } else if (sup.pid !== null) {
+      line += ` · PID ${sup.pid}`;
+    }
+  }
+
   const projects = listProjects();
   return `${line}. Projects tracked: ${projects.length}.`;
 }
