@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import * as clack from "@clack/prompts";
 import { accent, bold, muted, success } from "../cli/theme.js";
 import { DaemonManager } from "./daemon.js";
+import { installHooks, isInstalled, uninstallHooks } from "./hooks.js";
 import { SessionStore } from "./store.js";
 
 const daemon = new DaemonManager();
@@ -21,6 +22,10 @@ export async function runCapture(args: string[]): Promise<void> {
       return captureStatus();
     case "list":
       return listCaptures();
+    case "hook-install":
+      return hookInstall();
+    case "hook-uninstall":
+      return hookUninstall();
     default:
       captureHelp();
   }
@@ -30,10 +35,13 @@ function captureHelp(): void {
   clack.intro(`${accent("\u25C6")} ${bold("Synapse Capture")}`);
   clack.log.message(
     [
-      `  ${accent("start")}    Start the session capture daemon`,
-      `  ${accent("stop")}     Stop the capture daemon`,
-      `  ${accent("status")}   Check daemon status and session count`,
-      `  ${accent("list")}     List recently captured sessions`,
+      `  ${accent("start")}            Start the session capture daemon`,
+      `  ${accent("stop")}             Stop the capture daemon`,
+      `  ${accent("status")}           Check daemon status and session count`,
+      `  ${accent("list")}             List recently captured sessions`,
+      "",
+      `  ${accent("hook-install")}     Auto-start capture with Claude Code`,
+      `  ${accent("hook-uninstall")}   Remove Claude Code hook`,
     ].join("\n"),
   );
   clack.outro(muted("npx synapsesync-mcp capture <command>"));
@@ -143,4 +151,38 @@ function listCaptures(): void {
   }
 
   clack.outro(muted(`${sessions.length} session(s) total`));
+}
+
+function hookInstall(): void {
+  clack.intro(`${accent("\u25C6")} ${bold("Synapse Capture Hook")}`);
+
+  if (isInstalled()) {
+    clack.log.info("Hook is already installed.");
+    clack.outro(muted("Capture starts automatically with Claude Code"));
+    return;
+  }
+
+  const result = installHooks();
+  if (result.installed) {
+    clack.log.success("SessionStart hook installed");
+    clack.log.message(muted(`  ${result.settingsPath}`));
+    clack.outro(muted("Capture will start automatically with Claude Code"));
+  } else {
+    clack.log.warn("Could not install hook.");
+    clack.outro(muted("synapsesync.app"));
+  }
+}
+
+function hookUninstall(): void {
+  clack.intro(`${accent("\u25C6")} ${bold("Synapse Capture Hook")}`);
+
+  const result = uninstallHooks();
+  if (result.removed) {
+    clack.log.success("Hook removed");
+    clack.log.message(muted(`  ${result.settingsPath}`));
+    clack.outro(muted("Use 'capture start' to run manually"));
+  } else {
+    clack.log.info("No hook found to remove.");
+    clack.outro(muted("synapsesync.app"));
+  }
 }
