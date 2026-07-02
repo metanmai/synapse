@@ -6,6 +6,7 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code?: string,
   ) {
     super(message);
   }
@@ -48,7 +49,11 @@ async function request<T>(path: string, token: string | null, options: RequestIn
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
     const detail = body.detail ? ` (${body.detail})` : "";
-    throw new ApiError(res.status, `${method} ${path} → ${res.status}: ${body.error || res.statusText}${detail}`);
+    throw new ApiError(
+      res.status,
+      `${method} ${path} → ${res.status}: ${body.error || res.statusText}${detail}`,
+      typeof body.code === "string" ? body.code : undefined,
+    );
   }
 
   return res.json();

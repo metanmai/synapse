@@ -53,8 +53,8 @@ const renewalDate = $derived(
 
   {#if billing.tier === "free" && !showUpgradeSuccess}
     <p class="text-sm mb-3" style="color: var(--color-text-muted);">
-      You're on the <strong>Free</strong> plan (up to 5 projects). Upgrade to Plus for
-      up to 50 projects and unlimited team members.
+      You're on the <strong>Free</strong> plan. Upgrade to Plus for unlimited team
+      members per project, AI-generated project context, and link-based sharing.
     </p>
     <form method="POST" action="?/checkout" use:enhance={() => {
       checkoutLoading = true;

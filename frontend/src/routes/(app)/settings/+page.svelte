@@ -69,8 +69,8 @@ function formatDate(dateStr: string | null): string {
 
     {#if data.tier === "free" && !showUpgradeSuccess}
       <p class="plan-desc">
-        You're on the <strong>Free</strong> plan. Upgrade to Plus for 50 projects, unlimited
-        connections, and version history.
+        You're on the <strong>Free</strong> plan. Upgrade to Plus for AI-generated project
+        context, unlimited team members per project, link-based sharing, and version history.
       </p>
       <form method="POST" action="?/checkout" use:enhance={() => {
         checkoutLoading = true;

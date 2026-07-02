@@ -38,12 +38,12 @@ function toolColor(tool: string): string {
   return toolColors[tool] ?? "#8a7565";
 }
 
-const projectLimit = $derived(data.tier === "free" ? 5 : 50);
+// Phase 03-02: both tiers cap at 50 projects. Differentiation moved to
+// per-project capacity and auto-sync, not project count.
+const projectLimit = 50;
 
 const countTooltip = $derived(
-  data.tier === "free"
-    ? `Free tier supports up to ${projectLimit} projects. Upgrade to Plus for 50.`
-    : `Plus tier supports up to ${projectLimit} projects.`,
+  `${data.tier === "free" ? "Free" : "Plus"} tier supports up to ${projectLimit} projects.`,
 );
 
 function handleSubmit() {
