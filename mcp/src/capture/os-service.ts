@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+export const LAUNCHD_LABEL = "app.synapsesync.daemon";
+
 export interface ServiceTemplate {
   /** Absolute path to the node executable that will run the daemon. */
   node: string;
@@ -23,7 +25,7 @@ export function renderLaunchdPlist(a: ServiceTemplate): string {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyLists-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>app.synapsesync.daemon</string>
+  <key>Label</key><string>${LAUNCHD_LABEL}</string>
   <key>ProgramArguments</key>
   <array>
     <string>${a.node}</string>
