@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { admin } from "./api/admin";
 import { account, auth } from "./api/auth";
 import { billing } from "./api/billing";
+import { capture } from "./api/capture";
 import { compaction } from "./api/compaction";
 import { context } from "./api/context";
 import { conversations } from "./api/conversations";
@@ -36,7 +37,12 @@ app.use("*", (c, next) => {
     "http://localhost:5173,https://synapsesync.app,https://synapse-7mq.pages.dev",
   );
   return cors({
-    origin: origins,
+    // Configured frontend origins, PLUS any browser-extension origin: the
+    // self-sufficient capture extension POSTs cross-origin with a Bearer token
+    // (no cookies). CORS is not the auth boundary here — the capture-scoped key
+    // + fail-closed scope gate are. Reflect allowed origins, omit otherwise.
+    origin: (origin) =>
+      origin && (origins.includes(origin) || origin.startsWith("chrome-extension://")) ? origin : null,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization", "Idempotency-Key"],
     credentials: true,
@@ -84,6 +90,7 @@ app.route("/api/billing", billing);
 app.route("/api/insights", insights);
 app.route("/api", invites);
 app.route("/api/conversations", conversations);
+app.route("/api/capture", capture);
 app.route("/api", compaction);
 
 // Internal ops trigger — mounted OUTSIDE /api so it isn't caught by the

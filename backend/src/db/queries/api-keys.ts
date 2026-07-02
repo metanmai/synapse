@@ -12,10 +12,14 @@ export class ApiKeyExpiredError extends Error {
 export async function findUserByApiKeyHash(
   db: SupabaseClient,
   keyHash: string,
-): Promise<{ user: UserRow; apiKeyId: string } | null> {
+): Promise<{ user: UserRow; apiKeyId: string; scope: string } | null> {
+  // SELECT * (not an explicit column list) so `scope` is read feature-detected:
+  // before migration 031 is applied the column simply isn't present, and the
+  // reader must NOT 500 the core auth path. An absent column reads as undefined
+  // → defaulted to "full" below (i.e. existing behavior preserved).
   const { data, error } = await db
     .from("api_keys")
-    .select("id, user_id, expires_at, users(*)")
+    .select("*, users(*)")
     .eq("key_hash", keyHash)
     .limit(1)
     .maybeSingle();
@@ -28,7 +32,8 @@ export async function findUserByApiKeyHash(
     throw new ApiKeyExpiredError();
   }
 
-  return { user: data.users as unknown as UserRow, apiKeyId: data.id };
+  const scope = typeof (data as { scope?: unknown }).scope === "string" ? (data as { scope: string }).scope : "full";
+  return { user: data.users as unknown as UserRow, apiKeyId: data.id, scope };
 }
 
 export async function createApiKey(

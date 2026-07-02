@@ -793,11 +793,13 @@ describe("api-keys queries", () => {
       const result = await findUserByApiKeyHash(db as unknown as SupabaseClient, "hash123");
 
       expect(db.from).toHaveBeenCalledWith("api_keys");
-      expect(db.chainable.select).toHaveBeenCalledWith("id, user_id, expires_at, users(*)");
+      // SELECT * so `scope` is read feature-detected (absent column → "full").
+      expect(db.chainable.select).toHaveBeenCalledWith("*, users(*)");
       expect(db.chainable.eq).toHaveBeenCalledWith("key_hash", "hash123");
       expect(db.chainable.limit).toHaveBeenCalledWith(1);
       expect(db.chainable.maybeSingle).toHaveBeenCalled();
-      expect(result).toEqual({ user, apiKeyId: "ak1" });
+      // No `scope` in the row → defaulted to "full" (pre-migration-031 safe).
+      expect(result).toEqual({ user, apiKeyId: "ak1", scope: "full" });
     });
 
     it("returns null when no matching key", async () => {
@@ -829,7 +831,14 @@ describe("api-keys queries", () => {
       });
 
       const result = await findUserByApiKeyHash(db as unknown as SupabaseClient, "hash123");
-      expect(result).toEqual({ user, apiKeyId: "ak1" });
+      expect(result).toEqual({ user, apiKeyId: "ak1", scope: "full" });
+    });
+
+    it("reads scope when the column is present (capture-scoped key)", async () => {
+      const user = { id: "u1", email: "test@test.com" };
+      const db = mockSuccess({ id: "ak1", user_id: "u1", expires_at: null, scope: "capture", users: user });
+      const result = await findUserByApiKeyHash(db as unknown as SupabaseClient, "hash123");
+      expect(result?.scope).toBe("capture");
     });
   });
 

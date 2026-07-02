@@ -2,7 +2,7 @@ import type { Context, Next } from "hono";
 
 import { ApiKeyExpiredError, findUserByApiKeyHash, updateApiKeyLastUsed } from "../db/queries";
 import { findUserBySupabaseAuthId, getActiveSubscription } from "../db/queries";
-import { UnauthorizedError } from "./errors";
+import { ForbiddenError, UnauthorizedError } from "./errors";
 
 import type { UserRow } from "../db/types";
 import type { Env } from "./env";
@@ -11,8 +11,17 @@ declare module "hono" {
   interface ContextVariableMap {
     user: UserRow;
     tier: import("../db/types").Tier;
+    keyScope: string;
   }
 }
+
+/**
+ * The ONLY request path a `capture`-scoped API key may reach. Every other
+ * authenticated route rejects it (403), enforced fail-closed in authMiddleware
+ * below — so a leaked browser-extension key can only inject captures, never
+ * read/list/delete account data, and new routes are protected by default.
+ */
+export const CAPTURE_INGEST_PATH = "/api/capture/browser";
 
 export async function hashApiKey(key: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -37,6 +46,9 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next):
   const token = authHeader.slice(7);
   const db = c.get("db");
   let user: UserRow | null = null;
+  // JWT/Supabase sessions are always full-scope; only minted API keys can be
+  // capture-scoped. Default closed to "full" only for real user sessions.
+  let keyScope = "full";
 
   // Try JWT by verifying with Supabase auth
   if (isJwt(token)) {
@@ -66,6 +78,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next):
       const result = await findUserByApiKeyHash(db, apiKeyHash);
       if (result) {
         user = result.user;
+        keyScope = result.scope;
         // Update last_used_at (fire-and-forget)
         updateApiKeyLastUsed(db, result.apiKeyId);
       } else if (!isJwt(token)) {
@@ -84,6 +97,15 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next):
   }
 
   c.set("user", user);
+  c.set("keyScope", keyScope);
+
+  // Fail-closed scope gate: a capture-scoped key may reach ONLY the browser
+  // ingest endpoint. Anything else (projects, conversations, account, billing,
+  // future routes) is 403. Centralized here so coverage can't be forgotten
+  // per-route.
+  if (keyScope === "capture" && c.req.path !== CAPTURE_INGEST_PATH) {
+    throw new ForbiddenError("This key is scoped to browser capture only");
+  }
 
   // Resolve tier from subscription status
   const sub = await getActiveSubscription(db, user.id);

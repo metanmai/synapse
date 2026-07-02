@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/types.ts",
     "./capture-hosts.js": "./src/capture-hosts.ts",
+    "./redact.js": "./src/redact.ts",
     "./handoff/types.js": "./src/handoff/types.ts",
     "./handoff/events.js": "./src/handoff/events.ts",
     "./handoff/reducer.js": "./src/handoff/reducer.ts"
