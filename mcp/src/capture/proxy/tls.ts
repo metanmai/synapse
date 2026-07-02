@@ -32,14 +32,6 @@
  */
 
 import { execFileSync } from "node:child_process";
-
-/**
- * Env-var-gated debug logger for diagnosing platform-specific hangs
- * (e.g., Windows CI). Off by default — set SYNAPSE_PROXY_DEBUG=1 to
- * surface timing markers on every step of TlsManager.
- */
-const DEBUG = process.env.SYNAPSE_PROXY_DEBUG;
-const dlog = DEBUG ? (msg: string) => process.stderr.write(`[tls-debug ${Date.now()}] ${msg}\n`) : (_msg: string) => {};
 import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { synapseRoot } from "../handoff-paths.js";
@@ -98,18 +90,12 @@ export class TlsManager {
    * subsequent calls (including across process restarts).
    */
   ensureCa(): CertPair {
-    dlog("ensureCa: enter");
-    if (this.cachedCa) {
-      dlog("ensureCa: cache hit");
-      return this.cachedCa;
-    }
+    if (this.cachedCa) return this.cachedCa;
 
     const keyPath = path.join(this.caDir, "ca.key");
     const certPath = path.join(this.caDir, "ca.pem");
-    dlog(`ensureCa: caDir=${this.caDir} keyPath=${keyPath} certPath=${certPath}`);
 
     if (existsSync(keyPath) && existsSync(certPath)) {
-      dlog("ensureCa: existing CA files found, loading from disk");
       this.cachedCa = {
         key: readFileSync(keyPath, "utf-8"),
         cert: readFileSync(certPath, "utf-8"),
@@ -117,22 +103,22 @@ export class TlsManager {
       return this.cachedCa;
     }
 
-    dlog("ensureCa: mkdirSync");
     mkdirSync(this.caDir, { recursive: true, mode: 0o700 });
 
     // Generate RSA key.
-    dlog(`ensureCa: openssl genrsa ${this.keyBits} START`);
+    // stdio:["ignore","pipe","pipe"] + windowsHide is deliberate: on
+    // Windows, stdio:"ignore" for all three streams binds the child to
+    // NUL devices that some Windows openssl builds block on. Piping
+    // stdout/stderr (without reading) keeps the child writable.
     execFileSync("openssl", ["genrsa", "-out", keyPath, String(this.keyBits)], {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
-    dlog("ensureCa: openssl genrsa DONE");
     chmodSync(keyPath, 0o600);
 
     // Self-signed CA cert.
     // -extensions v3_ca with -addext for CA basic constraints — older
     // openssl needed a config file; openssl 1.1.1+ accepts -addext.
-    dlog("ensureCa: openssl req -x509 START");
     execFileSync(
       "openssl",
       [
@@ -154,7 +140,6 @@ export class TlsManager {
       ],
       { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
     );
-    dlog("ensureCa: openssl req -x509 DONE");
 
     this.cachedCa = {
       key: readFileSync(keyPath, "utf-8"),

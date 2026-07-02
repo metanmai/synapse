@@ -37,8 +37,23 @@ export interface BackendOptions {
   runCp?: CommandRunner;
   /** Linux — reads /etc/os-release. Null when file is absent (Linux runtime on macOS or unsupported distros). */
   readOsRelease?: () => string | null;
-  /** Windows — `certutil` CLI (CurrentUser Root store ops). Builtin since Windows Vista. */
+  /**
+   * Windows — `certutil` CLI. Used for the post-install verify query
+   * (`certutil -store ...`) which is non-destructive and has no UI prompt.
+   * NOT used for addstore/delstore on Windows: those hit the Windows
+   * "Do you want to install this CA?" GUI dialog that hangs CI runners
+   * (verified by daemon-side debug logs: `certutil -addstore` hung for
+   * exactly 30s on GHA windows-latest before our spawnSync timeout fired).
+   */
   runCertutil?: CommandRunner;
+  /**
+   * Windows — `powershell` CLI used to run `Import-Certificate` (install)
+   * and `X509Store.Remove()` (uninstall). Both use .NET's X509Store API
+   * which bypasses the Root-store GUI confirmation dialog that certutil
+   * triggers. Single arg: the PowerShell script body (we invoke
+   * `powershell.exe -NoProfile -NonInteractive -Command <script>`).
+   */
+  runPowerShell?: CommandRunner;
   proxyPort?: number;
 }
 

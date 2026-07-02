@@ -1,14 +1,22 @@
 // mcp/test/capture/proxy/backends/windows.test.ts
 //
-// Bug class: "the windows backend (a) invokes certutil with wrong args
-// or wrong store scope (e.g. machine instead of CurrentUser), (b)
-// silently reports success when post-install verify fails, (c) leaves
-// stale trust settings after uninstall, (d) ships an env snippet that
-// only covers PowerShell OR only covers cmd (must cover both per spec
-// §5.3), OR (e) omits the certmgr.msc fallback for GPO-blocked systems."
+// Bug class: "the windows backend (a) invokes the wrong cert-store API
+// (e.g. hits the certutil -addstore codepath that triggers the Windows
+// GUI confirmation dialog and hangs on CI), (b) silently reports success
+// when post-install verify fails, (c) leaves stale trust settings after
+// uninstall, (d) ships an env snippet that only covers PowerShell OR
+// only covers cmd (must cover both per spec §5.3), OR (e) omits the
+// certmgr.msc fallback for GPO-blocked systems."
 //
-// Every certutil invocation is injected. Tests never touch the real
-// CurrentUser Root store on any machine they're run from.
+// Empirically validated 2026-05-30: `certutil -addstore -user -f Root
+// <ca.pem>` hangs exactly 30 s on GHA windows-latest (UI confirmation
+// dialog waiting on a desktop that doesn't exist). Switched to
+// PowerShell Import-Certificate which uses the .NET X509Store API
+// path — no dialog. Status queries (certutil -store) are non-destructive
+// and remain certutil since they're fast (~60 ms) and never prompt.
+//
+// Every PowerShell + certutil invocation is injected. Tests never touch
+// the real CurrentUser Root store on any machine they're run from.
 
 import { describe, expect, it } from "vitest";
 import type { BackendOptions, CommandResult } from "../../../../src/capture/proxy/backends/types.js";
@@ -34,43 +42,76 @@ function makeRunner(results: CommandResult[]): {
 const okExit: CommandResult = { status: 0, stdout: "", stderr: "" };
 const errExit: CommandResult = { status: 1, stdout: "", stderr: "CertUtil: -store command FAILED: 0x80092004" };
 
-function backendOpts(runCertutil: (args: string[]) => CommandResult, proxyPort = 7727): BackendOptions {
-  return { runCertutil, proxyPort };
+function backendOpts(
+  runPowerShell: (args: string[]) => CommandResult,
+  runCertutil: (args: string[]) => CommandResult,
+  proxyPort = 7727,
+): BackendOptions {
+  return { runPowerShell, runCertutil, proxyPort };
 }
 
 // ── installCa (bug classes a, b) ─────────────────────────────────────────
 
 describe("WindowsBackend.installCa", () => {
-  it("invokes `certutil -addstore -user -f Root <caPath>` (CurrentUser scope, force-overwrite)", () => {
-    const c = makeRunner([okExit, okExit]); // addstore + verify
-    const r = WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(c.runner));
+  it("uses PowerShell Import-Certificate (avoids GUI prompt) + certutil -store to verify — bug class (a)", () => {
+    const ps = makeRunner([okExit]); // Import-Certificate
+    const cu = makeRunner([okExit]); // certutil -store verify
+    const r = WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner));
 
-    expect(c.calls).toHaveLength(2);
-    const [installArgs, verifyArgs] = c.calls;
-    // Bug class (a): exact certutil args.
-    expect(installArgs).toEqual(["-addstore", "-user", "-f", "Root", FAKE_CA_PATH]);
-    // -user is CRITICAL: ensures CurrentUser scope (no UAC, no admin).
-    expect(installArgs).toContain("-user");
-    // Root: "Trusted Root Certification Authorities"
-    expect(installArgs).toContain("Root");
-    // Bug class (b): verify call must follow.
-    expect(verifyArgs).toEqual(["-store", "-user", "Root", "Synapse Proxy CA"]);
+    // PowerShell-side: ONE call with an Import-Certificate script that
+    // targets the CurrentUser Root store.
+    expect(ps.calls).toHaveLength(1);
+    const installScript = ps.calls[0][0];
+    expect(installScript).toContain("Import-Certificate");
+    expect(installScript).toContain("Cert:\\CurrentUser\\Root");
+    // Single-quoted so backslashes in Windows paths are literal.
+    expect(installScript).toContain(`-FilePath '${FAKE_CA_PATH}'`);
+
+    // certutil-side: ONE call to -store for post-verify.
+    // Query operations don't trigger the UI dialog and stay on certutil.
+    expect(cu.calls).toHaveLength(1);
+    expect(cu.calls[0]).toEqual(["-store", "-user", "Root", "Synapse Proxy CA"]);
 
     expect(r.installed).toBe(true);
     expect(r.proxyPort).toBe(7727);
   });
 
+  it("does NOT invoke `certutil -addstore` — the operation that hangs on CI runners (bug class a)", () => {
+    // Regression guard: if anyone re-introduces certutil -addstore here,
+    // CI will hang for 30 s before the spawnSync timeout fires.
+    const ps = makeRunner([okExit]);
+    const cu = makeRunner([okExit]);
+    WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner));
+    for (const call of cu.calls) {
+      expect(call).not.toContain("-addstore");
+    }
+    for (const call of ps.calls) {
+      expect(call[0]).not.toContain("certutil");
+    }
+  });
+
   it("installed=false when post-install verify (-store) fails — bug class (b)", () => {
-    // certutil -addstore can succeed-but-not-store under GPO restrictions
-    // (silent failure). -store query is the source of truth.
-    const c = makeRunner([okExit, errExit]);
-    const r = WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(c.runner));
+    // PowerShell Import-Certificate can succeed-but-not-store under GPO
+    // restrictions (silent failure). certutil -store is the source of truth.
+    const ps = makeRunner([okExit]);
+    const cu = makeRunner([errExit]);
+    const r = WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner));
     expect(r.installed).toBe(false);
   });
 
+  it("escapes single quotes in caPath for PowerShell embedding (path-injection guard)", () => {
+    const tricky = "C:\\Users\\O'Brien\\.synapse\\proxy\\ca.pem";
+    const ps = makeRunner([okExit]);
+    const cu = makeRunner([okExit]);
+    WindowsBackend.installCa(tricky, backendOpts(ps.runner, cu.runner));
+    // Single-quote escape rule in PowerShell: ' → ''
+    expect(ps.calls[0][0]).toContain("'C:\\Users\\O''Brien\\.synapse\\proxy\\ca.pem'");
+  });
+
   it("env snippet shape — bug class (d): contains BOTH PowerShell + cmd syntaxes (spec §5.3)", () => {
-    const c = makeRunner([okExit, okExit]);
-    const r = WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(c.runner, 9999));
+    const ps = makeRunner([okExit]);
+    const cu = makeRunner([okExit]);
+    const r = WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner, 9999));
     // PowerShell session form
     expect(r.envSnippet).toContain(`$env:NODE_EXTRA_CA_CERTS = "${FAKE_CA_PATH}"`);
     expect(r.envSnippet).toContain('$env:HTTPS_PROXY = "http://127.0.0.1:9999"');
@@ -83,16 +124,18 @@ describe("WindowsBackend.installCa", () => {
   });
 
   it("manualInstallInstructions name certmgr.msc — bug class (e): GPO fallback path documented", () => {
-    const c = makeRunner([okExit, okExit]);
-    const r = WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(c.runner));
+    const ps = makeRunner([okExit]);
+    const cu = makeRunner([okExit]);
+    const r = WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner));
     expect(r.manualInstallInstructions).toContain("certmgr.msc");
     expect(r.manualInstallInstructions).toContain("Trusted Root Certification Authorities");
     expect(r.manualInstallInstructions).toContain(FAKE_CA_PATH);
   });
 
   it("custom proxy port flows through to envSnippet (drift guard)", () => {
-    const c = makeRunner([okExit, okExit]);
-    const r = WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(c.runner, 9999));
+    const ps = makeRunner([okExit]);
+    const cu = makeRunner([okExit]);
+    const r = WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner, 9999));
     expect(r.envSnippet).toContain("9999");
     expect(r.envSnippet).not.toContain("7727");
     expect(r.proxyPort).toBe(9999);
@@ -102,20 +145,40 @@ describe("WindowsBackend.installCa", () => {
 // ── uninstallCa (bug class c) ────────────────────────────────────────────
 
 describe("WindowsBackend.uninstallCa", () => {
-  it('invokes `certutil -delstore -user Root "Synapse Proxy CA"` (CurrentUser scope, CN lookup)', () => {
-    const c = makeRunner([okExit]);
-    const r = WindowsBackend.uninstallCa(FAKE_CA_PATH, backendOpts(c.runner));
-    expect(c.calls).toHaveLength(1);
-    expect(c.calls[0]).toEqual(["-delstore", "-user", "Root", "Synapse Proxy CA"]);
-    // Bug class (c): must be -user scope, not machine.
-    expect(c.calls[0]).toContain("-user");
+  it("uses PowerShell X509Store('Root','CurrentUser').Remove() — avoids UI prompt (bug class c)", () => {
+    const ps = makeRunner([okExit]);
+    const cu = makeRunner([]);
+    const r = WindowsBackend.uninstallCa(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner));
+
+    expect(ps.calls).toHaveLength(1);
+    const removeScript = ps.calls[0][0];
+    // X509Store on Root scope at CurrentUser (no UAC).
+    expect(removeScript).toContain("X509Store('Root','CurrentUser')");
+    expect(removeScript).toContain("$store.Remove($found)");
+    // Filter by the CA's Common Name.
+    expect(removeScript).toContain("Synapse Proxy CA");
+    // certutil is NOT invoked for uninstall (delstore also touches Root → potential UI prompt).
+    expect(cu.calls).toHaveLength(0);
+
     expect(r.removed).toBe(true);
   });
 
-  it("removed=false when certutil errors (cert not in store)", () => {
-    const c = makeRunner([errExit]);
-    const r = WindowsBackend.uninstallCa(FAKE_CA_PATH, backendOpts(c.runner));
+  it("removed=false when PowerShell exits non-zero (cert not in store; script `exit 1` branch)", () => {
+    // Script's `if ($found) { ... exit 0 } else { ... exit 1 }` is the
+    // signal — non-zero status → cert wasn't there, idempotent uninstall.
+    const ps = makeRunner([{ status: 1, stdout: "", stderr: "" }]);
+    const cu = makeRunner([]);
+    const r = WindowsBackend.uninstallCa(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner));
     expect(r.removed).toBe(false);
+  });
+
+  it("does NOT invoke `certutil -delstore` — same UI-dialog risk as -addstore", () => {
+    const ps = makeRunner([okExit]);
+    const cu = makeRunner([]);
+    WindowsBackend.uninstallCa(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner));
+    for (const call of cu.calls) {
+      expect(call).not.toContain("-delstore");
+    }
   });
 });
 
@@ -123,16 +186,20 @@ describe("WindowsBackend.uninstallCa", () => {
 
 describe("WindowsBackend.checkInstall", () => {
   it('invokes `certutil -store -user Root "Synapse Proxy CA"` and reports inTrustStore on exit 0', () => {
-    const c = makeRunner([okExit]);
-    const r = WindowsBackend.checkInstall(FAKE_CA_PATH, backendOpts(c.runner));
-    expect(c.calls).toHaveLength(1);
-    expect(c.calls[0]).toEqual(["-store", "-user", "Root", "Synapse Proxy CA"]);
+    const ps = makeRunner([]);
+    const cu = makeRunner([okExit]);
+    const r = WindowsBackend.checkInstall(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner));
+    expect(cu.calls).toHaveLength(1);
+    expect(cu.calls[0]).toEqual(["-store", "-user", "Root", "Synapse Proxy CA"]);
+    // Store query is read-only — no PowerShell needed.
+    expect(ps.calls).toHaveLength(0);
     expect(r.inTrustStore).toBe(true);
   });
 
   it("returns inTrustStore:false on certutil error (cert absent from store)", () => {
-    const c = makeRunner([errExit]);
-    const r = WindowsBackend.checkInstall(FAKE_CA_PATH, backendOpts(c.runner));
+    const ps = makeRunner([]);
+    const cu = makeRunner([errExit]);
+    const r = WindowsBackend.checkInstall(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner));
     expect(r.inTrustStore).toBe(false);
   });
 });

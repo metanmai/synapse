@@ -1,22 +1,40 @@
 /**
  * Windows backend — installs the Synapse Proxy CA into the CurrentUser
- * Root certificate store via the builtin `certutil` CLI.
+ * Root certificate store.
  *
- * Spec §5.2:
- *   • install:  certutil -addstore -user -f Root <caPath>
- *   • uninstall: certutil -delstore -user Root "Synapse Proxy CA"
- *   • status:    certutil -store -user Root "Synapse Proxy CA"  (exit 0 = present)
+ * Why TWO binaries (powershell for write, certutil for read)?
+ *
+ *   Windows shows a GUI confirmation dialog ("Do you want to install
+ *   this CA?") when ANY tool adds a cert to the ROOT store, even at
+ *   CurrentUser scope. `certutil -addstore -f` suppresses the CONSOLE
+ *   prompt but NOT the GUI dialog. On CI runners (no interactive
+ *   desktop) the dialog hangs forever — verified empirically on GHA
+ *   windows-latest, where `certutil -addstore -user -f Root <ca.pem>`
+ *   sat for exactly 30 s before our spawnSync timeout killed it.
+ *
+ *   PowerShell's `Import-Certificate` (and the underlying
+ *   `System.Security.Cryptography.X509Certificates.X509Store` API)
+ *   bypasses the dialog — it calls the .NET layer directly rather
+ *   than going through the UI-aware Win32 cert install codepath.
+ *
+ *   Query operations (`certutil -store ...`) are non-destructive and
+ *   do NOT trigger any prompt — we measured 64 ms on CI. Keep them.
+ *
+ * Operation map (spec §5.2, post-Windows-CI-validation revision):
+ *   • install:    powershell Import-Certificate ... Cert:\CurrentUser\Root
+ *   • uninstall:  powershell X509Store('Root','CurrentUser').Remove(...)
+ *   • status:     certutil -store -user Root "Synapse Proxy CA"  (exit 0 = present)
  *
  * CurrentUser store is intentional: no UAC prompt, no GPO complications
  * for the install path. Edge / Chrome / Node read CurrentUser by default.
  * Same philosophy as macOS login keychain.
  *
- * `certutil` is built into Windows since Vista — always on PATH in cmd,
- * PowerShell, and Git Bash. No dependency to install.
+ * `powershell.exe` is built into Windows 7+ (Server 2008 R2+); `certutil`
+ * is built in since Vista. Both always on PATH. No dependency to install.
  *
- * Testability: every `certutil` invocation goes through the injectable
- * `opts.runCertutil` runner. Tests pass a fake so the user's real Root
- * store is never touched.
+ * Testability: every PowerShell + certutil invocation goes through the
+ * injectable `opts.runPowerShell` / `opts.runCertutil` runners. Tests
+ * pass fakes so the user's real Root store is never touched.
  */
 
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
@@ -30,13 +48,36 @@ import type {
   UninstallResult,
 } from "./types.js";
 
-/** Common Name on the generated CA — lookup key for certutil queries. */
+/** Common Name on the generated CA — lookup key for store queries. */
 const CA_COMMON_NAME = "Synapse Proxy CA";
 
 const DEBUG = process.env.SYNAPSE_PROXY_DEBUG;
 const dlog = DEBUG
   ? (msg: string) => process.stderr.write(`[windows-debug ${Date.now()}] ${msg}\n`)
   : (_msg: string) => {};
+
+function defaultRunPowerShell(args: string[]): CommandResult {
+  // Single arg: the PowerShell script body. We wrap it in
+  // `powershell.exe -NoProfile -NonInteractive -Command <script>`
+  // so user profile / interactive prompts can't slow us down.
+  const script = args[0] ?? "";
+  dlog(`powershell START: ${script.slice(0, 100).replace(/\n/g, " ")}`);
+  const r: SpawnSyncReturns<Buffer> = spawnSync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      timeout: 30000,
+    },
+  );
+  dlog(`powershell DONE status=${r.status}`);
+  return {
+    status: r.status ?? -1,
+    stdout: (r.stdout ?? Buffer.from("")).toString("utf-8"),
+    stderr: (r.stderr ?? Buffer.from("")).toString("utf-8"),
+  };
+}
 
 function defaultRunCertutil(args: string[]): CommandResult {
   dlog(`certutil ${args.join(" ")} START`);
@@ -53,26 +94,43 @@ function defaultRunCertutil(args: string[]): CommandResult {
   };
 }
 
+function resolveRunPowerShell(opts: BackendOptions): CommandRunner {
+  return opts.runPowerShell ?? defaultRunPowerShell;
+}
+
 function resolveRunCertutil(opts: BackendOptions): CommandRunner {
   return opts.runCertutil ?? defaultRunCertutil;
+}
+
+/**
+ * Quote a string for embedding inside a PowerShell single-quoted literal.
+ * Inside single quotes PowerShell does not expand variables or escape
+ * sequences; the only character to escape is the single quote itself,
+ * which doubles. Backslashes are literal — perfect for Windows paths.
+ */
+function psSingleQuote(s: string): string {
+  return `'${s.replace(/'/g, "''")}'`;
 }
 
 export const WindowsBackend: PlatformBackend = {
   name: "windows",
 
   installCa(caPath, opts): InstallResult {
+    const runPowerShell = resolveRunPowerShell(opts);
     const runCertutil = resolveRunCertutil(opts);
     const proxyPort = opts.proxyPort ?? 7727;
     const envSnippet = this.buildEnvSnippet(caPath, proxyPort);
     const manualInstallInstructions = this.buildManualInstructions(caPath, proxyPort);
 
-    // -addstore: add cert to store.
-    // -user:     CurrentUser scope (no UAC prompt).
-    // -f:        force-overwrite an existing entry (idempotent re-install).
-    // Root:      "Trusted Root Certification Authorities" store.
-    runCertutil(["-addstore", "-user", "-f", "Root", caPath]);
+    // PowerShell Import-Certificate uses the .NET X509Store API path
+    // which bypasses the GUI confirmation dialog that certutil triggers
+    // on Root-store adds. CurrentUser scope = no UAC.
+    // `Out-Null` suppresses the cmdlet's output object — exit code is what we care about.
+    const installScript = `Import-Certificate -FilePath ${psSingleQuote(caPath)} -CertStoreLocation Cert:\\CurrentUser\\Root | Out-Null`;
+    runPowerShell([installScript]);
 
-    // Post-verify via -store query. certutil exits 0 = cert found, non-zero = absent.
+    // Post-verify via certutil -store (query: non-destructive, no UI).
+    // certutil exits 0 when the named cert is found, non-zero otherwise.
     // Same idea as macOS find-certificate after add-trusted-cert.
     const verify = runCertutil(["-store", "-user", "Root", CA_COMMON_NAME]);
     const installed = verify.status === 0;
@@ -88,14 +146,25 @@ export const WindowsBackend: PlatformBackend = {
   },
 
   uninstallCa(_caPath, opts): UninstallResult {
-    const runCertutil = resolveRunCertutil(opts);
-    // -delstore by Common Name. Idempotent — exit non-zero if cert isn't present.
-    const r = runCertutil(["-delstore", "-user", "Root", CA_COMMON_NAME]);
+    const runPowerShell = resolveRunPowerShell(opts);
+    // Use X509Store directly so we can detect both (a) cert-not-present
+    // (exit 1 → removed=false, idempotent) and (b) successful removal
+    // (exit 0 → removed=true). Remove-Item Cert:\... could also trigger
+    // a confirmation dialog in some Windows builds, so we go through
+    // the .NET API path here too.
+    const removeScript = [
+      "$store = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root','CurrentUser')",
+      "$store.Open('ReadWrite')",
+      `$found = $store.Certificates | Where-Object { $_.Subject -like '*CN=${CA_COMMON_NAME}*' }`,
+      "if ($found) { $store.Remove($found); $store.Close(); exit 0 } else { $store.Close(); exit 1 }",
+    ].join("; ");
+    const r = runPowerShell([removeScript]);
     return { removed: r.status === 0 };
   },
 
   checkInstall(_caPath, opts): InstallCheckResult {
     const runCertutil = resolveRunCertutil(opts);
+    // -store query is non-destructive, never prompts. Fast (~60ms on GHA).
     const r = runCertutil(["-store", "-user", "Root", CA_COMMON_NAME]);
     return { caExists: true, inTrustStore: r.status === 0, fingerprint: null };
   },
@@ -121,10 +190,11 @@ export const WindowsBackend: PlatformBackend = {
   },
 
   buildManualInstructions(caPath, proxyPort) {
-    // GPO-managed corporate Windows may block certutil -addstore even
-    // with -f. The certmgr.msc GUI path is the documented fallback.
+    // GPO-managed corporate Windows may block PowerShell cert-store
+    // writes even at CurrentUser scope. The certmgr.msc GUI path is the
+    // documented fallback.
     return [
-      "If certutil install failed (usual cause: Group Policy restriction on cert stores):",
+      "If auto-install failed (usual cause: Group Policy restriction on cert stores):",
       "  1. Open certmgr.msc (Start → Run → certmgr.msc)",
       "  2. Navigate to: Trusted Root Certification Authorities → Certificates",
       `  3. Right-click → All Tasks → Import. Select ${caPath}`,

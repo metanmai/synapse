@@ -5,8 +5,9 @@
 // this file guards:
 //
 //   - Dispatcher ROUTING: platform=darwin → MacBackend, platform=linux
-//     → LinuxBackend, platform=win32 → UnknownBackend (proven by which
-//     injected runner gets called).
+//     → LinuxBackend, platform=win32 → WindowsBackend, anything else
+//     (e.g. freebsd) → UnknownBackend (proven by which injected runner
+//     gets called).
 //   - LEGACY FIELD-NAME preservation: `installedInKeychain` (not
 //     `installed`), `inKeychain` (not `inTrustStore`) — `cli.ts` reads
 //     these names, breaking them would break the CLI.
@@ -117,12 +118,13 @@ describe("dispatcher routing", () => {
     expect(sudo.calls.length).toBeGreaterThan(0);
   });
 
-  it("platform=win32 invokes WindowsBackend (runCertutil called, no posix runners touched)", () => {
+  it("platform=win32 invokes WindowsBackend (powershell for install + certutil for verify, no posix runners touched)", () => {
     const sec = makeRunner([okExit]);
     const osl = makeRunner([okFingerprint]);
     const sudo = makeRunner([okExit]);
     const cp = makeRunner([okExit]);
-    const certutil = makeRunner([okExit, okExit]); // addstore + verify
+    const certutil = makeRunner([okExit]); // -store verify
+    const powershell = makeRunner([okExit]); // Import-Certificate
 
     const r = installCa({
       tlsManager,
@@ -133,17 +135,25 @@ describe("dispatcher routing", () => {
       runSudo: sudo.runner,
       runCp: cp.runner,
       runCertutil: certutil.runner,
+      runPowerShell: powershell.runner,
       readOsRelease: () => null,
     });
 
-    // Windows backend uses certutil exclusively for the trust-store path.
-    expect(certutil.calls.length).toBeGreaterThan(0);
-    expect(certutil.calls[0][0]).toBe("-addstore");
+    // Install path: PowerShell Import-Certificate (avoids the Windows
+    // Root-store GUI confirmation dialog that hangs CI runners).
+    expect(powershell.calls).toHaveLength(1);
+    expect(powershell.calls[0][0]).toContain("Import-Certificate");
+    expect(powershell.calls[0][0]).toContain("Cert:\\CurrentUser\\Root");
+    // Verify path: certutil -store (non-destructive query, no UI prompt).
+    expect(certutil.calls).toHaveLength(1);
+    expect(certutil.calls[0][0]).toBe("-store");
+    // Regression guard: addstore is the operation that hangs.
+    expect(certutil.calls[0]).not.toContain("-addstore");
     // POSIX runners must not be touched on win32.
     expect(sec.calls).toHaveLength(0);
     expect(sudo.calls).toHaveLength(0);
     expect(cp.calls).toHaveLength(0);
-    // Real install path returns installed=true on certutil success — no soft-skip.
+    // Real install path returns installed=true on verify success — no soft-skip.
     expect(r.installedInKeychain).toBe(true);
     expect(r.skippedReason).toBeUndefined();
   });
