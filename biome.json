@@ -27,7 +27,16 @@
     "lineWidth": 120
   },
   "files": {
-    "ignore": ["node_modules", "dist", "build", ".svelte-kit", ".wrangler", "*.min.js"]
+    "ignore": [
+      "node_modules",
+      "dist",
+      "build",
+      ".svelte-kit",
+      ".wrangler",
+      "*.min.js",
+      "frontend/test-results",
+      "frontend/playwright-report"
+    ]
   },
   "overrides": [
     {
