@@ -106,7 +106,10 @@ export class TlsManager {
     mkdirSync(this.caDir, { recursive: true, mode: 0o700 });
 
     // Generate RSA key.
-    execFileSync("openssl", ["genrsa", "-out", keyPath, String(this.keyBits)], { stdio: "ignore" });
+    execFileSync("openssl", ["genrsa", "-out", keyPath, String(this.keyBits)], {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
     chmodSync(keyPath, 0o600);
 
     // Self-signed CA cert.
@@ -131,7 +134,7 @@ export class TlsManager {
         "-addext",
         "keyUsage=critical,keyCertSign,cRLSign",
       ],
-      { stdio: "ignore" },
+      { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
     );
 
     this.cachedCa = {
@@ -180,12 +183,16 @@ export class TlsManager {
 
     try {
       // Leaf private key.
-      execFileSync("openssl", ["genrsa", "-out", keyPath, String(this.keyBits)], { stdio: "ignore" });
+      execFileSync("openssl", ["genrsa", "-out", keyPath, String(this.keyBits)], {
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      });
       chmodSync(keyPath, 0o600);
 
       // CSR with subject CN=hostname.
       execFileSync("openssl", ["req", "-new", "-key", keyPath, "-out", csrPath, "-subj", `/CN=${hostname}`], {
-        stdio: "ignore",
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
       });
 
       // SAN extension. Required for modern TLS clients to accept the cert
@@ -212,7 +219,7 @@ export class TlsManager {
           "-extfile",
           extPath,
         ],
-        { stdio: "ignore" },
+        { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
       );
     } finally {
       // CSR and ext file are intermediate artifacts; the leaf cert + key
