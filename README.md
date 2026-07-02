@@ -1,6 +1,6 @@
 # SYNAPSE
 
-**Shared AI context that survives sessions — one workspace for Claude, Cursor, ChatGPT, and your team.**
+**One workspace for shared AI context — across tools, devices, teammates, and sessions.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/runtime-Cloudflare%20Workers-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
@@ -11,7 +11,9 @@
 
 ---
 
-AI assistants start every conversation cold. Your stack, decisions, and notes live in chat transcripts — not in a place the *next* session can rely on. Synapse is a **persistent context workspace**: files in the cloud, semantic search, version history, optional encryption, and access from the web app or from AI tools via **REST** and **MCP**.
+AI assistants start every conversation cold. Your stack, decisions, and notes live in chat transcripts — not in a place the *next* session (or the *next* tool, or the *next* device) can rely on.
+
+**Synapse is a persistent context workspace in the cloud:** the same files and history are available from **any AI tool** that talks to the API or MCP, on **any device** where you use those tools or the web app, and to **everyone you invite** to a project — so your team’s assistants stay aligned, not siloed in separate chats. Under the hood: semantic search, version history, optional encryption, **REST**, and **MCP**.
 
 ---
 
@@ -20,9 +22,10 @@ AI assistants start every conversation cold. Your stack, decisions, and notes li
 | Problem | What Synapse does |
 |--------|-------------------|
 | Context disappears between sessions | Store decisions, notes, and specs as **paths** (e.g. `decisions/auth.md`) — always retrievable |
-| Tools don't share memory | **Same project** for every tool that can call the API or run the MCP server |
+| Tools don’t share memory | **One project** in the cloud for Claude, Cursor, ChatGPT-style clients, and anything else that can use the API or MCP |
+| Context doesn’t follow you across devices | **Same workspace** everywhere you log in or attach an API key — laptop, desktop, or mobile browser |
 | Keyword search misses intent | **Semantic search** (vector + text) so “auth flow” finds login and session docs |
-| Teams drift apart | **Projects, members, share links** — one source of truth for humans and AIs |
+| Teams and users stay out of sync | **Projects, members, share links** — one source of truth for humans and AIs |
 
 The complexity stays in the product. Your workflow: write context where it belongs, search when you need it, let tools read/write through MCP or HTTP.
 
@@ -30,8 +33,8 @@ The complexity stays in the product. Your workflow: write context where it belon
 
 ## Who this is for
 
-- Builders who want **durable memory** for AI-assisted work without copying prompts between tools.
-- Teams who want **one context layer** instead of scattered Notion docs and chat logs.
+- Builders who want **durable memory** for AI-assisted work **across tools and devices**, not locked to one chat or one machine.
+- Teams who want **one context layer for multiple people** — so everyone’s AI tools read and write the same project, instead of duplicating explanations in DMs and docs.
 - Anyone comfortable running a **Supabase** project and a **Cloudflare Worker** (or using a hosted deployment).
 
 ---
