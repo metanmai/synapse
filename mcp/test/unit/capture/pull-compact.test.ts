@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdapterRegistry } from "../../../src/capture/adapter-registry.js";
-import { pullHandoff } from "../../../src/capture/pull-compact.js";
+import { pullHandoff, pullHandoffWithTimeout } from "../../../src/capture/pull-compact.js";
 import type { CapturedSession, ToolAdapter } from "../../../src/capture/types.js";
 import { getProjectMapPath } from "../../../src/cli/project-map.js";
 
@@ -281,5 +281,55 @@ describe("pullHandoff", () => {
     writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
     fetchSpy.mockResolvedValueOnce(new Response("nope", { status: 500 }));
     expect(await pullHandoff({ cwd: CWD })).toBeNull();
+  });
+
+  // Regression guard for the bug class "a slow compact() blocks SessionStart
+  // for tens of seconds, visibly stalling Claude Code." The wall-clock cap
+  // must win over the inner async work, even when fetch hangs forever.
+  describe("pullHandoffWithTimeout", () => {
+    it("resolves to null within the timeout when pullHandoff hangs", async () => {
+      writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
+      // Fetch never resolves — pullHandoff is stuck on the first await.
+      fetchSpy.mockReturnValueOnce(new Promise<Response>(() => {}));
+      const t0 = Date.now();
+      const result = await pullHandoffWithTimeout({ cwd: CWD }, 100);
+      const elapsed = Date.now() - t0;
+      expect(result).toBeNull();
+      // Generous upper bound so we don't get flake under load — what matters
+      // is that we didn't wait the full 30-60s a compact() would take.
+      expect(elapsed).toBeLessThan(1000);
+    });
+
+    it("returns the pullHandoff result when it resolves before the timeout", async () => {
+      writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversations: [
+              {
+                id: "conv_fast",
+                updated_at: "2026-05-24T03:00:00Z",
+                metadata: { handoff_markdown: "## quick", handoff_at: "2026-05-24T03:00:01Z" },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+      // 5s budget; the cache-hit path is single-fetch, sub-ms in test.
+      const result = await pullHandoffWithTimeout({ cwd: CWD }, 5_000);
+      expect(result).toBe("## quick");
+    });
+
+    it("returns null without throwing when pullHandoff rejects", async () => {
+      writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
+      // pullHandoff catches fetch errors internally, but if anything else
+      // were to throw the wrapper still has to absorb it.
+      fetchSpy.mockImplementationOnce(() => {
+        throw new Error("synchronous boom");
+      });
+      const result = await pullHandoffWithTimeout({ cwd: CWD }, 1_000);
+      expect(result).toBeNull();
+    });
   });
 });
