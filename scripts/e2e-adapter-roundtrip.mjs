@@ -4,23 +4,33 @@
 // MULTI-TOOL ADAPTER E2E.
 //
 // Validates the FAQ promise — "Capture works with Claude Code, Cursor,
-// Codex CLI, and Gemini CLI" — end-to-end. Unit tests at
-// mcp/test/unit/capture/{cursor,codex,gemini}.test.ts already prove the
-// per-adapter `parse()` function is correct on a fixture. THIS test proves
-// the FULL PIPELINE: file appears in watched dir → chokidar detects →
-// registry routes to adapter → adapter.parse() → CloudSync POSTs to
-// backend → backend creates conversation row.
+// Codex CLI, Gemini CLI, Cline, Roo Code, and Copilot CLI" — end-to-end.
+// Unit tests at mcp/test/unit/capture/{cursor,codex,gemini,cline,roo-code,
+// copilot-cli}.test.ts already prove the per-adapter `parse()` function is
+// correct on a fixture. THIS test proves the FULL PIPELINE: file appears
+// in watched dir → chokidar detects → registry routes to adapter →
+// adapter.parse() → CloudSync POSTs to backend → backend creates
+// conversation row.
 //
 // Bug class under test: "the adapter→watcher→daemon→backend pipeline
 // silently breaks for a tool other than Claude Code." Existing
 // e2e-happy-flow.mjs covers Claude Code via `claude -p`; this complements
-// with Cursor / Codex / Gemini using their existing fixtures.
+// with the six non-Claude-Code adapters using their existing fixtures.
 //
 // Uses SYNAPSE_TEST_<TOOL>_PATH env-var overrides on adapter.watchPaths()
 // to redirect each watcher to a temp dir without polluting the user's
-// real ~/.cursor / ~/.codex / ~/.gemini state. Spawns a fresh
-// capture-worker subprocess (NOT the launchctl-managed daemon, which
-// doesn't have these env vars).
+// real ~/.cursor / ~/.codex / ~/.gemini / VSCode globalStorage /
+// ~/.copilot state. Spawns a fresh capture-worker subprocess (NOT the
+// launchctl-managed daemon, which doesn't have these env vars).
+//
+// Two fixture shapes are supported:
+//   * Flat — Cursor / Codex / Gemini: the fixture file is dropped directly
+//     into the watchDir; the adapter parses the session id out of file
+//     content.
+//   * Nested — Cline / Roo Code / Copilot CLI: each session lives under a
+//     per-session directory `<watchDir>/<sessionDirName>/<file>`; the
+//     adapter derives the native session id from the PARENT DIRECTORY
+//     name, not from file content.
 //
 // Usage:
 //   npm run test:e2e:adapter-roundtrip
@@ -34,7 +44,7 @@
 // Cost per run: $0 (no LLM calls — just adapter parsing + DB inserts).
 //
 // Exit codes:
-//   0 — all 3 adapters proven end-to-end
+//   0 — all 6 adapters proven end-to-end
 //   1 — one or more adapters failed
 //   2 — preflight error (missing API key, dist missing, etc.)
 
@@ -79,6 +89,45 @@ const FIXTURES = {
     ext: ".json",
     envVar: "SYNAPSE_TEST_GEMINI_PATH",
     nativeId: "d4e5f6a7-b8c9-0123-defa-234567890123",
+  },
+  // Nested-fixture adapters: native id comes from PARENT DIRECTORY name,
+  // not file content. Per-run freshness is achieved by dropping the fixture
+  // under a freshly-named per-session subdir of watchDir.
+  cline: {
+    src: path.join(
+      REPO_ROOT,
+      "mcp/test/fixtures/capture/cline/e5f6a7b8-c9d0-1234-efab-345678901234/api_conversation_history.json",
+    ),
+    ext: ".json",
+    envVar: "SYNAPSE_TEST_CLINE_PATH",
+    // Parent dir name in the canonical fixture path — we don't substitute
+    // it into content (it isn't there), we use the per-run sessionId as
+    // the parent dir name when dropping.
+    nativeId: "e5f6a7b8-c9d0-1234-efab-345678901234",
+    nested: true,
+    fixtureBasename: "api_conversation_history.json",
+  },
+  "roo-code": {
+    src: path.join(
+      REPO_ROOT,
+      "mcp/test/fixtures/capture/roo-code/f6a7b8c9-d0e1-2345-fabc-456789012345/api_conversation_history.json",
+    ),
+    ext: ".json",
+    envVar: "SYNAPSE_TEST_ROO_PATH",
+    nativeId: "f6a7b8c9-d0e1-2345-fabc-456789012345",
+    nested: true,
+    fixtureBasename: "api_conversation_history.json",
+  },
+  "copilot-cli": {
+    src: path.join(
+      REPO_ROOT,
+      "mcp/test/fixtures/capture/copilot-cli/a7b8c9d0-e1f2-3456-abcd-567890123456/events.jsonl",
+    ),
+    ext: ".jsonl",
+    envVar: "SYNAPSE_TEST_COPILOT_PATH",
+    nativeId: "a7b8c9d0-e1f2-3456-abcd-567890123456",
+    nested: true,
+    fixtureBasename: "events.jsonl",
   },
 };
 
@@ -152,6 +201,12 @@ function freshFixtureContent(tool, runId) {
   let swapped = raw.replaceAll(cfg.nativeId, newId);
   if (tool === "codex") {
     swapped = swapped.replaceAll("/Users/test/myproject", `/tmp/${RUN_TAG}-codex`);
+  }
+  if (tool === "copilot-cli") {
+    // copilot-cli adapter derives projectPath from session.start event's
+    // `cwd`. Substitute so the backend project name embeds RUN_TAG and
+    // Stage 7's project filter finds it.
+    swapped = swapped.replaceAll("/Users/test/copilot-project", `/tmp/${RUN_TAG}-copilot`);
   }
   return { content: swapped, sessionId: newId };
 }
@@ -246,11 +301,13 @@ async function main() {
     ...process.env,
     SYNAPSE_API_KEY: apiKey,
     SYNAPSE_HOME: isolatedHome,
-    SYNAPSE_TEST_CURSOR_PATH: watchDirs.cursor,
-    SYNAPSE_TEST_CODEX_PATH: watchDirs.codex,
-    SYNAPSE_TEST_GEMINI_PATH: watchDirs.gemini,
     SYNAPSE_CAPTURE_IDLE_MS: "3000",
   };
+  // Wire each adapter's test-override env var dynamically so adding a new
+  // adapter only requires a FIXTURES entry, not also editing this block.
+  for (const tool of TOOLS) {
+    daemonEnv[FIXTURES[tool].envVar] = watchDirs[tool];
+  }
   info(`SYNAPSE_HOME isolated to ${isolatedHome}`);
 
   const daemonProc = spawn("node", [CAPTURE_WORKER], {
@@ -281,7 +338,18 @@ async function main() {
   for (const tool of TOOLS) {
     const { content, sessionId } = freshFixtureContent(tool, RUN_ID);
     sessionIds[tool] = sessionId;
-    const dst = path.join(watchDirs[tool], `${RUN_TAG}-${tool}${FIXTURES[tool].ext}`);
+    const cfg = FIXTURES[tool];
+    let dst;
+    if (cfg.nested) {
+      // Adapter derives taskId/sessionDirName from parent dir basename.
+      // Use the fresh per-run sessionId UUID as the parent dir name so
+      // sessionIdFromNative() produces the ses_id we assert against.
+      const sessionDir = path.join(watchDirs[tool], sessionId);
+      mkdirSync(sessionDir, { recursive: true });
+      dst = path.join(sessionDir, cfg.fixtureBasename);
+    } else {
+      dst = path.join(watchDirs[tool], `${RUN_TAG}-${tool}${cfg.ext}`);
+    }
     writeFileSync(dst, content);
     info(`${tool}: dropped fixture session_id=${sessionId.slice(0, 13)}… at ${dst}`);
   }
@@ -341,11 +409,14 @@ async function main() {
   // ── Stage 7: backend roundtrip — confirm via API ───────────────────────
   header("STAGE 7 · Backend roundtrip — projects API");
 
-  // Cursor's project name should embed RUN_TAG via the workspaceStorage
-  // engineering. Codex's project name = RUN_TAG-codex via cwd substitution.
-  // Gemini's projectPath is hardcoded "unknown" so we can't filter by name
-  // there — but stage 6 already proves gemini synced. The projects sweep
-  // catches cursor + codex; the daemon log catches all three.
+  // Three adapters embed projectPath such that the backend project name
+  // includes RUN_TAG:
+  //   * cursor       — workspaceStorage path engineering above
+  //   * codex        — cwd substitution in fixture
+  //   * copilot-cli  — cwd substitution in session.start event
+  // Three adapters hardcode projectPath="unknown" (gemini, cline, roo-code)
+  // so the project filter can't catch them — but Stage 6 already proves
+  // they reached the cloud via the daemon log.
   try {
     const res = await fetch(`${API_BASE}/api/projects`, {
       headers: { Authorization: `Bearer ${apiKey}` },
@@ -355,12 +426,12 @@ async function main() {
     } else {
       const projects = await res.json();
       const matched = projects.filter((p) => p.name?.includes(RUN_TAG));
-      if (matched.length >= 2) {
+      if (matched.length >= 3) {
         ok("backend-projects", `backend has ${matched.length} project(s) tagged ${RUN_TAG}`);
       } else {
         fail(
           "backend-projects",
-          `expected ≥2 projects with name containing ${RUN_TAG} (cursor + codex); got ${matched.length}`,
+          `expected ≥3 projects with name containing ${RUN_TAG} (cursor + codex + copilot-cli); got ${matched.length}`,
         );
       }
     }
@@ -398,7 +469,7 @@ async function main() {
     log("\n❌ ADAPTER ROUNDTRIP FAILED. The multi-tool pipeline is broken.");
     process.exit(1);
   }
-  log("\n✅ All 3 adapters proven end-to-end. The multi-tool capture promise is intact.");
+  log("\n✅ All 6 adapters proven end-to-end. The multi-tool capture promise is intact.");
   process.exit(0);
 }
 
