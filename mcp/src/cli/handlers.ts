@@ -45,6 +45,7 @@ import { runInit } from "./init.js";
 import { runInviteCmd } from "./invite.js";
 import { runMoveCmd } from "./move.js";
 import { readProjectMap } from "./project-map.js";
+import { runPurgeEmptyCmd } from "./purge-empty.js";
 import { runDaemon } from "./run-daemon.js";
 import { runStats } from "./stats.js";
 import { runDoctor as runHandoffDoctor, runStatus as runHandoffStatus } from "./status.js";
@@ -189,6 +190,22 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
       throw new Error("usage: synapsesync move <conv-uuid|latest> <project-uuid|name>");
     }
     await runMoveCmd({ conv, project });
+  },
+  // `purge-empty` bulk-deletes the user's empty (zero-conversation,
+  // zero-insight) projects. Defaults to a dry-run; pass --yes to actually
+  // delete. Without --include-named, only `untitled` projects are
+  // considered — this is intentionally conservative so a user can't
+  // accidentally nuke an empty-but-real project like `get-shit-done`
+  // before they've captured anything to it. Pair with the backend's
+  // 409 PROJECT_NOT_EMPTY guard so a stale local view can't drop data.
+  "purge-empty": async (args) => {
+    const yes = args.includes("--yes");
+    const includeIdx = args.indexOf("--include-named");
+    const includeNamed = includeIdx >= 0 ? args[includeIdx + 1] : undefined;
+    if (includeIdx >= 0 && !includeNamed) {
+      throw new Error("usage: synapsesync purge-empty [--yes] [--include-named <pattern>]");
+    }
+    await runPurgeEmptyCmd({ yes, includeNamed });
   },
   issue: async (args) => {
     const sub = args[0];
