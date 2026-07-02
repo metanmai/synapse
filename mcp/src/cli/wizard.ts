@@ -6,6 +6,7 @@ import { browserAuth } from "./browser-auth.js";
 import type { ConfigLocation, SetupScope } from "./editors/index.js";
 import { detectEditors, detectExistingSetup, writeEditorConfigs } from "./editors/index.js";
 import { runInit } from "./init.js";
+import { runSmoke } from "./smoke.js";
 import { createGlyphSpinner } from "./spinner.js";
 import { accent, bold, muted, success, error as themeError } from "./theme.js";
 import { showWelcome } from "./welcome.js";
@@ -353,6 +354,26 @@ async function runEditorSetup(apiKey: string): Promise<void> {
       //     AND `launchctl load`s it so the daemon is running before this returns.
       await runInit({ api_key: apiKey });
       captureSpin.stop("Capture installed: 6 hooks, daemon registered, service running");
+
+      // Verify the wiring we just laid down actually works against the live
+      // backend. Without this, a misconfigured network/account/hooks would
+      // fail silently until the user's next Claude Code session \u2014 they'd
+      // assume Synapse is broken when it's actually a fixable install issue.
+      // Catches: API key revoked between paste-time and now, hooks not
+      // landed correctly, backend unreachable, brief endpoint regression.
+      const smokeSpin = createGlyphSpinner();
+      smokeSpin.start("Verifying install (5-stage roundtrip)\u2026");
+      const smoke = await runSmoke();
+      smokeSpin.stop(smoke.ok ? "Install verified" : "Install has issues");
+      for (const step of smoke.steps) {
+        const icon = step.ok ? success("\u2713") : themeError("\u2717");
+        clack.log.message(`  ${icon} ${step.step}. ${step.name}: ${muted(step.detail)}`);
+      }
+      if (!smoke.ok) {
+        clack.log.warn(
+          `Some smoke steps failed \u2014 Synapse may not capture sessions until these are resolved. Re-run with ${muted("synapsesync doctor --smoke")} after fixing.`,
+        );
+      }
     } catch (err) {
       captureSpin.stop("Could not install capture");
       clack.log.warn(`${themeError("\u2717")} ${(err as Error).message}`);
