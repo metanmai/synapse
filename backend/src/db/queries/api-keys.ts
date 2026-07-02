@@ -100,11 +100,7 @@ export async function findApiKeyByMachineId(
  * duplicate — the row id stays, the hash gets a fresh value so the
  * old plaintext (if it leaked) is invalidated.
  */
-export async function rotateApiKeyHash(
-  db: SupabaseClient,
-  keyId: string,
-  newKeyHash: string,
-): Promise<void> {
+export async function rotateApiKeyHash(db: SupabaseClient, keyId: string, newKeyHash: string): Promise<void> {
   const { error } = await db
     .from("api_keys")
     .update({ key_hash: newKeyHash, last_used_at: new Date().toISOString() })
