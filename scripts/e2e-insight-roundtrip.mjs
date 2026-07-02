@@ -278,13 +278,18 @@ async function ir3_resolve_project() {
 
   const testBasename = path.basename(testDir);
 
-  // Poll instead of one fixed retry: the forced `sync` in IR2 makes the
-  // common case land within the first attempt or two, but conversation-
-  // path syncs (capture-worker) and backend auto-routing can add seconds.
-  // 12 × 5s keeps the worst case bounded at ~60s — far below the old
-  // failure mode (the daemon's multi-minute dir re-scan) while never
-  // passing on luck. Bug class: fixed sleeps racing async pipelines.
-  const MAX_POLLS = 12;
+  // Poll instead of one fixed retry: common case lands within 1-2 attempts,
+  // but the proxy-capture path (`synapsesync sync` doesn't reach the proxy's
+  // own session buffer — that's the capture-worker's in-process state, which
+  // syncs via CloudSyncer on its own schedule) and backend auto-routing can
+  // add real wall-clock. Windows GitHub Actions runners are notoriously
+  // slower on IO + child-process spawn, and the previous 12 × 5s = 60s budget
+  // was tight enough that the project landed at ~70s on metanmai run
+  // 27283047790 (the cleanup sweep found it 10s after the poll timed out).
+  // 24 × 5s = 120s keeps the cap bounded while comfortably absorbing the
+  // Windows runner's tail latency. Bug class: fixed sleeps racing async
+  // pipelines.
+  const MAX_POLLS = 24;
   for (let attempt = 1; attempt <= MAX_POLLS; attempt++) {
     const projects = await fetchJson("/api/projects");
     if (!Array.isArray(projects)) {
@@ -299,7 +304,7 @@ async function ir3_resolve_project() {
     }
     if (attempt < MAX_POLLS) await sleep(5000);
   }
-  fail("IR3 project resolved", `project '${testBasename}' not found after ${MAX_POLLS} polls (~60s)`);
+  fail("IR3 project resolved", `project '${testBasename}' not found after ${MAX_POLLS} polls (~${MAX_POLLS * 5}s)`);
 }
 
 // ── IR4: Save insight with UNIQUE_PHRASE ────────────────────────────────
