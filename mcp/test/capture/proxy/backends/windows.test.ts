@@ -53,19 +53,27 @@ function backendOpts(
 // ── installCa (bug classes a, b) ─────────────────────────────────────────
 
 describe("WindowsBackend.installCa", () => {
-  it("uses PowerShell Import-Certificate (avoids GUI prompt) + certutil -store to verify — bug class (a)", () => {
-    const ps = makeRunner([okExit]); // Import-Certificate
+  it("uses PowerShell X509Store.Add via inline PEM decode (PS 5.1-compatible) + certutil -store verify — bug class (a)", () => {
+    const ps = makeRunner([okExit]); // X509Store.Add
     const cu = makeRunner([okExit]); // certutil -store verify
     const r = WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner));
 
-    // PowerShell-side: ONE call with an Import-Certificate script that
-    // targets the CurrentUser Root store.
+    // PowerShell-side: ONE call. Script must:
+    //   1. Read the PEM file (LiteralPath, single-quoted for backslashes)
+    //   2. Strip BEGIN/END armor + whitespace
+    //   3. Base64-decode to DER bytes
+    //   4. Construct X509Certificate2 from byte[] (.NET-Framework-portable
+    //      — Import-Certificate-via-PEM is PowerShell-7+ only)
+    //   5. Open Root/CurrentUser store ReadWrite and Add the cert
     expect(ps.calls).toHaveLength(1);
     const installScript = ps.calls[0][0];
-    expect(installScript).toContain("Import-Certificate");
-    expect(installScript).toContain("Cert:\\CurrentUser\\Root");
-    // Single-quoted so backslashes in Windows paths are literal.
-    expect(installScript).toContain(`-FilePath '${FAKE_CA_PATH}'`);
+    expect(installScript).toContain(`Get-Content -LiteralPath '${FAKE_CA_PATH}'`);
+    expect(installScript).toContain("-----[^-]+-----"); // armor-strip regex
+    expect(installScript).toContain("[Convert]::FromBase64String");
+    expect(installScript).toContain("X509Certificate2(,$der)");
+    expect(installScript).toContain("X509Store('Root','CurrentUser')");
+    expect(installScript).toContain("$store.Open('ReadWrite')");
+    expect(installScript).toContain("$store.Add($cert)");
 
     // certutil-side: ONE call to -store for post-verify.
     // Query operations don't trigger the UI dialog and stay on certutil.
@@ -74,6 +82,16 @@ describe("WindowsBackend.installCa", () => {
 
     expect(r.installed).toBe(true);
     expect(r.proxyPort).toBe(7727);
+  });
+
+  it("does NOT use Import-Certificate cmdlet — fails on Windows PowerShell 5.1 (DER-only) for PEM input", () => {
+    // Regression guard: a future contributor "simplifying" back to
+    // Import-Certificate would re-break GHA Windows runs (where Node
+    // spawns powershell.exe = PS 5.1, not pwsh.exe = PS 7).
+    const ps = makeRunner([okExit]);
+    const cu = makeRunner([okExit]);
+    WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner));
+    expect(ps.calls[0][0]).not.toContain("Import-Certificate");
   });
 
   it("does NOT invoke `certutil -addstore` — the operation that hangs on CI runners (bug class a)", () => {

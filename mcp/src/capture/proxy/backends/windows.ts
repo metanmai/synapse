@@ -71,11 +71,19 @@ function defaultRunPowerShell(args: string[]): CommandResult {
       timeout: 30000,
     },
   );
+  const stderr = (r.stderr ?? Buffer.from("")).toString("utf-8");
   dlog(`powershell DONE status=${r.status}`);
+  // Surface stderr in the debug log on non-zero exit — the silent
+  // exit-1 from a PowerShell cmdlet is otherwise indistinguishable from
+  // a thousand different errors. With this you get the actual error
+  // text in CI logs the moment a regression lands.
+  if (r.status !== 0 && stderr.trim()) {
+    dlog(`powershell stderr: ${stderr.trim().slice(0, 400).replace(/\n/g, " | ")}`);
+  }
   return {
     status: r.status ?? -1,
     stdout: (r.stdout ?? Buffer.from("")).toString("utf-8"),
-    stderr: (r.stderr ?? Buffer.from("")).toString("utf-8"),
+    stderr,
   };
 }
 
@@ -122,11 +130,33 @@ export const WindowsBackend: PlatformBackend = {
     const envSnippet = this.buildEnvSnippet(caPath, proxyPort);
     const manualInstallInstructions = this.buildManualInstructions(caPath, proxyPort);
 
-    // PowerShell Import-Certificate uses the .NET X509Store API path
-    // which bypasses the GUI confirmation dialog that certutil triggers
-    // on Root-store adds. CurrentUser scope = no UAC.
-    // `Out-Null` suppresses the cmdlet's output object — exit code is what we care about.
-    const installScript = `Import-Certificate -FilePath ${psSingleQuote(caPath)} -CertStoreLocation Cert:\\CurrentUser\\Root | Out-Null`;
+    // Why a hand-rolled PEM-to-DER decode instead of Import-Certificate?
+    //   • `Import-Certificate` calls X509Certificate2(string path) which
+    //     on .NET Framework 4.x (Windows PowerShell 5.1, what `powershell.exe`
+    //     resolves to on stock Windows) tries DER / PKCS#7 / PKCS#12 and
+    //     rejects PEM with a silent exit-1. PEM support arrived in .NET 5+
+    //     as X509Certificate2.CreateFromPemFile() — so it works under pwsh
+    //     (PS 7) but not powershell.exe (PS 5.1).
+    //   • Both X509Certificate2(byte[]) and X509Store('Root','CurrentUser')
+    //     are present on .NET Framework 4.x and .NET 5+ → portable across
+    //     every Windows that ships PowerShell.
+    //   • The `-----BEGIN/END-----` armor strip is a 2-character regex
+    //     pair; Base64 decode of what's left gives the raw DER bytes.
+    //
+    // X509Store.Add on CurrentUser/Root is the same .NET path Import-Certificate
+    // uses under the hood — so the GUI confirmation dialog (the bug that
+    // killed `certutil -addstore -user -f Root <ca.pem>` on CI) is still
+    // bypassed. We just call the underlying API ourselves.
+    const installScript = [
+      `$pem = Get-Content -LiteralPath ${psSingleQuote(caPath)} -Raw`,
+      "$b64 = $pem -replace '-----[^-]+-----','' -replace '\\s+',''",
+      "$der = [Convert]::FromBase64String($b64)",
+      "$cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(,$der)",
+      "$store = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root','CurrentUser')",
+      "$store.Open('ReadWrite')",
+      "$store.Add($cert)",
+      "$store.Close()",
+    ].join("; ");
     runPowerShell([installScript]);
 
     // Post-verify via certutil -store (query: non-destructive, no UI).
