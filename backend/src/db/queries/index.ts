@@ -9,3 +9,4 @@ export * from "./activity";
 export * from "./subscriptions";
 export * from "./insights";
 export * from "./conversations";
+export * from "./deleted-accounts";
