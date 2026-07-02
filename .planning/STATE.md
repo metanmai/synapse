@@ -123,6 +123,7 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260621-h13 | Billing/subscription test coverage (webhook transitions, gating filter, valid-HMAC dispatch) | 2026-06-21 | 89e0d875 | [260621-h13-billing-subscription-tests](./quick/260621-h13-billing-subscription-tests/) |
+| 260621-hsl | Neutralize CI migrate prod-wipe landmine (relocate teardown scripts, drop --include-all, 3-secret guard) | 2026-06-21 | 7395a0fe | [260621-hsl-neutralize-ci-migrate-prod-wipe-landmine](./quick/260621-hsl-neutralize-ci-migrate-prod-wipe-landmine/) |
 
 ### Recent activity
 
