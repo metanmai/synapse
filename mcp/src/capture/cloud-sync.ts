@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { API_URL } from "../cli/config.js";
-import { upsertProjectMapping } from "../cli/project-map.js";
+import { removeProjectMapping, upsertProjectMapping } from "../cli/project-map.js";
 import { synapseRoot } from "./handoff-paths.js";
 import { type SyncState, loadSyncStates, saveSyncStates } from "./sync-state-store.js";
 import type { CapturedSession, SessionMessage } from "./types.js";
@@ -137,22 +137,39 @@ export class CloudSyncer {
         const newMessages = session.messages.slice(existing.lastSyncedMessageCount);
         if (newMessages.length === 0) return true;
 
-        const ok = await this.appendMessages(existing.cloudConversationId, newMessages);
-        if (ok) {
+        const result = await this.appendMessages(existing.cloudConversationId, newMessages);
+        if (result.ok) {
           existing.lastSyncedMessageCount = session.messages.length;
           saveSyncStates(this.syncStates, this.log);
           if (existing.projectId) {
             this.updateProjectMap(canonicalPath, existing.projectId, existing.projectName ?? null);
           }
+          return true;
         }
-        return ok;
+
+        // 404 means the conversation was deleted server-side (synapse
+        // reset, dashboard delete, account wipe). The cached cloud id is
+        // dead — wipe state and retry as a first-sync via createConversation.
+        // Any other non-ok status (401, 5xx, network) we treat as transient
+        // and leave the cache intact so the next sync retries.
+        if (result.status === 404) {
+          this.log(`Stale sync state for ${session.id} (cloud conv ${existing.cloudConversationId} 404) — re-creating`);
+          this.syncStates.delete(session.id);
+          // Project might also have been deleted — drop the map entry so
+          // pull-compact doesn't keep pointing at a dead UUID either.
+          if (existing.projectId) this.removeProjectMapEntry(canonicalPath, existing.projectId);
+          saveSyncStates(this.syncStates, this.log);
+          // Fall through to first-sync path below.
+        } else {
+          return false;
+        }
       }
 
       const created = await this.createConversation(session);
       if (!created) return false;
 
-      const ok = await this.appendMessages(created.id, session.messages);
-      if (ok) {
+      const appended = await this.appendMessages(created.id, session.messages);
+      if (appended.ok) {
         this.syncStates.set(session.id, {
           cloudConversationId: created.id,
           lastSyncedMessageCount: session.messages.length,
@@ -162,7 +179,7 @@ export class CloudSyncer {
         saveSyncStates(this.syncStates, this.log);
         this.updateProjectMap(canonicalPath, created.project_id, created.project_name);
       }
-      return ok;
+      return appended.ok;
     } catch (err) {
       this.log(`Cloud sync error for ${session.id}: ${err}`);
       return false;
@@ -244,7 +261,10 @@ export class CloudSyncer {
     }
   }
 
-  private async appendMessages(conversationId: string, messages: SessionMessage[]): Promise<boolean> {
+  private async appendMessages(
+    conversationId: string,
+    messages: SessionMessage[],
+  ): Promise<{ ok: boolean; status: number }> {
     try {
       const res = await fetch(`${API_URL}/api/conversations/${conversationId}/messages`, {
         method: "POST",
@@ -256,13 +276,15 @@ export class CloudSyncer {
 
       if (!res.ok) {
         this.log(`Failed to append messages: ${res.status}`);
-        return false;
+        return { ok: false, status: res.status };
       }
 
-      return true;
+      return { ok: true, status: res.status };
     } catch (err) {
       this.log(`Failed to append messages: ${err}`);
-      return false;
+      // Network error — pretend the conversation is unreachable but NOT
+      // gone, so we don't wipe the cache on transient blips.
+      return { ok: false, status: 0 };
     }
   }
 
@@ -275,6 +297,10 @@ export class CloudSyncer {
     } catch {
       /* map is best-effort cache; never fail a sync for it */
     }
+  }
+
+  private removeProjectMapEntry(projectPath: string, projectIdHint: string): void {
+    removeProjectMapping(projectPath, projectIdHint);
   }
 
   private authHeaders(): Record<string, string> {

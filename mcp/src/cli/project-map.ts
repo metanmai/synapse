@@ -33,3 +33,25 @@ export function upsertProjectMapping(cwd: string, entry: { project_id: string; p
   map[cwd] = { ...entry, updated_at: new Date().toISOString() };
   fs.writeFileSync(p, JSON.stringify(map, null, 2));
 }
+
+/**
+ * Drop a cwd's project mapping. Best-effort, idempotent. Used when a sync
+ * (or pull-compact) discovers the cached project_id is dead server-side
+ * (e.g., user ran `synapse reset` or deleted the project from the
+ * dashboard). If projectIdHint is supplied, only drops the entry when
+ * the stored project_id matches — protects against racing writes that
+ * may have rebound the cwd to a fresh project_id in between.
+ */
+export function removeProjectMapping(cwd: string, projectIdHint?: string): void {
+  try {
+    const p = getProjectMapPath();
+    if (!fs.existsSync(p)) return;
+    const map = readProjectMap();
+    if (!map[cwd]) return;
+    if (projectIdHint && map[cwd].project_id !== projectIdHint) return;
+    delete map[cwd];
+    fs.writeFileSync(p, JSON.stringify(map, null, 2));
+  } catch {
+    /* best-effort cache — never throw from here */
+  }
+}

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { API_URL } from "../cli/config.js";
-import { readProjectMap } from "../cli/project-map.js";
+import { readProjectMap, removeProjectMapping } from "../cli/project-map.js";
 import type { AdapterRegistry } from "./adapter-registry.js";
 import { resolveApiKey } from "./cloud-sync.js";
 import { defaultRegistry } from "./default-registry.js";
@@ -82,6 +82,15 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
     });
     if (!res.ok) {
       log(`pull-compact: list returned ${res.status}`);
+      // 404 here means the cached project_id is dead (deleted server-side
+      // via synapse reset / dashboard / account wipe). Drop the stale
+      // project-map entry so the NEXT capture-sync from this cwd auto-
+      // creates a fresh project. The current SessionStart still emits a
+      // brief without handoff (caller treats null as "no handoff").
+      if (res.status === 404) {
+        removeProjectMapping(canonicalCwd, projectUuid);
+        log(`pull-compact: invalidated stale project-map entry for cwd=${canonicalCwd} (project ${projectUuid})`);
+      }
       return null;
     }
     const body = (await res.json()) as { conversations?: ConversationListItem[] };
