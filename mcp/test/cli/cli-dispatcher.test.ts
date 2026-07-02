@@ -255,5 +255,52 @@ describe("CLI dispatcher — handoff layer subcommands", () => {
       expect(code).not.toBe(0);
       expect(stderr.toLowerCase()).toContain("usage");
     });
+
+    it("installs hooks with absolute paths to node + cli (not bare 'synapse')", async () => {
+      const { code } = await runCli("init", "--api-key", "sk-paths", "--skip-service");
+      expect(code).toBe(0);
+      const settings = JSON.parse(fs.readFileSync(path.join(initHome, ".claude/settings.json"), "utf-8"));
+      const cmd: string = settings.hooks.SessionStart[0].hooks[0].command;
+      // Should not be the bare invocation that would require a global install.
+      expect(cmd).not.toMatch(/^synapse\s+hook/);
+      // Should reference an absolute path to node and an absolute path to a .js entry.
+      expect(cmd).toMatch(/".*\/node"\s+".*\.js"\s+hook session-start/);
+    });
+
+    it("installs slash commands with absolute paths (overwriting stale templates)", async () => {
+      const dir = path.join(initHome, ".claude/commands/synapse");
+      fs.mkdirSync(dir, { recursive: true });
+      // Pre-seed a stale slash command (bare `synapse` invocation) to confirm overwrite.
+      fs.writeFileSync(path.join(dir, "handoff.md"), "stale content with `synapse handoff`");
+
+      const { code } = await runCli("init", "--api-key", "sk-slash", "--skip-service");
+      expect(code).toBe(0);
+      const body = fs.readFileSync(path.join(dir, "handoff.md"), "utf-8");
+      expect(body).not.toContain("stale content");
+      expect(body).toMatch(/".*\/node"\s+".*\.js"\s+handoff "\$ARGUMENTS"/);
+    });
+
+    it("migrates stale `synapse hook <sub>` entries away when re-running init", async () => {
+      // Pre-seed an old-format hook entry.
+      const settingsPath = path.join(initHome, ".claude/settings.json");
+      fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+      fs.writeFileSync(
+        settingsPath,
+        JSON.stringify({
+          hooks: {
+            SessionStart: [{ hooks: [{ type: "command", command: "synapse hook session-start" }] }],
+          },
+        }),
+      );
+
+      const { code } = await runCli("init", "--api-key", "sk-mig", "--skip-service");
+      expect(code).toBe(0);
+      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+      // Should have exactly one SessionStart entry (the new absolute-path one),
+      // not the old bare entry plus a new one firing in parallel.
+      expect(settings.hooks.SessionStart).toHaveLength(1);
+      const cmd: string = settings.hooks.SessionStart[0].hooks[0].command;
+      expect(cmd).not.toBe("synapse hook session-start");
+    });
   });
 });
