@@ -126,4 +126,62 @@ export const schemas = {
       .nullable()
       .optional(),
   }),
+
+  // Conversations
+  createConversation: z.object({
+    project_id: z.string().uuid("Valid project ID is required"),
+    title: z.string().nullable().optional(),
+    fidelity_mode: z.enum(["summary", "full"]).optional(),
+    system_prompt: z.string().nullable().optional(),
+    working_context: z.record(z.string(), z.unknown()).nullable().optional(),
+    metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+  }),
+
+  updateConversation: z.object({
+    title: z.string().nullable().optional(),
+    status: z.enum(["active", "archived", "deleted"]).optional(),
+    fidelity_mode: z.enum(["summary", "full"]).optional(),
+  }),
+
+  appendMessages: z.object({
+    messages: z.array(
+      z.object({
+        role: z.enum(["user", "assistant", "system", "tool"]),
+        content: z.string().nullable(),
+        tool_interaction: z
+          .object({
+            name: z.string(),
+            input: z.record(z.string(), z.unknown()).optional(),
+            output: z.string().optional(),
+            summary: z.string(),
+          })
+          .nullable()
+          .optional(),
+        source_agent: z.string(),
+        source_model: z.string().nullable().optional(),
+        token_count: z
+          .object({ input: z.number().optional(), output: z.number().optional() })
+          .nullable()
+          .optional(),
+        cost: z.number().nullable().optional(),
+      }),
+    ),
+    context: z
+      .array(
+        z.object({
+          type: z.enum(["file", "repo", "env", "dependency"]),
+          key: z.string(),
+          value: z.string().nullable(),
+          snapshot_at: z.number().nullable().optional(),
+        }),
+      )
+      .optional(),
+  }),
+
+  importConversation: z.object({
+    project_id: z.string().uuid("Valid project ID is required"),
+    format: z.enum(["anthropic", "openai", "raw"]).optional(),
+    title: z.string().nullable().optional(),
+    messages: z.unknown(),
+  }),
 };
