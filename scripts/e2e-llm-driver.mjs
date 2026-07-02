@@ -12,8 +12,13 @@
  *
  *      Provider priority (first available key wins):
  *        ANTHROPIC_API_KEY   → api.anthropic.com/v1/messages
+ *        DEEPSEEK_API_KEY    → api.deepseek.com/v1/chat/completions  (preferred over OpenRouter — ~100× cheaper)
  *        OPENROUTER_API_KEY  → openrouter.ai/api/v1/chat/completions
- *        DEEPSEEK_API_KEY    → api.deepseek.com/v1/chat/completions
+ *
+ *      DeepSeek is ordered AHEAD of OpenRouter so that when both keys are
+ *      present (e.g. metanmai CI), the cheaper provider is the default.
+ *      Anthropic stays first: if ANTHROPIC_API_KEY is explicitly set, it
+ *      means someone wants the real target model, so honor that.
  *
  *   2. CLI-DRIVER mode  — when no direct-API key is set, OR `forceCli` is
  *      true. Spawns whatever AI CLI the user has locally (`claude -p` by
@@ -90,6 +95,32 @@ const PROVIDERS = [
     },
   },
   {
+    // DeepSeek is ordered AHEAD of OpenRouter: it's ~100× cheaper, so when
+    // multiple keys are present (e.g. metanmai CI carries both DEEPSEEK_API_KEY
+    // and OPENROUTER_API_KEY) the cheapest provider wins by default. Do not
+    // reorder below OpenRouter without a cost reason — see the cost-guard test
+    // in mcp/test/unit/e2e-llm-driver-provider.test.ts.
+    name: "DeepSeek",
+    envKey: "DEEPSEEK_API_KEY",
+    endpoint: "https://api.deepseek.com/v1/chat/completions",
+    model: "deepseek-chat",
+    buildCurlArgs(apiKey, body) {
+      const payload = {
+        model: body.model ?? this.model,
+        max_tokens: body.max_tokens ?? 256,
+        messages: body.messages,
+      };
+      return ["-H", `Authorization: Bearer ${apiKey}`, "-d", JSON.stringify(payload)];
+    },
+    extractText(stdout) {
+      const parsed = JSON.parse(stdout);
+      if (parsed.error) {
+        throw new Error(`DeepSeek API error: ${parsed.error?.message ?? JSON.stringify(parsed.error)}`);
+      }
+      return parsed.choices?.[0]?.message?.content ?? "";
+    },
+  },
+  {
     name: "OpenRouter",
     envKey: "OPENROUTER_API_KEY",
     endpoint: "https://openrouter.ai/api/v1/chat/completions",
@@ -115,27 +146,6 @@ const PROVIDERS = [
       const parsed = JSON.parse(stdout);
       if (parsed.error) {
         throw new Error(`OpenRouter API error: ${parsed.error?.message ?? JSON.stringify(parsed.error)}`);
-      }
-      return parsed.choices?.[0]?.message?.content ?? "";
-    },
-  },
-  {
-    name: "DeepSeek",
-    envKey: "DEEPSEEK_API_KEY",
-    endpoint: "https://api.deepseek.com/v1/chat/completions",
-    model: "deepseek-chat",
-    buildCurlArgs(apiKey, body) {
-      const payload = {
-        model: body.model ?? this.model,
-        max_tokens: body.max_tokens ?? 256,
-        messages: body.messages,
-      };
-      return ["-H", `Authorization: Bearer ${apiKey}`, "-d", JSON.stringify(payload)];
-    },
-    extractText(stdout) {
-      const parsed = JSON.parse(stdout);
-      if (parsed.error) {
-        throw new Error(`DeepSeek API error: ${parsed.error?.message ?? JSON.stringify(parsed.error)}`);
       }
       return parsed.choices?.[0]?.message?.content ?? "";
     },

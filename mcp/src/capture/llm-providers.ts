@@ -11,7 +11,9 @@
  * users with their own keys shouldn't be blocked by a transient outage
  * on the hosted compaction provider.
  *
- * Order of precedence (matches scripts/e2e-llm-driver.mjs PROVIDERS):
+ * Order of precedence (production local-compact — keeps OpenRouter ahead of
+ * DeepSeek for compaction QUALITY; this INTENTIONALLY differs from
+ * scripts/e2e-llm-driver.mjs, which prefers DeepSeek for CI COST):
  *   1. Anthropic    (ANTHROPIC_API_KEY)    — provider's own /v1/messages
  *   2. OpenRouter   (OPENROUTER_API_KEY)   — OpenAI-shaped on /api/v1
  *   3. DeepSeek     (DEEPSEEK_API_KEY)     — OpenAI-shaped on /v1
@@ -94,11 +96,10 @@ const PROVIDERS: LLMProvider[] = [
   {
     name: "openrouter",
     envKey: "OPENROUTER_API_KEY",
-    // Match scripts/e2e-llm-driver.mjs PROVIDERS — known to be available
-    // on OpenRouter's catalog and cheap enough for repeated CI runs.
-    // Stay in lockstep with the harness model; drift would mean local-
-    // compact uses a different (potentially unavailable) model than the
-    // Stage-3 chat call that already exercised the same provider.
+    // Known to be available on OpenRouter's catalog. NOTE: production keeps
+    // OpenRouter AHEAD of DeepSeek here (compaction quality); the e2e driver
+    // scripts/e2e-llm-driver.mjs deliberately orders DeepSeek first for CI
+    // cost. These two precedences are intentionally NOT in lockstep anymore.
     defaultModel: "anthropic/claude-3.5-haiku",
     async call(prompt, apiKey, maxTokens) {
       const res = await fetch(`${baseUrl("OPENROUTER_BASE_URL", "https://openrouter.ai/api")}/v1/chat/completions`, {
@@ -147,9 +148,10 @@ const PROVIDERS: LLMProvider[] = [
 ];
 
 /**
- * Auto-detect the first provider whose API key is set in env. Mirrors the
- * priority order in scripts/e2e-llm-driver.mjs so a user with multiple
- * keys configured gets predictable routing (Anthropic > OpenRouter > DeepSeek).
+ * Auto-detect the first provider whose API key is set in env. Production
+ * precedence is Anthropic > OpenRouter > DeepSeek (compaction quality). NOTE:
+ * the e2e driver (scripts/e2e-llm-driver.mjs) intentionally differs — it
+ * prefers DeepSeek over OpenRouter for CI cost.
  *
  * Returns null when no key is configured — caller falls back to hosted
  * compaction. Pure function: takes env explicitly so tests can pass any
