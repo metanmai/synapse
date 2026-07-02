@@ -2,7 +2,7 @@
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import MessageThread from "$lib/components/conversations/MessageThread.svelte";
-import type { Conversation, ConversationMessage, ConversationMediaRecord } from "$lib/types";
+import type { Conversation, ConversationMediaRecord, ConversationMessage } from "$lib/types";
 
 let { data, form } = $props();
 
@@ -25,9 +25,7 @@ async function loadConversation() {
   loading = true;
   errorMsg = "";
   try {
-    const res = await fetch(
-      `/projects/${encodedProject}/conversations/${data.conversationId}/api`
-    );
+    const res = await fetch(`/projects/${encodedProject}/conversations/${data.conversationId}/api`);
     if (!res.ok) {
       const body = await res.json().catch(() => ({ message: res.statusText }));
       throw new Error(body.message || `Failed to load (${res.status})`);
