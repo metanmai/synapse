@@ -110,18 +110,25 @@ function readPackageVersion(): string {
   }
 }
 
-const CLI_SUBCOMMANDS = new Set([
-  "wizard",
-  "help",
-  "stats",
-  "tree",
-  "status",
-  "refresh",
-  "upgrade",
-  "whoami",
-  "capture",
-  "distill",
-]);
+// Single source of truth for CLI subcommands.
+// Add a new command by adding one line here — no other edits needed.
+// The allow-list, dispatcher, and help menu all derive from this map.
+const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
+  wizard: async () => runWizard(readPackageVersion()),
+  help: async () => {
+    printHelp();
+  },
+  stats: async () => runStats(),
+  tree: async () => runTree(),
+  status: async () => runStatus(),
+  refresh: async () => runRefresh(),
+  upgrade: async () => runUpgrade(),
+  whoami: async () => runWhoami(),
+  capture: async (args) => runCapture(args),
+  distill: async (args) => runDistill(args),
+  reset: async () => runReset(),
+  uninstall: async () => runUninstall(),
+};
 
 // --- CLI help ---
 
@@ -216,56 +223,15 @@ async function handleCli(raw: string[]): Promise<void> {
     unknownOption(raw[0]);
   }
 
-  if (raw.length > 0 && raw[0] && !CLI_SUBCOMMANDS.has(raw[0])) {
-    unknownSubcommand(raw[0]);
-  }
-
-  // Subcommands
+  // Dispatch via the single-source HANDLERS map — no drift between
+  // allow-list and dispatcher possible, because they're the same table.
   const cmd = raw[0];
-  if (cmd === "stats") {
-    await runStats();
-    process.exit(0);
-  }
-  if (cmd === "tree") {
-    await runTree();
-    process.exit(0);
-  }
-  if (cmd === "status") {
-    await runStatus();
-    process.exit(0);
-  }
-  if (cmd === "refresh") {
-    await runRefresh();
-    process.exit(0);
-  }
-  if (cmd === "upgrade") {
-    await runUpgrade();
-    process.exit(0);
-  }
-  if (cmd === "whoami") {
-    await runWhoami();
-    process.exit(0);
-  }
-  if (cmd === "reset") {
-    await runReset();
-    process.exit(0);
-  }
-  if (cmd === "wizard") {
-    await runWizard(readPackageVersion());
-    process.exit(0);
-  }
-
-  if (cmd === "capture") {
-    await runCapture(raw.slice(1));
-    process.exit(0);
-  }
-
-  if (cmd === "distill") {
-    await runDistill(raw.slice(1));
-    process.exit(0);
-  }
-  if (cmd === "uninstall") {
-    await runUninstall();
+  if (cmd) {
+    const handler = HANDLERS[cmd];
+    if (!handler) {
+      unknownSubcommand(cmd);
+    }
+    await handler(raw.slice(1));
     process.exit(0);
   }
 
