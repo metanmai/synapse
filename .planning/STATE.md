@@ -1,6 +1,20 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: completed
+last_updated: "2026-05-20T09:36:16.554Z"
+progress:
+  total_phases: 7
+  completed_phases: 0
+  total_plans: 5
+  completed_plans: 4
+  percent: 0
+---
+
 # State — Stabilize-for-Launch Milestone
 
-*Last updated: 2026-05-20 — BUG-01 fully closed (migration restore + defensive swap deployed); SessionStart hook learns STATE.md fallback (`d61857b`); OPS-01 + Plan 05 remain for slice 1b*
+*Last updated: 2026-05-20 — BUG-01 fully closed (migration restore + defensive swap deployed); SessionStart hook learns STATE.md fallback (`d61857b`); Phase 2 context gathered (`f445a1d`); OPS-01 + Plan 05 remain for slice 1b*
 
 ## Project Reference
 
@@ -60,7 +74,7 @@
 
 - 2026-05-18: Shipped per-device CLI keys end-to-end (`a8ecf98` + `34de058`) and fixed 5 install-pipeline bugs (`d3cd771` + `025a814`). Daemon alive locally via launchd; cloud sync blocked by BUG-01.
 - 2026-05-19: Scope re-expansion (COLLAB + TOKEN added). 4-agent research consolidated into `research/SUMMARY.md`. Requirements rewritten. Roadmap created. Slice 1a-prime executed: BUG-02, BUG-03, BUG-04, BUGS.md #12 all closed inline (17 RED → GREEN; commits `19e3f8e` → `9a0db69`).
-- 2026-05-20 (today): BUG-01 closed on two layers — functional (migrations 015/016/017 re-applied to restore `handoff_events`) + defensive (Promise.allSettled swap deployed via CF git auto-integration, `16a4de1` + `2eb158b`). Account reset performed; one fresh project on dashboard. SessionStart hook learned STATE.md fallback so cold-start briefs surface the repo's hand-curated context instead of the apologetic "no cached context" string (`d61857b`).
+- 2026-05-20 (today): BUG-01 closed on two layers — functional (migrations 015/016/017 re-applied to restore `handoff_events`) + defensive (Promise.allSettled swap deployed via CF git auto-integration, `16a4de1` + `2eb158b`). Account reset performed; one fresh project on dashboard. SessionStart hook learned STATE.md fallback so cold-start briefs surface the repo's hand-curated context instead of the apologetic "no cached context" string (`d61857b`). BUGS.md + STATE.md stale-state cleanup (`ce0c253`): 5 closed bugs moved to Closed, #10 rewritten as "CF git auto-deploy can go silent." Phase 2 context gathered (`f445a1d`): same-user multi-device identity + cross-device discovery; 9 decisions locked, ready for research + planning.
 
 ## Session Continuity
 
@@ -73,7 +87,7 @@
 5. Read `.planning/research/SUMMARY.md` for technical decisions on Phases 1, 3, 6
 6. Read `docs/BUGS.md` for the canonical "what's still broken" list
 
-**Next command:** `/gsd:discuss-phase 2` (Phase 2: Real User Identity — the natural next phase given slice 1a-prime is shipped and slice 1b is CF-machine work). Slice 1b residual unblocks separately on the CF-enabled machine.
+**Next command:** `/gsd:plan-phase 2` (Phase 2: Real User Identity — context captured at `.planning/phases/02-real-user-identity/02-CONTEXT.md`; ROADMAP flags Phase 2 needs research, so plan-phase will invoke `gsd-phase-researcher` before the planner). Slice 1b residual unblocks separately on the CF-enabled machine.
 
 ## Critical Risks Active
 
