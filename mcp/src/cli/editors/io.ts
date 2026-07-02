@@ -57,6 +57,18 @@ export const SYNAPSE_COMMAND_DEFS: Record<string, CommandDef> = {
     description: "Clean up the Synapse workspace",
     body: "Clean up the Synapse workspace — remove duplicates, test files, and stale entries.\n\n1. Use the Synapse MCP `tree` tool to list all files\n2. Identify duplicates, test files, empty entries\n3. Confirm with the user before deleting anything\n4. Delete confirmed entries using the Synapse MCP `rm` tool",
   },
+  "synapse-conversations": {
+    description: "List synced conversations in the current project",
+    body: "List conversations synced to Synapse for the current project.\n\n1. Use the Synapse MCP `list_conversations` tool with the current project name\n2. Display each conversation with its title, message count, status, and last-updated date\n3. Show the conversation ID so the user can resume or load a specific one\n4. If no conversations exist, let the user know and suggest using `/synapse:save-conversation` to sync one",
+  },
+  "synapse-resume": {
+    description: "Resume a conversation from another agent session",
+    body: 'Resume a conversation that was synced from another agent or session.\n\nUsage: Provide a conversation ID or search term as $ARGUMENTS.\n\n1. If $ARGUMENTS looks like a UUID, use the Synapse MCP `load_conversation` tool with that ID and the current project name\n2. If $ARGUMENTS is a search term, first call `list_conversations` to find matching conversations, then let the user pick one\n3. Once loaded, display the conversation\'s system prompt, working context, and message history\n4. Tell the user: "Conversation loaded. I have the full context — you can continue where you left off."\n5. Adopt the conversation context (system prompt, working context) and continue naturally from the last message',
+  },
+  "synapse-save-conversation": {
+    description: "Save the current conversation to Synapse for cross-agent sync",
+    body: 'Save the current conversation to Synapse so it can be resumed in another agent or session.\n\n1. Determine the current project name from the repo/codebase\n2. Summarize the conversation so far — key topics discussed, decisions made, code changes, and current state\n3. Use the Synapse MCP `sync_conversation` tool with:\n   - The project name\n   - A descriptive title for the conversation\n   - The conversation messages (summarize tool calls, keep user/assistant messages)\n   - Working context: current branch, repo path, key files touched\n4. Display the conversation ID so the user can resume it later\n5. Suggest: "Use `/synapse:resume <ID>` in any agent to pick up where you left off."',
+  },
 };
 
 export function synapseMcpServer(apiKey: string): Record<string, unknown> {
