@@ -1,9 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { singleOrNull } from "../query-helpers";
-import type { Insight, InsightListItem, InsightType, InsightSource } from "../types";
+import type { Insight, InsightListItem, InsightSource, InsightType } from "../types";
 
-const INSIGHT_COLUMNS =
-  "id, project_id, user_id, type, summary, detail, source, encrypted, created_at, updated_at";
+const INSIGHT_COLUMNS = "id, project_id, user_id, type, summary, detail, source, encrypted, created_at, updated_at";
 
 const INSIGHT_LIST_COLUMNS = "id, type, summary, source, created_at, updated_at";
 
@@ -42,10 +41,7 @@ export async function listInsights(
   options?: { type?: InsightType; limit?: number; offset?: number },
 ): Promise<{ insights: InsightListItem[]; total: number }> {
   // Get total count
-  let countQuery = db
-    .from("insights")
-    .select("*", { count: "exact", head: true })
-    .eq("project_id", projectId);
+  let countQuery = db.from("insights").select("*", { count: "exact", head: true }).eq("project_id", projectId);
 
   if (options?.type) {
     countQuery = countQuery.eq("type", options.type);
@@ -81,9 +77,7 @@ export async function listInsights(
 }
 
 export async function getInsight(db: SupabaseClient, insightId: string): Promise<Insight | null> {
-  return singleOrNull<Insight>(
-    await db.from("insights").select(INSIGHT_COLUMNS).eq("id", insightId).single(),
-  );
+  return singleOrNull<Insight>(await db.from("insights").select(INSIGHT_COLUMNS).eq("id", insightId).single());
 }
 
 export async function updateInsight(
@@ -119,11 +113,7 @@ export async function deleteInsight(db: SupabaseClient, insightId: string): Prom
   if (error) throw error;
 }
 
-export async function searchInsights(
-  db: SupabaseClient,
-  projectId: string,
-  query: string,
-): Promise<Insight[]> {
+export async function searchInsights(db: SupabaseClient, projectId: string, query: string): Promise<Insight[]> {
   // Full-text search using the search_vector column
   const { data: ftResults, error: ftError } = await db
     .from("insights")
@@ -150,11 +140,7 @@ export async function searchInsights(
       })
       .join(",");
 
-    const { data, error } = await db
-      .from("insights")
-      .select(INSIGHT_COLUMNS)
-      .eq("project_id", projectId)
-      .or(orClauses);
+    const { data, error } = await db.from("insights").select(INSIGHT_COLUMNS).eq("project_id", projectId).or(orClauses);
 
     if (error) {
       console.error("[search] insights ilike error:", error.message);
