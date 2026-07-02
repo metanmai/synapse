@@ -13,6 +13,9 @@ interface RelayMessage {
   host?: string;
   role?: string;
   content?: string;
+  eventNames?: string[];
+  byteLength?: number;
+  sampleHash?: string;
 }
 
 async function getConfig(): Promise<{ token?: string; port: number }> {
@@ -49,6 +52,34 @@ export async function postCapture(port: number, token: string, host: string, tur
   } catch {
     return false; // daemon unreachable
   }
+}
+
+export async function postDrift(
+  port: number,
+  token: string,
+  payload: { host: string; eventNames: string[]; byteLength: number; sampleHash: string },
+): Promise<boolean> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/drift`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-synapse-ingest-token": token },
+      body: JSON.stringify(payload),
+    });
+    return res.ok;
+  } catch {
+    return false; // daemon unreachable
+  }
+}
+
+async function handleDrift(payload: {
+  host: string;
+  eventNames: string[];
+  byteLength: number;
+  sampleHash: string;
+}): Promise<void> {
+  const { token, port } = await getConfig();
+  if (!token) return;
+  await postDrift(port, token, payload);
 }
 
 async function flush(): Promise<void> {
@@ -104,6 +135,15 @@ export function installWorker(): void {
     if (!m || m.__synapse !== true || typeof m.host !== "string") return;
     if (m.kind === "heartbeat") {
       void heartbeat(m.host);
+      return;
+    }
+    if (m.kind === "drift") {
+      void handleDrift({
+        host: m.host,
+        eventNames: Array.isArray(m.eventNames) ? m.eventNames : [],
+        byteLength: typeof m.byteLength === "number" ? m.byteLength : 0,
+        sampleHash: typeof m.sampleHash === "string" ? m.sampleHash : "",
+      });
       return;
     }
     if (m.kind === "turn" && typeof m.content === "string") {
