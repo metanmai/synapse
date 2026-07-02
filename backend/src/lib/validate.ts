@@ -53,6 +53,18 @@ export const schemas = {
     code_verifier: z.string().min(1, "Code verifier is required"),
   }),
 
+  // BUG #5: Free-tier user hits 3-device cap → /auth/cli-session returns
+  // 409. The web /cli-auth picker UI lets them choose a device to revoke,
+  // then POSTs that selection here. Server revokes the chosen key + mints
+  // a fresh session in one atomic-ish flow (revoke first, then mint —
+  // a partial failure leaves the user under-limit which is the safe direction).
+  cliRevokeAndSession: z.object({
+    revoke_key_id: z.string().uuid("revoke_key_id must be a UUID"),
+    code_challenge: z.string().min(1, "Code challenge is required"),
+    device_name: z.string().optional(),
+    machine_id: z.string().uuid().optional(),
+  }),
+
   createApiKey: z.object({
     label: z.string().min(1, "Label is required").trim(),
     expires_at: z.string().nullable().optional(),

@@ -335,6 +335,45 @@ auth.post("/cli-session", authMiddleware, async (c) => {
   return c.json({ code });
 });
 
+// POST /auth/cli-revoke-and-session — picker companion to /cli-session.
+// Frontend flow: user hits the 3-device cap → /cli-session returns 409
+// + the device list → picker UI here. On submit, this endpoint revokes
+// the chosen device key, then mints a fresh session for the new device.
+// Revoke-then-mint ordering matters: a mint failure post-revoke leaves
+// the user at limit-1 (under cap, safe re-try). A revoke failure means
+// nothing was mutated.
+auth.post("/cli-revoke-and-session", authMiddleware, async (c) => {
+  const body = await parseBody(c, schemas.cliRevokeAndSession);
+  const user = c.get("user");
+  const db = c.get("db");
+
+  // Revoke the chosen key. deleteApiKey filters by (id, user_id) so a
+  // user can only revoke keys they own — 404 if id is bogus or belongs
+  // to a different user. The check `removed === false` distinguishes
+  // "key didn't exist" (return 404) from "DB error" (throws above).
+  const removed = await deleteApiKey(db, body.revoke_key_id, user.id);
+  if (!removed) {
+    throw new AppError("Selected device not found", 404, "NOT_FOUND");
+  }
+
+  // Mint a fresh session for the new device. NOTE: we don't re-check
+  // the limit here — by construction, removing a key drops the count
+  // by exactly 1. If a second concurrent /cli-session was in flight,
+  // it would have its own race condition, but that's an existing
+  // weakness in /cli-session, not specific to this endpoint.
+  const deviceLabel = `${DEVICE_LABEL_PREFIX}${sanitizeDeviceName(body.device_name)}`;
+  const code = await mintCliSessionCode({
+    db,
+    user,
+    deviceLabel,
+    codeChallenge: body.code_challenge,
+    secret: c.env.SUPABASE_SERVICE_KEY,
+    machineId: body.machine_id ?? null,
+  });
+
+  return c.json({ code });
+});
+
 // POST /auth/cli-exchange — exchange encrypted code + PKCE verifier for API key (no auth required)
 // Stateless: decrypts the code, verifies PKCE, returns the API key. No server-side session lookup.
 auth.post("/cli-exchange", async (c) => {

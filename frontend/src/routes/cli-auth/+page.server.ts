@@ -139,6 +139,30 @@ export const actions: Actions = {
       }),
     });
 
+    // BUG #5: device-limit picker. 409 means the user hit the 3-device
+    // Free-tier cap; backend includes the device list so the page can
+    // render a picker. We surface that list through `fail` so the
+    // template can branch on `form?.devices` and show the picker.
+    if (res.status === 409) {
+      const body = (await res.json()) as {
+        code?: string;
+        tier?: "free" | "plus";
+        limit?: number;
+        devices?: Array<{
+          id: string;
+          name: string;
+          last_used_at: string | null;
+          created_at: string;
+        }>;
+      };
+      return fail(409, {
+        deviceLimit: true,
+        devices: body.devices ?? [],
+        tier: body.tier ?? "free",
+        limit: body.limit ?? 3,
+      });
+    }
+
     if (!res.ok) {
       return fail(500, { error: "Failed to create CLI session. Please try again." });
     }
@@ -147,6 +171,52 @@ export const actions: Actions = {
     const callbackUrl = `http://localhost:${cli.port}/callback?code=${encodeURIComponent(data.code)}&state=${encodeURIComponent(cli.state)}`;
 
     // Return URL instead of redirect — cross-origin redirect to localhost doesn't work with use:enhance
+    return { redirectTo: callbackUrl };
+  },
+
+  // BUG #5: companion action to the picker UI. User selected a device
+  // to revoke + clicked "Revoke & continue" — POST the choice to the
+  // backend's /cli-revoke-and-session which revokes the chosen key and
+  // mints a fresh session in one round trip.
+  revokeAndContinue: async ({ request, locals }) => {
+    const formData = await request.formData();
+    const cli = getCliParams(formData);
+    const revokeKeyId = (formData.get("revoke_key_id") ?? "").toString();
+
+    if (!locals.user || !locals.token || !cli.challenge || !cli.state || !cli.port) {
+      return fail(400, { error: "Missing session or CLI parameters." });
+    }
+    if (!revokeKeyId) {
+      return fail(400, { error: "Select a device to revoke before continuing." });
+    }
+
+    const apiUrl = env.API_URL;
+    if (!apiUrl) {
+      return fail(500, { error: "API_URL is not configured." });
+    }
+
+    const res = await fetch(`${apiUrl}/auth/cli-revoke-and-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${locals.token}`,
+      },
+      body: JSON.stringify({
+        revoke_key_id: revokeKeyId,
+        code_challenge: cli.challenge,
+        ...(cli.device ? { device_name: cli.device } : {}),
+        ...(cli.machine_id ? { machine_id: cli.machine_id } : {}),
+      }),
+    });
+
+    if (!res.ok) {
+      return fail(res.status === 404 ? 404 : 500, {
+        error: "Could not revoke the selected device. It may already have been removed — refresh and try again.",
+      });
+    }
+
+    const data = (await res.json()) as { code: string };
+    const callbackUrl = `http://localhost:${cli.port}/callback?code=${encodeURIComponent(data.code)}&state=${encodeURIComponent(cli.state)}`;
     return { redirectTo: callbackUrl };
   },
 

@@ -5,6 +5,27 @@ let { data, form } = $props();
 let mode = $state<"login" | "signup">("login");
 let loginMode = $state<"password" | "magic">("password");
 let loading = $state(false);
+// Device-limit picker state. The selected radio's value is sent as
+// `revoke_key_id` in the revokeAndContinue action's form data.
+let selectedRevokeId = $state<string | null>(null);
+
+// Compact relative-time formatter. Shows "12m ago", "3h ago", "2d ago",
+// "never used". Lighter than pulling in a date library for one widget.
+function relativeTime(iso: string | null): string {
+  if (!iso) return "never used";
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return "never used";
+  const diffMs = Date.now() - then;
+  if (diffMs < 60_000) return "just now";
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
 </script>
 
 <div class="min-h-screen flex items-center justify-center" style="background-color: var(--color-bg);">
@@ -14,7 +35,89 @@ let loading = $state(false);
 
   <div class="glass w-full max-w-md rounded-xl" style="padding: 2rem;">
 
-    {#if data.authenticated && data.hasCli}
+    {#if data.authenticated && data.hasCli && form?.deviceLimit}
+      <!-- BUG #5 picker: user hit the Free-tier device limit. List the
+           existing devices + let them choose one to revoke so a slot
+           opens up for the new device. -->
+      <div class="text-center mb-6">
+        <div style="font-size: 1.5rem; color: var(--color-accent); margin-bottom: 0.5rem;">&#9670;</div>
+        <h1 class="text-xl font-semibold" style="color: var(--color-accent);">Device limit reached</h1>
+        <p class="text-sm mt-1" style="color: var(--color-text-muted);">
+          You're using {form.limit} of {form.limit} CLI device slots on the {form.tier === "plus" ? "Plus" : "Free"} plan.
+          Pick a device to revoke so this one can sign in.
+        </p>
+      </div>
+
+      <form method="POST" action="?/revokeAndContinue" use:enhance={() => {
+        loading = true;
+        return async ({ result, update }) => {
+          loading = false;
+          if (result.type === "success" && result.data?.redirectTo) {
+            window.location.href = result.data.redirectTo as string;
+            return;
+          }
+          await update();
+        };
+      }}>
+        <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
+        <input type="hidden" name="cli_state" value={data.state ?? ""} />
+        <input type="hidden" name="cli_port" value={data.port ?? ""} />
+        <input type="hidden" name="cli_device" value={data.device ?? ""} />
+        <input type="hidden" name="cli_machine_id" value={data.machine_id ?? ""} />
+
+        <fieldset class="space-y-2 mb-4" style="border: none; padding: 0;">
+          <legend class="sr-only">Devices to revoke</legend>
+          {#each form.devices as device (device.id)}
+            <label
+              class="flex items-start gap-3 cursor-pointer"
+              style="padding: 12px 14px; border-radius: 12px; border: 1px solid {selectedRevokeId === device.id ? 'var(--color-accent)' : 'var(--color-border)'}; background-color: {selectedRevokeId === device.id ? 'rgba(86, 28, 36, 0.04)' : 'transparent'}; transition: all 120ms ease;"
+            >
+              <input
+                type="radio"
+                name="revoke_key_id"
+                value={device.id}
+                bind:group={selectedRevokeId}
+                required
+                style="margin-top: 4px;"
+              />
+              <span class="flex-1 text-sm">
+                <span class="font-medium" style="color: var(--color-text);">{device.name}</span>
+                <span class="block text-xs mt-0.5" style="color: var(--color-text-muted);">
+                  Last used {relativeTime(device.last_used_at)}
+                </span>
+              </span>
+            </label>
+          {/each}
+        </fieldset>
+
+        <button
+          type="submit"
+          disabled={loading || !selectedRevokeId}
+          class="btn-primary w-full cursor-pointer"
+        >
+          {#if loading}
+            <span class="flex items-center justify-center gap-2">
+              <span class="spinner spinner-sm spinner-white"></span> Revoking + signing in...
+            </span>
+          {:else}
+            Revoke selected device + continue
+          {/if}
+        </button>
+      </form>
+      <!-- A revoke failure returns { error } without deviceLimit, so the page
+           falls through to the regular "Continue as" branch on next render —
+           the user clicks Continue again, gets a fresh 409, and the picker
+           reappears with up-to-date device list. Showing the inline error in
+           the picker would require carrying the device list through revoke
+           failures, which is a larger refactor for a transient error path. -->
+
+      <div class="mt-4 text-center">
+        <a href="/dashboard" class="text-sm" style="color: var(--color-link);">
+          Cancel — manage devices on your account page instead
+        </a>
+      </div>
+
+    {:else if data.authenticated && data.hasCli}
       <!-- Authenticated + CLI params but switch=1 was set — show account picker -->
       <div class="text-center mb-6">
         <div style="font-size: 1.5rem; color: var(--color-accent); margin-bottom: 0.5rem;">&#9670;</div>
