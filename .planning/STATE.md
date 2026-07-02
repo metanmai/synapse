@@ -46,14 +46,15 @@
 
 ### Open questions / TODOs
 
-- **BUG-01 root cause** is hypothesized (Promise.all in `recomputeProjectStatus`) but unverified. Phase 1 is research-then-fix; `wrangler tail` against prod is the gate.
+- **BUG-01 root cause refuted, not the Promise.all hypothesis.** Real cause was `handoff_events` table missing from prod Supabase — schema drift between `supabase/migrations/*.sql` and prod went undetected. **Process gap:** no drift detection between migration files and prod schema. Worth a separate cleanup task.
 - **Phase 2, 4, 5 need per-phase research** before planning (IDENT, COLLAB, TOKEN were added after the 4-agent research wave). `/gsd:discuss-phase N` will invoke a researcher.
 - **Workers Paid tier** needs verification — assumption until proven otherwise.
 - **Linux daemon path** is unverified at launch unless a Linux machine is accessed during Phase 1.
 
 ### Blockers
 
-None right now. Phase 1 ready to plan.
+- **Slice 1b residual (CF-machine work):** OPS-01 (`wrangler whoami` + Workers Paid screenshot) + Plan 05 (Sentry full pipeline; `npm install @sentry/*` is Netskope-blocked on the primary terminal). Both park on a CF-enabled machine.
+- This terminal has no remaining Phase 1 blockers — slice 1a-prime is shipped end-to-end.
 
 ### Recent activity
 
@@ -72,7 +73,7 @@ None right now. Phase 1 ready to plan.
 5. Read `.planning/research/SUMMARY.md` for technical decisions on Phases 1, 3, 6
 6. Read `docs/BUGS.md` for the canonical "what's still broken" list
 
-**Next command:** `/gsd:plan-phase 1` (Phase 1: Stabilize Backend & Observability)
+**Next command:** `/gsd:discuss-phase 2` (Phase 2: Real User Identity — the natural next phase given slice 1a-prime is shipped and slice 1b is CF-machine work). Slice 1b residual unblocks separately on the CF-enabled machine.
 
 ## Critical Risks Active
 

@@ -6,63 +6,6 @@ When closing an entry, move it to the `## Closed` section at the bottom with the
 
 ---
 
-## P0 — Blocks core feature
-
-### 1. Backend `/api/events/batch` throws Worker exception (Cloudflare 1101)
-
-The daemon's flush cycle to `https://api.synapsesync.app/api/events/batch` fails with HTTP 500 and Cloudflare error code 1101 on real event payloads. Sessions are captured locally to `~/.synapse/projects/<id>/events.jsonl` but never reach the backend — the dashboard, cross-device handoff, and conversation list all stay empty until this is fixed.
-
-**Forensic detail:** 1101 escapes Hono's `app.onError` catch boundary. Regular `throw error` paths in `events-batch.ts` (createErr at line 108, memberErr at 113, upsert error at 126) would surface as JSON 500s, not 1101. Whatever's throwing is happening somewhere `app.onError` can't reach — likely candidates:
-
-- Unhandled rejection in `Promise.all(projectIds.map(pid => recomputeProjectStatus(db, pid)))` at `backend/src/api/events-batch.ts:132`
-- CPU time limit (Workers free tier: 50ms wall-clock for the entry path)
-- Subrequest count limit
-- Streaming-response error after headers sent
-
-`recomputeProjectStatus` reads ALL events for the project and calls `reduce()` from `@synapse/shared/handoff/reducer.js`. If `reduce()` throws on an unexpected payload shape (`tool_used` events with surprising fields aren't handled in the switch — they fall through silently, but downstream code that reads `slot.recent_files` or similar might break), the rejection inside a Promise.all could escape.
-
-**No data lost meanwhile:** `events.jsonl` is append-only on the client, the `.watermark` file only advances on full-batch success, and the backend upserts on `event_id` with `ignoreDuplicates: true`. Once fixed, the next flush will catch up everything since the last successful batch.
-
-**Diagnostic plan:**
-- Live worker logs: `cd backend && wrangler tail --name synapse --format pretty`, then send one event via curl. Real stack trace will print.
-- Or stand up `wrangler dev` locally with real Supabase env vars in `backend/.dev.vars` and reproduce.
-
-**Code locations:** `backend/src/api/events-batch.ts:37-140`, `backend/src/lib/handoff-reducer.ts`, `packages/shared/src/handoff/reducer.ts`
-
----
-
-## P1 — Install-time UX
-
-### 2. `synapse capture status` reports "stopped" when daemon is running under launchd
-
-After installing via `synapse init`, the daemon is alive under launchd (verifiable via `launchctl list app.synapsesync.daemon` showing a real PID), but `synapse capture status` shows "Daemon: stopped" with PID null. Misleading — users assume capture isn't running.
-
-**Root cause:** `DaemonManager.isRunning()` at `mcp/src/capture/daemon.ts:40-50` only consults `~/.synapse/capture.pid`. The old wizard's fire-and-forget `spawn(capture-worker.js)` wrote this file, but that path was removed in `d3cd771`. The launchd-supervised daemon never writes `capture.pid` — it's supervised externally.
-
-**Fix sketch:** `isRunning()` should also consult `launchctl list app.synapsesync.daemon` (macOS), `systemctl --user is-active synapsesync.service` (Linux), or a process-name check. The PID file path becomes a non-OS-service fallback.
-
-**Code locations:** `mcp/src/capture/daemon.ts:40-50`, `mcp/src/cli/commands.ts` (`runCaptureStatus`)
-
-### 3. Wizard writes `npx synapsesync` configs that may be blocked by corporate proxies
-
-In `mcp/src/cli/editors/io.ts:95`, the MCP server config for Cursor / Windsurf uses `"command": "npx", "args": ["synapsesync"]`. On networks where `npx` is blocked (e.g. Netskope), the configs are written correctly but the MCP server fails to start.
-
-**Fix sketch:** Detect if the package is globally available and prefer `synapsesync` (resolves via `/opt/homebrew/bin/synapsesync` symlink) over `npx`. Or fall back to `node <abs-path>/dist/index.js` like `synapse init` does for hooks. Or surface the workaround in the post-wizard outro.
-
-**Code location:** `mcp/src/cli/editors/io.ts:95`
-
-### 4. `synapse init` doesn't write `.mcp.json` for the current project
-
-`init` installs hooks, service, slash commands, and config — but the local project's `.mcp.json` (which Claude Code reads for MCP server config) is only written by the wizard's `writeClaudeCodeLocal` adapter. A user who runs `init` directly (e.g. from `--api-key` flow or a script) gets hooks but no MCP server access in this project.
-
-The wizard fix in `d3cd771` partially closes this — `wizard` now calls `runInit` when capture is opted in — but `init` itself remains incomplete for the "Claude Code in this project" use case.
-
-**Fix sketch:** Add `--scope local|global` flag to `init` (or always write `.mcp.json` to cwd) so it's a complete one-shot replacement for the wizard.
-
-**Code location:** `mcp/src/cli/init.ts`
-
----
-
 ## P2 — Coverage gaps
 
 ### 5a. Backend integration tests skip the actual handler logic for events-batch + 6 other endpoints
@@ -113,24 +56,16 @@ Per-branch `git log origin/main..<branch>` diff needed before deletion.
 
 Substantial in-flight feature. Needs human triage: still active? Abandoned? Worth resurrecting or splitting up?
 
-### 10. No backend auto-deploy on push
+### 10. CF git auto-deploy can go silent without warning
 
-Frontend auto-deploys via Vercel/Cloudflare Pages. Backend Worker requires manual `wrangler deploy` from a machine with the Cloudflare API token. main can drift from what's actually serving requests.
+Cloudflare's git-integration auto-deploy IS wired (and proved working on 2026-05-20 — commits `16a4de1` + `2eb158b` both deployed automatically), but the integration can sit idle for hours without firing on new pushes. On 2026-05-20 the integration hadn't fired in 14h; a no-op trigger commit (`2eb158b`, a comment-only change to `backend/wrangler.jsonc`) was required to wake it up.
 
-**Fix sketch:** GitHub Actions workflow that runs `wrangler deploy` on push to main, with CF API token in repo secrets. Already a `.github/workflows/publish.yml` for npm publishing — same pattern.
+**Consequences:** main can silently drift from what's actually serving requests. There's no in-dashboard signal that a recent push was skipped — you have to compare the CF Deployments tab tip to `git log main` manually.
 
----
-
-### 12. Daemon flush has no retry/backoff or circuit-breaker
-
-`mcp/src/capture/handoff-sync.ts:42` just throws on any non-2xx, and the daemon's interval timer (`startHandoffLoop` at `mcp/src/capture/daemon.ts:164`) calls `cycle()` every `min(pull_ms, flush_ms)` = 10 seconds unconditionally. When the backend is broken (as it is right now with the 1101), the daemon hammers the dead endpoint indefinitely — once per 10s forever.
-
-**Consequences:**
-- Wasted bandwidth + Cloudflare invocations on the user side
-- `~/.synapse/daemon.log` fills with the same error every 10s (currently growing at ~6 lines/minute)
-- When the backend recovers, the daemon will burst-flush 4 projects simultaneously without any throttling — could trip rate limits
-
-**Fix sketch:** Exponential backoff with jitter on consecutive failures (10s → 20s → 40s → cap at ~5min). Reset on first successful flush. Could be implemented in `runFlushCycle` or in the loop wrapper at `startHandoffLoop`.
+**Fix sketch options:**
+- Add a CF-deploy health check (cron-pinged endpoint that compares `serving SHA` to `main HEAD`).
+- Switch to GitHub Actions `wrangler deploy` on push to main with CF API token in repo secrets (more explicit, removes the silent-idle failure mode).
+- Document the "if no deploy fires in N minutes, push a no-op commit" workaround in the runbook.
 
 ### 13. Frontend has 12 svelte-check warnings (4 a11y, 8 unused-CSS)
 
@@ -179,3 +114,11 @@ Fixed in the 2026-05-18 session:
 - **Launchd plist argv mangled** (single string `"node /path/to/commands.js"` instead of separate `<string>` elements) — fixed in `d3cd771`
 - **Service file written but never `launchctl load`ed** — fixed in `d3cd771`
 - **Service file pointed at `dist/cli/commands.js`** (a helper module with no main) **instead of `dist/index.js`** (the dispatcher entry) — fixed in `025a814`
+
+Fixed in the 2026-05-19 to 2026-05-20 sessions (Phase 1, slice 1a-prime + 1b):
+
+- **#1 `/api/events/batch` Cloudflare 1101** — fixed on two layers: functional (re-applied migrations 015/016/017 to restore the missing `handoff_events` table on prod Supabase — the actual root cause, *not* the Promise.all hypothesis from research D1) + defensive (`Promise.allSettled` swap in `backend/src/api/events-batch.ts:147` to isolate per-project recompute failures from now on) — `16a4de1` + `2eb158b`
+- **#2 `synapse capture status` reports "stopped" under launchd** — fixed by `checkSupervisor()` platform dispatch in `mcp/src/cli/util/daemon-supervisor.ts` — `17be259`
+- **#3 Wizard writes `npx synapsesync` configs blocked by Netskope** — fixed by three-tier MCP command resolver (`which synapsesync` → `node <abs-path>/dist/index.js` → `npx`) in `mcp/src/cli/util/mcp-command.ts` — `1f11b55`
+- **#4 `synapse init` doesn't write `.mcp.json` for current project** — fixed by adding `editorIo.writeMcpJson(cwd, ...)` + `ensureGitignore` to the init flow — `768b139`
+- **#12 Daemon flush has no retry/backoff** — fixed by `computeNextDelay` pure helper + setTimeout-chain replacing the unconditional 10s interval; jittered exponential 10s → cap 5min — `17be259`
