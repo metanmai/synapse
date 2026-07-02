@@ -696,9 +696,9 @@ describe("editors", () => {
       expect(files).toContain("sync.md");
       expect(files).toContain("whoami.md");
       expect(files).toContain("clean.md");
-      expect(files).toContain("conversations.md");
-      expect(files).toContain("resume.md");
-      expect(files).toContain("save-conversation.md");
+      expect(files).toContain("list-convos.md");
+      expect(files).toContain("load-convo.md");
+      expect(files).toContain("sync-convo.md");
     });
 
     it("command files are idempotent (skip existing)", () => {
