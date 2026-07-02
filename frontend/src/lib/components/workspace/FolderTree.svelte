@@ -101,7 +101,10 @@ function toggleMenu(e: MouseEvent, path: string) {
     menuOpen = null;
   } else {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    menuPos = { x: rect.left, y: rect.bottom + 4 };
+    const menuHeight = 140; // approximate max menu height
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const y = spaceBelow < menuHeight ? rect.top - menuHeight : rect.bottom + 4;
+    menuPos = { x: rect.left, y };
     menuOpen = path;
   }
 }
