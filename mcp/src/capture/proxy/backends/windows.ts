@@ -169,16 +169,21 @@ export const WindowsBackend: PlatformBackend = {
       // Suppress the "Do you want to install this CA?" GUI dialog when
       // possible. The flag that controls this is CERT_PROT_ROOT_DISABLE_USER_UI_FLAG
       // (0x20) in HKLM\SOFTWARE\Microsoft\SystemCertificates\Root\ProtectedRoots\Flags.
-      // - HKLM requires admin → works on CI runners (runneradmin) and on
-      //   sysadmin-managed corporate Windows.
-      // - On non-admin user installs the try{} fails silently and the
-      //   dialog appears as designed — the user has a desktop and clicks Yes,
-      //   which is the intended security UX.
-      // [Microsoft.Win32.Registry]::LocalMachine.CreateSubKey is idempotent
-      // and PS-5.1-bulletproof, unlike `New-Item -Force` which has a
-      // "Cannot delete a subkey tree" quirk on existing keys.
+      //
+      // BOUNDED with Start-Job + Wait-Job 5s: on the GitHub Actions
+      // windows-latest runner, this CreateSubKey HANGS indefinitely under
+      // pwsh — the try/catch never fires because the call blocks before
+      // throwing (suspected UAC virtualization deadlock on the runner image).
+      // Wrapping in a job lets us kill it after 5s and continue with the
+      // CurrentUser store install (which always works without elevation).
+      // Trade-off when the job times out: we lose the GUI-suppress benefit
+      // for fresh CurrentUser/Root installs, but Windows' default UX (the
+      // Yes/No dialog) is acceptable and matches the pre-df5c622 behavior.
       "Write-Host 'step1:reg'",
-      "try { $k = [Microsoft.Win32.Registry]::LocalMachine.CreateSubKey('SOFTWARE\\Microsoft\\SystemCertificates\\Root\\ProtectedRoots'); $k.SetValue('Flags', 0x20, 'DWord'); $k.Close(); Write-Host 'step1a:hklm-flag-set' } catch { Write-Host \"step1b:hklm-skip:$($_.Exception.Message)\" }",
+      "$regJob = Start-Job -ScriptBlock { try { $k = [Microsoft.Win32.Registry]::LocalMachine.CreateSubKey('SOFTWARE\\Microsoft\\SystemCertificates\\Root\\ProtectedRoots'); $k.SetValue('Flags', 0x20, 'DWord'); $k.Close(); 'ok' } catch { \"skip:$($_.Exception.Message)\" } }",
+      "$regDone = Wait-Job $regJob -Timeout 5",
+      "if ($regDone) { Write-Host \"step1a:hklm-$(Receive-Job $regJob)\" } else { Stop-Job $regJob -ErrorAction SilentlyContinue; Write-Host 'step1b:hklm-skip:timeout-5s' }",
+      "Remove-Job $regJob -Force -ErrorAction SilentlyContinue",
       "Write-Host 'step2:get-content'",
       `$pem = Get-Content -LiteralPath ${psSingleQuote(caPath)} -Raw`,
       "Write-Host 'step3:armor-strip'",

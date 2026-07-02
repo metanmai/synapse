@@ -186,7 +186,14 @@ jobs:
       - name: E2E tests
         if: steps.check.outputs.configured == 'true'
         working-directory: mcp
-        run: npx vitest run test/e2e/
+        # Route through the JSON-reporter wrapper that tolerates vitest 4's
+        # "Worker exited unexpectedly" teardown crash on Windows CI.
+        # Without the wrapper, all 121 e2e tests pass but vitest exits 1
+        # because tinypool's fork-worker shutdown races; the wrapper reads
+        # the JSON report and exits 0 when there are no test failures.
+        # See mcp/scripts/run-tests.mjs for the rationale + the matching
+        # `npm test` script wiring already in place for the verify job.
+        run: node ./scripts/run-tests.mjs test/e2e/
         env:
           TEST_E2E: "1"
           TEST_API_URL: ${{ secrets.TEST_API_URL }}
