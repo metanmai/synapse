@@ -1,20 +1,28 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Hono } from "hono";
 
 import {
   countApiKeys,
+  countCliKeys,
   createApiKey,
   createUser,
   deleteApiKey,
   findUserByEmail,
   getActiveSubscription,
   listApiKeys,
+  listCliKeys,
   recordDeletedAccount,
+  updateApiKeyLabel,
 } from "../db/queries";
 import { authMiddleware, hashApiKey } from "../lib/auth";
 import {
   API_KEY_MAX_PER_USER,
   CLI_SESSION_SALT,
   CLI_SESSION_TTL_MS,
+  DEVICE_LABEL_PREFIX,
+  DEVICE_LIMIT_FREE,
+  DEVICE_LIMIT_PLUS,
+  DEVICE_NAME_MAX_LENGTH,
   GOOGLE_DRIVE_SCOPE,
   GOOGLE_TOKEN_EXPIRY_FALLBACK,
 } from "../lib/constants";
@@ -194,34 +202,132 @@ auth.post("/login", async (c) => {
   });
 });
 
-// POST /auth/cli-session — create a CLI auth session after browser login
-// Returns an encrypted code containing the API key + PKCE challenge (stateless — no server-side storage)
+/**
+ * Sanitize a device name into a label-safe segment: lowercase, only [a-z0-9-],
+ * collapse repeated dashes, trim leading/trailing dashes, cap at 60 chars.
+ * Exported for unit testing.
+ */
+export function sanitizeDeviceName(input: string | undefined | null): string {
+  const raw = (input ?? "").toString().trim();
+  if (!raw) return `device-${Date.now().toString(36)}`;
+  const cleaned = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, DEVICE_NAME_MAX_LENGTH);
+  return cleaned || `device-${Date.now().toString(36)}`;
+}
+
+/** Resolve the device limit for a user's tier. Plus = Infinity. */
+function deviceLimitForTier(tier: "free" | "plus"): number {
+  return tier === "plus" ? DEVICE_LIMIT_PLUS : DEVICE_LIMIT_FREE;
+}
+
+/**
+ * Strip the cli- prefix from a label for display. Names stored as cli-foo, shown as foo.
+ */
+function displayName(label: string): string {
+  return label.startsWith(DEVICE_LABEL_PREFIX) ? label.slice(DEVICE_LABEL_PREFIX.length) : label;
+}
+
+/**
+ * Issue a fresh CLI device key for a user. Shared by cli-session and
+ * cli-revoke-and-session — both ultimately call this after their own
+ * preconditions (limit check / revocation) are satisfied.
+ */
+async function mintCliSessionCode(args: {
+  db: SupabaseClient;
+  user: { id: string; email: string | null };
+  deviceLabel: string;
+  codeChallenge: string;
+  secret: string;
+}): Promise<string> {
+  const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+  const apiKeyHash = await hashApiKey(apiKey);
+  await createApiKey(args.db, args.user.id, apiKeyHash, args.deviceLabel);
+
+  return encryptSession(
+    {
+      api_key: apiKey,
+      email: args.user.email ?? "",
+      code_challenge: args.codeChallenge,
+      exp: Date.now() + CLI_SESSION_TTL_MS,
+    },
+    args.secret,
+  );
+}
+
+// POST /auth/cli-session — create a CLI auth session after browser login.
+// Returns an encrypted code containing the API key + PKCE challenge (stateless — no server-side storage).
+// Enforces per-tier device limits (3 free, unlimited Plus). When the limit is hit, returns
+// 409 + the list of existing devices so the web /cli-auth page can offer a "revoke and continue" picker.
 auth.post("/cli-session", authMiddleware, async (c) => {
   const body = await parseBody(c, schemas.cliSession);
   const user = c.get("user");
-
   const db = c.get("db");
 
-  // Delete existing "cli" key and create a fresh one
-  const existingKeys = await listApiKeys(db, user.id);
-  const existingCliKey = existingKeys.find((k) => k.label === "cli");
-  if (existingCliKey) {
-    await deleteApiKey(db, existingCliKey.id, user.id);
+  // Resolve tier from active subscription (active or past_due = plus)
+  const sub = await getActiveSubscription(db, user.id);
+  const tier: "free" | "plus" = sub ? "plus" : "free";
+  const limit = deviceLimitForTier(tier);
+
+  // Count existing devices (cli-* labeled keys)
+  const deviceCount = await countCliKeys(db, user.id);
+  if (deviceCount >= limit) {
+    const devices = await listCliKeys(db, user.id);
+    return c.json(
+      {
+        error: "Device limit reached",
+        code: "DEVICE_LIMIT_REACHED",
+        tier,
+        limit,
+        devices: devices.map((d) => ({
+          id: d.id,
+          name: displayName(d.label),
+          last_used_at: d.last_used_at,
+          created_at: d.created_at,
+        })),
+      },
+      409,
+    );
   }
 
-  const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
-  const apiKeyHash = await hashApiKey(apiKey);
-  await createApiKey(db, user.id, apiKeyHash, "cli");
+  const deviceLabel = `${DEVICE_LABEL_PREFIX}${sanitizeDeviceName(body.device_name)}`;
+  const code = await mintCliSessionCode({
+    db,
+    user,
+    deviceLabel,
+    codeChallenge: body.code_challenge,
+    secret: c.env.SUPABASE_SERVICE_KEY,
+  });
 
-  const code = await encryptSession(
-    {
-      api_key: apiKey,
-      email: user.email ?? "",
-      code_challenge: body.code_challenge,
-      exp: Date.now() + CLI_SESSION_TTL_MS,
-    },
-    c.env.SUPABASE_SERVICE_KEY,
-  );
+  return c.json({ code });
+});
+
+// POST /auth/cli-revoke-and-session — revoke a specified device + immediately issue a new one.
+// Used by the web /cli-auth page when a user picks "revoke this device and continue" from the
+// device limit picker. The revoke and create happen back-to-back so the user doesn't end up
+// in a half-revoked state on a network failure.
+auth.post("/cli-revoke-and-session", authMiddleware, async (c) => {
+  const body = await parseBody(c, schemas.cliRevokeAndSession);
+  const user = c.get("user");
+  const db = c.get("db");
+
+  // Revoke the specified key. deleteApiKey enforces ownership (user_id check).
+  const deleted = await deleteApiKey(db, body.revoke_key_id, user.id);
+  if (!deleted) {
+    throw new AppError("Device not found", 404, "NOT_FOUND");
+  }
+
+  const deviceLabel = `${DEVICE_LABEL_PREFIX}${sanitizeDeviceName(body.device_name)}`;
+  const code = await mintCliSessionCode({
+    db,
+    user,
+    deviceLabel,
+    codeChallenge: body.code_challenge,
+    secret: c.env.SUPABASE_SERVICE_KEY,
+  });
 
   return c.json({ code });
 });
@@ -380,6 +486,33 @@ account.delete("/keys/:id", async (c) => {
   }
 
   return c.json({ ok: true });
+});
+
+// PATCH /api/account/keys/:id — rename a key (used by the Connected Devices dashboard).
+// For cli-* labels, the user-facing name doesn't include the prefix — we add it back here
+// so rename UX is "type a name" rather than "type cli-name".
+account.patch("/keys/:id", async (c) => {
+  const user = c.get("user");
+  const keyId = c.req.param("id");
+  const db = c.get("db");
+  const body = await parseBody(c, schemas.updateApiKeyLabel);
+
+  // Look up the existing label to decide whether to re-apply the cli- prefix.
+  const keys = await listApiKeys(db, user.id);
+  const existing = keys.find((k) => k.id === keyId);
+  if (!existing) {
+    throw new AppError("API key not found", 404, "NOT_FOUND");
+  }
+
+  const isDevice = existing.label.startsWith(DEVICE_LABEL_PREFIX);
+  const newLabel = isDevice ? `${DEVICE_LABEL_PREFIX}${sanitizeDeviceName(body.label)}` : body.label;
+
+  const ok = await updateApiKeyLabel(db, keyId, user.id, newLabel);
+  if (!ok) {
+    throw new AppError("API key not found", 404, "NOT_FOUND");
+  }
+
+  return c.json({ ok: true, label: newLabel });
 });
 
 // POST /api/account/reset — wipe all user data but keep the auth user alive

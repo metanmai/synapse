@@ -37,6 +37,13 @@ export const schemas = {
 
   cliSession: z.object({
     code_challenge: z.string().min(1, "Code challenge is required"),
+    device_name: z.string().optional(),
+  }),
+
+  cliRevokeAndSession: z.object({
+    code_challenge: z.string().min(1, "Code challenge is required"),
+    device_name: z.string().optional(),
+    revoke_key_id: z.string().uuid("revoke_key_id must be a uuid"),
   }),
 
   cliExchange: z.object({
@@ -47,6 +54,10 @@ export const schemas = {
   createApiKey: z.object({
     label: z.string().min(1, "Label is required").trim(),
     expires_at: z.string().nullable().optional(),
+  }),
+
+  updateApiKeyLabel: z.object({
+    label: z.string().min(1, "Label is required").trim().max(80, "Label too long"),
   }),
 
   // Project resolve

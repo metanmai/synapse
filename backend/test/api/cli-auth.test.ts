@@ -227,3 +227,39 @@ describe("POST /auth/login", () => {
     expect(res.status).toBe(400);
   });
 });
+
+import { sanitizeDeviceName } from "../../src/api/auth";
+
+describe("sanitizeDeviceName", () => {
+  it("lowercases and replaces invalid chars with dashes", () => {
+    expect(sanitizeDeviceName("Tanmais MacBook Pro")).toBe("tanmais-macbook-pro");
+  });
+
+  it("collapses repeated dashes", () => {
+    expect(sanitizeDeviceName("dev--vm__1")).toBe("dev-vm-1");
+  });
+
+  it("trims leading and trailing dashes", () => {
+    expect(sanitizeDeviceName("---foo---")).toBe("foo");
+  });
+
+  it("preserves existing valid characters", () => {
+    expect(sanitizeDeviceName("work-laptop-2026")).toBe("work-laptop-2026");
+  });
+
+  it("caps at 60 chars", () => {
+    const long = "a".repeat(100);
+    expect(sanitizeDeviceName(long).length).toBe(60);
+  });
+
+  it("returns a synthetic name when input is empty", () => {
+    expect(sanitizeDeviceName("")).toMatch(/^device-[a-z0-9]+$/);
+    expect(sanitizeDeviceName("   ")).toMatch(/^device-[a-z0-9]+$/);
+    expect(sanitizeDeviceName(null)).toMatch(/^device-[a-z0-9]+$/);
+    expect(sanitizeDeviceName(undefined)).toMatch(/^device-[a-z0-9]+$/);
+  });
+
+  it("returns a synthetic name when input sanitizes to empty", () => {
+    expect(sanitizeDeviceName("!!!!!")).toMatch(/^device-[a-z0-9]+$/);
+  });
+});

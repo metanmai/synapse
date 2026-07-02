@@ -19,9 +19,12 @@ import {
 import {
   ApiKeyExpiredError,
   countApiKeys,
+  countCliKeys,
   createApiKey,
   deleteApiKey,
   findUserByApiKeyHash,
+  listCliKeys,
+  updateApiKeyLabel,
 } from "../../src/db/queries/api-keys";
 
 // ── Subscriptions ────────────────────────────────────────────────
@@ -542,6 +545,75 @@ describe("api-keys queries", () => {
       const db = createMockDb({ data: null, error: null, count: null });
       const result = await countApiKeys(db as unknown as SupabaseClient, "u1");
       expect(result).toBe(0);
+    });
+  });
+
+  // ── countCliKeys ───────────────────────────────────────────
+  describe("countCliKeys", () => {
+    it("counts only keys with cli- label prefix", async () => {
+      const db = createMockDb({ data: null, error: null, count: 2 });
+      const result = await countCliKeys(db as unknown as SupabaseClient, "u1");
+
+      expect(db.from).toHaveBeenCalledWith("api_keys");
+      expect(db.chainable.eq).toHaveBeenCalledWith("user_id", "u1");
+      expect(db.chainable.like).toHaveBeenCalledWith("label", "cli-%");
+      expect(result).toBe(2);
+    });
+
+    it("returns 0 when no cli keys exist", async () => {
+      const db = createMockDb({ data: null, error: null, count: 0 });
+      const result = await countCliKeys(db as unknown as SupabaseClient, "u1");
+      expect(result).toBe(0);
+    });
+  });
+
+  // ── listCliKeys ────────────────────────────────────────────
+  describe("listCliKeys", () => {
+    it("filters by cli- prefix and orders by created_at desc", async () => {
+      const rows = [
+        {
+          id: "k1",
+          user_id: "u1",
+          label: "cli-laptop",
+          expires_at: null,
+          last_used_at: null,
+          created_at: "2026-01-02",
+        },
+        {
+          id: "k2",
+          user_id: "u1",
+          label: "cli-desktop",
+          expires_at: null,
+          last_used_at: null,
+          created_at: "2026-01-01",
+        },
+      ];
+      const db = createMockDb({ data: rows, error: null });
+      const result = await listCliKeys(db as unknown as SupabaseClient, "u1");
+
+      expect(db.chainable.like).toHaveBeenCalledWith("label", "cli-%");
+      expect(db.chainable.order).toHaveBeenCalledWith("created_at", { ascending: false });
+      expect(result).toEqual(rows);
+    });
+  });
+
+  // ── updateApiKeyLabel ──────────────────────────────────────
+  describe("updateApiKeyLabel", () => {
+    it("updates label and returns true when row matches", async () => {
+      const db = createMockDb({ data: null, error: null, count: 1 });
+      const result = await updateApiKeyLabel(db as unknown as SupabaseClient, "k1", "u1", "cli-new-name");
+
+      expect(db.from).toHaveBeenCalledWith("api_keys");
+      expect(db.chainable.update).toHaveBeenCalledWith({ label: "cli-new-name" }, { count: "exact" });
+      expect(db.chainable.eq).toHaveBeenCalledWith("id", "k1");
+      expect(db.chainable.eq).toHaveBeenCalledWith("user_id", "u1");
+      expect(result).toBe(true);
+    });
+
+    it("returns false when no row matches (wrong user or missing key)", async () => {
+      const db = createMockDb({ data: null, error: null, count: 0 });
+      const result = await updateApiKeyLabel(db as unknown as SupabaseClient, "k1", "u1", "cli-new");
+      expect(result).toBe(false);
     });
   });
 });
