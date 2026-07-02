@@ -8,17 +8,18 @@
 
 ## STOP-SHIP (must close before any public reveal)
 
-### 1. ⚠ CATASTROPHIC: Enable Row-Level Security on every Supabase table
+### 1. ✅ DONE — RLS enabled on the two unprotected tables (`d146d26`, `41c1c3b`)
 
-**Status**: ZERO tables have RLS enabled (`grep ENABLE ROW LEVEL SECURITY supabase/migrations/*.sql` → 0 matches). Supabase Security Advisor flagged this. Currently safe ONLY because the anon key is in SvelteKit `lib/server/` (server-only, not bundled) — but a single accidental commit / log leak of the anon key = full DB read access.
+**Status correction (2026-06-10)**: the original "ZERO tables have RLS" claim was a case-sensitive-grep false positive. A case-insensitive sweep showed 20 of 22 tables already had RLS on. The actual gap was only `project_context` (migration 012) and `deleted_accounts` (013).
 
-**Fix**:
-- Write `supabase/migrations/027_enable_rls_on_all_tables.sql` with one `ALTER TABLE x ENABLE ROW LEVEL SECURITY;` per table.
-- Tables to cover (from grep of `create table` in migrations 001-026): `users`, `projects`, `project_members`, `entries`, `entry_history`, `user_preferences`, `share_links`, `activity_log`, `api_keys`, `subscriptions`, `insights`, `conversations`, `conversation_messages`, `conversation_media`, `conversation_context`, `conversation_limits`, `project_context`, `deleted_accounts`, `handoff_sessions`, `handoff_events`, `project_invites` (and any newer ones).
-- BEFORE applying: audit `frontend/src/lib/server/` and `backend/src/` to confirm NO read path uses anon key against these tables. Backend uses `SUPABASE_SERVICE_KEY` (service role) which bypasses RLS — safe. Frontend's only known anon-key usage is `frontend/src/lib/server/auth.ts`; verify the rest.
-- After applying: `curl https://<project>.supabase.co/rest/v1/users -H "apikey: <anon>"` must return `[]` or 401. Backend `/api/projects` etc. must still work (service-role path).
+**What shipped**: `supabase/migrations/027_rls_remaining_tables.sql` with two `ALTER TABLE … ENABLE ROW LEVEL SECURITY` statements. No policies — both tables are accessed exclusively by the backend service-role client, so deny-by-default for anon/authenticated is the correct posture. Audit confirmed `frontend/src/lib/server/auth.ts` (the only anon-key consumer) never queries either table.
 
-**Risk**: low — service role bypasses RLS by design, so backend continues to work. Anon path gets locked, which is the goal.
+**Still pending in PROD** — see item #3 below. Apply via `supabase db push` from a credentialed machine, then verify:
+```
+curl https://<project>.supabase.co/rest/v1/project_context -H "apikey: <anon>"  # → [] or 401
+curl https://<project>.supabase.co/rest/v1/deleted_accounts -H "apikey: <anon>" # → [] or 401
+```
+Backend `/api/projects` etc. must still respond normally (service-role path).
 
 ### 2. ⚠ Cloudflare per-key rate limit (DASHBOARD WORK)
 
@@ -131,6 +132,8 @@ User reported high disk IO with only themselves as a user. Suspects ranked:
 | `aa2593b` | CloudSync: retry on transient 5xx/408/429 (3 attempts, 500/1000ms backoff) + companion "Sync FAILED" log in capture-worker |
 | `424eb87` | adapter-roundtrip: echo daemon-log lines on Stage 6 failure (the diagnostic that surfaced today's HTTP 402) |
 | `3b265f9` | e2e-cli: invite + sync test coverage (closed the 2-of-23 commands gap) |
+| `d146d26` (2026-06-10) | RLS enabled on `project_context` + `deleted_accounts` (only 2 unprotected; 20/22 already had it) |
+| `41c1c3b` (2026-06-10) | SUMMARY for RLS migration + correction of the "ZERO tables have RLS" false positive |
 
 Result: **1:1:1 macOS/Linux/Windows parity proven** in metanmai CI run `27132064970` (Windows e2e-cli 66/66 PASS, 0 SKIP). All test-suite Windows-skip guards removed. Five distinct Windows-specific bug classes rooted and fixed.
 
@@ -138,8 +141,10 @@ Result: **1:1:1 macOS/Linux/Windows parity proven** in metanmai CI run `27132064
 
 ## Recommended order for the next agent
 
-1. Start with **#1 RLS migration** (15 min code work + audit). Highest blast-radius reduction per unit time.
-2. **#5 test-account quota** (option a OR b) — fastest way back to trustable CI.
+~~1. Start with **#1 RLS migration**~~ ✅ DONE 2026-06-10 (`d146d26`).
+
+1. **#3 Apply migration 027 to PROD** — `supabase db push` from a credentialed machine, then run the two `curl` checks above. Owner-side; ~10 min.
+2. **#5 test-account quota** (option a OR b) — fastest way back to trustable CI. Currently both Ubuntu + Windows happy-flow-e2e were flaking on HTTP 402 quota exhaustion.
 3. **#10 disk-IO investigation** — get the Supabase Query Performance screenshot/data from owner, then act on top finding (likely throttling `pull-handoff` pre-warm).
 4. **#6 + #7 merge-gate additions** — 5-minute `package.json` edit that adds real continuous-validation coverage of launched features.
 5. **#8 backend deploy workflow** — write the YAML; owner adds the secret.
