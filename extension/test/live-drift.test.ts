@@ -6,11 +6,15 @@
 // harmless in CI). Never stores credentials; it reuses the live session only.
 import { type Browser, chromium } from "playwright";
 import { afterAll, describe, expect, it } from "vitest";
-import type { CaptureAdapter } from "../src/content/adapters/types.js";
 import { chatgptAdapter } from "../src/content/adapters/chatgpt.js";
 import { claudeAdapter } from "../src/content/adapters/claude-ai.js";
+import type { CaptureAdapter } from "../src/content/adapters/types.js";
 
-const CDP = process.env.SYNAPSE_CDP ?? "http://127.0.0.1:9222";
+// Read the optional env override via globalThis — the extension workspace is a
+// browser target (tsconfig types: []), so `process` is not an ambient global here.
+const CDP =
+  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.SYNAPSE_CDP ??
+  "http://127.0.0.1:9222";
 const WAIT_MS = 90_000; // time for you to type one message
 
 let browser: Browser | null = null;
@@ -88,7 +92,9 @@ async function captureLiveTurn(adapter: CaptureAdapter, openUrl: string, label: 
     console.log(`  [${label}] Typed prompt and pressed Enter`);
   } catch {
     // eslint-disable-next-line no-console
-    console.log(`  [${label}] Could not find input — page may require login (title: "${await page.title().catch(() => "?")}")`);
+    console.log(
+      `  [${label}] Could not find input — page may require login (title: "${await page.title().catch(() => "?")}")`,
+    );
   }
 
   // Wait for completion(s) to stream in, then concatenate all matching bodies.

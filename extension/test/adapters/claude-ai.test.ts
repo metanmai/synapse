@@ -24,7 +24,11 @@ function buildSSE(deltas: string[]): string {
 describe("claude-ai adapter", () => {
   it("matchesCompletion only on the completion endpoint", () => {
     expect(claudeAdapter.matchesCompletion("/api/organizations/abc/chat_conversations/xyz/completion")).toBe(true);
+    // numbered-endpoint drift seen live (2026-06): /completion → /completion2
+    expect(claudeAdapter.matchesCompletion("/api/organizations/abc/chat_conversations/xyz/completion2")).toBe(true);
+    expect(claudeAdapter.matchesCompletion("/api/organizations/abc/chat_conversations/xyz/completion10")).toBe(true);
     expect(claudeAdapter.matchesCompletion("/api/organizations/abc/chat_conversations/xyz")).toBe(false);
+    expect(claudeAdapter.matchesCompletion("/api/organizations/abc/chat_conversations/xyz/completionfoo")).toBe(false);
     expect(claudeAdapter.matchesCompletion("/api/account")).toBe(false);
   });
 

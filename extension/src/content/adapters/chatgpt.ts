@@ -55,8 +55,10 @@ export function parseChatGPTResponse(responseText: string): CapturedTurn | null 
       }
     }
 
-    // Legacy delta format: {o:"append", p:".../parts/0", v:"..."}
-    if (typeof e.v === "string" && (e.o === "append" || typeof e.p === "undefined" || String(e.p).includes("parts"))) {
+    // Legacy delta format: {o:"append", p:".../parts/0", v:"..."}. Require an
+    // explicit append op targeting a parts path — a bare {v:"..."} with no path
+    // must NOT be treated as assistant text (it can be an id/metadata scalar).
+    if (e.o === "append" && typeof e.v === "string" && typeof e.p === "string" && e.p.includes("parts")) {
       appended += e.v;
     }
   }
