@@ -144,7 +144,6 @@ function printHelp(): void {
     c("capture stop", "Stop the capture daemon"),
     c("capture status", "Daemon health + session count"),
     c("capture list", "Browse captured sessions"),
-    c("capture hook-install", "Auto-start capture with Claude Code"),
     "",
     `  ${bold("Workspace")}`,
     c("tree", "File tree"),
@@ -247,7 +246,6 @@ async function runMenu(): Promise<void> {
       { value: "capture-status", label: "Capture status", hint: "daemon health + session count" },
       { value: "tree", label: "Workspace tree", hint: "browse your files" },
       { value: "wizard", label: "Setup wizard", hint: "connect tools + configure" },
-      { value: "hook-install", label: "Install hook", hint: "auto-start capture with Claude Code" },
       { value: "help", label: "Help", hint: "show all commands" },
     ],
   });
@@ -274,9 +272,6 @@ async function runMenu(): Promise<void> {
       break;
     case "wizard":
       await runWizard(readPackageVersion());
-      break;
-    case "hook-install":
-      await runCapture(["hook-install"]);
       break;
     case "help":
       printHelp();

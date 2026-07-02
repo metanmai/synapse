@@ -14,6 +14,48 @@ import { accent, bold, muted, success, error as themeError } from "./theme.js";
 // biome-ignore lint/suspicious/noExplicitAny: API responses
 type R = Record<string, any>;
 
+interface ClaudeHookBlock {
+  matcher?: string;
+  hooks: Array<{ type?: string; command?: string }>;
+}
+interface ClaudeSettingsShape {
+  hooks?: Record<string, ClaudeHookBlock[]>;
+  [key: string]: unknown;
+}
+
+/**
+ * Remove every hook block whose command invokes `synapse hook <kind>` —
+ * these are written by `synapse init` into ~/.claude/settings.json.
+ * Drops empty event arrays, and the `hooks` key entirely if everything
+ * Synapse-owned was cleared. Returns true if the file was modified.
+ */
+function removeSynapseHooksFromClaudeSettings(settingsPath: string): boolean {
+  let parsed: ClaudeSettingsShape;
+  try {
+    parsed = JSON.parse(fs.readFileSync(settingsPath, "utf-8")) as ClaudeSettingsShape;
+  } catch {
+    return false;
+  }
+  if (!parsed.hooks) return false;
+
+  let changed = false;
+  const nextHooks: Record<string, ClaudeHookBlock[]> = {};
+  for (const [event, blocks] of Object.entries(parsed.hooks)) {
+    const filtered = blocks.filter(
+      (b) => !b.hooks.some((h) => typeof h.command === "string" && h.command.includes("synapse hook ")),
+    );
+    if (filtered.length !== blocks.length) changed = true;
+    if (filtered.length > 0) nextHooks[event] = filtered;
+  }
+
+  if (!changed) return false;
+
+  const { hooks: _drop, ...rest } = parsed;
+  const out: ClaudeSettingsShape = Object.keys(nextHooks).length > 0 ? { ...rest, hooks: nextHooks } : rest;
+  fs.writeFileSync(settingsPath, `${JSON.stringify(out, null, 2)}\n`);
+  return true;
+}
+
 async function apiFetch<T>(apiKey: string, path: string, method = "GET", body?: unknown): Promise<T> {
   const h: Record<string, string> = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
   const res = await fetch(`${API_URL}${path}`, { method, headers: h, body: body ? JSON.stringify(body) : undefined });
@@ -538,17 +580,21 @@ export async function runUninstall(): Promise<void> {
     }
   }
 
-  // Capture hooks
-  try {
-    const { uninstallHooks, isInstalled } = await import("../capture/hooks.js");
-    if (isInstalled()) {
-      targets.push({
-        label: "Remove capture hook from Claude Code settings",
-        action: () => uninstallHooks().removed,
-      });
+  // Synapse hooks installed by `synapse init` into ~/.claude/settings.json.
+  // We strip every block whose command invokes `synapse hook <kind>`.
+  const claudeSettingsPath = path.join(home, ".claude", "settings.json");
+  if (fs.existsSync(claudeSettingsPath)) {
+    try {
+      const raw = fs.readFileSync(claudeSettingsPath, "utf-8");
+      if (raw.includes("synapse hook ")) {
+        targets.push({
+          label: "Remove Synapse hooks from ~/.claude/settings.json",
+          action: () => removeSynapseHooksFromClaudeSettings(claudeSettingsPath),
+        });
+      }
+    } catch {
+      /* skip unreadable */
     }
-  } catch {
-    /* hooks module not available */
   }
 
   // Capture daemon
