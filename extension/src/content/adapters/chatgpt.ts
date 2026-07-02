@@ -29,12 +29,24 @@ export function parseChatGPTResponse(responseText: string): CapturedTurn | null 
     if (!evt || typeof evt !== "object") continue;
     const e = evt as ChatGPTEvent;
 
-    const parts = e.message?.content?.parts;
-    if (e.message?.author?.role === "assistant" && Array.isArray(parts)) {
-      const text = parts.filter((p): p is string => typeof p === "string").join("");
+    // Old snapshot format: {message: {author: {role}, content: {parts}}}
+    const snapParts = e.message?.content?.parts;
+    if (e.message?.author?.role === "assistant" && Array.isArray(snapParts)) {
+      const text = snapParts.filter((p): p is string => typeof p === "string").join("");
       if (text.length >= cumulative.length) cumulative = text; // snapshots grow → keep latest
     }
 
+    // New "add" format: {o:"add", v: {message: {author: {role}, content: {parts}}}}
+    if (e.o === "add" && e.v && typeof e.v === "object") {
+      const msg = (e.v as { message?: ChatGPTEvent["message"] }).message;
+      const addParts = msg?.content?.parts;
+      if (msg?.author?.role === "assistant" && Array.isArray(addParts)) {
+        const text = addParts.filter((p): p is string => typeof p === "string").join("");
+        if (text.length >= cumulative.length) cumulative = text;
+      }
+    }
+
+    // Legacy delta format: {o:"append", p:".../parts/0", v:"..."}
     if (typeof e.v === "string" && (e.o === "append" || typeof e.p === "undefined" || String(e.p).includes("parts"))) {
       appended += e.v;
     }
