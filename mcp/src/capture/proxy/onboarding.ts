@@ -18,6 +18,7 @@
 
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import os from "node:os";
 import { detectBackend } from "./backends/index.js";
 import type { BackendOptions, CommandRunner } from "./backends/types.js";
 import { TlsManager } from "./tls.js";
@@ -182,7 +183,9 @@ export function caStatus(opts: OnboardingOptions = {}): CaStatusResult {
 
 function buildBackendOptions(opts: OnboardingOptions, proxyPort: number): BackendOptions {
   return {
-    home: opts.home ?? process.env.HOME ?? "~",
+    // `os.homedir()` returns the correct path on every platform —
+    // including Windows where `process.env.HOME` is undefined.
+    home: opts.home ?? os.homedir(),
     runSecurity: opts.runSecurity,
     runOpenssl: opts.runOpenssl,
     runSudo: opts.runSudo,
