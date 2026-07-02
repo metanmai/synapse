@@ -1,8 +1,8 @@
-# Synapse proxy Layer 8 E2E — Windows trust-store install assertions.
+# Synapse proxy Layer 8 E2E -- Windows trust-store install assertions.
 #
 # Drives `synapsesync capture proxy install/status/uninstall` against
 # the REAL CurrentUser Root certificate store via certutil. Mirrors the
-# Linux Docker matrix's e2e-proxy-install.sh — same install/status/
+# Linux Docker matrix's e2e-proxy-install.sh -- same install/status/
 # uninstall sequence, same filesystem-state assertions, distro-aware
 # expected paths replaced with the Windows certutil store query.
 #
@@ -15,6 +15,13 @@
 # Cleans up any pre-existing "Synapse Proxy CA" cert before starting
 # so reruns are idempotent. Leaves the CurrentUser Root store in the
 # same state it found it (uninstall stage removes anything install added).
+#
+# ASCII-only by design: Windows PowerShell 5.1 (`shell: powershell`)
+# misreads UTF-8 box-drawing chars and em-dashes as mojibake and chokes
+# on the resulting "syntax errors." The CI workflow now invokes pwsh
+# (PowerShell 7, UTF-8 native) but keeping this script ASCII means it
+# also works under legacy Windows PowerShell, in Git Bash, or in any
+# code page the user happens to be on.
 
 $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -22,7 +29,7 @@ $RepoRoot = (Get-Item $ScriptRoot).Parent.Parent.FullName
 $Cli = "$RepoRoot\mcp\dist\index.js"
 $CN = "Synapse Proxy CA"
 
-Write-Host "── e2e-proxy-install (Windows) ──"
+Write-Host "== e2e-proxy-install (Windows) =="
 Write-Host "  repo_root=$RepoRoot"
 Write-Host "  cli=$Cli"
 
@@ -45,11 +52,11 @@ function Assert-CertNotInStore {
     }
 }
 
-# ── Pre-state: ensure clean slate ───────────────────────────────────────
+# Pre-state: ensure clean slate
 & certutil -delstore -user Root $CN > $null 2>&1
 Assert-CertNotInStore -Stage "pre-state"
 
-# ── STAGE 1: install ────────────────────────────────────────────────────
+# STAGE 1: install
 Write-Host "  [install] node $Cli capture proxy install"
 & node $Cli capture proxy install
 if ($LASTEXITCODE -ne 0) {
@@ -57,9 +64,9 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Assert-CertInStore -Stage "post-install"
-Write-Host "  [install] PASS — cert in CurrentUser Root"
+Write-Host "  [install] PASS -- cert in CurrentUser Root"
 
-# ── STAGE 2: status (smoke check — non-zero exit is the regression) ────
+# STAGE 2: status (smoke check -- non-zero exit is the regression)
 Write-Host "  [status] node $Cli capture proxy status"
 & node $Cli capture proxy status
 if ($LASTEXITCODE -ne 0) {
@@ -68,7 +75,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  [status] PASS"
 
-# ── STAGE 3: uninstall ─────────────────────────────────────────────────
+# STAGE 3: uninstall
 Write-Host "  [uninstall] node $Cli capture proxy uninstall"
 & node $Cli capture proxy uninstall
 if ($LASTEXITCODE -ne 0) {
@@ -76,6 +83,6 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Assert-CertNotInStore -Stage "post-uninstall"
-Write-Host "  [uninstall] PASS — cert removed"
+Write-Host "  [uninstall] PASS -- cert removed"
 
 Write-Host "PASS windows"

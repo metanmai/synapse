@@ -208,5 +208,8 @@ jobs:
         run: npm run build --workspace=mcp
 
       - name: Run Windows proxy E2E
-        shell: powershell
+        # `pwsh` = PowerShell 7 Core. UTF-8 native, modern parser, cross-OS
+        # consistent. `powershell` (Windows PowerShell 5.1) reads scripts
+        # as code-page-dependent and misparses UTF-8 chars as mojibake.
+        shell: pwsh
         run: ./scripts/e2e-windows/e2e-proxy-install.ps1
