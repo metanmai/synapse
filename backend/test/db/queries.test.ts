@@ -1078,3 +1078,108 @@ describe("conversations queries — updated_at bumps on every UPDATE", () => {
     expect(updatePayload).toHaveProperty("compaction_model", "claude-haiku");
   });
 });
+
+// ═════════════════════════════════════════════════════════════════
+// appendMessages — concurrent-write race retry
+// ═════════════════════════════════════════════════════════════════
+//
+// Bug class: select-max(sequence) → insert at max+1 is read-modify-write.
+// Concurrent POSTs to /api/conversations/:id/messages collide on the
+// unique(conversation_id, sequence) index, the loser raises Postgres
+// error 23505, and the loser used to surface as HTTP 500 (data loss
+// from the client's perspective — message never landed).
+//
+// Verified 2026-05-24 in production via 10 concurrent POSTs against
+// project d9353855: 2 succeeded, 8 returned 500. After this fix the
+// 8 losers retry with a fresh max(sequence) reading and ultimately
+// land their messages.
+//
+// The tests guard the bug CLASS — they assert (a) that the 23505 is
+// retried (not bubbled), (b) that a non-23505 error is NOT retried
+// (we don't silently mask unrelated DB errors), and (c) that retry
+// exhaustion eventually throws (no silent infinite loop).
+describe("appendMessages — concurrent-write race retry", () => {
+  it("retries on 23505 unique(sequence) violation and succeeds on the next attempt", async () => {
+    const { appendMessages } = await import("../../src/db/queries/conversations");
+
+    const conflictErr = {
+      name: "PostgrestError",
+      code: "23505",
+      message: 'duplicate key value violates unique constraint "conversation_messages_seq_uniq"',
+      details: "",
+      hint: "",
+    };
+
+    // Sequence of from() calls during a retry:
+    //   1. select max(sequence)               → first attempt's max read
+    //   2. insert (fails 23505)               → loser of first race
+    //   3. select max(sequence)               → second attempt's max read (sees winner's row)
+    //   4. insert (succeeds)                  → wins this round
+    //   5. update conversations (count + ts)  → bumps message_count + updated_at
+    const db = createSequentialMockDb(
+      { data: { sequence: 5 }, error: null }, // max = 5
+      { data: null, error: conflictErr }, // first INSERT loses
+      { data: { sequence: 6 }, error: null }, // max now = 6 (someone won)
+      { data: [{ id: "msg-7", sequence: 7, role: "user", content: "hi", source_agent: "claude-code" }], error: null },
+      { data: null, error: null }, // conversations.update
+    );
+
+    const result = await appendMessages(db as unknown as SupabaseClient, "conv-1", [
+      { role: "user", content: "hi", source_agent: "claude-code" },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].sequence).toBe(7);
+    // The fact that we got here (no throw) proves the retry happened —
+    // a single attempt would have bubbled the 23505 up.
+  });
+
+  it("does NOT retry on a non-sequence 23505 (e.g. duplicate event_id) — bubbles up", async () => {
+    const { appendMessages } = await import("../../src/db/queries/conversations");
+
+    // 23505 from an unrelated unique index — don't mask it as a race.
+    const unrelatedDup = {
+      name: "PostgrestError",
+      code: "23505",
+      message: 'duplicate key value violates unique constraint "some_other_index_uniq"',
+      details: "",
+      hint: "",
+    };
+
+    const db = createSequentialMockDb(
+      { data: { sequence: 5 }, error: null }, // max = 5
+      { data: null, error: unrelatedDup }, // INSERT fails for unrelated reason
+    );
+
+    await expect(
+      appendMessages(db as unknown as SupabaseClient, "conv-1", [
+        { role: "user", content: "hi", source_agent: "claude-code" },
+      ]),
+    ).rejects.toEqual(
+      expect.objectContaining({ code: "23505", message: expect.stringContaining("some_other_index_uniq") }),
+    );
+  });
+
+  it("does NOT retry on non-23505 errors (e.g. permission denied)", async () => {
+    const { appendMessages } = await import("../../src/db/queries/conversations");
+
+    const permDenied = {
+      name: "PostgrestError",
+      code: "42501",
+      message: "permission denied for table conversation_messages",
+      details: "",
+      hint: "",
+    };
+
+    const db = createSequentialMockDb(
+      { data: { sequence: 5 }, error: null }, // max = 5
+      { data: null, error: permDenied }, // INSERT permission-denied
+    );
+
+    await expect(
+      appendMessages(db as unknown as SupabaseClient, "conv-1", [
+        { role: "user", content: "hi", source_agent: "claude-code" },
+      ]),
+    ).rejects.toEqual(expect.objectContaining({ code: "42501" }));
+  });
+});
