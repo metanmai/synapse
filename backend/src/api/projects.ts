@@ -4,6 +4,7 @@ import { logActivity } from "../db/activity-logger";
 import {
   addMember,
   countMembers,
+  countOwnedProjects,
   createProject,
   createShareLink,
   deleteShareLink,
@@ -37,9 +38,13 @@ projects.post("/", async (c) => {
 
   const db = c.get("db");
 
-  // Enforce project quota before creating
-  const existing = await listProjectsForUser(db, user.id);
-  enforceProjectQuota(existing.length, c);
+  // Enforce project quota before creating. Counts OWNED projects only —
+  // shared projects (role !== "owner") don't count toward the user's cap.
+  // (Bug class from pre-Phase-03: listProjectsForUser.length counted shared
+  // memberships too, so an invitee with 50 shared projects + 0 owned would
+  // be falsely blocked from creating their first project.)
+  const ownedCount = await countOwnedProjects(db, user.id);
+  enforceProjectQuota(ownedCount, c);
 
   const project = await createProject(db, name, user.id);
   await logActivity(db, {

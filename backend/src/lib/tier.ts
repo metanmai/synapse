@@ -103,10 +103,13 @@ export function enforceMemberLimit(currentMemberCount: number, c: Context<{ Bind
 export function enforceProjectQuotaForTier(currentCount: number, tier: Tier) {
   const max = tier === "plus" ? PLUS_MAX_PROJECTS : FREE_MAX_PROJECTS;
   if (currentCount >= max) {
+    // Phase 03-02: structured 402 PROJECT_QUOTA_EXCEEDED. Both tiers cap at 50
+    // post-redesign; the upgrade pitch is gone — message is the same regardless
+    // of tier. CLI surface (handoff-sync.ts) and frontend match on the code.
     throw new AppError(
-      `Project limit reached (${max}). ${tier === "free" ? "Upgrade to Plus for up to 50 projects." : "Maximum 50 projects on Plus."}`,
-      403,
-      "TIER_LIMIT",
+      `Project limit reached (${max}). Delete an existing project to add this one.`,
+      402,
+      "PROJECT_QUOTA_EXCEEDED",
     );
   }
 }

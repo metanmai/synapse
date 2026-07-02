@@ -17,7 +17,10 @@ export const DEFAULT_TIER_PLUS_PRICE = "5.99";
 export const DEFAULT_APP_URL = "https://synapsesync.app";
 
 // --- Quota limits ---
-export const FREE_MAX_PROJECTS = 5;
+// Phase 03-02: Free expanded from 5 → 50 (parity with Plus). Differentiation
+// moves to per-project capacity + auto-sync + link sharing. See
+// .planning/phases/03-free-plus-tier-redesign/03-CONTEXT.md.
+export const FREE_MAX_PROJECTS = 50;
 export const PLUS_MAX_PROJECTS = 50;
 
 // --- Per-project capacity limits (per tier) ---

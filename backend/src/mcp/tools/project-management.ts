@@ -32,11 +32,11 @@ export function registerProjectManagementTools(
     { name: z.string().describe("Project name") },
     async ({ name }) => {
       const userId = requireMcpUserId(getContext);
-      // Tier-quota enforcement on the MCP create path. Without this, a free
-      // user at quota can keep creating projects via the MCP tool while
-      // POST /api/projects 403s — the two paths must agree. tier resolved
-      // from subscription rather than `c.get("tier")` because the MCP
-      // handler has no Hono Context.
+      // Tier-quota enforcement on the MCP create path. Without this, a user
+      // at the 50-project cap could keep creating projects via the MCP tool
+      // while POST /api/projects 402s — the two paths must agree. tier
+      // resolved from subscription rather than `c.get("tier")` because the
+      // MCP handler has no Hono Context.
       const tier = await getTierForUser(db, userId);
       const owned = await countOwnedProjects(db, userId);
       try {

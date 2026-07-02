@@ -179,7 +179,7 @@ export async function findOrCreateProjectByGit(
      * Called RIGHT BEFORE the Tier 3 INSERT — only when we're about to
      * actually create a project (existing matches skip this entirely).
      * Throw from here to abort the create. Used by quota enforcement so
-     * a free user at 5 projects can still ACCESS existing ones via this
+     * a user at 50 projects can still ACCESS existing ones via this
      * helper but can't materialize new ones via the auto-create path
      * (events-batch, conversations capture, etc.).
      */
