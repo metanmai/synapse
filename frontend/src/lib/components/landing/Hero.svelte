@@ -34,7 +34,7 @@ onMount(() => {
       <p class="hero-sub">
         Synapse automatically captures your AI coding sessions from Claude, Cursor, Codex, and
         Gemini. When you go idle, it distills the valuable parts — decisions, architecture,
-        learnings — into a searchable workspace your tools can read next time.
+        learnings — into a curated knowledge layer your next session opens with.
       </p>
       <div class="hero-actions">
         <a href="#how-it-works" class="hero-secondary">See how it works</a>

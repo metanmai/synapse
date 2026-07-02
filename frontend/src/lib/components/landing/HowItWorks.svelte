@@ -18,7 +18,7 @@ const steps = [
     number: 3,
     title: "Remember",
     description:
-      "Next session, your AI tools search the workspace and already have context from every past conversation",
+      "Next session opens with a brief from the workspace — your AI tools have context from every past conversation, no re-briefing needed",
     illustration: "remember",
   },
 ];
