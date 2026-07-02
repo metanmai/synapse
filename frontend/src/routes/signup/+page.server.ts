@@ -15,7 +15,15 @@ export const actions: Actions = {
     const supabase = getSupabase(cookies);
     const { error } = await supabase.auth.signUp({ email, password });
 
-    if (error) return fail(400, { error: error.message, email });
+    if (error) {
+      if (error.message.includes("already registered") || error.message.includes("already exists")) {
+        return fail(400, {
+          error: "An account with this email already exists. Try logging in instead, or use \"Forgot password\" to reset your password.",
+          email,
+        });
+      }
+      return fail(400, { error: error.message, email });
+    }
 
     return { success: true, email };
   },
