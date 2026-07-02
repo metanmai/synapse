@@ -6,6 +6,30 @@ import type { CapturedSession } from "./types.js";
 
 type WatcherHealth = "healthy" | "degraded" | "error";
 
+/**
+ * Build the chokidar options object based on the current platform. Exported
+ * so the platform-conditional polling decision can be unit-tested without
+ * mocking chokidar itself.
+ *
+ * Linux (inotify) and macOS (FSEvents) get the native event APIs which are
+ * reliable and cheap. Windows (ReadDirectoryChangesW under the hood) misses
+ * events for deeply-nested watch paths — e.g. the editor-globalStorage dirs
+ * that adapter watches hit — so we force chokidar to stat-poll on win32.
+ * Polling costs ~1% CPU per watched dir; the reliability win is mandatory
+ * for the capture pipeline.
+ */
+export function buildChokidarOptions(platform: NodeJS.Platform): Record<string, unknown> {
+  const base = {
+    ignoreInitial: true,
+    persistent: true,
+    awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },
+  };
+  if (platform === "win32") {
+    return { ...base, usePolling: true, interval: 500, binaryInterval: 1000 };
+  }
+  return base;
+}
+
 interface FileState {
   mtime: number;
   size: number;
@@ -66,23 +90,7 @@ export class CaptureWatcher extends EventEmitter {
       this.lastError = `${paths.length - existingPaths.length} watch path(s) not found`;
     }
 
-    // chokidar's default uses Node's fs.watch (native OS notifications).
-    // That's fast on Linux (inotify) and macOS (FSEvents) but UNRELIABLE on
-    // Windows — events for nested directories under deeply-nested watch
-    // paths (e.g. ~/.config/Code/User/globalStorage/.../tasks) frequently
-    // never fire under fs.watch. The 2026-06-07 Windows happy-flow-e2e
-    // adapter-roundtrip failure showed all 6 adapters (cursor, codex,
-    // gemini, cline, roo-code, copilot-cli) missing their captures.
-    // Polling closes the gap at the cost of ~1% CPU per watched dir.
-    // Linux/macOS stay on native because they don't have the reliability
-    // problem and polling would be wasteful.
-    const isWindows = process.platform === "win32";
-    this.fsWatcher = watch(paths, {
-      ignoreInitial: true,
-      persistent: true,
-      awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },
-      ...(isWindows ? { usePolling: true, interval: 500, binaryInterval: 1000 } : {}),
-    });
+    this.fsWatcher = watch(paths, buildChokidarOptions(process.platform));
 
     this.fsWatcher.on("add", (filePath) => this.queueEvent(filePath));
     this.fsWatcher.on("change", (filePath) => this.queueEvent(filePath));

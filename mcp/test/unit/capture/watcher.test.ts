@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AdapterRegistry } from "../../../src/capture/adapter-registry.js";
 import type { CapturedSession, ToolAdapter } from "../../../src/capture/types.js";
-import { CaptureWatcher } from "../../../src/capture/watcher.js";
+import { CaptureWatcher, buildChokidarOptions } from "../../../src/capture/watcher.js";
 
 function makeFakeAdapter(tool: string, watchDir: string): ToolAdapter {
   return {
@@ -133,6 +133,68 @@ describe("CaptureWatcher", () => {
     // Should emit at most once (event queue deduplicates by path)
     expect(sessions.length).toBeLessThanOrEqual(1);
   }, 15000);
+
+  // ── Platform-conditional chokidar config (bug class guard) ─────────────
+  //
+  // BUG CLASS: "the file watcher silently misses adapter file writes on
+  // Windows because chokidar's default (fs.watch) is unreliable for
+  // deeply-nested watch paths on that OS." Discovered 2026-06-07: 6/6
+  // adapters in e2e-adapter-roundtrip.mjs reported "NOT captured —
+  // chokidar missed the file?" on the Windows CI matrix, while Ubuntu
+  // and macOS passed cleanly. Fix is `usePolling: true` on Windows only
+  // — stat-polling closes the reliability gap at ~1% CPU per watched
+  // dir.
+  //
+  // The structural risk this test guards is a future refactor (e.g.
+  // consolidating options into a constant, switching to a wrapper
+  // library, "simplifying" the platform branch) silently dropping the
+  // polling flag and re-breaking Windows captures. We test the pure
+  // option-builder directly rather than the runtime watcher, because
+  // the bug only manifests on real Windows file systems — a unit test
+  // on Linux can't trigger the fs.watch miss-case that polling fixes.
+  // Asserting the config shape is the structural invariant that, when
+  // held, guarantees the runtime fix.
+  describe("buildChokidarOptions — platform-conditional polling", () => {
+    it("enables polling on Windows so chokidar doesn't silently miss adapter file writes", () => {
+      const opts = buildChokidarOptions("win32");
+      // The load-bearing assertion: polling MUST be on for Windows. A
+      // future refactor that drops this flag will re-break the
+      // adapter-roundtrip Windows merge gate.
+      expect(opts.usePolling).toBe(true);
+      // Interval choices are documented in watcher.ts — assert presence
+      // so a refactor that turns polling on but forgets the interval
+      // (chokidar default = 100ms, way too aggressive for a daemon)
+      // still trips this test.
+      expect(typeof opts.interval).toBe("number");
+      expect(typeof opts.binaryInterval).toBe("number");
+    });
+
+    it("does NOT enable polling on Linux — inotify is reliable and polling wastes CPU", () => {
+      const opts = buildChokidarOptions("linux");
+      // Negative assertion: polling is reserved for Windows specifically.
+      // Turning it on globally would cost ~1% CPU per watched dir on
+      // every user's machine for zero benefit on Linux/macOS, where
+      // inotify/FSEvents already deliver reliable native notifications.
+      expect(opts.usePolling).toBeUndefined();
+    });
+
+    it("does NOT enable polling on macOS — FSEvents is reliable and polling wastes CPU", () => {
+      const opts = buildChokidarOptions("darwin");
+      expect(opts.usePolling).toBeUndefined();
+    });
+
+    it("always sets awaitWriteFinish so partial file writes don't trigger premature parses", () => {
+      // Cross-platform invariant: every adapter parses JSONL files that
+      // are appended-to over the lifetime of the editor session. Without
+      // awaitWriteFinish, chokidar could emit on a partial write and the
+      // adapter would parse a truncated JSON line, silently dropping a
+      // capture. This applies on every platform, so assert it for all.
+      for (const platform of ["win32", "linux", "darwin"] as const) {
+        const opts = buildChokidarOptions(platform);
+        expect(opts.awaitWriteFinish).toBeDefined();
+      }
+    });
+  });
 
   it("emits idle event after idle timeout", async () => {
     // Use a very short idle timeout (800ms) and scan interval (300ms) for testing
