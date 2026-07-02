@@ -738,6 +738,102 @@ jobs:
           INTERNAL_TRIGGER_TOKEN: ${{ secrets.INTERNAL_TRIGGER_TOKEN }}
         run: node scripts/e2e-project-correlation.mjs
 
+  multi-account-e2e:
+    # Cross-account SHARING + revocation gate (scripts/e2e-multi-account.mjs,
+    # 29 stages): User A shares a project with User B → B reads A's handoff/
+    # insights in their brief AND writes back; role demote/promote; cross-account
+    # supersession; revocation closes EVERY surface (list, read API, brief, write
+    # API) with no leakage; authz negatives; and the share-link join path. This
+    # validates the whole sharing promise end-to-end on the deployed backend.
+    #
+    # Ubuntu-only (sharing/authz logic is OS-neutral, like insight-roundtrip).
+    # Needs TWO accounts: User A from `init` (SYNAPSE_E2E_API_KEY) + User B from a
+    # SEPARATE test account (SYNAPSE_API_KEY_USER_B secret). Graceful-skips green
+    # when either key (or a provider key for the capture stage) is absent — so it
+    # stays green on tanmain and on metanmai until a dedicated 2nd test account is
+    # configured. Provider keys (OpenRouter/DeepSeek) are already set on metanmai,
+    # so activation only requires adding the SYNAPSE_API_KEY_USER_B secret.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [verify, cleanup-e2e-account]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: prod
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Check secrets are configured
+        # Needs User A (SYNAPSE_E2E_API_KEY) + User B (SYNAPSE_API_KEY_USER_B — a
+        # SEPARATE test account) + one provider key for the capture stage.
+        id: check
+        env:
+          SYNAPSE_E2E_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+          SYNAPSE_API_KEY_USER_B: ${{ secrets.SYNAPSE_API_KEY_USER_B }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          if [ -z "$SYNAPSE_E2E_API_KEY" ] || [ -z "$SYNAPSE_API_KEY_USER_B" ]; then
+            echo "::notice::multi-account-e2e skipped — needs SYNAPSE_E2E_API_KEY (User A) + SYNAPSE_API_KEY_USER_B (a separate 2nd test account). Add the SYNAPSE_API_KEY_USER_B secret on metanmai/synapse to activate."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ] && [ -z "$DEEPSEEK_API_KEY" ]; then
+            echo "::notice::multi-account-e2e skipped — no LLM provider key configured (needs ANTHROPIC_API_KEY / OPENROUTER_API_KEY / DEEPSEEK_API_KEY)."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build mcp
+        if: steps.check.outputs.configured == 'true'
+        run: npm run build --workspace=mcp
+
+      - name: Install hooks + enable proxy + start daemon (User A)
+        # Same one-machine onboarding shape as insight-roundtrip-e2e. `init` writes
+        # ~/.synapse/config.json with User A's key — which e2e-multi-account.mjs
+        # reads as User A. User B is supplied via SYNAPSE_API_KEY_USER_B env below.
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SYNAPSE_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+        run: |
+          mkdir -p "$HOME/.synapse"
+          node mcp/dist/index.js init --api-key "$SYNAPSE_API_KEY" --skip-service
+          node mcp/dist/index.js capture proxy enable
+          nohup node mcp/dist/index.js daemon > "$HOME/.synapse/daemon.log" 2>&1 &
+          for i in $(seq 1 30); do
+            if [ -f "$HOME/.synapse/daemon.healthcheck" ]; then
+              echo "Daemon healthcheck present after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Daemon never wrote healthcheck file after 30s"
+          exit 1
+
+      - name: Run multi-account sharing + revocation (29 stages)
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SYNAPSE_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+          SYNAPSE_API_KEY_USER_B: ${{ secrets.SYNAPSE_API_KEY_USER_B }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: node scripts/e2e-multi-account.mjs
+
+      - name: Dump daemon log on failure
+        if: failure() && steps.check.outputs.configured == 'true'
+        run: |
+          echo "--- ~/.synapse/capture.log (last 200 lines) ---"
+          tail -200 "$HOME/.synapse/capture.log" 2>/dev/null || true
+          echo "--- ~/.synapse/daemon.log (last 200 lines) ---"
+          tail -200 "$HOME/.synapse/daemon.log" 2>/dev/null || true
+
   project-cap-e2e:
     # LAUNCH-READINESS #7 — continuous coverage of the structured 402
     # PROJECT_QUOTA_EXCEEDED contract: the exact bug class that turned CI
@@ -753,7 +849,7 @@ jobs:
     timeout-minutes: 10
     # Needs ALL account-using jobs done — saturating the cap while any of
     # them is still creating projects would 402 their creates.
-    needs: [happy-flow-e2e, e2e, insight-roundtrip-e2e]
+    needs: [happy-flow-e2e, e2e, insight-roundtrip-e2e, multi-account-e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: prod
 
