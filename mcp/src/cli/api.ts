@@ -10,20 +10,34 @@ export type KeyStatus = "valid" | "expired" | "unknown";
 
 /**
  * Build a fetch-compatible abort signal that fires after `ms` milliseconds.
- * Manual AbortController + setTimeout instead of `AbortSignal.timeout(ms)`
- * because the static helper triggers a Windows-only Node.js crash (exit
- * 3221226505 = STATUS_STACK_BUFFER_OVERRUN) when used with native fetch
- * through an HTTP proxy. Discovered on metanmai windows happy-flow-e2e
- * runs 27116735113-27118252389: every CLI command that called into
- * validateApiKey or fetchMe crashed catastrophically on Windows runners
- * while the same code worked on Linux/macOS. The manual pattern goes
- * through a different code path internally and avoids the trigger.
- * Caller is responsible for clearing the timeout once the fetch settles.
+ *
+ * Platform-conditional implementation:
+ *   - Linux/macOS: `AbortSignal.timeout(ms)` — the documented helper. Its
+ *     internal scheduling doesn't keep the event loop alive and handles
+ *     cleanup automatically. Used here because the global change to a
+ *     manual controller pattern broke happy-flow Stage 9 stats on
+ *     Linux/macOS in metanmai run 27118865555 (process exited 1 mid-
+ *     fetch with no diagnostic) — the static helper's lifecycle has
+ *     subtle guarantees that the manual pattern doesn't replicate.
+ *   - Windows: manual AbortController + setTimeout. The static
+ *     `AbortSignal.timeout` triggers a Windows-only Node.js crash (exit
+ *     3221226505 = STATUS_STACK_BUFFER_OVERRUN) when used with native
+ *     fetch through an HTTP proxy — observed on metanmai runs
+ *     27116735113-27118252389. The manual pattern uses a different
+ *     internal code path and avoids the trigger.
+ *
+ * Caller MUST call `clear()` once the fetch settles (in a finally block)
+ * — for Windows, this releases the setTimeout from keeping Node's event
+ * loop alive. The Linux/macOS variant's clear is a no-op for behavior
+ * but kept for symmetric calling convention.
  */
 function timeoutSignal(ms: number): { signal: AbortSignal; clear: () => void } {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), ms);
-  return { signal: controller.signal, clear: () => clearTimeout(id) };
+  if (process.platform === "win32") {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), ms);
+    return { signal: controller.signal, clear: () => clearTimeout(id) };
+  }
+  return { signal: AbortSignal.timeout(ms), clear: () => {} };
 }
 
 /** Validate an API key by making a lightweight authenticated request. */
