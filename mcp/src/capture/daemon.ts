@@ -1,15 +1,31 @@
+import child_process from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { EventKind } from "@synapse/shared/handoff/events.js";
 import { type Supervisor, checkSupervisor } from "../cli/util/daemon-supervisor.js";
 import { BASE_DELAY_MS, computeNextDelay } from "./daemon-backoff.js";
 import { spawnInferNextStep } from "./daemon-cc.js";
 import { appendEvent, readEvents } from "./events-log.js";
 import { writeBrief } from "./handoff-brief.js";
-import { flushNowSignalPath, healthcheckPath, projectDir } from "./handoff-paths.js";
+import { flushNowSignalPath, healthcheckPath, projectDir, synapseRoot } from "./handoff-paths.js";
 import { runEagerPullCycle, runFlushCycle, runPullCycle } from "./handoff-sync.js";
 import { synthesizeHeuristicNextStep } from "./heuristic-synth.js";
+
+/**
+ * Minimum interval between daemon-triggered pull-handoff pre-warms for the
+ * same project. The `pull-handoff` recompute spawns `claude -p` and costs
+ * ~$0.02 per call. With a busy session firing batch flushes every ~10s,
+ * unthrottled spawns would burn dollars per hour and saturate the LLM
+ * rate-limit. At 5 minutes per project, the worst-case cost is ~$0.24/hr per
+ * actively-edited project — acceptable for the killer-feature payoff (next
+ * session has fresh context even after ctrl+C / crash / power loss).
+ *
+ * Exported as a constant rather than hard-coded so the unit test can assert
+ * against the same value the production loop uses.
+ */
+export const PREWARM_MIN_INTERVAL_MS = 5 * 60 * 1000;
 
 interface DaemonStatus {
   running: boolean;
@@ -143,11 +159,88 @@ export async function maybeFireInferNextStep(a: FireArgs): Promise<void> {
   });
 }
 
+/**
+ * Pure debounce decision for daemon-triggered pull-handoff pre-warms.
+ *
+ * Returns true iff `projectId` has either never been pre-warmed (no entry
+ * in `lastPrewarmAt`) or was last pre-warmed `>= intervalMs` ago. Exported
+ * so the unit test can drive it without spinning the full handoff loop —
+ * the previous design (debounce inline in the cycle closure) was effectively
+ * untestable because asserting state required hooking child_process.spawn.
+ */
+export function shouldPrewarm(
+  lastPrewarmAt: Map<string, number>,
+  projectId: string,
+  now: number,
+  intervalMs: number,
+): boolean {
+  const last = lastPrewarmAt.get(projectId);
+  if (last === undefined) return true;
+  return now - last >= intervalMs;
+}
+
+/**
+ * Spawn `synapsesync pull-handoff --project-id <id>` as a detached child so
+ * the recompute (claude -p, 30-60s) survives the daemon's lifetime and
+ * completes even if the daemon is restarted or the user kills the parent
+ * process. Fire-and-forget; stderr lands in `~/.synapse/daemon-prewarm.log`
+ * for diagnosis.
+ *
+ * Env-passes the daemon's `SYNAPSE_API_KEY` + `SYNAPSE_API_URL` so the child
+ * doesn't need to re-read config.json. That's belt-and-suspenders — the
+ * config path also works — but explicit env is cheaper and survives config
+ * file races.
+ *
+ * Exported for tests; the spawn target is overridable via the `spawnFn`
+ * arg so unit tests can assert without actually launching node subprocesses.
+ */
+export function spawnPrewarm(
+  projectId: string,
+  apiKey: string,
+  apiUrl: string,
+  spawnFn: typeof child_process.spawn = child_process.spawn,
+): void {
+  try {
+    const logFile = path.join(synapseRoot(), "daemon-prewarm.log");
+    fs.mkdirSync(synapseRoot(), { recursive: true });
+    const out = fs.openSync(logFile, "a");
+    // dist/capture/daemon.js → dist/index.js (../index.js relative to this
+    // compiled file). Same pattern as pre-compact.ts spawn.
+    const cliEntry = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), "index.js");
+    const child = spawnFn(process.execPath, [cliEntry, "pull-handoff", "--project-id", projectId], {
+      detached: true,
+      stdio: ["ignore", out, out],
+      env: {
+        ...process.env,
+        SYNAPSE_API_KEY: apiKey,
+        SYNAPSE_API_URL: apiUrl,
+        SYNAPSE_DAEMON_PREWARM: "1",
+      },
+    });
+    child.unref();
+  } catch (err) {
+    try {
+      fs.appendFileSync(
+        path.join(synapseRoot(), "daemon-prewarm.log"),
+        `[${new Date().toISOString()}] spawn FAILED project=${projectId} err=${err instanceof Error ? err.message : err}\n`,
+      );
+    } catch {
+      // truly nothing we can do; the next cycle will retry the debounce check
+    }
+  }
+}
+
 export function startHandoffLoop(a: HandoffLoopArgs): () => void {
   const hc_ms = a.healthcheck_ms ?? 10000;
   let stopped = false;
   let currentDelay = BASE_DELAY_MS;
   let nextTimer: ReturnType<typeof setTimeout> | null = null;
+  // Per-project debounce state for daemon-triggered pull-handoff pre-warms.
+  // Keyed by canonical project_id (post-remap). Lives in the closure so each
+  // daemon process gets a fresh map on startup — that's intentional: after a
+  // restart we want a fresh pre-warm to confirm the cache is current, even
+  // though the previous process may have pre-warmed seconds ago.
+  const lastPrewarmAt = new Map<string, number>();
 
   async function cycle(): Promise<boolean> {
     if (stopped) return true;
@@ -182,6 +275,20 @@ export function startHandoffLoop(a: HandoffLoopArgs): () => void {
         }
         await runPullCycle({ project_id: effectiveId, api_key: a.api_key, api_url: a.api_url });
         if (a.user_id) writeBrief(effectiveId, a.user_id);
+        // Continuous handoff pre-warm — the killer-feature fix. Without
+        // this, the SessionStart brief is only refreshed by graceful hooks
+        // (PreCompact, SessionEnd). Real-world session terminations
+        // (ctrl+C, terminal close, OOM, network drop) bypass those hooks
+        // entirely, so the next session sees a stale handoff (sometimes
+        // days old). By spawning a detached pull-handoff whenever we
+        // flush new events — debounced 5min per project to cap LLM cost —
+        // the backend's handoff cache stays within minutes of live state.
+        // A ctrl+C now means "lose at most the last 5 minutes," not
+        // "lose everything since the last graceful shutdown."
+        if (flush.flushed > 0 && shouldPrewarm(lastPrewarmAt, effectiveId, Date.now(), PREWARM_MIN_INTERVAL_MS)) {
+          lastPrewarmAt.set(effectiveId, Date.now());
+          spawnPrewarm(effectiveId, a.api_key, a.api_url);
+        }
       } catch (err) {
         console.error("[handoff] cycle error", project_id, err);
         ok = false;
