@@ -12,18 +12,32 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Lint, typecheck, and unit test on BOTH ubuntu-latest and
+    # windows-latest. Phase 3 of Windows-readiness: catch
+    # platform-specific bugs in code AND tests on every push, not just
+    # at the e2e layer.
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash  # Git Bash on windows-latest; works on both runners.
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Node 24 needed on Windows because @synapse/shared ships .ts
+          # only (relies on native type-stripping in v24+). Same version
+          # both runners to keep the matrix simple.
+          node-version: 24
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
 
       - name: Frontend env for typecheck
         run: cp frontend/.env.example frontend/.env
