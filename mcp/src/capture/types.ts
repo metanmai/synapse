@@ -23,6 +23,8 @@ export interface CapturedSession {
     | "roo-code"
     | "opencode"
     | "crush"
+    | "claude-ai"
+    | "chatgpt"
     | "unknown";
   projectPath: string;
   startedAt: string; // ISO 8601
