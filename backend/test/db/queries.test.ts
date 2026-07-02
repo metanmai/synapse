@@ -479,6 +479,90 @@ describe("projects queries", () => {
 
       expect(result).toBe("proj_new");
     });
+
+    // Regression guard for Fix #2 — bug class: "two concurrent Tier 3
+    // INSERTs both pass Tier 1 with null, both attempt to insert, second
+    // raises 23505 unique-violation against migration 021's constraint —
+    // we must catch it and return the winner's id, not propagate the error
+    // to the caller (which would 500 the request)."
+    it("recovers from 23505 unique-violation by re-fetching the winner", async () => {
+      const uniqueViolation = {
+        name: "PostgrestError",
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "projects_user_remote_url_uniq_idx"',
+        details: "",
+        hint: "",
+      };
+      const db = createSequentialMockDb(
+        { data: [{ project_id: "proj_winner" }], error: null }, // memberships
+        { data: null, error: null }, // Tier 1 miss
+        { data: null, error: null }, // Tier 2 miss
+        { data: null, error: uniqueViolation }, // INSERT raises 23505
+        { data: { id: "proj_winner" }, error: null }, // retry Tier 1 finds winner
+      );
+
+      const result = await findOrCreateProjectByGit(db as unknown as SupabaseClient, "u1", {
+        git_remote_url: "https://github.com/me/raced.git",
+        git_basename: "raced",
+      });
+
+      expect(result).toBe("proj_winner");
+    });
+
+    // Race-recovery still degrades gracefully when the membership snapshot
+    // we captured before the race didn't include the new project (because
+    // the winner inserted the project_members row after our memberships
+    // SELECT returned). The unscoped owner-based lookup is the safety net.
+    it("falls back to unscoped owner lookup when scoped lookup misses winner", async () => {
+      const uniqueViolation = {
+        name: "PostgrestError",
+        code: "23505",
+        message: "duplicate key value violates unique constraint projects_user_remote_url_uniq_idx",
+        details: "",
+        hint: "",
+      };
+      const db = createSequentialMockDb(
+        { data: [{ project_id: "stale" }], error: null }, // memberships (stale)
+        { data: null, error: null }, // Tier 1 miss
+        { data: null, error: null }, // Tier 2 miss
+        { data: null, error: uniqueViolation }, // INSERT raises 23505
+        { data: null, error: null }, // scoped retry: still misses (winner not in memberships snapshot)
+        { data: { id: "proj_unscoped" }, error: null }, // unscoped owner lookup finds it
+      );
+
+      const result = await findOrCreateProjectByGit(db as unknown as SupabaseClient, "u1", {
+        git_remote_url: "https://github.com/me/raced2.git",
+        git_basename: "raced2",
+      });
+
+      expect(result).toBe("proj_unscoped");
+    });
+
+    // Non-23505 errors must still propagate — we only swallow the specific
+    // race signal, not arbitrary failures.
+    it("propagates non-23505 INSERT errors", async () => {
+      const otherError = {
+        name: "PostgrestError",
+        code: "23503",
+        message: "foreign key constraint violation",
+        details: "",
+        hint: "",
+      };
+      // Empty memberships → Tier 1 + Tier 2 skipped (their guards check
+      // memberProjectIds.length > 0). The next from("projects") is the INSERT,
+      // which is mock-index 1.
+      const db = createSequentialMockDb(
+        { data: [], error: null }, // memberships (empty user)
+        { data: null, error: otherError }, // INSERT fails for a non-race reason
+      );
+
+      await expect(
+        findOrCreateProjectByGit(db as unknown as SupabaseClient, "u1", {
+          git_remote_url: "https://github.com/me/uses-fk.git",
+          git_basename: "uses-fk",
+        }),
+      ).rejects.toMatchObject({ code: "23503" });
+    });
   });
 });
 
