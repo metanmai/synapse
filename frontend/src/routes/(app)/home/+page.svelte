@@ -40,6 +40,12 @@ function toolColor(tool: string): string {
 
 const projectLimit = $derived(data.tier === "free" ? 3 : 50);
 
+const countTooltip = $derived(
+  data.tier === "free"
+    ? `Free tier supports up to ${projectLimit} projects. Upgrade to Plus for 50.`
+    : `Plus tier supports up to ${projectLimit} projects.`,
+);
+
 function handleSubmit() {
   creating = true;
   return async ({ result, update }: { result: { type: string }; update: () => Promise<void> }) => {
@@ -58,7 +64,22 @@ function handleSubmit() {
 
 <div class="home-page">
   <div class="header">
-    <h1 class="title">Your Projects</h1>
+    <div class="title-row">
+      <h1 class="title">Your Projects</h1>
+      {#if data.projects.length > 0}
+        {#if data.tier === "free"}
+          <a href="/account" class="count-pill count-pill-link" title={countTooltip} aria-label={countTooltip}>
+            <span class="count-text">{data.projects.length} / {projectLimit}</span>
+            <span class="info-icon" aria-hidden="true">ⓘ</span>
+          </a>
+        {:else}
+          <span class="count-pill" title={countTooltip}>
+            <span class="count-text">{data.projects.length} / {projectLimit}</span>
+            <span class="info-icon" aria-hidden="true">ⓘ</span>
+          </span>
+        {/if}
+      {/if}
+    </div>
     <button class="new-project-btn cursor-pointer" onclick={() => (showForm = !showForm)}>
       {showForm ? "Cancel" : "+ New Project"}
     </button>
@@ -127,14 +148,6 @@ function handleSubmit() {
     </div>
   {/if}
 
-  <div class="usage-bar">
-    <span class="usage-text">
-      Projects: {data.projects.length} / {projectLimit}
-    </span>
-    {#if data.tier === "free"}
-      <a href="/account" class="upgrade-link">Upgrade to Plus</a>
-    {/if}
-  </div>
 </div>
 
 <style>
@@ -149,12 +162,57 @@ function handleSubmit() {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 1.5rem;
+    gap: 1rem;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
   }
 
   .title {
     font-size: 1.5rem;
     font-weight: 700;
     color: var(--color-accent);
+  }
+
+  .count-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 2px 10px;
+    border-radius: 9999px;
+    background: rgba(86, 28, 36, 0.06);
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.6;
+    text-decoration: none;
+    transition: var(--transition-base);
+  }
+
+  .count-pill-link {
+    cursor: pointer;
+  }
+
+  .count-pill-link:hover {
+    background: rgba(86, 28, 36, 0.12);
+    color: var(--color-accent);
+  }
+
+  .count-text {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .info-icon {
+    font-size: 0.8rem;
+    opacity: 0.6;
+    line-height: 1;
+  }
+
+  .count-pill-link:hover .info-icon {
+    opacity: 1;
   }
 
   .new-project-btn {
@@ -342,32 +400,4 @@ function handleSubmit() {
     white-space: nowrap;
   }
 
-  .usage-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.75rem 1rem;
-    background: rgba(255, 253, 248, 0.5);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    font-size: 0.8125rem;
-  }
-
-  .usage-text {
-    color: var(--color-text-muted);
-    font-weight: 500;
-  }
-
-  .upgrade-link {
-    color: var(--color-link);
-    font-weight: 600;
-    text-decoration: none;
-    transition: var(--transition-base);
-  }
-
-  .upgrade-link:hover {
-    text-decoration: underline;
-  }
 </style>

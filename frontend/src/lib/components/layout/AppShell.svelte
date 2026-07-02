@@ -56,17 +56,17 @@ function projectLabel(p: Project): string {
         <img src="/logo.svg" alt="Synapse logo" class="w-7 h-7" />
         synapse
       </a>
-      {#if projects.length > 0}
+      {#if currentProject}
         <div class="switcher-wrapper" onclick={(e) => e.stopPropagation()}>
           <button class="switcher-btn cursor-pointer"
             onclick={() => { switcherOpen = !switcherOpen; }}>
-            <span class="switcher-label">{currentProject ? projectLabel(currentProject) : "Select workspace"}</span>
+            <span class="switcher-label">{projectLabel(currentProject)}</span>
             <span class="switcher-chevron">{switcherOpen ? "▲" : "▼"}</span>
           </button>
           {#if switcherOpen}
             <div class="switcher-dropdown">
               {#if ownProjects.length > 0}
-                <div class="switcher-group-label">My Workspaces</div>
+                <div class="switcher-group-label">My Projects</div>
                 {#each ownProjects as p}
                   <a href={`/projects/${encodeURIComponent(projectSlug(p))}`}
                     class="switcher-item"
