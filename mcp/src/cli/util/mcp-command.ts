@@ -1,38 +1,81 @@
-// Wave 0 stub — fill in Plan 01-03 (BUG-03 — proxy-resilient MCP command resolver).
-// Exports the type contract that Wave 2 production code will implement and Wave 1
-// RED tests can import. Calling either function at runtime throws "not implemented
-// — Wave 2" so any premature use surfaces loudly.
+// Three-tier MCP-server-command resolver. Closes BUG-03.
+// See RESEARCH.md §"Pattern 4" for the decision tree + rationale.
+// Prefer absolute paths so proxy-restricted networks (Netskope) never
+// have to resolve `npx synapsesync` at MCP-server-start time.
 
-/**
- * Shape of an MCP server command entry, suitable for writing into
- * `.mcp.json` under `mcpServers.synapse`. `command` is the executable
- * (absolute path, or "npx" as last resort); `args` is the argv tail;
- * `env` carries `SYNAPSE_API_KEY` (and nothing else by design).
- */
+import child_process from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 export interface McpCommand {
   command: string;
   args: string[];
   env: Record<string, string>;
 }
 
-/**
- * Resolve the most-reliable command shape for spawning the Synapse MCP
- * server on the current machine. Wave 2 (Plan 01-03) fills the body with the
- * `which → dist → npx` fallback chain. Sync per RESEARCH §"Open Questions" #3.
- *
- * @param _apiKey  Synapse API key to embed in the returned env record
- */
-export function resolveSynapseMcpCommand(_apiKey: string): McpCommand {
-  throw new Error("not implemented — Wave 2");
+export const PROXY_FALLBACK_WARNING =
+  "npm registry unreachable; the MCP server may fail to start; run `npm i -g synapsesync` from a non-proxied network and rerun `synapse init`.";
+
+const WHICH_COMMAND = process.platform === "win32" ? "where synapsesync" : "which synapsesync";
+
+function resolvePackageDistEntry(): string {
+  // here = mcp/src/cli/util (source) OR mcp/dist/cli/util (built) — three levels
+  // up from this file in either case lands at the package root.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const packageRoot = path.resolve(here, "../../..");
+  return path.join(packageRoot, "dist", "index.js");
 }
 
 /**
- * Probe `https://registry.npmjs.org/-/ping` with an `AbortController`-driven
- * timeout. Returns `true` on a 2xx response, `false` on any other outcome
- * (timeout, network error, non-2xx status). Wave 2 (Plan 01-03) fills the body.
- *
- * @param _timeoutMs  abort budget in milliseconds; defaults to 2000 in the impl
+ * Resolve the most-reliable MCP-server command shape for the current machine.
+ * Sync — see RESEARCH §"Open Questions" #3. Never throws.
  */
-export async function probeNpmRegistry(_timeoutMs?: number): Promise<boolean> {
-  throw new Error("not implemented — Wave 2");
+export function resolveSynapseMcpCommand(apiKey: string): McpCommand {
+  const env = { SYNAPSE_API_KEY: apiKey };
+
+  // Tier 1: prefer an absolute synapsesync binary on PATH.
+  try {
+    const raw = child_process.execSync(WHICH_COMMAND, {
+      stdio: ["ignore", "pipe", "ignore"],
+      encoding: "utf-8",
+    });
+    const candidate = raw.split(/\r?\n/)[0].trim();
+    if (candidate.length > 0 && fs.existsSync(candidate)) {
+      return { command: candidate, args: [], env };
+    }
+  } catch {
+    // fall through
+  }
+
+  // Tier 2: prefer `node <abs>/dist/index.js` over the npx fallback.
+  try {
+    const distEntry = resolvePackageDistEntry();
+    if (fs.existsSync(distEntry)) {
+      return { command: process.execPath, args: [distEntry], env };
+    }
+  } catch {
+    // fall through
+  }
+
+  // Tier 3: last resort — npx. The wizard outro warns the user (Plan 04).
+  return { command: "npx", args: ["synapsesync"], env };
+}
+
+/**
+ * 2-second probe against the npm registry's `-/ping` endpoint. Returns false
+ * on any failure (timeout, network error, non-2xx). Used by the wizard outro
+ * (Plan 04) to decide whether to surface `PROXY_FALLBACK_WARNING`.
+ */
+export async function probeNpmRegistry(timeoutMs = 2000): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch("https://registry.npmjs.org/-/ping", { signal: ctrl.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
 }

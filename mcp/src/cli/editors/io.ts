@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { resolveSynapseMcpCommand } from "../util/mcp-command.js";
 
 export const SYNAPSE_INSTRUCTIONS = `# Synapse — Shared Context Layer
 
@@ -92,7 +93,7 @@ export const SYNAPSE_COMMAND_DEFS: Record<string, CommandDef> = {
 };
 
 export function synapseMcpServer(apiKey: string): Record<string, unknown> {
-  return { command: "npx", args: ["synapsesync"], env: { SYNAPSE_API_KEY: apiKey } };
+  return resolveSynapseMcpCommand(apiKey) as unknown as Record<string, unknown>;
 }
 
 export function writeMcpJson(filePath: string, apiKey: string): void {
