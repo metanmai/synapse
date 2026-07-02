@@ -1,4 +1,4 @@
-import { env } from "$env/dynamic/private";
+import { API_URL } from "$env/static/private";
 
 export class ApiError extends Error {
   constructor(
@@ -22,7 +22,7 @@ async function request<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${env.API_URL}${path}`, { ...options, headers });
+  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
