@@ -24,6 +24,11 @@ export const DEFAULT_TIER_PLUS_MAX_FILES = 500;
 export const DEFAULT_TIER_PLUS_PRICE = "5.99";
 export const DEFAULT_APP_URL = "https://synapsesync.app";
 
+// --- Quota limits ---
+export const FREE_MAX_PROJECTS = 5;
+export const PLUS_MAX_PROJECTS = 50;
+export const FREE_MAX_PULLS_PER_DAY = 50;
+
 // --- Rate limiting ---
 export const RATE_LIMIT_MAX = 120;
 export const RATE_LIMIT_WINDOW_MS = 60_000;
