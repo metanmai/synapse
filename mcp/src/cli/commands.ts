@@ -128,11 +128,32 @@ export async function runTree(): Promise<void> {
     return;
   }
 
-  const project = projects[0];
-  const entries = await apiFetch<{ path: string; tags: string[]; updated_at: string }[]>(
-    apiKey,
-    `/api/context/${encodeURIComponent(project.name)}/list`,
-  );
+  // Iterate projects until we find one whose context endpoint resolves.
+  // Same 404-tolerance pattern as stats.ts \u2014 `/api/projects` and
+  // `/api/context/<name>` can diverge in the wild (stale projects,
+  // mid-flight rename, post-purge residue, Windows-style temp-path names
+  // from prior test runs). Crashing the whole command on the first 404
+  // is brittle; fall through gracefully.
+  let project: R | null = null;
+  let entries: { path: string; tags: string[]; updated_at: string }[] = [];
+  for (const candidate of projects) {
+    try {
+      entries = await apiFetch<{ path: string; tags: string[]; updated_at: string }[]>(
+        apiKey,
+        `/api/context/${encodeURIComponent(candidate.name)}/list`,
+      );
+      project = candidate;
+      break;
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith("API 404")) continue;
+      throw err;
+    }
+  }
+  if (!project) {
+    spin.stop("No accessible workspace.");
+    clack.outro(muted("Your projects are in a transient state \u2014 try again in a moment."));
+    return;
+  }
   spin.stop(`${success("\u2713")} ${entries.length} files`);
 
   if (entries.length === 0) {
@@ -370,10 +391,20 @@ export async function runWhoami(): Promise<void> {
   const projects = await apiFetch<R[]>(apiKey, "/api/projects");
   const billing = await apiFetch<{ tier: string }>(apiKey, "/api/billing/status");
   const keys = await apiFetch<R[]>(apiKey, "/api/account/keys");
+  // Iterate to first project whose context endpoint resolves \u2014 same
+  // 404-tolerance pattern as stats.ts/runTree. Without this, a stale
+  // project at projects[0] (e.g. with a Windows temp-path name from
+  // prior test runs) crashes whoami with an unhandled API 404.
   let fileCount = 0;
-  if (projects.length > 0) {
-    const entries = await apiFetch<R[]>(apiKey, `/api/context/${encodeURIComponent(projects[0].name)}/list`);
-    fileCount = entries.length;
+  for (const candidate of projects) {
+    try {
+      const entries = await apiFetch<R[]>(apiKey, `/api/context/${encodeURIComponent(candidate.name)}/list`);
+      fileCount = entries.length;
+      break;
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith("API 404")) continue;
+      throw err;
+    }
   }
   spin.stop(`${success("\u2713")} Connected`);
 
