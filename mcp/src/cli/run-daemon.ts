@@ -48,6 +48,7 @@ export function runDaemon(opts: RunDaemonOpts = {}): () => void {
 
   const stop = startFn({
     projects,
+    projects_dir: projectsDir,
     api_key: apiKey,
     api_url: API_URL,
     user_id: readUserIdFromConfig(),

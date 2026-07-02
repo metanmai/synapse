@@ -59,20 +59,36 @@ export async function runFlushCycle(a: FlushArgs): Promise<FlushResult> {
     const remapped = body.canonical_project_ids?.[a.project_id];
     if (remapped && remapped !== a.project_id) {
       const newDir = projectDir(remapped);
+      const lastEventId = pending[pending.length - 1].event_id;
       if (fs.existsSync(newDir)) {
-        throw new Error(`auto-create remap collision: ${dir} -> ${newDir} (destination already exists)`);
+        // Destination already exists — typically because a prior cycle
+        // already canonicalized this cwd, then the hook re-created the
+        // `cwd_<hash>` dir before its project-map caught up. Merge: append
+        // the pseudo-dir's events into the canonical events.jsonl, advance
+        // the watermark past everything in pseudo (never regress it), then
+        // remove the pseudo dir. The backend dedupes by event_id, so a
+        // re-flushed event is safe — we'd rather over-deliver than lose.
+        const pseudoEvents = path.join(dir, "events.jsonl");
+        const canonicalEvents = path.join(newDir, "events.jsonl");
+        if (fs.existsSync(pseudoEvents)) {
+          const pseudoBody = fs.readFileSync(pseudoEvents, "utf-8");
+          if (pseudoBody.length > 0) fs.appendFileSync(canonicalEvents, pseudoBody);
+        }
+        const wmDest = path.join(newDir, ".watermark");
+        const existingWm = fs.existsSync(wmDest) ? fs.readFileSync(wmDest, "utf-8").trim() : "";
+        fs.writeFileSync(wmDest, lastEventId > existingWm ? lastEventId : existingWm);
+        fs.rmSync(dir, { recursive: true, force: true });
+      } else {
+        fs.renameSync(dir, newDir);
+        fs.writeFileSync(path.join(newDir, ".watermark"), lastEventId);
       }
-      fs.renameSync(dir, newDir);
-      // Watermark now lives in the new dir, so write it there.
-      fs.writeFileSync(path.join(newDir, ".watermark"), pending[pending.length - 1].event_id);
       canonicalId = remapped;
     }
-  } catch (err) {
-    // If the body wasn't JSON we still consider the flush successful — only
-    // re-throw collision errors so the caller can surface them.
-    if (err instanceof Error && err.message.startsWith("auto-create remap collision")) {
-      throw err;
-    }
+  } catch {
+    // Body wasn't JSON or the canonical-remap step failed in a way that
+    // doesn't impact the at-least-once delivery contract (events already
+    // POSTed above). Considered successful — the next cycle will retry the
+    // remap if the backend keeps sending canonical_project_ids.
   }
 
   if (!canonicalId) {
