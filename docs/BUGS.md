@@ -6,6 +6,35 @@ When closing an entry, move it to the `## Closed` section at the bottom with the
 
 ---
 
+## P1 — Process gaps
+
+### Configure Supabase secrets so CI auto-migrate activates
+
+Phase 2 added a `migrate` job to `.github/workflows/ci.yml` that runs `supabase db push` on every push-to-main. Today it's inert — the job runs but skips the actual `db push` because `SUPABASE_ACCESS_TOKEN` / `SUPABASE_PROJECT_REF` / `SUPABASE_DB_PASSWORD` aren't configured as repo secrets on **metanmai/synapse** yet. Status: scaffolded but gated.
+
+**Why it matters:** This is the same class of problem as P0 BUG-01 (which was about schema drift between repo migrations and prod going undetected). Until secrets are configured, migrations still require manual `supabase db push` from a CF-enabled machine — and "forgetting to push" is exactly how `merge_projects` is currently missing from prod (Phase 2 LinkPicker 5xx's because the function isn't there).
+
+**One-time setup steps:**
+
+1. Open https://supabase.com/dashboard → **Account → Access Tokens** → "Generate new token" (label it `synapse-ci`). Copy.
+2. Open the Supabase project → **Settings → General** → copy the **Reference ID** (a short slug like `abcdefghijklmnop`).
+3. The DB password is the postgres password from when the project was created. If lost: **Settings → Database → "Reset database password"** (note: this will require updating any other system using the DB password too).
+4. In https://github.com/metanmai/synapse/settings/secrets/actions, add three repository secrets (NOT environment secrets — the migrate job uses `environment: prod` which inherits both repo and env-level secrets, but repo-level is simpler):
+   - `SUPABASE_ACCESS_TOKEN` → the token from step 1
+   - `SUPABASE_PROJECT_REF` → the slug from step 2
+   - `SUPABASE_DB_PASSWORD` → the postgres password from step 3
+5. Trigger a re-run of the latest CI workflow on metanmai (or push any commit) — the `migrate` job should now actually apply pending migrations instead of emitting the "secrets not configured" notice.
+
+**Verification after setup:** the `migrate` job logs should show `Applying migration ...` lines instead of `::notice::Supabase auto-migrate skipped...`. Confirm against prod by running `select version from supabase_migrations.schema_migrations order by version desc limit 5;` in the Dashboard SQL Editor.
+
+**Risk acknowledged:** once active, every push-to-main applies migrations. A careless `drop table` lands in prod with no manual review. Consistent with the solo-dev / merge-directly-to-main workflow per `feedback_no_prs.md`, but worth knowing.
+
+**Code locations:**
+- Job: `.github/workflows/ci.yml` (search for `migrate:` — between `verify:` and `e2e:`)
+- Pending migration today: `supabase/migrations/019_merge_projects.sql` (Phase 2 D-07 RPC; needed for LinkPicker happy-path to stop 5xx-ing in prod)
+
+---
+
 ## P2 — Coverage gaps
 
 ### 5a. Backend integration tests skip the actual handler logic for events-batch + 6 other endpoints
