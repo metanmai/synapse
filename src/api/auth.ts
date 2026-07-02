@@ -1,9 +1,11 @@
 import { Hono } from "hono";
-import type { Env } from "../lib/env";
+
 import { createSupabaseClient } from "../db/client";
-import { createUser, findUserByEmail } from "../db/queries/users";
+import { createUser, findUserByEmail } from "../db/queries";
 import { hashApiKey, authMiddleware } from "../lib/auth";
 import { AppError, ConflictError } from "../lib/errors";
+
+import type { Env } from "../lib/env";
 
 const auth = new Hono<{ Bindings: Env }>();
 
