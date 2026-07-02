@@ -61,7 +61,6 @@ interface GHObject {
 export interface Session extends GHObject {
   type: "session";
   project_id: string;
-  actor: Actor;
   state: "open" | "closed";
   branch_at_start: string | null;
   base_commit: CommitRef | null;
