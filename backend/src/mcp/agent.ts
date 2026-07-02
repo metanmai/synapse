@@ -38,30 +38,30 @@ export class SynapseAgent extends (McpAgent as AnyMcpAgent) {
     // The MCP HTTP transport passes the original request to the Durable Object.
     // Extract the Bearer token and resolve the user.
     const self = this as unknown as McpAgentWithRequest;
+    const env: Env = self.env;
+    const db = createSupabaseClient(env);
+
     const authHeader = self.request?.headers?.get("Authorization") ?? self.ctx?.request?.headers?.get("Authorization");
     if (authHeader?.startsWith("Bearer ")) {
       const apiKey = authHeader.slice(7);
       const apiKeyHash = await hashApiKey(apiKey);
-      const db = createSupabaseClient(self.env);
       const result = await findUserByApiKeyHash(db, apiKeyHash);
       if (result) {
         this.userId = result.user.id;
       }
     }
 
-    const env: Env = self.env;
-
     // Pass userId getter to all tool registrations via a context object
     const getContext = () => ({ userId: this.userId });
 
-    registerProjectManagementTools(this.server, env, getContext);
-    registerContextCaptureTools(this.server, env, getContext);
-    registerContextRetrievalTools(this.server, env, getContext);
-    registerInsightTools(this.server, env, getContext);
-    registerConversationTools(this.server, env, getContext);
-    registerGoogleSyncTools(this.server, env, getContext);
+    registerProjectManagementTools(this.server, env, getContext, db);
+    registerContextCaptureTools(this.server, env, getContext, db);
+    registerContextRetrievalTools(this.server, env, getContext, db);
+    registerInsightTools(this.server, env, getContext, db);
+    registerConversationTools(this.server, env, getContext, db);
+    registerGoogleSyncTools(this.server, env, getContext, db);
     registerPrompts(this.server, env);
-    registerResources(this.server, env);
+    registerResources(this.server, env, db);
   }
 }
 
