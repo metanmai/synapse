@@ -47,5 +47,12 @@ export async function runPullHandoff(args: string[]): Promise<void> {
       `[pull-handoff] FAILED ${label} elapsed=${elapsed}ms err=${err instanceof Error ? err.message : err}\n`,
     );
   }
-  process.exit(0);
+  // Same Node 24 + Windows libuv shutdown race that surfaced in
+  // index.ts: process.exit(0) here triggers UV_HANDLE_CLOSING because
+  // pullHandoff opens fetch keep-alives via /api/projects/resolve and
+  // /api/conversations. Run 27130861928 was the smoking gun — the
+  // index.ts fix landed 4 of 5 tests green; pullHandoff still crashed
+  // because this file has its own process.exit. Same fix pattern.
+  process.exitCode = 0;
+  setTimeout(() => process.exit(process.exitCode ?? 0), 5_000).unref();
 }
