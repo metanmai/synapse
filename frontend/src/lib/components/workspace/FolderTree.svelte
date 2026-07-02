@@ -35,7 +35,7 @@
         <button onclick={() => onSelect(path)}
           class="block w-full text-left px-2 py-1.5 rounded-lg text-sm truncate cursor-pointer"
           style={selectedPath === path
-            ? `background-color: var(--color-bg-muted); color: var(--color-accent); font-weight: 500;`
+            ? `background-color: var(--color-bg-muted); color: var(--color-link); font-weight: 500;`
             : `color: var(--color-text);`}
         >
           {filename}
