@@ -4,15 +4,15 @@
  * inline copies (handlers.ts, run-daemon.ts, hook-dispatch.ts).
  *
  * Resolution order:
- *   1. ~/.synapse/config.json `user_id` — set by `synapse init` after a
+ *   1. ~/.synapse/config.json `user_id` — set by `synapsesync init` after a
  *      successful GET /api/account/me call (the canonical public.users.id)
  *   2. ~/.synapse/config.json `email` — legacy installs where init only had
  *      email; superseded the first time the user re-runs init
- *   3. "local-user" placeholder — fresh install before `synapse init` has
+ *   3. "local-user" placeholder — fresh install before `synapsesync init` has
  *      run, OR config.json read fails for any reason
  *
  * Callers MUST NOT cache the return value — config.json may be rewritten by
- * `synapse init` mid-process, and the daemon reads on every hook dispatch.
+ * `synapsesync init` mid-process, and the daemon reads on every hook dispatch.
  */
 
 import fs from "node:fs";

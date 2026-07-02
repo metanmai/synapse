@@ -1,6 +1,6 @@
 # Synapse — Agent Orientation
 
-Synapse captures AI coding sessions and surfaces cross-session insights. SvelteKit frontend → Cloudflare Workers backend → Supabase Postgres, plus an MCP CLI (`synapsesync-mcp`) that runs locally as a capture daemon.
+Synapse captures AI coding sessions and surfaces cross-session insights. SvelteKit frontend → Cloudflare Workers backend → Supabase Postgres, plus an MCP CLI (`synapsesync`) that runs locally as a daemon.
 
 **Repository mirroring:** `metanmai/synapse` (this repo) and `tanmain/synapse` (private) are kept in sync via a bidirectional sync bot. Commits have the same messages but **different commit hashes** across repos — never assume a hash from one repo exists in the other.
 
@@ -34,7 +34,7 @@ cd packages/shared && npx vitest  # 13 tests
 ```
 CLI / Hooks (local)          Backend (CF Workers)        Supabase Postgres
 ───────────────────         ────────────────────        ─────────────────
-synapse hook <kind>  ──▶    POST /api/events/batch ──▶  handoff_events
+synapsesync hook <kind>  ──▶ POST /api/events/batch ──▶  handoff_events
      │                      (materialize status)         handoff_project_status
      ▼                                                  
 events.jsonl ──flush──▶     GET /api/projects/:id/status
@@ -51,7 +51,7 @@ next SessionStart hook
 
 | Path | Package | Runtime | Key files |
 |------|---------|---------|-----------|
-| `mcp/` | `synapsesync-mcp` | Node 24 ESM | `src/index.ts` (entry), `src/capture/` (daemon+log+sync+proxy+adapters), `src/hooks/` (6 Claude Code hook handlers), `src/cli/` (subcommands+editors), `src/capture/proxy/` (TLS-MITM forward proxy), `src/capture/adapters/` (8+ AI tool watchers) |
+| `mcp/` | `synapsesync` | Node 24 ESM | `src/index.ts` (entry), `src/capture/` (daemon+log+sync+proxy+adapters), `src/hooks/` (6 Claude Code hook handlers), `src/cli/` (subcommands+editors), `src/capture/proxy/` (TLS-MITM forward proxy), `src/capture/adapters/` (8+ AI tool watchers) |
 | `backend/` | `@synapse/backend` | CF Workers (Hono) | `src/index.ts` (router), `src/api/` (17 Hono sub-apps: auth, billing, events-batch, insights, invites, projects, share, etc.), `src/db/` (Supabase queries), `src/lib/` (auth, errors, embeddings, tier, rate-limit, Creem billing, LLM compaction), `src/mcp/` (Durable Object MCP server with 5 tool domains), `src/cron/` (daily aggregation + consolidation retry), `src/durable-objects/` (CompactionScheduler) |
 | `frontend/` | `@synapse/frontend` | SvelteKit (Vite) | `src/routes/` (pages), `src/lib/server/` (SSR API client), `src/lib/components/` (Svelte 5) |
 | `packages/shared/` | `@synapse/shared` | TypeScript only (no build) | `src/handoff/reducer.ts` (THE reducer), `src/handoff/types.ts`, `src/handoff/events.ts`. Ships raw `.ts` — consumers import source directly via Node 24 type-stripping or bundler. |
@@ -90,7 +90,7 @@ import { EventKind } from "@synapse/shared/handoff/events.js";
 
 ## Control Flow — Handoff Loop (v1.1)
 
-1. Claude Code hook fires → shells out `synapse hook <kind>` → `mcp/src/cli/hook-dispatch.ts` reads stdin JSON
+1. Claude Code hook fires → shells out `synapsesync hook <kind>` → `mcp/src/cli/hook-dispatch.ts` reads stdin JSON
 2. Hook handler (`mcp/src/hooks/<kind>.ts`) translates to handoff events → `appendEvent()` writes to `events.jsonl`
 3. Daemon (`mcp/src/capture/daemon.ts`) runs flush/pull cycle every 10s (jittered + exponential backoff on failure)
 4. `POST /api/events/batch` (idempotent by ULID `event_id`) → backend recomputes `ProjectStatus` via the shared reducer
@@ -134,7 +134,11 @@ afterEach(() => {
 `maybeFireInferNextStep()` in `mcp/src/capture/daemon.ts:83` is never called in production. The daemon loop runs flush/pull/brief but never the LLM next-step inference path. The heuristic fallback (`heuristic-synth.ts`) is dead transitively.
 
 ### Two parallel daemon families in same directory
-`mcp/src/capture/` houses both the legacy conversation-capture daemon (`capture-worker.ts`, `watcher.ts`, `store.ts`) and the new handoff daemon (`daemon.ts`, `handoff-sync.ts`). They share zero state, write to different locations, but coexist confusingly. `synapse capture start` and `synapse daemon` are both launchable.
+`mcp/src/capture/` houses two independent daemons:
+- **Capture daemon** (`capture-worker.ts`, `watcher.ts`, `store.ts`) — powers the frontend Conversations tab. Starts via `synapsesync capture start`. Uploads raw session transcripts to `POST /api/conversations`.
+- **Handoff daemon** (`daemon.ts`, `handoff-sync.ts`) — powers cross-session briefs. Starts via `synapsesync daemon`. Flushes handoff events to `POST /api/events/batch` and pulls briefs back.
+
+They share zero state, write to different locations, and have separate start/stop/status commands. Both are actively used — they serve different data pipelines. `synapsesync status` checks both (handoff first, falls back to capture).
 
 ### Multi-tool adapter system
 `mcp/src/capture/adapters/` contains filesystem-watching adapters for 8+ AI tools: claude-code, cursor, codex, gemini, copilot-cli, cline, roo-code, opencode, crush. Each adapter knows the tool's session file paths and log formats. `adapter-registry.ts` discovers which tool is running by matching watch paths. A separate `mcp/src/cli/editors/` module detects installed editors (Claude Code, Cursor, VSCode, Windsurf) for setup orchestration.
@@ -232,7 +236,7 @@ CI also runs **Playwright UI E2E** (`frontend/`, `npx playwright test`) with Chr
 
 **Migrate** (on push to main): applies pending Supabase migrations via `supabase db push --include-all`. Skips gracefully when `SUPABASE_ACCESS_TOKEN`/`SUPABASE_PROJECT_REF` secrets not set.
 
-**Publish** (`mcp-v*` tags): npm trusted publishing with `--provenance`. `prepublishOnly` runs `npm install && npm run build` to ensure fresh build.
+**Publish** (`synapsesync-v*` tags): npm trusted publishing with `--provenance`. `prepublishOnly` runs `npm install && npm run build` to ensure fresh build. Provenance requires CI (GitHub Actions); local `npm publish` omits it.
 
 **Pre-push hook**: Runs `npm run verify` — adds ~25s per push.
 

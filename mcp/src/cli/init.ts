@@ -22,8 +22,8 @@ interface HookBlock {
 }
 
 // Absolute paths to the running node + CLI entry. Used so installed hooks and
-// slash commands keep working even when `synapse` is not on PATH (the default,
-// since the package is not installed globally by `synapse init`).
+// slash commands keep working even when `synapsesync` is not on PATH (the default,
+// since the package is not installed globally by `synapsesync init`).
 // resolveStableNodePath: never persist a version-pinned Cellar path — it dies
 // on the next `brew upgrade node` and takes all 6 hooks with it.
 function resolveBin(): string {
@@ -83,7 +83,7 @@ export async function runInit(a: InitArgs): Promise<void> {
 
   if (!a.skip_service) {
     const svc = writeServiceFile();
-    console.log(`[synapse init] OS service registered: ${svc.path}`);
+    console.log(`[synapsesync init] OS service registered: ${svc.path}`);
   }
 
   // BUG-03 wizard outro: if the resolver fell through to `npx synapsesync`
@@ -93,7 +93,7 @@ export async function runInit(a: InitArgs): Promise<void> {
   if (resolved.command === "npx") {
     const reachable = await probeNpmRegistry();
     if (!reachable) {
-      console.warn(`[synapse init] ${PROXY_FALLBACK_WARNING}`);
+      console.warn(`[synapsesync init] ${PROXY_FALLBACK_WARNING}`);
     }
   }
 }

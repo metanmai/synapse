@@ -32,7 +32,7 @@ function readApiKey(): string {
   }
   const envKey = process.env.SYNAPSE_API_KEY;
   if (envKey) return envKey;
-  throw new Error("no API key configured — run `synapse init` first or set SYNAPSE_API_KEY");
+  throw new Error("no API key configured — run `synapsesync init` first or set SYNAPSE_API_KEY");
 }
 
 function resolveProjectIdFromCwd(cwd: string): string | undefined {

@@ -687,7 +687,7 @@ export async function runUninstall(opts: { yes?: boolean } = {}): Promise<void> 
     }
   }
 
-  // Synapse hooks installed by `synapse init` into ~/.claude/settings.json.
+  // Synapse hooks installed by `synapsesync init` into ~/.claude/settings.json.
   // Strips every block whose command invokes the Synapse hook dispatcher —
   // works for both v1.0 (`synapse hook X`) and v1.1 (absolute-path) formats.
   const claudeSettingsPath = path.join(home, ".claude", "settings.json");
@@ -708,7 +708,7 @@ export async function runUninstall(opts: { yes?: boolean } = {}): Promise<void> 
     }
   }
 
-  // OS service unit installed by `synapse init` (launchd plist on macOS,
+  // OS service unit installed by `synapsesync init` (launchd plist on macOS,
   // systemd unit on Linux, Task Scheduler XML on Windows). Unloads from
   // the supervisor before deleting.
   const servicePath = serviceFilePath();

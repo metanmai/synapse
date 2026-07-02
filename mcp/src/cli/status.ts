@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { DaemonManager } from "../capture/daemon.js";
 import { healthcheckPath, synapseRoot } from "../capture/handoff-paths.js";
 import { checkSupervisor } from "./util/daemon-supervisor.js";
 
@@ -31,6 +32,16 @@ export async function runStatus(): Promise<string> {
       line += ` · supervised by systemd · PID ${sup.pid ?? "unknown"}`;
     } else if (sup.pid !== null) {
       line += ` · PID ${sup.pid}`;
+    }
+  }
+
+  // Fallback: when the handoff daemon isn't running, check the legacy
+  // capture daemon so `synapsesync status` doesn't contradict `capture status`.
+  if (line === "Daemon: not running") {
+    const capture = new DaemonManager();
+    const cap = capture.status();
+    if (cap.running && cap.pid !== null) {
+      line = `Daemon: running (capture) · PID ${cap.pid}`;
     }
   }
 

@@ -61,7 +61,7 @@ export async function readHookPayloadFromStdin(): Promise<AnyHookPayload | null>
   const skip = shouldSkipDispatch(cwd, process.env);
   if (skip.skip) {
     if (process.env.SYNAPSE_DEBUG === "1") {
-      process.stderr.write(`synapse hook skipped: ${skip.reason}\n`);
+      process.stderr.write(`synapsesync hook skipped: ${skip.reason}\n`);
     }
     return null;
   }

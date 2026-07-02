@@ -26,7 +26,7 @@ export function resolveApiKey(): string | null {
   if (homeKey) return homeKey;
 
   // 4. ~/.synapse/config.json — the canonical location written by
-  //    `synapse init`. Hooks fire from arbitrary project directories with
+  //    `synapsesync init`. Hooks fire from arbitrary project directories with
   //    no local .mcp.json, so falling back to the daemon's config is what
   //    lets pull-compact reach the API at all.
   return readKeyFromSynapseConfig();

@@ -1,7 +1,7 @@
 /**
- * `synapse daemon` subcommand entry point.
+ * `synapsesync daemon` subcommand entry point.
  *
- * The OS service unit installed by `synapse init` (launchd plist on macOS,
+ * The OS service unit installed by `synapsesync init` (launchd plist on macOS,
  * systemd unit on Linux) invokes `<bin> daemon`. This function discovers
  * tracked projects from `~/.synapse/projects/`, reads the API key from
  * `~/.synapse/config.json`, and hands off to `startHandoffLoop` which owns
@@ -36,14 +36,14 @@ export function runDaemon(opts: RunDaemonOpts = {}): () => void {
     : {};
   const apiKey = config.api_key ?? process.env.SYNAPSE_API_KEY;
   if (!apiKey) {
-    console.error("[synapse daemon] no API key configured. Run `synapse init` first.");
+    console.error("[synapsesync daemon] no API key configured. Run `synapsesync init` first.");
     return () => {};
   }
 
   const projectsDir = path.join(root, "projects");
   const projects = fs.existsSync(projectsDir) ? fs.readdirSync(projectsDir) : [];
   if (projects.length === 0) {
-    console.log("[synapse daemon] no projects tracked yet — waiting for hook activity to populate.");
+    console.log("[synapsesync daemon] no projects tracked yet — waiting for hook activity to populate.");
   }
 
   const stop = startFn({

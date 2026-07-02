@@ -93,7 +93,7 @@ export interface MeResponse {
 
 /**
  * Phase 2 (D-02): fetch the authenticated user's canonical identity from the
- * backend. Called by `synapse init` BEFORE any disk write so that on /me
+ * backend. Called by `synapsesync init` BEFORE any disk write so that on /me
  * failure, we fail-fast (D-05) without leaving a half-configured config.json.
  *
  * Error messages are user-facing (init flow surfaces them via clack.log.error).

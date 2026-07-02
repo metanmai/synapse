@@ -176,7 +176,7 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
     await runInit({ api_key, skip_service });
   },
   // `daemon` is the entry the OS service (launchd plist / systemd unit
-  // written by `synapse init`) invokes. It discovers tracked projects,
+  // written by `synapsesync init`) invokes. It discovers tracked projects,
   // starts the handoff loop, and blocks forever — the loop's intervals +
   // signal handlers keep the event loop alive and supervise shutdown.
   daemon: async () => {
