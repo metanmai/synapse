@@ -98,7 +98,7 @@ async function copySnippet() {
 }
 </script>
 
-<section class="setup">
+<section class="setup" id="setup">
   <div class="setup-bg" aria-hidden="true">
     <div class="setup-orb setup-orb-1"></div>
     <div class="setup-orb setup-orb-2"></div>
