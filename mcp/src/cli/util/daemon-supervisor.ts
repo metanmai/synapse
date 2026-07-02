@@ -1,8 +1,8 @@
 import child_process from "node:child_process";
-import { LAUNCHD_LABEL } from "../../capture/os-service.js";
+import { LAUNCHD_LABEL, WINDOWS_TASK_NAME } from "../../capture/os-service.js";
 
 /** Supervisor kinds Synapse can interrogate. `null` means "no supervisor — PID-file fallback". */
-export type Supervisor = "launchd" | "systemd" | null;
+export type Supervisor = "launchd" | "systemd" | "taskscheduler" | null;
 
 /**
  * Result of querying the OS service supervisor about the Synapse daemon.
@@ -67,6 +67,28 @@ export function checkSupervisor(): SupervisorStatus {
       } catch {
         return { running: true, pid: null, supervisor: "systemd" };
       }
+    } catch {
+      return { running: false, pid: null, supervisor: null };
+    }
+  }
+
+  if (platform === "win32") {
+    // schtasks /Query exit code is non-zero when the task doesn't exist, so
+    // a successful invocation means the task is registered. The output
+    // contains "Status: Running" / "Status: Ready" — we parse it to decide
+    // running vs registered-but-idle. PID is intentionally null: schtasks
+    // doesn't expose the spawned PID; getting it would require WMI which
+    // is heavier than the value justifies for a status display.
+    try {
+      const out = child_process
+        .execSync(`schtasks /Query /TN "${WINDOWS_TASK_NAME}" /FO LIST`, {
+          stdio: ["ignore", "pipe", "ignore"],
+          encoding: "utf-8",
+          windowsHide: true,
+        })
+        .toString();
+      const isRunning = /^Status:\s*Running\s*$/im.test(out);
+      return { running: isRunning, pid: null, supervisor: "taskscheduler" };
     } catch {
       return { running: false, pid: null, supervisor: null };
     }

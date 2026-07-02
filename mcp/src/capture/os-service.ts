@@ -6,6 +6,14 @@ import { fileURLToPath } from "node:url";
 
 export const LAUNCHD_LABEL = "app.synapsesync.daemon";
 
+/**
+ * Windows Task Scheduler task name for the daemon. Used both for the
+ * `schtasks /Create /TN <name>` registration and the `schtasks /Query
+ * /TN <name>` supervisor check. No backslash prefix — `schtasks` accepts
+ * either `SynapseSync` or `\SynapseSync` and normalises to the latter.
+ */
+export const WINDOWS_TASK_NAME = "SynapseSync";
+
 export interface ServiceTemplate {
   /** Absolute path to the node executable that will run the daemon. */
   node: string;
@@ -60,6 +68,94 @@ WantedBy=default.target
 }
 
 /**
+ * XML-escape a string so it's safe to interpolate into an element body or a
+ * double-quoted attribute. Paths normally only need `&` escaping (rare in
+ * Windows paths but possible), but handling all five named entities makes
+ * the renderer robust if a user's home directory ever contains `<`/`>`/etc.
+ */
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+/**
+ * Render the Windows Task Scheduler XML definition that runs the daemon at
+ * user logon. Mirrors the macOS launchd plist's `RunAtLoad=true` and the
+ * Linux systemd unit's `Restart=always` semantics:
+ *   - `<LogonTrigger>` fires once at user logon (like RunAtLoad)
+ *   - `<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>` so an
+ *     already-running daemon doesn't get a sibling spawned
+ *   - `<RestartOnFailure>` retries 3× at 1-minute intervals on crash (a
+ *     softer KeepAlive — Task Scheduler doesn't have a true "always restart"
+ *     loop; for chronic crashes the user re-logs or runs `synapsesync
+ *     daemon` manually)
+ *   - `<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>` — no time cap (the
+ *     daemon is meant to run continuously)
+ *   - `<LogonType>InteractiveToken</LogonType>` + `<RunLevel>LeastPrivilege
+ *     </RunLevel>` so the task runs as the current user without elevation
+ *     (no UAC prompt at install time)
+ *
+ * Stdout/stderr redirection: Task Scheduler doesn't natively pipe a task's
+ * output to a file the way launchd/systemd do. We rely on the daemon
+ * writing its own log via the existing `~/.synapse/daemon.log` writer
+ * (capture-worker.ts) — the `a.log` field is unused on Windows but kept in
+ * the signature for cross-platform symmetry.
+ */
+export function renderTaskSchedulerXml(a: ServiceTemplate): string {
+  const cmd = escapeXml(a.node);
+  // Quote the script path so spaces in `C:\Users\Some User\...` survive the
+  // schtasks argv split. `daemon` is a single token so doesn't need quoting.
+  const args = escapeXml(`"${a.script}" daemon`);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Synapse capture and handoff daemon</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>3</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>${cmd}</Command>
+      <Arguments>${args}</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+`;
+}
+
+/**
  * Activate the service file the OS just received. Idempotent: an already-loaded
  * service produces a launchctl/systemctl error which we swallow (re-running
  * install should never throw).
@@ -95,6 +191,28 @@ function loadServiceFile(p: string): void {
       execSync("systemctl --user enable --now synapsesync.service", { stdio: "ignore" });
     } catch {
       /* enable failed — daemon.log will show why */
+    }
+    return;
+  }
+  if (process.platform === "win32") {
+    // schtasks /Create reads the XML and registers (or replaces, via /F) the
+    // task in the per-user store. No elevation required because the XML
+    // declares RunLevel=LeastPrivilege + LogonType=InteractiveToken.
+    // Quoting: `/XML` and `/TN` values must be CMD-escaped — schtasks runs
+    // under cmd.exe even when invoked from bash via execSync. Path with
+    // spaces is wrapped in double-quotes; the path itself can't contain
+    // unescaped quotes so this is safe.
+    try {
+      execSync(`schtasks /Create /TN "${WINDOWS_TASK_NAME}" /XML "${p}" /F`, {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+    } catch {
+      // Registration failed — surface via daemon.log on first manual run.
+      // Reasons: malformed XML, AV blocking the schtasks invocation, or
+      // user lacks "Log on as a batch job" right (rare on personal Windows
+      // installs). Don't crash install; the user can run `synapsesync
+      // daemon` manually until they resolve the issue.
     }
   }
 }
@@ -141,8 +259,20 @@ export function writeServiceFile(): { platform: string; path: string } {
     loadServiceFile(p);
     return { platform: "linux", path: p };
   }
+  if (process.platform === "win32") {
+    // The XML lives under `~/.synapse/` (already created by other code paths)
+    // rather than `~/Library/LaunchAgents`-style platform conventions —
+    // Windows doesn't have a per-user task XML directory, and the file is
+    // only an artifact we hand to schtasks; the registered task lives in
+    // the Task Scheduler database, not on disk.
+    const p = path.join(os.homedir(), ".synapse", "synapsesync.task.xml");
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, renderTaskSchedulerXml(tmpl));
+    loadServiceFile(p);
+    return { platform: "win32", path: p };
+  }
   throw new Error(
-    `Unsupported platform: ${process.platform}. Run \`synapsesync daemon\` manually until Windows service support lands.`,
+    `Unsupported platform: ${process.platform}. Synapse supports darwin, linux, and win32; run \`synapsesync daemon\` manually on other platforms.`,
   );
 }
 
@@ -156,6 +286,9 @@ export function serviceFilePath(): string | null {
   }
   if (process.platform === "linux") {
     return path.join(os.homedir(), ".config/systemd/user/synapsesync.service");
+  }
+  if (process.platform === "win32") {
+    return path.join(os.homedir(), ".synapse", "synapsesync.task.xml");
   }
   return null;
 }
@@ -180,6 +313,15 @@ export function removeServiceFile(): boolean {
       execSync("systemctl --user disable --now synapsesync.service", { stdio: "ignore" });
     } catch {
       // Unit may not be enabled.
+    }
+  } else if (process.platform === "win32") {
+    try {
+      execSync(`schtasks /Delete /TN "${WINDOWS_TASK_NAME}" /F`, {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+    } catch {
+      // Task may not exist (already removed, or never registered).
     }
   }
 

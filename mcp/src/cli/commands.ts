@@ -637,13 +637,16 @@ export async function runUninstall(): Promise<void> {
   }
 
   // OS service unit installed by `synapse init` (launchd plist on macOS,
-  // systemd unit on Linux). Unloads from the supervisor before deleting.
+  // systemd unit on Linux, Task Scheduler XML on Windows). Unloads from
+  // the supervisor before deleting.
   const servicePath = serviceFilePath();
   if (servicePath && fs.existsSync(servicePath)) {
     const label =
       process.platform === "darwin"
         ? "Unload + delete launchd plist (~/Library/LaunchAgents/app.synapsesync.daemon.plist)"
-        : "Disable + delete systemd unit (~/.config/systemd/user/synapsesync.service)";
+        : process.platform === "win32"
+          ? "Delete Task Scheduler task 'SynapseSync' + remove ~/.synapse/synapsesync.task.xml"
+          : "Disable + delete systemd unit (~/.config/systemd/user/synapsesync.service)";
     targets.push({ label, action: () => removeServiceFile() });
   }
 

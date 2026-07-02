@@ -5,8 +5,10 @@ import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   LAUNCHD_LABEL,
+  WINDOWS_TASK_NAME,
   renderLaunchdPlist,
   renderSystemdUnit,
+  renderTaskSchedulerXml,
   resolveDaemonScriptPath,
 } from "../../src/capture/os-service.js";
 
@@ -106,5 +108,77 @@ describe("LAUNCHD_LABEL invariant", () => {
     // replacement with a different string.
     const matches = plist.match(/<string>app\.synapsesync\.daemon<\/string>/g);
     expect(matches?.length).toBe(1);
+  });
+});
+
+// Windows Task Scheduler installer guards. Same bug-class shape as the
+// launchd block above:
+//   - WINDOWS_TASK_NAME is an importable single-source constant
+//   - the XML body contains the node binary, the script, and `daemon` in
+//     the right place (Command / Arguments split, not concatenated)
+//   - the script path is QUOTED inside <Arguments> so spaces in
+//     `C:\Users\Some User\...` don't argv-split
+describe("WINDOWS_TASK_NAME invariant + renderTaskSchedulerXml", () => {
+  it("exports WINDOWS_TASK_NAME as a runtime constant equal to 'SynapseSync'", () => {
+    expect(WINDOWS_TASK_NAME).toBe("SynapseSync");
+  });
+
+  it("XML embeds the node binary as <Command> and the script as a quoted <Arguments> token", () => {
+    const xml = renderTaskSchedulerXml({
+      node: "C:\\Program Files\\nodejs\\node.exe",
+      script: "C:\\Users\\Test\\synapse\\mcp\\dist\\index.js",
+      log: "C:\\Users\\Test\\.synapse\\daemon.log",
+    });
+    // Node binary goes directly into <Command> — no quoting (Task
+    // Scheduler treats the whole element body as the executable path).
+    expect(xml).toContain("<Command>C:\\Program Files\\nodejs\\node.exe</Command>");
+    // Script path goes into <Arguments>, MUST be wrapped in quotes (either
+    // literal `"` or escaped `&quot;`) so spaces in `C:\Users\Some User\...`
+    // don't get argv-split. The trailing `daemon` token is unquoted (single
+    // word, can't split). The bug shape this guards against:
+    //   <Arguments>C:\Users\Some User\synapse\... daemon</Arguments>
+    // would invoke the CLI with argv[1]="C:\Users\Some" — wrong.
+    // schtasks unescapes &quot; back to " before CreateProcess, so both
+    // forms work; the test accepts either to stay implementation-agnostic.
+    const quoteOrEntity = `("|&quot;)`;
+    const scriptRegex = new RegExp(
+      `<Arguments>${quoteOrEntity}C:\\\\Users\\\\Test\\\\synapse\\\\mcp\\\\dist\\\\index\\.js${quoteOrEntity} daemon</Arguments>`,
+    );
+    expect(xml).toMatch(scriptRegex);
+  });
+
+  it("XML escapes special characters in paths (& < > \" ')", () => {
+    // Defensive: a user with `&` in their home dir (rare but legal) used
+    // to break the legacy launchd plist renderer. Make sure the XML
+    // renderer escapes properly so the file is still well-formed.
+    const xml = renderTaskSchedulerXml({
+      node: "C:\\node&co\\node.exe",
+      script: "C:\\app<test>.js",
+      log: "C:\\log\"with'quotes.log",
+    });
+    expect(xml).toContain("C:\\node&amp;co\\node.exe");
+    expect(xml).toContain("C:\\app&lt;test&gt;.js");
+    // No raw `&` characters outside named entities — well-formedness check.
+    // (A bare `&foo` would be invalid XML.)
+    const bareAmpersands = xml.match(/&(?!amp;|lt;|gt;|quot;|apos;)/g);
+    expect(bareAmpersands).toBeNull();
+  });
+
+  it("XML declares LogonTrigger + RunLevel=LeastPrivilege + LogonType=InteractiveToken", () => {
+    // Cross-platform parity with launchd's RunAtLoad + system parity with
+    // user-scope service (no elevation prompt). Catches: someone copying
+    // the XML for a Windows Service / scheduled task with admin rights.
+    const xml = renderTaskSchedulerXml({
+      node: "C:\\node.exe",
+      script: "C:\\script.js",
+      log: "C:\\log.log",
+    });
+    expect(xml).toContain("<LogonTrigger>");
+    expect(xml).toContain("<RunLevel>LeastPrivilege</RunLevel>");
+    expect(xml).toContain("<LogonType>InteractiveToken</LogonType>");
+    // ExecutionTimeLimit must be PT0S so the daemon isn't killed after the
+    // default 72h. Catches accidental copy of a default Task Scheduler
+    // template that would silently stop the daemon after 3 days.
+    expect(xml).toContain("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>");
   });
 });
