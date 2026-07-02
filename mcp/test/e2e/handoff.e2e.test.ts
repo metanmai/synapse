@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { writeBrief } from "../../src/capture/handoff-brief.js";
 import { runFlushCycle, runPullCycle } from "../../src/capture/handoff-sync.js";
@@ -78,5 +79,84 @@ describe("E2E: Tanmai-Monday → Alex-Tuesday handoff", () => {
     expect(brief).toContain("wire /callback to user repo");
     expect(brief).toContain("tanmai");
     expect(brief).toMatch(/feature\/oauth|OAuth/);
+  });
+});
+
+// Phase 2 (IDENT-02, D-06 + D-08 + D-09): same user, two machines, same git_remote_url.
+// Machine A captures + flushes; Machine B (fresh tmpdir representing the same user on a
+// different physical device) pulls + renders a brief. The brief MUST surface the remote
+// actor's hostname so the user knows where the activity came from.
+//
+// RED until both Plan 02-03 (handoff-brief device-origin renderer) AND Plan 02-04
+// (eager-pull mechanic) land. The test uses the existing runPullCycle which already
+// handles status-pull; the cross-device hostname surfacing is what's missing today.
+
+describe("E2E: machine A → machine B same user same repo (Phase 2 IDENT-02)", () => {
+  it("brief on machine B contains machine A's hostname when device_id differs", async () => {
+    const SAME_USER = "tanmai-uuid-2026";
+    const REPO_URL = "https://github.com/tanmain/synapse.git";
+
+    // -------- Machine A (tanmaiHome) — captures event, flushes to stub --------
+    process.env.SYNAPSE_HOME = tanmaiHome;
+    fs.writeFileSync(path.join(tanmaiHome, "device_id"), "device-A-hex");
+    fs.mkdirSync(path.join(tanmaiHome, "projects/p-cross"), { recursive: true });
+
+    // Write a controlled event directly. We bypass the hook because we need to
+    // control actor.hostname (the real hook uses os.hostname() which would be
+    // the test runner's hostname — same on both "machines" — defeating the assertion).
+    const machineAEvent = {
+      event_id: "01HZ_A_001",
+      project_id: "p-cross",
+      session_id: "s-A",
+      actor: {
+        user_id: SAME_USER,
+        kind: "human" as const,
+        device_id: "device-A-hex",
+        hostname: "laptop-A",
+        client: "claude-code" as const,
+      },
+      attached_to: null,
+      kind: "handoff" as const,
+      occurred_at: "2026-05-20T09:00:00Z",
+      received_at: "2026-05-20T09:00:01Z",
+      payload: {
+        text: "wire /callback to user repo; tests pass at HEAD",
+        git_basename: "synapse",
+        git_remote_url: REPO_URL,
+      },
+    };
+    fs.writeFileSync(path.join(tanmaiHome, "projects/p-cross/events.jsonl"), `${JSON.stringify(machineAEvent)}\n`);
+
+    const flushResult = await runFlushCycle({ project_id: "p-cross", api_key: "k", api_url: stubUrl });
+    expect(flushResult.flushed).toBe(1);
+
+    // -------- Machine B (alexHome) — same user, different device, pulls + briefs --------
+    process.env.SYNAPSE_HOME = alexHome;
+    fs.writeFileSync(path.join(alexHome, "device_id"), "device-B-hex");
+
+    // Machine B's daemon pulls project status from the stub (existing path; future
+    // Plan 02-04's runEagerPullCycle adds a full event pull on first link — but the
+    // status-derived ProjectStatus is enough to surface the most-recent actor for the brief).
+    await runPullCycle({ project_id: "p-cross", api_key: "k", api_url: stubUrl });
+    writeBrief("p-cross", SAME_USER);
+
+    const briefStdout: string[] = [];
+    await runSessionStartHook({
+      project_id: "p-cross",
+      user_id: SAME_USER,
+      stdout: { write: (s: string) => briefStdout.push(s) > 0 } as NodeJS.WriteStream,
+    });
+    const brief = briefStdout.join("");
+
+    // Contract: D-09 says brief surfaces the remote actor's hostname when
+    // mostRecent.actor.device_id !== local device_id AND mostRecent.actor.user_id === viewer.
+    // RED until Plan 02-03 wires the device-id comparison into the renderer.
+    // Per feedback_test_generality.md: assert hostname appears in the brief somehow
+    // (substring match), NOT the literal "(on laptop-A)" format — planner picks the format.
+    expect(brief).toContain("laptop-A");
+
+    // Belt-and-suspenders: the handoff text from machine A should also flow through
+    // (proves the cross-device handoff data path works end-to-end, not just the renderer change).
+    expect(brief).toContain("wire /callback to user repo");
   });
 });
