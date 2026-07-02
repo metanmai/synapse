@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { probeNpmRegistry, resolveSynapseMcpCommand } from "../../src/cli/util/mcp-command.js";
+import { resolveStableNodePath } from "../../src/cli/util/node-path.js";
 
 // VALIDATION row mapping (mcp/.../01-VALIDATION.md "Per-Task Verification Map"):
 //   BUG-03 → "resolves to absolute bin path when `which synapsesync` succeeds"
@@ -47,7 +48,13 @@ describe("resolveSynapseMcpCommand (BUG-03)", () => {
 
     const cmd = resolveSynapseMcpCommand("sk-test-key");
 
-    expect(cmd.command).toBe(process.execPath);
+    // The persisted command must be the STABLE node alias, never a
+    // version-pinned Homebrew Cellar path (dies on `brew upgrade node`).
+    // With existsSync mocked true above, resolveStableNodePath
+    // deterministically picks the opt symlink on Cellar-installed nodes and
+    // passes execPath through everywhere else.
+    expect(cmd.command).toBe(resolveStableNodePath(process.execPath));
+    expect(cmd.command).not.toMatch(/\/Cellar\//);
     expect(cmd.args).toHaveLength(1);
     // path.sep-aware endsWith: matches `dist/index.js` on POSIX and
     // `dist\index.js` on Windows.

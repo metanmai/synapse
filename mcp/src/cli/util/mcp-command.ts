@@ -7,6 +7,7 @@ import child_process from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveStableNodePath } from "./node-path.js";
 
 export interface McpCommand {
   command: string;
@@ -49,10 +50,13 @@ export function resolveSynapseMcpCommand(apiKey: string): McpCommand {
   }
 
   // Tier 2: prefer `node <abs>/dist/index.js` over the npx fallback.
+  // resolveStableNodePath: this command is persisted into `.mcp.json`, so a
+  // version-pinned Homebrew Cellar path would break the MCP server on the
+  // next `brew upgrade node`.
   try {
     const distEntry = resolvePackageDistEntry();
     if (fs.existsSync(distEntry)) {
-      return { command: process.execPath, args: [distEntry], env };
+      return { command: resolveStableNodePath(), args: [distEntry], env };
     }
   } catch {
     // fall through

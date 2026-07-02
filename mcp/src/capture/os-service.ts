@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveStableNodePath } from "../cli/util/node-path.js";
 
 export const LAUNCHD_LABEL = "app.synapsesync.daemon";
 
@@ -237,10 +238,13 @@ export function resolveDaemonScriptPath(moduleUrl: string): string {
 
 export function writeServiceFile(): { platform: string; path: string } {
   // process.execPath is the absolute path to the node binary that's running
-  // this install. Pinning to that exact node ensures the daemon runs with
-  // the same node version, even if the user's PATH changes later or
-  // multiple node installs coexist.
-  const nodeBin = process.execPath;
+  // this install — pinning to an absolute node keeps the daemon on a known
+  // interpreter even when the user's PATH changes or multiple node installs
+  // coexist. resolveStableNodePath rewrites Homebrew Cellar paths to the
+  // formula's stable symlink: the raw execPath there is version-pinned and
+  // vanishes on `brew upgrade node`, leaving launchd/systemd unable to
+  // respawn the daemon after the next restart.
+  const nodeBin = resolveStableNodePath();
   const script = resolveDaemonScriptPath(import.meta.url);
   const log = path.join(os.homedir(), ".synapse", "daemon.log");
   const tmpl = { node: nodeBin, script, log };

@@ -9,6 +9,7 @@ import { type MeResponse, fetchMe } from "./api.js";
 // perspective when destructured).
 import * as editorIo from "./editors/io.js";
 import { PROXY_FALLBACK_WARNING, probeNpmRegistry, resolveSynapseMcpCommand } from "./util/mcp-command.js";
+import { resolveStableNodePath } from "./util/node-path.js";
 
 interface InitArgs {
   api_key: string;
@@ -23,8 +24,10 @@ interface HookBlock {
 // Absolute paths to the running node + CLI entry. Used so installed hooks and
 // slash commands keep working even when `synapse` is not on PATH (the default,
 // since the package is not installed globally by `synapse init`).
+// resolveStableNodePath: never persist a version-pinned Cellar path — it dies
+// on the next `brew upgrade node` and takes all 6 hooks with it.
 function resolveBin(): string {
-  const nodePath = process.execPath;
+  const nodePath = resolveStableNodePath();
   let cliPath = process.argv[1] ?? "";
   try {
     cliPath = fs.realpathSync(cliPath);
