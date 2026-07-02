@@ -606,6 +606,48 @@ jobs:
           echo "--- ~/.synapse/daemon.log (last 200 lines) ---"
           tail -200 "$HOME/.synapse/daemon.log" 2>/dev/null || true
 
+  project-correlation-e2e:
+    # Live coverage of AI project correlation: a keyless browser-shaped capture
+    # (no git, no project_id) is accepted + auto-assigned on the DEPLOYED backend,
+    # and the /internal/reconcile endpoint runs. The deterministic assign/merge
+    # logic is unit-tested in backend/test (project-correlation, ai-resolve,
+    # reconcile-projects); this proves the deployed wiring. Ubuntu-only, no daemon
+    # or LLM (pure API calls). Skips green unless SYNAPSE_E2E_API_KEY is set.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [verify, cleanup-e2e-account]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: prod
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Check secrets are configured
+        id: check
+        env:
+          SYNAPSE_E2E_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+        run: |
+          if [ -z "$SYNAPSE_E2E_API_KEY" ]; then
+            echo "::notice::project-correlation-e2e skipped — SYNAPSE_E2E_API_KEY not configured. Mirror to metanmai/synapse for the validated run."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run project-correlation
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SYNAPSE_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+          INTERNAL_TRIGGER_TOKEN: ${{ secrets.INTERNAL_TRIGGER_TOKEN }}
+        run: node scripts/e2e-project-correlation.mjs
+
   project-cap-e2e:
     # LAUNCH-READINESS #7 — continuous coverage of the structured 402
     # PROJECT_QUOTA_EXCEEDED contract: the exact bug class that turned CI

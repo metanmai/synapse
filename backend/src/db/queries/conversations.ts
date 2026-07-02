@@ -13,7 +13,7 @@ import type {
 } from "../types";
 
 const CONVERSATION_COLUMNS =
-  "id, project_id, user_id, title, status, fidelity_mode, system_prompt, working_context, forked_from, fork_point, message_count, media_size, metadata, encrypted, created_at, updated_at, compacted_summary, compacted_at, compaction_model";
+  "id, project_id, user_id, title, status, fidelity_mode, system_prompt, working_context, forked_from, fork_point, message_count, media_size, metadata, encrypted, created_at, updated_at, compacted_summary, compacted_at, compaction_model, assignment_method, assignment_confidence";
 
 const CONVERSATION_LIST_COLUMNS = "id, title, status, message_count, metadata, updated_at, compacted_at";
 

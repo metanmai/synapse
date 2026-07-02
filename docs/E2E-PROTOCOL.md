@@ -184,17 +184,22 @@ This is sufficient for a solo-dev project. When the team grows or external contr
 | Lifecycle race-guard `EADDRINUSE` / port-never-bound | Real regression in `restartDaemon` polling | Check `cli.ts:restartDaemon` + `waitForProcessExit` — was the timeout shortened? |
 | Proxy Layer 5/7 skipped on this run | `claude` not on PATH (expected) | Install Claude Code if proxy-subsystem coverage matters for the changeset |
 
-## Browser capture (manual, per release)
+## Browser capture (mostly automated)
 
-Browser capture (`claude.ai` / `chatgpt.com` via the MV3 extension) is **not** in the automated merge gate — the wire/DOM formats are private and only verifiable against a real logged-in session. Run this by hand before any release that touches `extension/` or `mcp/src/capture/ingest/`.
+Browser capture (`claude.ai` / `chatgpt.com` via the MV3 extension) is now **validated by tests alone** — the manual smoke is reduced to one thin wire-format confirmation.
 
-1. **Setup.** `synapsesync wizard` → answer **yes** to browser capture; note the printed ingest token. Restart the daemon. `npm run bundle -w @synapse/extension`, load `extension/dist/` unpacked in Chrome, paste the token in the extension Options.
-2. **Capture + redaction (R3).** Open a real `claude.ai` session, send a message, wait for the reply. Confirm:
-   - a `CapturedSession` reaches the backend (a `claude-ai` sync line in `~/.synapse/capture.log`, and the conversation shows on the dashboard);
-   - the synced payload contains **no** cookie / token / `sessionKey` — the allowlist + scrub held end-to-end.
-   - Repeat on `chatgpt.com`. This also confirms the **deferred ChatGPT SSE shape** — if the assistant turn is empty, the adapter needs correcting against the real wire format.
-3. **Buffer survival (P6).** With a conversation open, **stop the daemon** (kill the capture-worker), send a few more turns, then **restart** it. Confirm the buffered turns flush and arrive (the extension badge count drains to empty).
-4. **Zero-capture signal (R2).** If an adapter is broken (no turns despite an active tab), the daemon log shows `WARNING: browser capture produced zero turns for active host(s): …` within the window — confirm it fires.
+**Automated (runs in the merge gate / CI verify):**
+- **Full chain, no real browser** — `extension/test/full-chain.test.ts` drives the *real* glue end to end: fake SSE `Response` → `makeHookedFetch` (adapter parse) → `handleRelayMessage` (relay) → `installWorker` listener → `CaptureBuffer` → `postCapture`, intercepted by a global fetch spy. Covers `claude.ai` + `chatgpt.com`, both-turn extraction, and the relay's origin/window/tag guards.
+- **Adapter golden fixtures** — `extension/test/adapters/*.test.ts` reassemble the assistant turn from recorded SSE.
+- **Daemon ingest + redaction (R3)** — `mcp/test/unit/ingest-server.test.ts` + `redact.test.ts`: allowlist (`{host, messages}` only), token guard, secret scrubbing.
+- **Zero-capture signal (R2)** — `CaptureRateTracker` unit tests.
+- **Buffer survival (P6)** — `extension/test/buffer.test.ts` (`toJSON`/`fromJSON` eviction round-trip).
+- **Anti-drift** — `extension/test/anti-drift.test.ts` pins the manifest hosts + content-script `world: MAIN` injection to `CAPTURE_HOSTS`.
+- **Live grouping** — `scripts/e2e-project-correlation.mjs` (`project-correlation-e2e` CI job) asserts a keyless browser-shaped capture is accepted + auto-assigned on the deployed backend.
+
+**Still manual (only when `extension/` adapters change) — the private wire format can drift without notice:**
+1. `synapsesync wizard` → **yes** to browser capture (note the token); `npm run bundle -w @synapse/extension`; load `extension/dist/` unpacked in Chrome; paste the token in Options.
+2. Open a real `claude.ai` session, send a message, wait for the reply. Confirm a `claude-ai` sync line in `~/.synapse/capture.log` with the assistant turn populated (proves the live MAIN-world fetch hook fires + the adapter still matches the real wire format). Repeat on `chatgpt.com` (confirms the documented-shape ChatGPT adapter against the real wire). If a turn is empty, the site changed its format — patch the adapter + its golden fixture.
 
 ## The bigger picture
 

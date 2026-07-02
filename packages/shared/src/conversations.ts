@@ -61,6 +61,9 @@ export interface Conversation {
   compacted_summary: string | null;
   compacted_at: string | null;
   compaction_model: string | null;
+  // AI project correlation: how this conversation was assigned to its project.
+  assignment_method: string | null; // git | ai_assign | ai_create | manual
+  assignment_confidence: number | null;
   created_at: string;
   updated_at: string;
 }
