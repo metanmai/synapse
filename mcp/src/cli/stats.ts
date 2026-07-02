@@ -126,11 +126,24 @@ export async function runStats(): Promise<void> {
     if (!newestDate || entry.updated_at > newestDate) newestDate = entry.updated_at;
   }
 
+  // Activity is a graceful-degrade section: if the per-project activity
+  // endpoint 404s (project id stale relative to activity table, transient
+  // backend lag, or post-deletion residue), still render file stats with
+  // an empty activity breakdown rather than crash the whole command.
+  // Same bug-class fix as the context-iteration loop above \u2014 stats must
+  // survive any single endpoint 404 on a valid /api/projects entry.
   spin.update("Fetching activity\u2026");
-  const activity = await apiFetch<ActivityEntry[]>(
-    apiKey,
-    `/api/projects/${encodeURIComponent(project.id)}/activity?limit=500`,
-  );
+  let activity: ActivityEntry[] = [];
+  try {
+    activity = await apiFetch<ActivityEntry[]>(
+      apiKey,
+      `/api/projects/${encodeURIComponent(project.id)}/activity?limit=500`,
+    );
+  } catch (err) {
+    if (!(err instanceof Error) || !err.message.startsWith("API 404")) throw err;
+    // 404 \u2014 leave activity as [] and continue. Breakdown sections will
+    // short-circuit on the empty arrays below.
+  }
 
   for (const a of activity) {
     actionCounts[a.action] = (actionCounts[a.action] || 0) + 1;
