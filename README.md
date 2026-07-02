@@ -19,16 +19,16 @@ Synapse stores your AI context as **files in a cloud workspace** so the same mem
 
 Connect Claude Code, Cursor, Windsurf, VS Code (MCP), or any client that supports **Model Context Protocol**.
 
-1. **Get an API key** — Sign up at **[synapsesync.app](https://synapsesync.app)**, open **Account → API keys**, and create a key.
-2. **Guided setup (recommended)** — In a terminal, `cd` to your project and run:
+1. **Get an API key** — Sign up at **[synapsesync.app](https://synapsesync.app)**, open **Account → API keys**, and create a key (or create the account from the CLI — see below).
+2. **CLI setup (recommended)** — In a terminal, `cd` to your project and run:
 
    ```bash
-   npx synapsesync-mcp
+   npx synapsesync-mcp --help    # command list
+   npx synapsesync-mcp login     # interactive sign-in → writes .mcp.json + editor configs
+   # or: signup | init | wizard
    ```
 
-   This interactive wizard can sign you up, log you in, or accept a key you already have, then writes `.mcp.json` (and editor-specific config when it detects Claude Code, Cursor, Windsurf, or VS Code). Editors that spawn the MCP with a pipe still run the server directly — only an interactive terminal runs the wizard.
-
-   Same wizard explicitly: `npx synapsesync-mcp wizard`.
+   Interactive flows use keyboard navigation (arrow keys + Enter). Editors that spawn the MCP **without a TTY** still run the **server** when **`SYNAPSE_API_KEY`** is set — not the setup UI.
 
 3. **Or register the server yourself** — Add the published **`synapsesync-mcp`** package to your MCP config:
 
@@ -46,7 +46,7 @@ Connect Claude Code, Cursor, Windsurf, VS Code (MCP), or any client that support
 }
 ```
 
-4. **CLI helpers** — You can also run `npx synapsesync-mcp login`, `signup`, or `init --key <key>` for non-interactive flows (see package output for flags).
+4. **Scripted / CI** — `login --email … --password …` or `signup --email …` print JSON snippets; run `init --key <key>` to write config files.
 
 Your assistant gets tools such as **`read`**, **`write`**, **`search`**, **`tree`**, **`ls`**, and **`history`** against your project paths (e.g. `decisions/`, `notes/`, `architecture/`).
 
