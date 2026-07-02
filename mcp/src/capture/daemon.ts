@@ -1,8 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { EventKind } from "@synapse/shared/handoff/events.js";
 import { writeBrief } from "./handoff-brief.js";
-import { flushNowSignalPath, healthcheckPath } from "./handoff-paths.js";
+import { spawnInferNextStep } from "./daemon-cc.js";
+import { appendEvent, readEvents } from "./events-log.js";
+import { flushNowSignalPath, healthcheckPath, projectDir } from "./handoff-paths.js";
 import { runFlushCycle, runPullCycle } from "./handoff-sync.js";
 
 export interface DaemonStatus {
@@ -68,6 +71,53 @@ export interface HandoffLoopArgs {
   pull_ms?: number;
   flush_ms?: number;
   healthcheck_ms?: number;
+}
+
+export interface FireArgs {
+  project_id: string;
+  ai_enabled: boolean;
+  idle_threshold_ms: number;
+  spawnFn?: typeof spawnInferNextStep;
+}
+
+export async function maybeFireInferNextStep(a: FireArgs): Promise<void> {
+  if (!a.ai_enabled) return;
+  const events = readEvents(projectDir(a.project_id));
+  if (events.length === 0) return;
+
+  const lastEvent = events.at(-1);
+  if (!lastEvent) return;
+  const lastEventTime = new Date(lastEvent.occurred_at).getTime();
+  if (Date.now() - lastEventTime < a.idle_threshold_ms) return;
+
+  const sinceIdle = events.filter(
+    (e) => new Date(e.occurred_at).getTime() >= lastEventTime - a.idle_threshold_ms,
+  );
+  if (sinceIdle.some((e) => e.kind === EventKind.NextStepSet)) return;
+
+  const summary = events
+    .slice(-30)
+    .map((e) => `${e.kind}: ${JSON.stringify(e.payload).slice(0, 80)}`)
+    .join("\n");
+  const fn = a.spawnFn ?? spawnInferNextStep;
+  const text = await fn({ project_id: a.project_id, recent_events_summary: summary });
+  if (!text || text.length === 0) return;
+
+  appendEvent(projectDir(a.project_id), {
+    project_id: a.project_id,
+    session_id: "daemon",
+    attached_to: null,
+    actor: {
+      user_id: lastEvent.actor.user_id,
+      kind: "synapse-daemon",
+      device_id: "daemon",
+      hostname: "daemon",
+      client: "claude-code",
+    },
+    kind: EventKind.NextStepInferred,
+    occurred_at: new Date().toISOString(),
+    payload: { text, on_behalf_of: lastEvent.actor.user_id },
+  });
 }
 
 export function startHandoffLoop(a: HandoffLoopArgs): () => void {
