@@ -427,7 +427,10 @@ describe("projects queries", () => {
   describe("findOrCreateProjectByGit", () => {
     it("Tier 1 URL match chain calls .order().limit(1) before .maybeSingle()", async () => {
       // Membership lookup: 1 project. Tier 1 hit: returns the existing id.
-      const db = createSequentialMockDb({ data: [{ project_id: "proj_a" }], error: null }, { data: { id: "proj_a" }, error: null });
+      const db = createSequentialMockDb(
+        { data: [{ project_id: "proj_a" }], error: null },
+        { data: { id: "proj_a" }, error: null },
+      );
 
       const result = await findOrCreateProjectByGit(db as unknown as SupabaseClient, "u1", {
         git_remote_url: "https://github.com/me/foo.git",
