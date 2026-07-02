@@ -8,6 +8,7 @@ import {
   createUser,
   deleteApiKey,
   findApiKeyByMachineId,
+  findKeyByLabel,
   findUserByEmail,
   getActiveSubscription,
   getApiKeyByIdForUser,
@@ -20,6 +21,7 @@ import {
 import { authMiddleware, hashApiKey } from "../lib/auth";
 import {
   API_KEY_MAX_PER_USER,
+  CAPTURE_KEY_LABEL,
   CLI_SESSION_SALT,
   CLI_SESSION_TTL_MS,
   DEVICE_LABEL_PREFIX,
@@ -286,6 +288,26 @@ async function mintCliSessionCode(args: {
   );
 }
 
+/**
+ * Slice B: mint (or rotate) the single browser-extension capture key for a
+ * user, returning the new plaintext API key. Capture keys are NOT devices, so
+ * this path never consults the cli device cap. One `ext-browser` key per user:
+ * if it already exists we ROTATE its hash (re-auth is idempotent and can't
+ * accumulate credentials); otherwise we create it with scope='capture'.
+ * Exported for unit testing.
+ */
+export async function mintOrRotateCaptureKey(db: SupabaseClient, userId: string): Promise<string> {
+  const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+  const apiKeyHash = await hashApiKey(apiKey);
+  const existing = await findKeyByLabel(db, userId, CAPTURE_KEY_LABEL);
+  if (existing) {
+    await rotateApiKeyHash(db, existing.id, apiKeyHash);
+  } else {
+    await createApiKey(db, userId, apiKeyHash, CAPTURE_KEY_LABEL, null, null, "capture");
+  }
+  return apiKey;
+}
+
 // POST /auth/cli-session — create a CLI auth session after browser login.
 // Returns an encrypted code containing the API key + PKCE challenge (stateless — no server-side storage).
 // Enforces per-tier device limits (3 free, unlimited Plus). When the limit is hit, returns
@@ -294,6 +316,24 @@ auth.post("/cli-session", authMiddleware, async (c) => {
   const body = await parseBody(c, schemas.cliSession);
   const user = c.get("user");
   const db = c.get("db");
+
+  // Slice B: browser-extension capture key. A capture key is not a "device",
+  // so this branch bypasses the cli device cap entirely and mints (or rotates)
+  // the single ext-browser key for the user. It returns the same encrypted-code
+  // envelope the CLI flow uses, so /auth/cli-exchange is identical downstream.
+  if (body.scope === "capture") {
+    const apiKey = await mintOrRotateCaptureKey(db, user.id);
+    const code = await encryptSession(
+      {
+        api_key: apiKey,
+        email: user.email ?? "",
+        code_challenge: body.code_challenge,
+        exp: Date.now() + CLI_SESSION_TTL_MS,
+      },
+      c.env.SUPABASE_SERVICE_KEY,
+    );
+    return c.json({ code, scope: "capture" });
+  }
 
   // Resolve tier from active subscription (active or past_due = plus)
   const sub = await getActiveSubscription(db, user.id);

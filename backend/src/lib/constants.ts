@@ -56,6 +56,13 @@ export const DEVICE_LIMIT_PLUS = 10;
 export const DEVICE_LABEL_PREFIX = "cli-";
 export const DEVICE_NAME_MAX_LENGTH = 60;
 
+// --- Browser-extension capture key (Slice B) ---
+// The single capture-scoped key (scope='capture') minted for the self-sufficient
+// browser extension. Fixed label, one per user, rotated on re-auth. It deliberately
+// does NOT carry the `cli-` prefix, so it never counts toward the device cap — it's
+// a browser identity, not a CLI device.
+export const CAPTURE_KEY_LABEL = "ext-browser";
+
 // --- Idempotency ---
 export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 

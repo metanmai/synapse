@@ -1,5 +1,8 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
+import { mintOrRotateCaptureKey, sanitizeDeviceName } from "../../src/api/auth";
 import worker from "../../src/index";
+import { createSequentialMockDb } from "../db/mock-supabase";
 import { createExecutionContext, env, waitOnExecutionContext } from "../setup";
 
 describe("POST /auth/cli-exchange", () => {
@@ -270,8 +273,6 @@ describe("POST /auth/login", () => {
   });
 });
 
-import { sanitizeDeviceName } from "../../src/api/auth";
-
 describe("sanitizeDeviceName", () => {
   it("lowercases and replaces invalid chars with dashes", () => {
     expect(sanitizeDeviceName("Tanmais MacBook Pro")).toBe("tanmais-macbook-pro");
@@ -303,5 +304,46 @@ describe("sanitizeDeviceName", () => {
 
   it("returns a synthetic name when input sanitizes to empty", () => {
     expect(sanitizeDeviceName("!!!!!")).toMatch(/^device-[a-z0-9]+$/);
+  });
+});
+
+// Slice B: the capture-key mint decision. The whole "capture keys aren't
+// devices" claim is enforced here — minting issues EXACTLY two queries (the
+// label lookup + an insert OR a rotate), never the cli device-cap count. And
+// re-auth ROTATES the single ext-browser key rather than minting duplicates.
+describe("mintOrRotateCaptureKey", () => {
+  it("CREATES a scope='capture' ext-browser key when none exists yet", async () => {
+    // 1st from(): findKeyByLabel → no existing capture key.
+    // 2nd from(): createApiKey insert → returns the new row.
+    const db = createSequentialMockDb({ data: null, error: null }, { data: { id: "new-cap" }, error: null });
+
+    const apiKey = await mintOrRotateCaptureKey(db as unknown as SupabaseClient, "u1");
+
+    expect(typeof apiKey).toBe("string");
+    expect(apiKey.length).toBeGreaterThan(70); // uuid-uuid plaintext
+    // Exactly two queries — no device-cap lookup snuck in.
+    expect(db.from).toHaveBeenCalledTimes(2);
+    expect(db.from).toHaveBeenNthCalledWith(1, "api_keys");
+    expect(db.from).toHaveBeenNthCalledWith(2, "api_keys");
+    // The 2nd call is the INSERT, carrying scope + the fixed ext-browser label.
+    expect(db.chains[1].insert).toHaveBeenCalledWith(
+      expect.objectContaining({ label: "ext-browser", scope: "capture", user_id: "u1" }),
+    );
+    expect(db.chains[1].update).not.toHaveBeenCalled();
+  });
+
+  it("ROTATES the existing ext-browser key instead of creating a duplicate", async () => {
+    // 1st from(): findKeyByLabel → existing capture key.
+    // 2nd from(): rotateApiKeyHash update → ok.
+    const db = createSequentialMockDb({ data: { id: "cap-1" }, error: null }, { data: null, error: null });
+
+    const apiKey = await mintOrRotateCaptureKey(db as unknown as SupabaseClient, "u1");
+
+    expect(typeof apiKey).toBe("string");
+    expect(db.from).toHaveBeenCalledTimes(2);
+    // Rotate (update key_hash on the existing row), NOT a second insert.
+    expect(db.chains[1].update).toHaveBeenCalled();
+    expect(db.chains[1].insert).not.toHaveBeenCalled();
+    expect(db.chains[1].eq).toHaveBeenCalledWith("id", "cap-1");
   });
 });

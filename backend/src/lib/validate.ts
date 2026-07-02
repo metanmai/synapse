@@ -37,6 +37,9 @@ export const schemas = {
 
   cliSession: z.object({
     code_challenge: z.string().min(1, "Code challenge is required"),
+    // Slice B: 'capture' mints a browser-extension capture-scoped key (one per
+    // user, rotated, device-cap-exempt). Absent/'full' → normal CLI device key.
+    scope: z.enum(["full", "capture"]).optional(),
     device_name: z.string().optional(),
     // Phase 03-05: optional per-machine UUID generated at first
     // `synapsesync wizard` and persisted at ~/.synapse/device.json.

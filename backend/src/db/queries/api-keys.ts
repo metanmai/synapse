@@ -43,6 +43,7 @@ export async function createApiKey(
   label: string,
   expiresAt?: string | null,
   machineId?: string | null,
+  scope?: string | null,
 ): Promise<ApiKey> {
   const { data, error } = await db
     .from("api_keys")
@@ -52,12 +53,43 @@ export async function createApiKey(
       label,
       expires_at: expiresAt ?? null,
       machine_id: machineId ?? null,
+      // Feature-detection safety (migration 031): only reference the `scope`
+      // column when minting a non-default (capture) key. Full-key inserts stay
+      // byte-identical so they cannot 500 on pre-migration prod. The read side
+      // (findUserByApiKeyHash) mirrors this with SELECT * → absent col = "full".
+      ...(scope && scope !== "full" ? { scope } : {}),
     })
     .select()
     .single();
 
   if (error) throw error;
   return data as ApiKey;
+}
+
+/**
+ * Slice B: look up a single key for (user_id, label). Used by the capture-key
+ * mint path — a user has at most one `ext-browser` key, so if it already
+ * exists we rotate its hash instead of creating a second credential. Mirrors
+ * findApiKeyByMachineId: returns null (not throw) on error so the caller
+ * degrades to "create" rather than failing the sign-in.
+ */
+export async function findKeyByLabel(
+  db: SupabaseClient,
+  userId: string,
+  label: string,
+): Promise<{ id: string } | null> {
+  const { data, error } = await db
+    .from("api_keys")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("label", label)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error(`[db] findKeyByLabel failed: ${error.message}`);
+    return null;
+  }
+  return (data as { id: string } | null) ?? null;
 }
 
 /**

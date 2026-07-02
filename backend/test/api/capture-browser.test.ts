@@ -223,3 +223,25 @@ describe("POST /api/capture/browser — persists a scrubbed conversation", () =>
     expect(res.status).toBe(400);
   });
 });
+
+// Slice B: the extension mints its capture key by reusing the CLI PKCE flow
+// with scope=capture. This is the worker-level smoke that the route accepts
+// the new scope and returns the capture session envelope.
+describe("POST /auth/cli-session scope=capture — capture-key mint via the PKCE flow", () => {
+  it("returns a capture session code, rotating (not inserting) when a key already exists", async () => {
+    const db = makeMockSupabase();
+    // Authenticate with a FULL key (not gated). The same seeded row also makes
+    // the capture-key lookup non-null → the mint takes the rotate path.
+    seedKey(db, "full");
+    setMockDb(db);
+
+    const res = await send("POST", "/auth/cli-session", { code_challenge: "challenge-xyz", scope: "capture" });
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { code?: string; scope?: string };
+    expect(json.scope).toBe("capture");
+    expect(typeof json.code).toBe("string");
+    // Rotate path: NO new api_keys row inserted — re-auth can't accumulate keys.
+    expect(db.calls.some((c) => c.table === "api_keys" && c.op === "insert")).toBe(false);
+  });
+});

@@ -24,6 +24,7 @@ import {
   countCliKeys,
   createApiKey,
   deleteApiKey,
+  findKeyByLabel,
   findUserByApiKeyHash,
   listCliKeys,
 } from "../../src/db/queries/api-keys";
@@ -876,6 +877,58 @@ describe("api-keys queries", () => {
       await createApiKey(db as unknown as SupabaseClient, "u1", "h", "Key");
 
       expect(db.chainable.insert).toHaveBeenCalledWith(expect.objectContaining({ expires_at: null }));
+    });
+
+    // Slice B: capture-scope. The `scope` column only exists after migration
+    // 031, so createApiKey must reference it ONLY for a non-default value.
+    // Full-key inserts stay byte-identical (the "inserts with correct fields"
+    // test above pins that exact shape) so they can't 500 on pre-migration prod.
+    it("includes scope in the insert when minting a capture key", async () => {
+      const db = mockSuccess({ id: "ak1" });
+      await createApiKey(db as unknown as SupabaseClient, "u1", "h", "ext-browser", null, null, "capture");
+
+      expect(db.chainable.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ label: "ext-browser", scope: "capture" }),
+      );
+    });
+
+    it("omits the scope key entirely for a default/full key (pre-migration-031 safe)", async () => {
+      const db = mockSuccess({ id: "ak1" });
+      await createApiKey(db as unknown as SupabaseClient, "u1", "h", "Key", null, null, "full");
+
+      const insertArg = (db.chainable.insert as Mock).mock.calls[0][0] as Record<string, unknown>;
+      expect(insertArg).not.toHaveProperty("scope");
+    });
+  });
+
+  // ── findKeyByLabel ─────────────────────────────────────────
+  describe("findKeyByLabel", () => {
+    it("queries api_keys by user_id + label and returns the row", async () => {
+      const db = mockSuccess({ id: "ak-cap" });
+      const result = await findKeyByLabel(db as unknown as SupabaseClient, "u1", "ext-browser");
+
+      expect(db.from).toHaveBeenCalledWith("api_keys");
+      expect(db.chainable.select).toHaveBeenCalledWith("id");
+      expect(db.chainable.eq).toHaveBeenCalledWith("user_id", "u1");
+      expect(db.chainable.eq).toHaveBeenCalledWith("label", "ext-browser");
+      expect(db.chainable.limit).toHaveBeenCalledWith(1);
+      expect(db.chainable.maybeSingle).toHaveBeenCalled();
+      expect(result).toEqual({ id: "ak-cap" });
+    });
+
+    it("returns null when no key matches", async () => {
+      const db = createMockDb({ data: null, error: null });
+      const result = await findKeyByLabel(db as unknown as SupabaseClient, "u1", "ext-browser");
+      expect(result).toBeNull();
+    });
+
+    it("returns null (degrades to create, never throws) on a DB error", async () => {
+      const db = createMockDb({
+        data: null,
+        error: { name: "PostgrestError", code: "42501", message: "boom", details: "", hint: "" },
+      });
+      const result = await findKeyByLabel(db as unknown as SupabaseClient, "u1", "ext-browser");
+      expect(result).toBeNull();
     });
   });
 

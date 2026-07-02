@@ -2,7 +2,7 @@ import { env } from "$env/dynamic/private";
 import { getSupabase } from "$lib/server/auth";
 import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
-import { buildRedirect, getCliParams } from "./cli-params";
+import { buildCallbackUrl, buildRedirect, getCliParams } from "./cli-params";
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   const challenge = url.searchParams.get("challenge");
@@ -13,7 +13,13 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   // Forwarded to /auth/cli-session so the backend can return an existing
   // rotated key on same-machine re-init instead of burning a device-cap slot.
   const machineId = url.searchParams.get("machine_id");
-  const hasCli = Boolean(challenge && state && port);
+  // Slice B: the browser extension signs in via chrome.identity.launchWebAuthFlow,
+  // which supplies a chromiumapp.org redirect_uri (no loopback port) and requests a
+  // capture-scoped key. EITHER a port (CLI) or a redirect_uri (extension) makes this
+  // a completable CLI-style handshake.
+  const redirectUri = url.searchParams.get("redirect_uri");
+  const scope = url.searchParams.get("scope");
+  const hasCli = Boolean(challenge && state && (port || redirectUri));
 
   return {
     challenge,
@@ -21,6 +27,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     port,
     device,
     machine_id: machineId,
+    redirect_uri: redirectUri,
+    scope,
     hasCli,
     authenticated: Boolean(locals.user),
     email: locals.user?.email ?? null,
@@ -112,7 +120,7 @@ export const actions: Actions = {
     const formData = await request.formData();
     const cli = getCliParams(formData);
 
-    if (!locals.user || !locals.token || !cli.challenge || !cli.state || !cli.port) {
+    if (!locals.user || !locals.token || !cli.challenge || !cli.state || !(cli.port || cli.redirect_uri)) {
       return fail(400, { error: "Missing session or CLI parameters." });
     }
 
@@ -136,6 +144,8 @@ export const actions: Actions = {
         // the backend rotates the existing api_keys row's hash instead
         // of creating a duplicate row that burns a device-cap slot.
         ...(cli.machine_id ? { machine_id: cli.machine_id } : {}),
+        // Slice B: 'capture' requests a browser-extension capture-scoped key.
+        ...(cli.scope ? { scope: cli.scope } : {}),
       }),
     });
 
@@ -168,7 +178,10 @@ export const actions: Actions = {
     }
 
     const data = (await res.json()) as { code: string };
-    const callbackUrl = `http://localhost:${cli.port}/callback?code=${encodeURIComponent(data.code)}&state=${encodeURIComponent(cli.state)}`;
+    const callbackUrl = buildCallbackUrl(cli, data.code);
+    if (!callbackUrl) {
+      return fail(400, { error: "Invalid CLI callback target." });
+    }
 
     // Return URL instead of redirect — cross-origin redirect to localhost doesn't work with use:enhance
     return { redirectTo: callbackUrl };
@@ -183,7 +196,7 @@ export const actions: Actions = {
     const cli = getCliParams(formData);
     const revokeKeyId = (formData.get("revoke_key_id") ?? "").toString();
 
-    if (!locals.user || !locals.token || !cli.challenge || !cli.state || !cli.port) {
+    if (!locals.user || !locals.token || !cli.challenge || !cli.state || !(cli.port || cli.redirect_uri)) {
       return fail(400, { error: "Missing session or CLI parameters." });
     }
     if (!revokeKeyId) {
@@ -216,7 +229,10 @@ export const actions: Actions = {
     }
 
     const data = (await res.json()) as { code: string };
-    const callbackUrl = `http://localhost:${cli.port}/callback?code=${encodeURIComponent(data.code)}&state=${encodeURIComponent(cli.state)}`;
+    const callbackUrl = buildCallbackUrl(cli, data.code);
+    if (!callbackUrl) {
+      return fail(400, { error: "Invalid CLI callback target." });
+    }
     return { redirectTo: callbackUrl };
   },
 

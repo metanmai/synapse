@@ -63,6 +63,8 @@ function relativeTime(iso: string | null): string {
         <input type="hidden" name="cli_state" value={data.state ?? ""} />
         <input type="hidden" name="cli_port" value={data.port ?? ""} />
         <input type="hidden" name="cli_device" value={data.device ?? ""} />
+        <input type="hidden" name="cli_redirect_uri" value={data.redirect_uri ?? ""} />
+        <input type="hidden" name="cli_scope" value={data.scope ?? ""} />
         <input type="hidden" name="cli_machine_id" value={data.machine_id ?? ""} />
 
         <fieldset class="space-y-2 mb-4" style="border: none; padding: 0;">
@@ -140,6 +142,8 @@ function relativeTime(iso: string | null): string {
         <input type="hidden" name="cli_state" value={data.state ?? ""} />
         <input type="hidden" name="cli_port" value={data.port ?? ""} />
         <input type="hidden" name="cli_device" value={data.device ?? ""} />
+        <input type="hidden" name="cli_redirect_uri" value={data.redirect_uri ?? ""} />
+        <input type="hidden" name="cli_scope" value={data.scope ?? ""} />
         <input type="hidden" name="cli_machine_id" value={data.machine_id ?? ""} />
         <button type="submit" disabled={loading} aria-label="Continue as {data.email}" class="btn-primary w-full cursor-pointer">
           {#if loading}
@@ -158,6 +162,8 @@ function relativeTime(iso: string | null): string {
           <input type="hidden" name="cli_state" value={data.state ?? ""} />
           <input type="hidden" name="cli_port" value={data.port ?? ""} />
         <input type="hidden" name="cli_device" value={data.device ?? ""} />
+        <input type="hidden" name="cli_redirect_uri" value={data.redirect_uri ?? ""} />
+        <input type="hidden" name="cli_scope" value={data.scope ?? ""} />
           <button type="submit" class="cursor-pointer text-sm" style="color: var(--color-link);">
             Use a different account
           </button>
@@ -210,6 +216,8 @@ function relativeTime(iso: string | null): string {
           <input type="hidden" name="cli_state" value={data.state ?? ""} />
           <input type="hidden" name="cli_port" value={data.port ?? ""} />
         <input type="hidden" name="cli_device" value={data.device ?? ""} />
+        <input type="hidden" name="cli_redirect_uri" value={data.redirect_uri ?? ""} />
+        <input type="hidden" name="cli_scope" value={data.scope ?? ""} />
           <button type="submit" aria-label="Continue with Google" class="btn-secondary w-full cursor-pointer">
             Continue with Google
           </button>
@@ -220,6 +228,8 @@ function relativeTime(iso: string | null): string {
           <input type="hidden" name="cli_state" value={data.state ?? ""} />
           <input type="hidden" name="cli_port" value={data.port ?? ""} />
         <input type="hidden" name="cli_device" value={data.device ?? ""} />
+        <input type="hidden" name="cli_redirect_uri" value={data.redirect_uri ?? ""} />
+        <input type="hidden" name="cli_scope" value={data.scope ?? ""} />
           <button type="submit" aria-label="Continue with GitHub" class="btn-secondary w-full cursor-pointer">
             Continue with GitHub
           </button>
@@ -248,6 +258,8 @@ function relativeTime(iso: string | null): string {
             <input type="hidden" name="cli_state" value={data.state ?? ""} />
             <input type="hidden" name="cli_port" value={data.port ?? ""} />
         <input type="hidden" name="cli_device" value={data.device ?? ""} />
+        <input type="hidden" name="cli_redirect_uri" value={data.redirect_uri ?? ""} />
+        <input type="hidden" name="cli_scope" value={data.scope ?? ""} />
             <label for="cli-login-email" class="sr-only">Email</label>
             <input id="cli-login-email" type="email" name="email" placeholder="Email" required
               value={form?.email ?? ""}
@@ -284,6 +296,8 @@ function relativeTime(iso: string | null): string {
             <input type="hidden" name="cli_state" value={data.state ?? ""} />
             <input type="hidden" name="cli_port" value={data.port ?? ""} />
         <input type="hidden" name="cli_device" value={data.device ?? ""} />
+        <input type="hidden" name="cli_redirect_uri" value={data.redirect_uri ?? ""} />
+        <input type="hidden" name="cli_scope" value={data.scope ?? ""} />
             <label for="cli-magic-email" class="sr-only">Email</label>
             <input id="cli-magic-email" type="email" name="email" placeholder="Email" required
               value={form?.email ?? ""}
@@ -330,6 +344,8 @@ function relativeTime(iso: string | null): string {
           <input type="hidden" name="cli_state" value={data.state ?? ""} />
           <input type="hidden" name="cli_port" value={data.port ?? ""} />
         <input type="hidden" name="cli_device" value={data.device ?? ""} />
+        <input type="hidden" name="cli_redirect_uri" value={data.redirect_uri ?? ""} />
+        <input type="hidden" name="cli_scope" value={data.scope ?? ""} />
           <label for="cli-signup-email" class="sr-only">Email</label>
           <input id="cli-signup-email" type="email" name="email" placeholder="Email" required
             value={form?.email ?? ""}

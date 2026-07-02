@@ -1,4 +1,4 @@
-import { vi } from "vitest";
+import { type Mock, vi } from "vitest";
 
 /**
  * Creates a chainable mock Supabase client that records method calls
@@ -79,4 +79,55 @@ export function mockNoRows() {
     data: null,
     error: { name: "PostgrestError", code: "PGRST116", message: "No rows found", details: "", hint: "" },
   });
+}
+
+/**
+ * Multi-step mock: each `from()` call returns a fresh chain that resolves to
+ * the NEXT configured response (last response repeats once exhausted). Needed
+ * for query helpers / handlers that issue several queries in sequence (e.g.
+ * lookup-then-insert, lookup-then-rotate) — createMockDb shares one chain and
+ * can't express per-call sequencing. `chains[i]` exposes the i-th call's mocks
+ * for `.toHaveBeenCalledWith` assertions.
+ */
+export function createSequentialMockDb(...responses: { data?: unknown; error?: unknown; count?: number | null }[]) {
+  let callIndex = 0;
+  const chains: ReturnType<typeof createMockDb>["chainable"][] = [];
+
+  const from = vi.fn().mockImplementation(() => {
+    const idx = callIndex++;
+    const resp = responses[idx] ?? responses[responses.length - 1];
+
+    const chainable: Record<string, Mock> = {};
+    const methods = [
+      "select",
+      "insert",
+      "update",
+      "delete",
+      "upsert",
+      "eq",
+      "neq",
+      "in",
+      "is",
+      "like",
+      "or",
+      "overlaps",
+      "order",
+      "limit",
+      "range",
+      "textSearch",
+    ];
+    for (const m of methods) {
+      chainable[m] = vi.fn().mockReturnValue(chainable);
+    }
+    chainable.single = vi.fn().mockResolvedValue(resp);
+    chainable.maybeSingle = vi.fn().mockResolvedValue(resp);
+    // biome-ignore lint/suspicious/noThenProperty: intentional thenable mock
+    (chainable as Record<string, unknown>).then = (resolve: (v: unknown) => void) => resolve(resp);
+
+    // biome-ignore lint/suspicious/noExplicitAny: structurally compatible Mock chain TS can't prove without a broad cast
+    chains.push(chainable as any);
+    return chainable;
+  });
+
+  return { from, chains };
 }
