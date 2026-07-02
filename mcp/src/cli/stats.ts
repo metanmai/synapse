@@ -84,15 +84,39 @@ export async function runStats(): Promise<void> {
     return;
   }
 
-  const project = projects[0];
+  // Iterate projects until we find one whose context endpoint resolves.
+  // `/api/projects` and `/api/context/<name>` can diverge in real-world
+  // workflows: a project deleted via purge-empty, a rename mid-flight, or
+  // a backend consistency lag can leave a project listed but its context
+  // lookup 404s. Without this loop, stats crashes on the first such row
+  // \u2014 a brittle behavior that surfaced on metanmai CI run 27120098811
+  // (Error: API 404: {"error":"Project not found","code":"NOT_FOUND"}).
+  let project: ProjectResponse | null = null;
+  let entries: EntryListItem[] = [];
+  spin.update("Fetching files\u2026");
+  for (const candidate of projects) {
+    try {
+      entries = await apiFetch<EntryListItem[]>(apiKey, `/api/context/${encodeURIComponent(candidate.name)}/list`);
+      project = candidate;
+      break;
+    } catch (err) {
+      // Only fall through on 404. Other errors (5xx, auth) should still
+      // surface to the user so they don't silently see partial stats.
+      if (err instanceof Error && err.message.startsWith("API 404")) continue;
+      throw err;
+    }
+  }
+  if (!project) {
+    spin.stop("No accessible workspace.");
+    clack.outro(muted("Your projects are in a transient state \u2014 try again in a moment."));
+    return;
+  }
+
   const tagCounts: Record<string, number> = {};
   const sourceCounts: Record<string, number> = {};
   const actionCounts: Record<string, number> = {};
   let oldestDate: string | null = null;
   let newestDate: string | null = null;
-
-  spin.update("Fetching files\u2026");
-  const entries = await apiFetch<EntryListItem[]>(apiKey, `/api/context/${encodeURIComponent(project.name)}/list`);
 
   for (const entry of entries) {
     for (const tag of entry.tags) {
