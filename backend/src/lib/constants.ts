@@ -61,3 +61,14 @@ export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // --- Embedding ---
 export const EMBEDDING_TIMEOUT_MS = 3000;
+
+// --- AI project correlation (spec: docs/superpowers/specs/2026-06-14-ai-project-correlation-design.md) ---
+// Embedding cosine-similarity bands for assigning a keyless capture to a project.
+// Starting values; calibrate against real capture data post-launch.
+export const PROJECT_ASSIGN_THRESHOLD = 0.82; // top candidate ≥ → confident assign
+export const PROJECT_CREATE_THRESHOLD = 0.65; // top candidate < → create a new project
+export const PROJECT_MERGE_THRESHOLD = 0.85; // project-centroid sim to consider a merge
+// Daily reconciler per-run caps (fit the ~30s cron budget; raise as headroom is measured).
+export const RECONCILE_BACKFILL_CAP = 200; // embeddings backfilled per run
+export const RECONCILE_RECHECK_CAP = 50; // ambiguous LLM rechecks per run
+export const RECONCILE_OWNERS_PER_RUN = 100; // owners scanned for merge candidates per run
