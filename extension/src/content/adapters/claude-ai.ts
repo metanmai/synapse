@@ -1,7 +1,7 @@
 import type { CaptureAdapter, CapturedTurn } from "./types.js";
 
 // POST /api/organizations/{org}/chat_conversations/{conv}/completion (SSE).
-const COMPLETION_RE = /\/chat_conversations\/[^/]+\/completion\b/;
+const COMPLETION_RE = /\/chat_conversations\/[^/]+\/completion\d*\b/;
 
 /**
  * Reassemble the assistant turn from claude.ai's completion SSE. The web app
