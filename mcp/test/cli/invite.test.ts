@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { API_URL } from "../../src/cli/config.js";
@@ -7,7 +8,7 @@ import { runInviteCmd } from "../../src/cli/invite.js";
 let tmp: string;
 
 beforeEach(() => {
-  tmp = fs.mkdtempSync("/tmp/synapse-invite-");
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-invite-"));
   process.env.SYNAPSE_HOME = tmp;
   // Seed config so readApiKey() succeeds.
   fs.writeFileSync(path.join(tmp, "config.json"), JSON.stringify({ api_key: "test-key" }));

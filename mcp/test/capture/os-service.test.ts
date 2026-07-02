@@ -54,12 +54,19 @@ describe("os-service installers", () => {
   // cleanly with no daemon running). After build, os-service.js sits at
   // dist/capture/os-service.js so the script path resolves up one level.
   it("resolveDaemonScriptPath resolves to dist/index.js relative to dist/capture/", () => {
-    const fakeModuleUrl = pathToFileURL("/fake/build/dist/capture/os-service.js").href;
+    // Use a platform-shaped fake module path so the test is OS-agnostic:
+    // path.join produces `/fake/build/.../os-service.js` on POSIX and
+    // `\fake\build\...\os-service.js` on Windows. pathToFileURL handles
+    // both shapes. The expected resolved path then uses the same
+    // path.join shape so separator comparison matches.
+    const fakeModuleUrl = pathToFileURL(path.join("/", "fake", "build", "dist", "capture", "os-service.js")).href;
     const resolved = resolveDaemonScriptPath(fakeModuleUrl);
-    expect(resolved).toBe("/fake/build/dist/index.js");
+    const expected = path.join("/", "fake", "build", "dist", "index.js");
+    expect(resolved).toBe(expected);
     // The historical bug pointed at cli/commands.js — must never come back.
-    expect(resolved).not.toContain("/cli/commands.js");
-    expect(resolved.endsWith("/dist/index.js")).toBe(true);
+    // Use path.sep-aware substring check so the assertion is the same on Windows.
+    expect(resolved).not.toContain(path.join("cli", "commands.js"));
+    expect(resolved.endsWith(path.join("dist", "index.js"))).toBe(true);
   });
 
   it("systemd unit has the right Restart and a shell-style ExecStart with node + script + arg", () => {

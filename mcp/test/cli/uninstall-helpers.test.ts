@@ -12,6 +12,7 @@
  */
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -69,7 +70,7 @@ describe("removeSynapseHooksFromClaudeSettings", () => {
   let settingsPath: string;
 
   beforeEach(() => {
-    tmp = fs.mkdtempSync("/tmp/syn-uninstall-test-");
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "syn-uninstall-test-"));
     settingsPath = path.join(tmp, "settings.json");
   });
 

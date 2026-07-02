@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getProjectMapPath } from "../../src/cli/project-map.js";
@@ -7,7 +8,7 @@ import { runSessionStartHook } from "../../src/hooks/session-start.js";
 describe("SessionStart hook", () => {
   let tmp: string;
   beforeEach(() => {
-    tmp = fs.mkdtempSync("/tmp/synapse-test-");
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-test-"));
     process.env.SYNAPSE_HOME = tmp;
   });
   afterEach(() => {
@@ -52,7 +53,7 @@ describe("SessionStart hook", () => {
   // pin the freshness contract, not the specific strings either side emits.
 
   function setupRepo(): { repo: string; stateMd: string } {
-    const repo = fs.mkdtempSync("/tmp/synapse-repo-");
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-repo-"));
     fs.mkdirSync(path.join(repo, ".planning"), { recursive: true });
     return { repo, stateMd: path.join(repo, ".planning/STATE.md") };
   }
@@ -136,7 +137,7 @@ describe("SessionStart hook", () => {
   });
 
   it("emits fallback string when neither cache nor STATE.md exists", async () => {
-    const repo = fs.mkdtempSync("/tmp/synapse-empty-");
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-empty-"));
     const out: string[] = [];
     const stdout = {
       write: (s: string) => {
@@ -157,7 +158,7 @@ describe("SessionStart hook", () => {
   // the rendered brief actually surfaces it under a labelled section so the
   // next agent picks it up via the standard <synapse-brief> channel.
   it("appends pull-compact handoff to the brief when available", async () => {
-    const repo = fs.mkdtempSync("/tmp/synapse-pull-");
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-pull-"));
     const mapFile = getProjectMapPath();
     fs.mkdirSync(path.dirname(mapFile), { recursive: true });
     fs.writeFileSync(

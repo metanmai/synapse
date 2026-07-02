@@ -35,6 +35,7 @@ beforeEach(() => {
   tmpHome = mkdtempSync(path.join(tmpdir(), "smoke-test-home-"));
   tmpSynapse = mkdtempSync(path.join(tmpdir(), "smoke-test-synapse-"));
   process.env.HOME = tmpHome;
+  process.env.USERPROFILE = tmpHome; // Windows: os.homedir() reads USERPROFILE, not HOME
   process.env.SYNAPSE_HOME = tmpSynapse;
   // Default: API key present so we get past step 2 in most scenarios.
   // Individual tests can override by deleting the env var.
@@ -43,6 +44,7 @@ beforeEach(() => {
 
 afterEach(() => {
   process.env.HOME = originalHome;
+  process.env.USERPROFILE = originalHome; // Windows: os.homedir() reads USERPROFILE, not HOME
   // biome-ignore lint/performance/noDelete: test teardown — restoring undefined env, perf negligible
   if (originalSynapseHome === undefined) delete process.env.SYNAPSE_HOME;
   else process.env.SYNAPSE_HOME = originalSynapseHome;

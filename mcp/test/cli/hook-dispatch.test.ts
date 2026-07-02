@@ -8,7 +8,7 @@ import { canonicalCwd, dispatchHook, hashCwd } from "../../src/cli/hook-dispatch
 describe("hook dispatch", () => {
   let tmp: string;
   beforeEach(() => {
-    tmp = fs.mkdtempSync("/tmp/synapse-test-");
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-test-"));
     process.env.SYNAPSE_HOME = tmp;
   });
   afterEach(() => {
@@ -118,9 +118,10 @@ describe("hook dispatch — user_id resolution chain (Phase 2 IDENT-01)", () => 
   let tmp: string;
   let homeOrig: string | undefined;
   beforeEach(() => {
-    tmp = fs.mkdtempSync("/tmp/synapse-resolve-");
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-resolve-"));
     homeOrig = process.env.HOME;
     process.env.HOME = tmp;
+    process.env.USERPROFILE = tmp; // Windows: os.homedir() reads USERPROFILE, not HOME
     process.env.SYNAPSE_HOME = path.join(tmp, ".synapse");
     fs.mkdirSync(process.env.SYNAPSE_HOME, { recursive: true });
   });
