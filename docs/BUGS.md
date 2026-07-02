@@ -81,7 +81,21 @@ The churned row (`bd5be0f2`) updated once — almost certainly on the `subscript
 
 **Fix sketch:** Either (a) stand up a test Supabase instance (free tier is enough for CI) and inject creds via repo secrets so the skipped tests run on metanmai CI, or (b) refactor the handler to take db + user as injectable args so we can mock them and test the pure logic.
 
-**Status (2026-05-30):** Path (b) proof-of-concept landed for `events-batch`. Pure helpers extracted into `backend/src/api/events-batch-pure.ts` (skew adjustment, cwd_<hash> regex, id remapping, body validation) — 28 unit tests in `backend/test/api/events-batch-pure.test.ts` cover the previously-uncovered bug classes without needing Supabase. Pattern for remaining endpoints: extract pure logic into a sibling `*-pure.ts` file, keep DB code in the handler, write pure-helper tests. Endpoints still on the to-do list: `events-batch-auto-create` (auto-create payload selection), `project-status` (response shape building), `project-events` (pagination + ordering), `invites` (token generation, validation), `projects-delete` (cascade ordering), `projects-merge` (owner-check sequencing), `auth-me` (response shape).
+**Status (2026-05-31):** Path (b) round 2 landed (`<pending>`).
+
+**Done via path (b) pure-helper extraction:**
+- `events-batch` (round 1, `7b3e8f3`) — 28 tests covering skew adjustment, cwd-hash regex, id remapping, body validation
+- `events-batch-auto-create` (effectively closed by round 1 — its pure logic IS extractCwdHashes + applyIdMapping in `events-batch-pure.ts`)
+- `invites` (round 2) — 21 tests covering token generation entropy/charset, body validation (malformed JSON, whitespace email, non-object), expiry boundary semantics, TTL math
+- `project-events` (round 2) — 13 tests covering limit clamping (NaN, negative, over-cap, decimals), cursor preservation on empty page
+
+**Path (a) preferred (limited pure-extractable surface):**
+- `project-status` — 21-line handler, all DB. The skipped tests assert response shape that's a thin passthrough of `handoff_project_status.status`. No path (b) value.
+- `auth-me` — 5-line handler returning `{user_id, email, tier}`. The skipped tests assert the public.users vs auth.users contract — only a live DB can verify the JOIN chain produces the right id.
+- `projects-delete` — high-stakes cascade ordering bug class is inherently DB-bound. Pure-extractable surface is the 409 error shape only (low value).
+- `projects-merge` — owner-check sequencing + the SQL `merge_projects` RPC are DB-bound. Pure-extractable surface is the self-link guard (one line).
+
+**Pattern for any future round:** extract pure logic into `<endpoint>-pure.ts`, keep DB code in the handler, write `<endpoint>-pure.test.ts` with bug-class tests. The `.skip`'d integration tests stay skipped — they cover schema/RLS/migration drift that needs live Supabase (path (a)).
 
 **Code locations:** `backend/test/api/events-batch.test.ts:44-55`, `backend/test/api/events-batch-auto-create.test.ts:64`, `backend/test/api/project-status.test.ts:27-34`, `backend/test/api/project-events.test.ts:35-44`, `backend/test/api/invites.test.ts:43-51`
 

@@ -3,24 +3,20 @@ import { countMembers } from "../db/queries/projects";
 import { authMiddleware } from "../lib/auth";
 import type { Env } from "../lib/env";
 import { enforceMemberLimitForTier, getTierForUser } from "../lib/tier";
-
-/** 24 random bytes → 32-char base64url string (web-crypto, runs in Workers). */
-function generateInviteToken(): string {
-  const buf = new Uint8Array(24);
-  crypto.getRandomValues(buf);
-  let bin = "";
-  for (const b of buf) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
+import {
+  buildJoinUrl,
+  computeInviteExpiresAt,
+  generateInviteToken,
+  isInviteAccepted,
+  isInviteExpired,
+  parseInviteRequestBody,
+} from "./invites-pure";
 
 // v1.1 invite flow.
 // - POST /api/projects/:id/invites { email } — caller must be a member; mints a
 //   7-day token and returns a join URL. (Email delivery deferred post-v1.1.)
 // - POST /api/invites/:token/accept — caller redeems a valid token; inserts a
 //   project_members row and marks the invite accepted.
-
-const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const JOIN_URL_BASE = "https://synapsesync.app/invite";
 
 interface InviteRow {
   token: string;
@@ -37,14 +33,10 @@ invites.use("*", authMiddleware);
 
 invites.post("/projects/:id/invites", async (c) => {
   const project_id = c.req.param("id");
-  let body: { email?: string };
-  try {
-    body = await c.req.json<{ email?: string }>();
-  } catch {
-    return c.json({ error: "invalid JSON body" }, 400);
-  }
-  const email = typeof body.email === "string" ? body.email.trim() : "";
-  if (!email) return c.json({ error: "email required" }, 400);
+  const rawBody = await c.req.text();
+  const parsed = parseInviteRequestBody(rawBody);
+  if (!parsed.ok) return c.json({ error: parsed.reason }, parsed.status);
+  const { email } = parsed;
 
   const user = c.get("user");
   const db = c.get("db");
@@ -68,7 +60,7 @@ invites.post("/projects/:id/invites", async (c) => {
   enforceMemberLimitForTier(memberCount, ownerTier, c.env as unknown as Record<string, string>);
 
   const token = generateInviteToken();
-  const expiresAt = new Date(Date.now() + INVITE_TTL_MS).toISOString();
+  const expiresAt = computeInviteExpiresAt(Date.now());
 
   const { error } = await db.from("project_invites").insert({
     token,
@@ -81,7 +73,7 @@ invites.post("/projects/:id/invites", async (c) => {
 
   // Email delivery is deferred to post-v1.1. The CLI prints join_url so the
   // inviter can share it manually.
-  return c.json({ token, join_url: `${JOIN_URL_BASE}/${token}`, expires_at: expiresAt });
+  return c.json({ token, join_url: buildJoinUrl(token), expires_at: expiresAt });
 });
 
 invites.post("/invites/:token/accept", async (c) => {
@@ -98,8 +90,8 @@ invites.post("/invites/:token/accept", async (c) => {
   if (!invite) return c.json({ error: "invite not found" }, 404);
 
   const row = invite as InviteRow;
-  if (row.accepted_at) return c.json({ error: "already accepted" }, 409);
-  if (new Date(row.expires_at).getTime() < Date.now()) return c.json({ error: "expired" }, 410);
+  if (isInviteAccepted(row)) return c.json({ error: "already accepted" }, 409);
+  if (isInviteExpired(row, Date.now())) return c.json({ error: "expired" }, 410);
 
   // Re-check the owner's tier limit at accept time. The mint endpoint
   // already enforces, but the project's member roster may have grown
