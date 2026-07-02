@@ -130,6 +130,16 @@ function isVersionArgv(args: string[]): boolean {
 
 // --- CLI standalone interactive commands ---
 
+function showWriteResult(result: { written: string[]; errors: { editor: string; error: string }[] }): void {
+  if (result.written.length > 0) {
+    const summary = result.written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
+    clack.log.message(summary);
+  }
+  for (const e of result.errors) {
+    clack.log.warn(`\u2717 ${e.editor}: ${e.error}`);
+  }
+}
+
 async function runInteractiveLogin(): Promise<void> {
   clack.intro(`${accent("\u25C6")} ${bold("Sign in to Synapse")}`);
 
@@ -137,12 +147,15 @@ async function runInteractiveLogin(): Promise<void> {
   spin.start("Waiting for browser login\u2026");
 
   try {
-    const result = await browserAuth();
+    const result = await browserAuth({
+      onUrl: (url) => {
+        spin.update("Waiting for browser login\u2026");
+        clack.log.info(`If the browser didn't open, visit:\n  ${muted(url)}`);
+      },
+    });
     spin.stop(`Signed in as ${result.email}`);
 
-    const written = writeAllDetected(result.api_key);
-    const summary = written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
-    clack.log.message(summary);
+    showWriteResult(writeAllDetected(result.api_key));
     clack.outro("Restart your editor to connect.");
   } catch (err) {
     spin.stop("Login failed");
@@ -158,12 +171,15 @@ async function runInteractiveSignup(): Promise<void> {
   spin.start("Waiting for browser\u2026");
 
   try {
-    const result = await browserAuth();
+    const result = await browserAuth({
+      onUrl: (url) => {
+        spin.update("Waiting for browser\u2026");
+        clack.log.info(`If the browser didn't open, visit:\n  ${muted(url)}`);
+      },
+    });
     spin.stop(`Signed in as ${result.email}`);
 
-    const written = writeAllDetected(result.api_key);
-    const summary = written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
-    clack.log.message(summary);
+    showWriteResult(writeAllDetected(result.api_key));
     clack.outro("Restart your editor to connect.");
   } catch (err) {
     spin.stop("Signup failed");
@@ -185,9 +201,7 @@ async function runInteractiveInit(): Promise<void> {
     process.exit(0);
   }
 
-  const written = writeAllDetected(key.trim());
-  const summary = written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
-  clack.log.message(summary);
+  showWriteResult(writeAllDetected(key.trim()));
   clack.outro("Restart your editor to connect.");
 }
 
@@ -343,13 +357,13 @@ async function handleCli(raw: string[]): Promise<void> {
     if (isInteractiveTerminal()) {
       clack.intro(`${accent("\u25C6")} ${bold("Writing MCP config")}`);
     }
-    const written = writeAllDetected(apiKey);
+    const result = writeAllDetected(apiKey);
     if (isInteractiveTerminal()) {
-      const summary = written.map((f) => `  ${success("\u2713")} ${f}`).join("\n");
-      clack.log.message(summary);
+      showWriteResult(result);
       clack.outro("Restart your editor to connect.");
     } else {
-      for (const f of written) console.log(`  \u2713 ${f}`);
+      for (const f of result.written) console.log(`  \u2713 ${f}`);
+      for (const e of result.errors) console.error(`  \u2717 ${e.editor}: ${e.error}`);
       console.log("\nDone! Restart your AI tools to connect to Synapse.");
     }
     process.exit(0);
