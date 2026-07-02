@@ -1,4 +1,6 @@
 <script lang="ts">
+import Markdown from "$lib/components/Markdown.svelte";
+
 let { data } = $props();
 
 const projectSlug = $derived(
@@ -48,7 +50,9 @@ function insightTypeLabel(type: string): string {
         {#each data.insights as insight (insight.id)}
           <div class="insight-card">
             <span class="insight-type">{insightTypeLabel(insight.type)}</span>
-            <p class="insight-summary">{insight.summary}</p>
+            <div class="insight-summary">
+              <Markdown text={insight.summary} inline />
+            </div>
           </div>
         {/each}
       </div>
@@ -64,7 +68,12 @@ function insightTypeLabel(type: string): string {
         <a href="/projects/{encodeURIComponent(projectSlug)}/context" class="section-link">View full context &rarr;</a>
       </div>
       <div class="glass-card context-preview">
-        <pre class="context-preview-text">{data.projectContext.summary.slice(0, 500)}{data.projectContext.summary.length > 500 ? "..." : ""}</pre>
+        <div class="context-preview-text">
+          <Markdown
+            text={data.projectContext.summary.slice(0, 500) +
+              (data.projectContext.summary.length > 500 ? "..." : "")}
+          />
+        </div>
       </div>
     </section>
   {/if}
@@ -238,9 +247,8 @@ function insightTypeLabel(type: string): string {
   }
 
   .context-preview-text {
-    white-space: pre-wrap;
     word-wrap: break-word;
-    font-family: inherit;
+    overflow-wrap: anywhere;
     font-size: 13px;
     line-height: 1.6;
     color: var(--color-text);

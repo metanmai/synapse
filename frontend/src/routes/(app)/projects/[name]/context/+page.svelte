@@ -1,4 +1,6 @@
 <script lang="ts">
+import Markdown from "$lib/components/Markdown.svelte";
+
 let { data } = $props();
 
 function relativeTime(dateStr: string): string {
@@ -42,7 +44,9 @@ function relativeTime(dateStr: string): string {
     </div>
   {:else if data.context?.summary}
     <div class="glass-card">
-      <pre class="context-content">{data.context.summary}</pre>
+      <div class="context-content">
+        <Markdown text={data.context.summary} />
+      </div>
       {#if data.context.conversation_count}
         <p class="context-source">
           Generated from {data.context.conversation_count} conversation{data.context.conversation_count === 1 ? "" : "s"}
@@ -69,7 +73,7 @@ function relativeTime(dateStr: string): string {
   .context-subtitle { font-size: 13px; color: var(--color-text-muted); margin: 0; }
   .glass-card { background: rgba(255, 253, 248, 0.5); border: 1px solid rgba(199, 183, 163, 0.25); border-radius: 12px; padding: 1.25rem 1.5rem; backdrop-filter: blur(8px); }
   .card-text { font-size: 14px; line-height: 1.6; color: var(--color-text); margin: 0; }
-  .context-content { white-space: pre-wrap; word-wrap: break-word; font-family: inherit; font-size: 14px; line-height: 1.7; color: var(--color-text); margin: 0; }
+  .context-content { word-wrap: break-word; overflow-wrap: anywhere; font-size: 14px; line-height: 1.7; color: var(--color-text); margin: 0; }
   .context-source { font-size: 12px; color: var(--color-text-muted); margin: 0.75rem 0 0; }
   .upgrade-button { display: inline-block; margin-top: 1rem; background: rgba(86, 28, 36, 0.06); color: var(--color-pink-dark); border: 1px solid var(--color-pink); border-radius: 9999px; padding: 0.5rem 1.25rem; font-size: 13px; font-weight: 600; text-decoration: none; transition: background 150ms ease, transform 150ms ease; }
   .upgrade-button:hover { background: rgba(86, 28, 36, 0.1); transform: translateY(-1px); }
