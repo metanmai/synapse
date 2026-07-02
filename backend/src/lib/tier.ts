@@ -1,16 +1,13 @@
 import { Context, Next } from "hono";
-import { TIER_LIMITS } from "../db/types";
+import { getTierLimitsFromEnv } from "../db/types";
 import { AppError } from "./errors";
 import type { Env } from "./env";
-
-/**
- * Tier enforcement helpers. Call these in route handlers where limits apply.
- */
 
 export function getTierLimits(c: Context<{ Bindings: Env }>) {
   const user = c.get("user");
   const tier = user.tier ?? "free";
-  return TIER_LIMITS[tier] ?? TIER_LIMITS.free;
+  const limits = getTierLimitsFromEnv(c.env as unknown as Record<string, string>);
+  return limits[tier] ?? limits.free;
 }
 
 export function requirePro(c: Context<{ Bindings: Env }>, feature: string) {
@@ -31,8 +28,9 @@ export function enforceFileLimit(
 ) {
   const limits = getTierLimits(c);
   if (currentCount >= limits.maxFiles) {
+    const tier = c.get("user").tier ?? "free";
     throw new AppError(
-      `File limit reached (${limits.maxFiles} files on ${c.get("user").tier ?? "free"} tier). Upgrade to Pro for ${TIER_LIMITS.pro.maxFiles} files.`,
+      `File limit reached (${limits.maxFiles} files on ${tier} tier). Upgrade to Pro for more files.`,
       403,
       "TIER_LIMIT"
     );
@@ -45,11 +43,11 @@ export function enforceConnectionLimit(
   c: Context<{ Bindings: Env }>
 ) {
   const limits = getTierLimits(c);
-  // If this source is already counted, it's not a new connection
-  // This check should happen before counting
+  if (limits.maxConnections === 0) return; // 0 = unlimited
   if (currentConnections >= limits.maxConnections) {
+    const tier = c.get("user").tier ?? "free";
     throw new AppError(
-      `Connection limit reached (${limits.maxConnections} sources on ${c.get("user").tier ?? "free"} tier). Upgrade to Pro for unlimited connections.`,
+      `Connection limit reached (${limits.maxConnections} sources on ${tier} tier). Upgrade to Pro for unlimited connections.`,
       403,
       "TIER_LIMIT"
     );
