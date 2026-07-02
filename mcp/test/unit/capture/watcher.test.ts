@@ -118,15 +118,19 @@ describe("CaptureWatcher", () => {
 
     await watcher.start();
 
+    // Small delay to ensure chokidar is watching
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
     // Write to the same file multiple times rapidly
     const testFile = path.join(tmpDir, "rapid.jsonl");
     fs.writeFileSync(testFile, "line1\n");
     fs.appendFileSync(testFile, "line2\n");
     fs.appendFileSync(testFile, "line3\n");
 
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    // Wait long enough for awaitWriteFinish stabilityThreshold (500ms) + scan interval (500ms) + overhead
+    await new Promise((resolve) => setTimeout(resolve, 5000));
 
     // Should emit at most once (event queue deduplicates by path)
     expect(sessions.length).toBeLessThanOrEqual(1);
-  });
+  }, 15000);
 });
