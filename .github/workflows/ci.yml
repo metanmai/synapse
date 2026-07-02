@@ -51,6 +51,47 @@ jobs:
       - name: Test
         run: npm test
 
+  pgvector-rpc-test:
+    # REAL pgvector test of the AI-correlation RPCs (match_conversations,
+    # find_merge_candidates) against a real Postgres — proves the actual
+    # vector-similarity SQL, not a mock. Runs the function bodies extracted
+    # from migrations 029/030. Deterministic + no secrets → runs on every
+    # push/PR (a true gate, unlike the metanmai-only live e2e).
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Ensure psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Run pgvector RPC test
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: node scripts/test-pgvector-rpcs.mjs
+
   cleanup-e2e-account:
     # Hygiene gate for the shared E2E test account. Every E2E run creates
     # test projects; failed/cancelled runs leak them past their own sweeps.
