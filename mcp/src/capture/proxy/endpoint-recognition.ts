@@ -22,6 +22,11 @@ import type { EndpointInfo } from "./types.js";
 // matching so we tolerate `?beta=true`-style variants.
 const ANTHROPIC_CHAT = /^\/v1\/messages$/;
 const OPENAI_CHAT = /^\/v1\/chat\/completions$/;
+// OpenRouter is OpenAI-API-compatible but lives one path segment deeper:
+// `openrouter.ai/api/v1/chat/completions`. Same request/response shape as
+// OpenAI — classified as provider:"openai" so session-reconstruction's
+// existing OpenAI extractor handles the body.
+const OPENROUTER_CHAT = /^\/api\/v1\/chat\/completions$/;
 // Google embeds the model id in the path: /v1/models/gemini-1.5-pro:generateContent
 // — and has both streaming + non-streaming variants. Both are chat.
 const GOOGLE_CHAT = /^\/v\d+(?:beta\d*)?\/models\/[^/]+:(?:generateContent|streamGenerateContent)$/;
@@ -36,6 +41,14 @@ const UNKNOWN: EndpointInfo = { provider: null, kind: null, capture: false };
  *
  * The path argument may include a query string; this function strips it
  * before regex matching.
+ *
+ * SUPPORTED HOSTS (must stay in sync with `scripts/e2e-llm-driver.mjs`
+ * PROVIDERS list — drift produces silent capture loss):
+ *   • api.anthropic.com           — Anthropic Claude /v1/messages
+ *   • api.openai.com              — OpenAI /v1/chat/completions
+ *   • api.deepseek.com            — DeepSeek (OpenAI-shaped)
+ *   • openrouter.ai               — OpenRouter (OpenAI-shaped, /api/v1 prefix)
+ *   • generativelanguage.googleapis.com — Google Gemini :generateContent
  */
 export function recognizeEndpoint(host: string, path: string): EndpointInfo {
   const cleanPath = stripQuery(path);
@@ -48,6 +61,18 @@ export function recognizeEndpoint(host: string, path: string): EndpointInfo {
     return { provider: "anthropic", kind: "other", capture: false };
   }
   if (isOpenAIHost(normalizedHost)) {
+    if (OPENAI_CHAT.test(cleanPath)) {
+      return { provider: "openai", kind: "chat", capture: true };
+    }
+    return { provider: "openai", kind: "other", capture: false };
+  }
+  if (isOpenRouterHost(normalizedHost)) {
+    if (OPENROUTER_CHAT.test(cleanPath)) {
+      return { provider: "openai", kind: "chat", capture: true };
+    }
+    return { provider: "openai", kind: "other", capture: false };
+  }
+  if (isDeepSeekHost(normalizedHost)) {
     if (OPENAI_CHAT.test(cleanPath)) {
       return { provider: "openai", kind: "chat", capture: true };
     }
@@ -73,6 +98,14 @@ function isAnthropicHost(host: string): boolean {
 
 function isOpenAIHost(host: string): boolean {
   return host === "api.openai.com" || host.endsWith(".openai.com");
+}
+
+function isOpenRouterHost(host: string): boolean {
+  return host === "openrouter.ai" || host.endsWith(".openrouter.ai");
+}
+
+function isDeepSeekHost(host: string): boolean {
+  return host === "api.deepseek.com" || host.endsWith(".deepseek.com");
 }
 
 function isGoogleHost(host: string): boolean {
