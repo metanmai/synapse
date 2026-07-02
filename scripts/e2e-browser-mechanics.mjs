@@ -57,12 +57,24 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>fixture</title><script
 </script>ok`;
 
 async function main() {
+  // L3_REQUIRE=1 (set by CI) turns a missing-dependency skip into a hard
+  // failure. Locally these deps may be absent (proxy-blocked install) so the
+  // default is skip-green; in CI they are guaranteed, so a skip there would
+  // mean the gate silently degraded to a no-op — which we refuse.
+  const skipOrFail = (msg) => {
+    if (process.env.L3_REQUIRE === "1") {
+      log(`❌ L3 REQUIRED but ${msg} — failing (must be present in CI)`);
+      process.exit(1);
+    }
+    log(`· ${msg} — skipping L3 (green)`);
+    process.exit(0);
+  };
+
   let chromium;
   try {
     ({ chromium } = await import("playwright"));
   } catch {
-    log("· playwright not available — skipping L3 (green)");
-    process.exit(0);
+    skipOrFail("playwright not available");
   }
 
   const tmp = mkdtempSync(path.join(tmpdir(), "l3-"));
@@ -89,9 +101,8 @@ async function main() {
       { stdio: "ignore" },
     );
   } catch {
-    log("· openssl not available — skipping L3 (green)");
     rmSync(tmp, { recursive: true, force: true });
-    process.exit(0);
+    skipOrFail("openssl not available");
   }
 
   const https = createHttps({ key: readFileSync(keyP), cert: readFileSync(certP) }, (req, res) => {

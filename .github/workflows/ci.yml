@@ -92,6 +92,55 @@ jobs:
           PGPASSWORD: postgres
         run: node scripts/test-pgvector-rpcs.mjs
 
+  browser-mechanics-e2e:
+    # Drift-defense Layer 3 (scripts/e2e-browser-mechanics.mjs). Loads the REAL
+    # built extension into a real (headed, under xvfb) Chromium and proves the
+    # whole in-browser capture chain fires end to end: MAIN-world fetch hook →
+    # ISOLATED relay → MV3 service worker → POST /capture. It host-maps claude.ai
+    # to a local HTTPS server replaying the golden-fixture SSE and asserts the
+    # assistant turn reaches a mock daemon — so it guards OUR capture mechanics,
+    # not the live site's wire format. Deterministic + no secrets → a true gate
+    # on every push AND pr, same tier as verify / pgvector-rpc-test.
+    #
+    # Layer relationship:
+    #   L1 (in-extension drift sentinel) + adapter unit tests run inside `verify`.
+    #   L3 (this job) — real-browser mechanics — automated here.
+    #   L2 (extension/test/live-drift.test.ts) — live-site wire-format drift —
+    #      stays MANUAL by design: it needs a logged-in claude.ai / chatgpt.com
+    #      session and we never store site credentials in CI. Run it on a personal
+    #      machine with a debug-port Chrome. This is a boundary, not a gap.
+    #
+    # MV3 service workers only register in HEADED Chromium on the pinned
+    # Playwright build, hence xvfb (virtual display). L3_REQUIRE=1 makes a
+    # "playwright/openssl missing" skip a hard FAILURE here — in CI those deps
+    # are guaranteed, so a skip would mean the gate silently became a no-op.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build extension bundle (produces extension/dist)
+        run: npm run bundle --workspace=extension
+
+      - name: Install Playwright Chromium + system deps
+        run: npx playwright install --with-deps chromium
+
+      - name: Install xvfb (virtual display for headed Chromium)
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Run L3 browser-mechanics under xvfb
+        env:
+          L3_REQUIRE: "1"
+        run: xvfb-run -a node scripts/e2e-browser-mechanics.mjs
+
   cleanup-e2e-account:
     # Hygiene gate for the shared E2E test account. Every E2E run creates
     # test projects; failed/cancelled runs leak them past their own sweeps.
