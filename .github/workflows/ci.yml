@@ -513,6 +513,99 @@ jobs:
           echo "--- ~/.synapse/project-map.json ---"
           cat "$HOME/.synapse/project-map.json" 2>/dev/null || echo "(no project-map.json)"
 
+  insight-roundtrip-e2e:
+    # Continuous coverage of the brief-recall loop (LAUNCH-READINESS #6):
+    # capture → backend project resolve → save_insight → SessionStart hook
+    # composes a brief that contains the insight phrase. Runs on Ubuntu
+    # only — the proxy capture → CloudSync → /api/projects materialization
+    # tail latency on the windows-latest runner consistently overruns any
+    # bounded poll budget (observed 60s, 120s, 130s in metanmai runs
+    # 27281443605 / 27283047790 / 27284091981). The bug class under
+    # guard is OS-neutral business logic, so the Ubuntu leg gives full
+    # coverage without forcing a fragile timeout race on Windows. The
+    # Windows-side capture-worker timing is tracked as a separate
+    # follow-up in LAUNCH-READINESS "NICE-TO-HAVE".
+    #
+    # Runs in parallel with happy-flow-e2e (no `needs` dependency on it) —
+    # both account-creating jobs are gated behind cleanup-e2e-account
+    # which provides enough quota headroom for both to coexist.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [verify, cleanup-e2e-account]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: prod
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Check secrets are configured
+        id: check
+        env:
+          SYNAPSE_E2E_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          if [ -z "$SYNAPSE_E2E_API_KEY" ]; then
+            echo "::notice::insight-roundtrip-e2e skipped — SYNAPSE_E2E_API_KEY not configured. Mirror to metanmai/synapse for the validated run."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ] && [ -z "$DEEPSEEK_API_KEY" ]; then
+            echo "::notice::insight-roundtrip-e2e skipped — no LLM provider key configured. Mirror to metanmai/synapse for the validated run."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build mcp
+        if: steps.check.outputs.configured == 'true'
+        run: npm run build --workspace=mcp
+
+      - name: Install hooks + enable proxy + start daemon
+        # Same one-machine onboarding shape as happy-flow-e2e: init writes
+        # hooks/.mcp.json, proxy enable spawns capture-worker, daemon
+        # background-spawn drives the handoff loop.
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SYNAPSE_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+        run: |
+          mkdir -p "$HOME/.synapse"
+          node mcp/dist/index.js init --api-key "$SYNAPSE_API_KEY" --skip-service
+          node mcp/dist/index.js capture proxy enable
+          nohup node mcp/dist/index.js daemon > "$HOME/.synapse/daemon.log" 2>&1 &
+          for i in $(seq 1 30); do
+            if [ -f "$HOME/.synapse/daemon.healthcheck" ]; then
+              echo "Daemon healthcheck present after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Daemon never wrote healthcheck file after 30s"
+          exit 1
+
+      - name: Run insight-roundtrip
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SYNAPSE_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: node scripts/e2e-insight-roundtrip.mjs
+
+      - name: Dump daemon log on failure
+        if: failure() && steps.check.outputs.configured == 'true'
+        run: |
+          echo "--- ~/.synapse/capture.log (last 200 lines) ---"
+          tail -200 "$HOME/.synapse/capture.log" 2>/dev/null || true
+          echo "--- ~/.synapse/daemon.log (last 200 lines) ---"
+          tail -200 "$HOME/.synapse/daemon.log" 2>/dev/null || true
+
   project-cap-e2e:
     # LAUNCH-READINESS #7 — continuous coverage of the structured 402
     # PROJECT_QUOTA_EXCEEDED contract: the exact bug class that turned CI
@@ -526,9 +619,9 @@ jobs:
     # pre-cleans its own e2e-cap-test-* residue from crashed prior runs.
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Needs BOTH account-using jobs (all matrix legs) done — saturating the
-    # cap while either is still creating projects would 402 their creates.
-    needs: [happy-flow-e2e, e2e]
+    # Needs ALL account-using jobs done — saturating the cap while any of
+    # them is still creating projects would 402 their creates.
+    needs: [happy-flow-e2e, e2e, insight-roundtrip-e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: prod
 

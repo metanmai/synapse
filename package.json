@@ -7,7 +7,7 @@
     "dev:frontend": "npm run dev -w frontend",
     "build": "npm run lint && npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "test:e2e": "node scripts/e2e-happy-flow.mjs && node scripts/e2e-adapter-roundtrip.mjs && node scripts/e2e-proxy-layer5.mjs && node scripts/e2e-proxy-source.mjs && node scripts/e2e-proxy-lifecycle.mjs && node scripts/e2e-cli.mjs && node scripts/e2e-insight-roundtrip.mjs",
+    "test:e2e": "node scripts/e2e-happy-flow.mjs && node scripts/e2e-adapter-roundtrip.mjs && node scripts/e2e-proxy-layer5.mjs && node scripts/e2e-proxy-source.mjs && node scripts/e2e-proxy-lifecycle.mjs && node scripts/e2e-cli.mjs",
     "test:e2e:failures": "node scripts/e2e-failure-cases.mjs",
     "test:e2e:multi-device": "node scripts/e2e-multi-device.mjs",
     "test:e2e:insight": "node scripts/e2e-insight-roundtrip.mjs",
