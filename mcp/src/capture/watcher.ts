@@ -66,10 +66,22 @@ export class CaptureWatcher extends EventEmitter {
       this.lastError = `${paths.length - existingPaths.length} watch path(s) not found`;
     }
 
+    // chokidar's default uses Node's fs.watch (native OS notifications).
+    // That's fast on Linux (inotify) and macOS (FSEvents) but UNRELIABLE on
+    // Windows — events for nested directories under deeply-nested watch
+    // paths (e.g. ~/.config/Code/User/globalStorage/.../tasks) frequently
+    // never fire under fs.watch. The 2026-06-07 Windows happy-flow-e2e
+    // adapter-roundtrip failure showed all 6 adapters (cursor, codex,
+    // gemini, cline, roo-code, copilot-cli) missing their captures.
+    // Polling closes the gap at the cost of ~1% CPU per watched dir.
+    // Linux/macOS stay on native because they don't have the reliability
+    // problem and polling would be wasteful.
+    const isWindows = process.platform === "win32";
     this.fsWatcher = watch(paths, {
       ignoreInitial: true,
       persistent: true,
       awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },
+      ...(isWindows ? { usePolling: true, interval: 500, binaryInterval: 1000 } : {}),
     });
 
     this.fsWatcher.on("add", (filePath) => this.queueEvent(filePath));
