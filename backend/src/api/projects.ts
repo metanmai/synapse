@@ -3,31 +3,24 @@ import { Hono } from "hono";
 import { logActivity } from "../db/activity-logger";
 import {
   addMember,
-  countEntries,
   countMembers,
   createProject,
   createShareLink,
   deleteShareLink,
   findUserByEmail,
   getActivityLog,
-  getAllEntries,
-  getProjectByName,
   getProjectStats,
   listProjectsForUser,
   listShareLinks,
   removeMember,
-  setPreference,
   updateMemberRole,
 } from "../db/queries";
 import { authMiddleware } from "../lib/auth";
 import { DEFAULT_PAGE_LIMIT } from "../lib/constants";
-import { AppError, ForbiddenError, NotFoundError } from "../lib/errors";
-import { buildProjectZip } from "../lib/export";
+import { ForbiddenError, NotFoundError } from "../lib/errors";
 import { recomputeProjectStatus } from "../lib/handoff-reducer";
 import { idempotency } from "../lib/idempotency";
-import { importEntries, parseZipEntries } from "../lib/import";
 import { enforceMemberLimit, enforceProjectQuota, requirePlus } from "../lib/tier";
-import { getTierLimits } from "../lib/tier";
 import { parseBody, schemas } from "../lib/validate";
 import { requireRole } from "../middleware/project-auth";
 
@@ -160,20 +153,6 @@ projects.delete("/:id/members/:email", async (c) => {
   return c.json({ ok: true });
 });
 
-// PUT /api/preferences/:project
-projects.put("/preferences/:project", async (c) => {
-  const user = c.get("user");
-  const projectName = c.req.param("project");
-  const { key, value } = await parseBody(c, schemas.setPreference);
-
-  const db = c.get("db");
-  const proj = await getProjectByName(db, projectName, user.id);
-  if (!proj) throw new NotFoundError(`Project "${projectName}" not found`);
-
-  const prefs = await setPreference(db, user.id, proj.id, key, value);
-  return c.json(prefs);
-});
-
 // POST /api/projects/:id/share-links (Plus only — free tier uses email invites)
 projects.post("/:id/share-links", async (c) => {
   requirePlus(c, "Share links");
@@ -243,83 +222,6 @@ projects.get("/:id/activity", async (c) => {
 
   const activity = await getActivityLog(db, projectId, limit, offset);
   return c.json(activity);
-});
-
-// GET /api/projects/:id/export
-projects.get("/:id/export", async (c) => {
-  const user = c.get("user");
-  const projectId = c.req.param("id");
-
-  const db = c.get("db");
-  await requireRole(db, projectId, user.id);
-
-  // Get project name for the zip filename
-  const { data: project } = await db.from("projects").select("name").eq("id", projectId).single();
-
-  const entries = await getAllEntries(db, projectId);
-  const zip = buildProjectZip(project?.name ?? "export", entries);
-
-  const filename = `${(project?.name ?? "export").replace(/[^a-zA-Z0-9-_]/g, "_")}.zip`;
-
-  return new Response(zip, {
-    headers: {
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-    },
-  });
-});
-
-// POST /api/projects/:id/import
-projects.post("/:id/import", async (c) => {
-  const user = c.get("user");
-  const projectId = c.req.param("id");
-
-  const db = c.get("db");
-  await requireRole(db, projectId, user.id, "editor");
-
-  // Parse multipart form data
-  const formData = await c.req.formData();
-  const file = formData.get("file");
-  if (!file || !(file instanceof File)) {
-    throw new AppError("file is required", 400, "VALIDATION_ERROR");
-  }
-
-  const arrayBuffer = await file.arrayBuffer();
-  const zipData = new Uint8Array(arrayBuffer);
-
-  let parsed: ReturnType<typeof parseZipEntries>;
-  try {
-    parsed = parseZipEntries(zipData);
-  } catch {
-    throw new AppError("Invalid zip file", 400, "VALIDATION_ERROR");
-  }
-
-  // Validate Synapse export
-  if (!parsed.meta || parsed.meta.version !== 1) {
-    throw new AppError("Not a valid Synapse export (missing or invalid _synapse_meta.json)", 400, "VALIDATION_ERROR");
-  }
-
-  // Tier enforcement: check if import would exceed file limit
-  const currentCount = await countEntries(db, projectId);
-  const existingPaths = new Set<string>();
-  const { data: existingEntries } = await db.from("entries").select("path").eq("project_id", projectId);
-  if (existingEntries) {
-    for (const e of existingEntries) existingPaths.add(e.path);
-  }
-
-  const newEntryCount = parsed.entries.filter((e) => !existingPaths.has(e.path)).length;
-  const limits = getTierLimits(c);
-  if (currentCount + newEntryCount > limits.maxFiles) {
-    throw new AppError(
-      `Import would exceed file limit (${currentCount} existing + ${newEntryCount} new = ${currentCount + newEntryCount}, limit: ${limits.maxFiles})`,
-      403,
-      "TIER_LIMIT",
-    );
-  }
-
-  const result = await importEntries(db, projectId, parsed.entries, user.id);
-
-  return c.json(result);
 });
 
 // POST /api/projects/:id/merge-into/:target_id

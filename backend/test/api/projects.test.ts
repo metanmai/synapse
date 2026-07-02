@@ -94,24 +94,6 @@ describe("Projects API — auth enforcement", () => {
     await waitOnExecutionContext(ctx);
     expect(res.status).toBe(401);
   });
-
-  it("GET /api/projects/:id/export without auth returns 401", async () => {
-    const req = new Request("http://localhost/api/projects/some-id/export");
-    const ctx = createExecutionContext();
-    const res = await worker.fetch(req, env, ctx);
-    await waitOnExecutionContext(ctx);
-    expect(res.status).toBe(401);
-  });
-
-  it("POST /api/projects/:id/import without auth returns 401", async () => {
-    const req = new Request("http://localhost/api/projects/some-id/import", {
-      method: "POST",
-    });
-    const ctx = createExecutionContext();
-    const res = await worker.fetch(req, env, ctx);
-    await waitOnExecutionContext(ctx);
-    expect(res.status).toBe(401);
-  });
 });
 
 // Note: testing with an invalid Bearer token would hit createSupabaseClient

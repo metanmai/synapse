@@ -26,7 +26,6 @@ import {
   deleteApiKey,
   findUserByApiKeyHash,
   listCliKeys,
-  updateApiKeyLabel,
 } from "../../src/db/queries/api-keys";
 
 // ── Subscriptions ────────────────────────────────────────────────
@@ -954,26 +953,6 @@ describe("api-keys queries", () => {
       expect(db.chainable.like).toHaveBeenCalledWith("label", "cli-%");
       expect(db.chainable.order).toHaveBeenCalledWith("created_at", { ascending: false });
       expect(result).toEqual(rows);
-    });
-  });
-
-  // ── updateApiKeyLabel ──────────────────────────────────────
-  describe("updateApiKeyLabel", () => {
-    it("updates label and returns true when row matches", async () => {
-      const db = createMockDb({ data: null, error: null, count: 1 });
-      const result = await updateApiKeyLabel(db as unknown as SupabaseClient, "k1", "u1", "cli-new-name");
-
-      expect(db.from).toHaveBeenCalledWith("api_keys");
-      expect(db.chainable.update).toHaveBeenCalledWith({ label: "cli-new-name" }, { count: "exact" });
-      expect(db.chainable.eq).toHaveBeenCalledWith("id", "k1");
-      expect(db.chainable.eq).toHaveBeenCalledWith("user_id", "u1");
-      expect(result).toBe(true);
-    });
-
-    it("returns false when no row matches (wrong user or missing key)", async () => {
-      const db = createMockDb({ data: null, error: null, count: 0 });
-      const result = await updateApiKeyLabel(db as unknown as SupabaseClient, "k1", "u1", "cli-new");
-      expect(result).toBe(false);
     });
   });
 });

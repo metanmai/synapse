@@ -139,9 +139,9 @@ A background daemon (chokidar, event queue, mtime+size dedup) parses these into 
 2. Optionally distills via LLM (Anthropic/OpenAI/Google) into structured knowledge files
 3. Writes distilled output to the workspace via `POST /api/context/save`
 
-The MCP server then exposes the workspace to any client:
-- `search` (semantic + full-text via pgvector)
-- `read`, `tree`, `ls`, `history`
+The MCP server then exposes the curated knowledge layer to any client:
+- `list_insights` — browse decisions/learnings/architecture/preferences/action_items, filtered by project, type, or recency
+- `save_insight` — write a new entry, with `supersedes` to consolidate against older ones
 
 Adapter pattern makes adding new tools trivial -- implement `watchPaths()` and `parse()`.
 

@@ -319,9 +319,6 @@ async function stageF2_4_stale_project_map() {
   // wouldn't fire and this test would pass on a trivial setup miss
   // rather than the actual invalidation behavior.
   const canonicalCwd = (await import("node:fs")).realpathSync(cwd);
-  try {
-    /* try realpath */
-  } catch {}
 
   // Write a project-map entry pointing to a UUID that doesn't exist
   const fakeUuid = "00000000-0000-0000-0000-000000000000";

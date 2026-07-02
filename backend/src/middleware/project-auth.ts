@@ -41,38 +41,6 @@ export async function resolveProject(
 }
 
 /**
- * Resolve project and require at least editor access.
- * Throws ForbiddenError if the caller is a viewer.
- */
-export async function resolveProjectEditor(
-  db: SupabaseClient,
-  projectName: string,
-  userId: string,
-): Promise<ResolvedProject> {
-  const resolved = await resolveProject(db, projectName, userId);
-  if (resolved.role === "viewer") {
-    throw new ForbiddenError("Viewers cannot modify this project");
-  }
-  return resolved;
-}
-
-/**
- * Resolve project and require owner access.
- * Throws ForbiddenError if the caller is not the owner.
- */
-export async function resolveProjectOwner(
-  db: SupabaseClient,
-  projectName: string,
-  userId: string,
-): Promise<ResolvedProject> {
-  const resolved = await resolveProject(db, projectName, userId);
-  if (resolved.role !== "owner") {
-    throw new ForbiddenError("Only the project owner can perform this action");
-  }
-  return resolved;
-}
-
-/**
  * Verify member role on a project by ID (not name).
  * Used when you already have the project ID.
  */

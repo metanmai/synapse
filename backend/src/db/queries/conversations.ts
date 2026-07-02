@@ -4,7 +4,6 @@ import type {
   Conversation,
   ConversationContext,
   ConversationListItem,
-  ConversationMediaRecord,
   ConversationMessage,
   ConversationStatus,
   FidelityMode,
@@ -20,9 +19,6 @@ const CONVERSATION_LIST_COLUMNS = "id, title, status, message_count, metadata, u
 
 const MESSAGE_COLUMNS =
   "id, conversation_id, sequence, role, content, tool_interaction, source_agent, source_model, token_count, cost, attachments_summary, parent_message_id, encrypted, created_at";
-
-const MEDIA_COLUMNS =
-  "id, message_id, conversation_id, type, mime_type, filename, size, storage_path, encrypted, created_at";
 
 const CONTEXT_COLUMNS = "id, conversation_id, type, key, value, snapshot_at, encrypted, created_at";
 
@@ -347,73 +343,6 @@ export async function getMessages(
   const { data, error } = await query;
   if (error) throw error;
   return (data ?? []) as ConversationMessage[];
-}
-
-// --- Media ---
-
-export async function getMediaForConversation(
-  db: SupabaseClient,
-  conversationId: string,
-): Promise<ConversationMediaRecord[]> {
-  const { data, error } = await db
-    .from("conversation_media")
-    .select(MEDIA_COLUMNS)
-    .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as ConversationMediaRecord[];
-}
-
-export async function insertMedia(
-  db: SupabaseClient,
-  params: {
-    message_id: string;
-    conversation_id: string;
-    type: "image" | "file" | "pdf" | "audio" | "video";
-    mime_type: string;
-    filename?: string | null;
-    size: number;
-    storage_path: string;
-    encrypted?: boolean;
-  },
-): Promise<ConversationMediaRecord> {
-  const { data, error } = await db
-    .from("conversation_media")
-    .insert({
-      message_id: params.message_id,
-      conversation_id: params.conversation_id,
-      type: params.type,
-      mime_type: params.mime_type,
-      filename: params.filename ?? null,
-      size: params.size,
-      storage_path: params.storage_path,
-      encrypted: params.encrypted ?? false,
-    })
-    .select(MEDIA_COLUMNS)
-    .single();
-  if (error) throw error;
-
-  // Update media_size on the conversation
-  // Fetch current media_size and add the new file's size
-  const { data: conv, error: convError } = await db
-    .from("conversations")
-    .select("media_size")
-    .eq("id", params.conversation_id)
-    .single();
-  if (convError) {
-    console.error(`[conversations] Failed to read media_size for ${params.conversation_id}:`, convError.message);
-  } else {
-    const newSize = (conv.media_size ?? 0) + params.size;
-    const { error: updateError } = await db
-      .from("conversations")
-      .update({ media_size: newSize })
-      .eq("id", params.conversation_id);
-    if (updateError) {
-      console.error(`[conversations] Failed to update media_size for ${params.conversation_id}:`, updateError.message);
-    }
-  }
-
-  return data as ConversationMediaRecord;
 }
 
 // --- Context ---

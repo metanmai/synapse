@@ -70,9 +70,6 @@ export interface BrowserAuthOptions {
   deviceName?: string;
 }
 
-// Backwards-compatible alias for the original name (was {@link BrowserAuthCallbacks}).
-export type BrowserAuthCallbacks = BrowserAuthOptions;
-
 /**
  * Browser-based CLI authentication using PKCE.
  *

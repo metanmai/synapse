@@ -1,15 +1,12 @@
-export { ensureGitignore, writeJsonSafe, writeMcpJson } from "./io.js";
-export { writeClaudeCodeLocal, writeClaudeCodeGlobal } from "./claude-code.js";
-export { writeCursorLocal, writeCursorGlobal } from "./cursor.js";
-export { writeWindsurfLocal, writeWindsurfGlobal } from "./windsurf.js";
-export { writeVSCodeLocal, writeVSCodeGlobal } from "./vscode.js";
+// Barrel for the editors/ module. Limited to the names callers actually
+// import via this path — the per-editor write functions (writeClaudeCodeLocal/
+// Global, writeCursorLocal/Global, etc.) and io helpers are imported directly
+// from their source files when needed, so they don't need re-exports here.
 export {
   type SetupScope,
-  type EditorInfo,
   type ExistingSetup,
   type ConfigLocation,
-  type LocationStatus,
   detectEditors,
   detectExistingSetup,
 } from "./detect.js";
-export { type WriteResult, writeEditorConfigs } from "./orchestrate.js";
+export { writeEditorConfigs } from "./orchestrate.js";

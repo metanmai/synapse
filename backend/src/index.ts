@@ -14,7 +14,6 @@ import { projectStatus } from "./api/project-status";
 import { projects } from "./api/projects";
 import { projectsResolve } from "./api/projects-resolve";
 import { share } from "./api/share";
-import { sync } from "./api/sync";
 import { runDailyAggregation } from "./cron/aggregate";
 import { CompactionScheduler } from "./durable-objects/compaction-scheduler";
 import type { Env } from "./lib/env";
@@ -23,7 +22,6 @@ import { AppError } from "./lib/errors";
 import { rateLimit } from "./lib/rate-limit";
 import { SynapseAgent } from "./mcp/agent";
 import { dbMiddleware } from "./middleware/db";
-import { runScheduledGoogleSync } from "./sync/from-google";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -76,7 +74,6 @@ app.route("/api/projects", projectsResolve);
 app.route("/api/projects", projects);
 app.route("/api/projects", projectStatus);
 app.route("/api/projects", projectEvents);
-app.route("/api/sync", sync);
 app.route("/api/share", share);
 app.route("/api/account", account);
 app.route("/api/admin", admin);
@@ -98,8 +95,6 @@ export default {
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     if (event.cron === "0 3 * * *") {
       ctx.waitUntil(runDailyAggregation(env));
-    } else {
-      ctx.waitUntil(runScheduledGoogleSync(env));
     }
   },
 };

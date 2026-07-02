@@ -7,10 +7,6 @@ export interface Env {
   // Admin
   ADMIN_SECRET?: string;
 
-  // OAuth
-  GOOGLE_CLIENT_ID: string;
-  GOOGLE_CLIENT_SECRET: string;
-
   // CORS — comma-separated allowed origins
   // Default: "http://localhost:5173,https://synapsesync.app"
   CORS_ORIGINS?: string;
@@ -31,9 +27,6 @@ export interface Env {
   CREEM_API_KEY: string;
   CREEM_WEBHOOK_SECRET: string;
   CREEM_PRO_PRODUCT_ID: string;
-
-  // Valid sources for entries
-  VALID_SOURCES?: string; // Default: "human,claude,chatgpt,cursor,copilot,windsurf,google_docs"
 
   // Activity log defaults
   ACTIVITY_PAGE_LIMIT?: string; // Default: "50"

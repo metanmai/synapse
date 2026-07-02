@@ -12,7 +12,6 @@ import {
   listApiKeys,
   listCliKeys,
   recordDeletedAccount,
-  updateApiKeyLabel,
 } from "../db/queries";
 import { authMiddleware, hashApiKey } from "../lib/auth";
 import {
@@ -23,8 +22,6 @@ import {
   DEVICE_LIMIT_FREE,
   DEVICE_LIMIT_PLUS,
   DEVICE_NAME_MAX_LENGTH,
-  GOOGLE_DRIVE_SCOPE,
-  GOOGLE_TOKEN_EXPIRY_FALLBACK,
 } from "../lib/constants";
 import { creemRequest } from "../lib/creem";
 import { AppError, ConflictError } from "../lib/errors";
@@ -305,33 +302,6 @@ auth.post("/cli-session", authMiddleware, async (c) => {
   return c.json({ code });
 });
 
-// POST /auth/cli-revoke-and-session — revoke a specified device + immediately issue a new one.
-// Used by the web /cli-auth page when a user picks "revoke this device and continue" from the
-// device limit picker. The revoke and create happen back-to-back so the user doesn't end up
-// in a half-revoked state on a network failure.
-auth.post("/cli-revoke-and-session", authMiddleware, async (c) => {
-  const body = await parseBody(c, schemas.cliRevokeAndSession);
-  const user = c.get("user");
-  const db = c.get("db");
-
-  // Revoke the specified key. deleteApiKey enforces ownership (user_id check).
-  const deleted = await deleteApiKey(db, body.revoke_key_id, user.id);
-  if (!deleted) {
-    throw new AppError("Device not found", 404, "NOT_FOUND");
-  }
-
-  const deviceLabel = `${DEVICE_LABEL_PREFIX}${sanitizeDeviceName(body.device_name)}`;
-  const code = await mintCliSessionCode({
-    db,
-    user,
-    deviceLabel,
-    codeChallenge: body.code_challenge,
-    secret: c.env.SUPABASE_SERVICE_KEY,
-  });
-
-  return c.json({ code });
-});
-
 // POST /auth/cli-exchange — exchange encrypted code + PKCE verifier for API key (no auth required)
 // Stateless: decrypts the code, verifies PKCE, returns the API key. No server-side session lookup.
 auth.post("/cli-exchange", async (c) => {
@@ -356,74 +326,6 @@ auth.post("/cli-exchange", async (c) => {
   return c.json({
     api_key: session.api_key,
     email: session.email,
-  });
-});
-
-// Google OAuth connect flow — requires auth so we know which user to link
-auth.get("/google/connect", authMiddleware, async (c) => {
-  const user = c.get("user");
-  const redirectUri = new URL("/auth/google/callback", c.req.url).href;
-  const state = btoa(JSON.stringify({ userId: user.id }));
-  const params = new URLSearchParams({
-    client_id: c.env.GOOGLE_CLIENT_ID,
-    redirect_uri: redirectUri,
-    response_type: "code",
-    scope: GOOGLE_DRIVE_SCOPE,
-    access_type: "offline",
-    prompt: "consent",
-    state,
-  });
-  return c.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
-});
-
-auth.get("/google/callback", async (c) => {
-  const code = c.req.query("code");
-  const stateParam = c.req.query("state");
-  if (!code) throw new AppError("Missing code parameter", 400, "VALIDATION_ERROR");
-  if (!stateParam) throw new AppError("Missing state parameter", 400, "VALIDATION_ERROR");
-
-  const { userId } = JSON.parse(atob(stateParam));
-  const redirectUri = new URL("/auth/google/callback", c.req.url).href;
-
-  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: c.env.GOOGLE_CLIENT_ID,
-      client_secret: c.env.GOOGLE_CLIENT_SECRET,
-      code,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-    }),
-  });
-
-  interface GoogleTokenResponse {
-    access_token?: string;
-    refresh_token?: string;
-    expires_in?: number;
-  }
-  const tokens = (await tokenRes.json()) as GoogleTokenResponse;
-  if (!tokens.access_token) {
-    throw new AppError("Failed to exchange code for tokens", 400, "OAUTH_ERROR");
-  }
-
-  const db = c.get("db");
-  const { error } = await db
-    .from("users")
-    .update({
-      google_oauth_tokens: {
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_at: Date.now() + (tokens.expires_in ?? GOOGLE_TOKEN_EXPIRY_FALLBACK) * 1000,
-      },
-    })
-    .eq("id", userId);
-
-  if (error) throw error;
-
-  return c.json({
-    message: "Google account connected successfully.",
-    note: "Use set_preference to link a Google Drive folder to your project.",
   });
 });
 
@@ -486,33 +388,6 @@ account.delete("/keys/:id", async (c) => {
   }
 
   return c.json({ ok: true });
-});
-
-// PATCH /api/account/keys/:id — rename a key (used by the Connected Devices dashboard).
-// For cli-* labels, the user-facing name doesn't include the prefix — we add it back here
-// so rename UX is "type a name" rather than "type cli-name".
-account.patch("/keys/:id", async (c) => {
-  const user = c.get("user");
-  const keyId = c.req.param("id");
-  const db = c.get("db");
-  const body = await parseBody(c, schemas.updateApiKeyLabel);
-
-  // Look up the existing label to decide whether to re-apply the cli- prefix.
-  const keys = await listApiKeys(db, user.id);
-  const existing = keys.find((k) => k.id === keyId);
-  if (!existing) {
-    throw new AppError("API key not found", 404, "NOT_FOUND");
-  }
-
-  const isDevice = existing.label.startsWith(DEVICE_LABEL_PREFIX);
-  const newLabel = isDevice ? `${DEVICE_LABEL_PREFIX}${sanitizeDeviceName(body.label)}` : body.label;
-
-  const ok = await updateApiKeyLabel(db, keyId, user.id, newLabel);
-  if (!ok) {
-    throw new AppError("API key not found", 404, "NOT_FOUND");
-  }
-
-  return c.json({ ok: true, label: newLabel });
 });
 
 // GET /api/account/me — return the authenticated user's canonical identity.

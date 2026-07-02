@@ -107,7 +107,7 @@ Without embeddings: full-text / keyword paths still work depending on your schem
 - [ ] Worker `/health` or equivalent responds (see `backend/test/api/health.test.ts`).
 - [ ] Frontend can sign in and list projects.
 - [ ] API key created in UI works with `Authorization: Bearer …`.
-- [ ] MCP `tree` / `read` against a test project.
+- [ ] MCP `list_insights` / `save_insight` against a test project.
 
 ## 7. Fork-specific customization
 

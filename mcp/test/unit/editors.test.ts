@@ -433,7 +433,24 @@ describe("editors", () => {
       expect(fs.existsSync(cmdDir)).toBe(true);
       const files = fs.readdirSync(cmdDir);
       const synapseFiles = files.filter((f) => f.startsWith("synapse-") && f.endsWith(".md"));
-      expect(synapseFiles.length).toBe(9);
+      // Only `synapse-insights` survives in SYNAPSE_COMMAND_DEFS after the
+      // v1.1 MCP-tool purge — the other 8 (search/tree/sync/whoami/clean/
+      // conversations/resume/save-conversation) called removed tools.
+      expect(synapseFiles.length).toBe(1);
+      expect(synapseFiles.some((f) => f.startsWith("synapse-insights"))).toBe(true);
+      // Regression guard: the 8 dead command names must NOT come back.
+      for (const dead of [
+        "synapse-search",
+        "synapse-tree",
+        "synapse-sync",
+        "synapse-whoami",
+        "synapse-clean",
+        "synapse-conversations",
+        "synapse-resume",
+        "synapse-save-conversation",
+      ]) {
+        expect(synapseFiles.some((f) => f.startsWith(dead))).toBe(false);
+      }
     });
 
     it("command files have content", () => {
@@ -454,9 +471,10 @@ describe("editors", () => {
       const cursor = findEditor(editors, "cursor");
       cursor.write("sk-test");
 
-      // Modify one file
+      // Modify the one file the writer manages (post-v1.1-purge). Targets
+      // synapse-insights.md — the only file still produced by SYNAPSE_COMMAND_DEFS.
       const cmdDir = path.join(tmpDir, ".cursor", "commands");
-      const target = path.join(cmdDir, "synapse-search.md");
+      const target = path.join(cmdDir, "synapse-insights.md");
       fs.writeFileSync(target, "custom content");
 
       cursor.write("sk-test");
@@ -474,7 +492,24 @@ describe("editors", () => {
       expect(fs.existsSync(promptDir)).toBe(true);
       const files = fs.readdirSync(promptDir);
       const synapseFiles = files.filter((f) => f.startsWith("synapse-") && f.endsWith(".prompt.md"));
-      expect(synapseFiles.length).toBe(9);
+      // Only `synapse-insights` survives in SYNAPSE_COMMAND_DEFS after the
+      // v1.1 MCP-tool purge — the other 8 (search/tree/sync/whoami/clean/
+      // conversations/resume/save-conversation) called removed tools.
+      expect(synapseFiles.length).toBe(1);
+      expect(synapseFiles.some((f) => f.startsWith("synapse-insights"))).toBe(true);
+      // Regression guard: the 8 dead command names must NOT come back.
+      for (const dead of [
+        "synapse-search",
+        "synapse-tree",
+        "synapse-sync",
+        "synapse-whoami",
+        "synapse-clean",
+        "synapse-conversations",
+        "synapse-resume",
+        "synapse-save-conversation",
+      ]) {
+        expect(synapseFiles.some((f) => f.startsWith(dead))).toBe(false);
+      }
 
       // Verify YAML frontmatter
       for (const file of synapseFiles) {
@@ -491,7 +526,9 @@ describe("editors", () => {
       vscode.write("sk-test");
 
       const promptDir = path.join(tmpDir, ".github", "prompts");
-      const target = path.join(promptDir, "synapse-search.prompt.md");
+      // synapse-insights.prompt.md is the only file the writer still produces
+      // after the v1.1 MCP-tool purge.
+      const target = path.join(promptDir, "synapse-insights.prompt.md");
       fs.writeFileSync(target, "custom prompt content");
 
       vscode.write("sk-test");
@@ -509,7 +546,24 @@ describe("editors", () => {
       expect(fs.existsSync(workflowDir)).toBe(true);
       const files = fs.readdirSync(workflowDir);
       const synapseFiles = files.filter((f) => f.startsWith("synapse-") && f.endsWith(".md"));
-      expect(synapseFiles.length).toBe(9);
+      // Only `synapse-insights` survives in SYNAPSE_COMMAND_DEFS after the
+      // v1.1 MCP-tool purge — the other 8 (search/tree/sync/whoami/clean/
+      // conversations/resume/save-conversation) called removed tools.
+      expect(synapseFiles.length).toBe(1);
+      expect(synapseFiles.some((f) => f.startsWith("synapse-insights"))).toBe(true);
+      // Regression guard: the 8 dead command names must NOT come back.
+      for (const dead of [
+        "synapse-search",
+        "synapse-tree",
+        "synapse-sync",
+        "synapse-whoami",
+        "synapse-clean",
+        "synapse-conversations",
+        "synapse-resume",
+        "synapse-save-conversation",
+      ]) {
+        expect(synapseFiles.some((f) => f.startsWith(dead))).toBe(false);
+      }
     });
 
     it("skips existing files (idempotent)", () => {
@@ -518,7 +572,9 @@ describe("editors", () => {
       windsurf.write("sk-test");
 
       const workflowDir = path.join(tmpDir, ".windsurf", "workflows");
-      const target = path.join(workflowDir, "synapse-tree.md");
+      // synapse-insights.md is the only file the writer still produces after
+      // the v1.1 MCP-tool purge.
+      const target = path.join(workflowDir, "synapse-insights.md");
       fs.writeFileSync(target, "custom workflow");
 
       windsurf.write("sk-test");
