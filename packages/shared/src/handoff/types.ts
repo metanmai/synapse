@@ -98,4 +98,16 @@ export interface ProjectStatus {
   open_issues: { decisions: Issue[]; questions: Issue[] };
   open_subtasks: Subtask[];
   updated_at: string;
+  // Internal bookkeeping for incremental recompute. Optional so existing
+  // rows pre-dating BUGS.md #11 fix fall through to the full-recompute
+  // path (which stamps it on first run). Underscore prefix signals
+  // reducer-private — UI/API consumers should not depend on it.
+  _meta?: {
+    // ISO 8601 timestamp of the last full reduce(allEvents). When the
+    // delta since this exceeds FULL_RECOMPUTE_INTERVAL_MS in the backend
+    // wrapper, the next recompute call discards the incremental path and
+    // re-folds from DB truth, bounding staleness from rare upstream
+    // failures or late-arriving events.
+    last_full_recompute_at: string;
+  };
 }
