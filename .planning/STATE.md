@@ -1,6 +1,6 @@
 # State — Stabilize-for-Launch Milestone
 
-*Last updated: 2026-05-19 — pre-execution audit further carved Plan 05 to slice 1b; slice 1a-prime ready to execute (4 plans)*
+*Last updated: 2026-05-19 — slice 1a-prime SHIPPED (4 plans, 17 tests GREEN); slice 1b waits for CF-enabled machine*
 
 ## Project Reference
 
@@ -15,8 +15,8 @@
 ## Current Position
 
 - **Phase:** Phase 1 — Stabilize Backend & Observability (**slice 1a-prime — 4 plans, npm-install-free**)
-- **Plan:** 4 PLAN.md files in scope on this device. Wave 1 (01-01 scaffolding) ✅ COMPLETE (`19e3f8e` + `2576c45` + `c7988c3` — pushed); Wave 2 (01-02, 01-03 parallel) ⏳ next; Wave 3 (01-04) ⏳. Plan 05 deferred to slice 1b.
-- **Status:** Wave 0 scaffolding landed: 17 RED tests queued + 2 GREEN LAUNCHD invariants; LAUNCHD_LABEL exported as single source of truth.
+- **Plan:** Slice 1a-prime ✅ COMPLETE. Plans 01-01 (`19e3f8e`+`2576c45`+`c7988c3`+`c808c54`), 01-02 (`17be259`+`e3528e9`), 01-03 (`1f11b55`+`e972ac8`), 01-04 (`768b139`). Plan 05 (Sentry) + BUG-01 + OPS-01 queued for slice 1b on CF-enabled machine.
+- **Status:** All 17 RED tests turned GREEN. Pre-push hook running clean (lint + typecheck + 352 tests). BUG-02, BUG-03, BUG-04, BUGS-MD-12 closed.
 - **Roadmap progress:** 0/7 phases complete
 
 **Slice routing (2026-05-19, updated):** Phase 1 originally split into 1a (wrangler-free) + 1b (CF machine). Pre-execution audit revealed Plan 05's `npm install @sentry/*` is also Netskope-blocked here. So slice 1a was further narrowed to "1a-prime": BUG-02, BUG-03, BUG-04, BUGS.md #12 land here; OBS-01 (full — code + deploy + verify) consolidated into slice 1b alongside BUG-01 + OPS-01. Phase is complete only when both slices ship.
