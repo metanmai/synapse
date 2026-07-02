@@ -44,7 +44,6 @@ const UNIQUE_PHRASE = `owlfish-bridge-eleven-${RUN_ID}`;
 const INSIGHT_SUMMARY = `Cross-session test — should appear in next brief: ${UNIQUE_PHRASE}`;
 const INSIGHT_DETAIL = `Detail line for ${UNIQUE_PHRASE} — if this surfaces in the brief, the round-trip works end-to-end.`;
 
-const SLEEP_DAEMON_SYNC_MS = 15_000;
 const HOOK_FAST_TIMEOUT_MS = 10_000;
 
 // ── State ────────────────────────────────────────────────────────────────
@@ -230,8 +229,23 @@ async function ir2_capture_and_sync() {
   }
   ok("IR2 LLM capture", `session captured via ${mode} (${driver})`);
 
-  info(`Waiting ${SLEEP_DAEMON_SYNC_MS / 1000}s for daemon sync...`);
-  await sleep(SLEEP_DAEMON_SYNC_MS);
+  // Force the flush instead of racing the daemon's projects-dir re-scan.
+  // The session's events land in a FIRST-CONTACT placeholder queue
+  // (~/.synapse/projects/cwd_<hash>/events.jsonl) that the daemon only
+  // discovers on its next dir scan — minutes, not seconds. `synapsesync
+  // sync` flushes it on demand (and this run doubles as continuous
+  // coverage of the 2026-06-10 sync.ts fix: the map-only listing used to
+  // skip exactly these never-synced placeholder queues).
+  info("Forcing flush via `synapsesync sync`...");
+  const syncRun = spawnSync(process.execPath, [MCP_DIST, "sync"], {
+    encoding: "utf-8",
+    timeout: 120_000,
+    env: { ...process.env, SYNAPSE_API_KEY: apiKey },
+  });
+  if (syncRun.status !== 0) {
+    info(`sync exited ${syncRun.status} — continuing, IR3 poll may still catch the daemon path`);
+    info((syncRun.stdout ?? "").slice(-400));
+  }
 }
 
 // ── IR3: Resolve testProjectId ──────────────────────────────────────────
@@ -239,28 +253,29 @@ async function ir3_resolve_project() {
   header("IR3 · Resolve project_id from backend");
 
   const testBasename = path.basename(testDir);
-  const projects = await fetchJson("/api/projects");
-  if (!Array.isArray(projects)) {
-    fail("IR3 list projects", `non-array response: ${JSON.stringify(projects).slice(0, 200)}`);
-    return;
-  }
-  const match = projects.find((p) => p.name === testBasename);
-  if (!match) {
-    try {
-      writeFileSync(path.join(process.env.HOME ?? "/", ".synapse", "daemon-flush-now"), "");
-    } catch {}
-    await sleep(5000);
-    const retry = await fetchJson("/api/projects");
-    const m2 = Array.isArray(retry) ? retry.find((p) => p.name === testBasename) : null;
-    if (!m2) {
-      fail("IR3 project resolved", `project '${testBasename}' not found after retry`);
+
+  // Poll instead of one fixed retry: the forced `sync` in IR2 makes the
+  // common case land within the first attempt or two, but conversation-
+  // path syncs (capture-worker) and backend auto-routing can add seconds.
+  // 12 × 5s keeps the worst case bounded at ~60s — far below the old
+  // failure mode (the daemon's multi-minute dir re-scan) while never
+  // passing on luck. Bug class: fixed sleeps racing async pipelines.
+  const MAX_POLLS = 12;
+  for (let attempt = 1; attempt <= MAX_POLLS; attempt++) {
+    const projects = await fetchJson("/api/projects");
+    if (!Array.isArray(projects)) {
+      fail("IR3 list projects", `non-array response: ${JSON.stringify(projects).slice(0, 200)}`);
       return;
     }
-    testProjectId = m2.id;
-  } else {
-    testProjectId = match.id;
+    const match = projects.find((p) => p.name === testBasename);
+    if (match) {
+      testProjectId = match.id;
+      ok("IR3 project resolved", `${testProjectId} (poll ${attempt}/${MAX_POLLS})`);
+      return;
+    }
+    if (attempt < MAX_POLLS) await sleep(5000);
   }
-  ok("IR3 project resolved", `${testProjectId}`);
+  fail("IR3 project resolved", `project '${testBasename}' not found after ${MAX_POLLS} polls (~60s)`);
 }
 
 // ── IR4: Save insight with UNIQUE_PHRASE ────────────────────────────────

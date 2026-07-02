@@ -270,12 +270,22 @@ function preflight() {
   }
   info(`API key resolved (${apiKey.slice(0, 12)}...)`);
 
-  const claude = spawnSync("which", ["claude"], { encoding: "utf-8" });
-  if (claude.status !== 0) {
-    fail("preflight", "claude CLI not on PATH");
+  // This script REQUIRES direct-API mode (a provider key). The cli-driver
+  // fallback (`claude -p`) can't pass — conversation attribution rides on
+  // the `X-Synapse-Cwd` request header, which the direct-API curl driver
+  // sends but claude's own HTTPS calls through the proxy never carry, so
+  // captured sessions can't be routed to the test repo's project and MD3
+  // "conversation A" fails structurally, not flakily. Same key
+  // requirement as e2e-happy-flow Stage 3, so the merge-gate env already
+  // satisfies this everywhere the gate runs (locally + CI).
+  if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENROUTER_API_KEY && !process.env.DEEPSEEK_API_KEY) {
+    fail(
+      "preflight",
+      "multi-device needs direct-API mode: set ANTHROPIC_API_KEY / OPENROUTER_API_KEY / DEEPSEEK_API_KEY (cli-driver mode can't attribute proxy sessions to the test cwd)",
+    );
     return false;
   }
-  info(`claude at ${claude.stdout.trim()}`);
+
   ok("preflight", "all prereqs satisfied");
   return true;
 }
@@ -303,11 +313,10 @@ async function md2_device_a_captures() {
   const prompt = `E2E multi-device test, Device A side. Remember: (a) test_id is ${A_TEST_ID}, (b) secret_phrase is '${A_TEST_PHRASE}'. Reply 'noted' only.`;
   info("Running LLM driver in Device A cwd (CLI mode — hook must fire for SYNAPSE_HOME dispatch)...");
   try {
-    // forceCli: the multi-device test depends on the CLI tool's SessionEnd
-    // hook firing so hook-dispatch routes to Device A's daemon via the
-    // inherited SYNAPSE_HOME. Direct-API curl has no hook → would break
-    // the cross-device handoff semantics this test verifies.
-    const result = generateSession({ prompt, cwd: deviceADir, timeoutMs: 120_000, forceCli: true });
+    // Direct-API mode required (preflight enforces): the captured proxy
+    // session gets attributed to the test cwd via the X-Synapse-Cwd
+    // header that the curl driver sends, which claude -p doesn't.
+    const result = generateSession({ prompt, cwd: deviceADir, timeoutMs: 120_000 });
     ok("MD2 device A capture", `LLM responded in ${result.elapsedMs}ms via ${result.driver}`);
   } catch (err) {
     fail("MD2 device A capture", `${err.message}`.slice(0, 300));
@@ -346,14 +355,21 @@ async function md3_a_syncs() {
   testProjectId = match.id;
   ok("MD3 backend project", `created: ${match.id}`);
 
-  const list = await fetchJson(`/api/conversations?project_id=${testProjectId}&limit=5`);
-  const convs = list.conversations ?? [];
-  if (convs.length === 0) {
-    fail("MD3 conversation A", "no conversations in project");
-    return;
+  // Poll: the conversation row lands seconds behind the project that
+  // gets auto-created via the events flush (capture-worker's CloudSync
+  // path). 12 × 5s keeps the worst-case bounded at ~60s. Bug class:
+  // fixed waits racing async pipelines.
+  for (let attempt = 1; attempt <= 12; attempt++) {
+    const list = await fetchJson(`/api/conversations?project_id=${testProjectId}&limit=5`);
+    const convs = list.conversations ?? [];
+    if (convs.length > 0) {
+      aConvId = convs[0].id;
+      ok("MD3 conversation A", `synced: ${aConvId} (poll ${attempt}/12)`);
+      return;
+    }
+    if (attempt < 12) await sleep(5000);
   }
-  aConvId = convs[0].id;
-  ok("MD3 conversation A", `synced: ${aConvId}`);
+  fail("MD3 conversation A", "no conversations in project after 12 polls (~60s)");
 }
 
 // ── MD3.5: Re-fire Device A SessionStart to trigger fast-mode bg recompute ─
