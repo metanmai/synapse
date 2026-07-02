@@ -4,7 +4,7 @@ import { type FSWatcher, watch } from "chokidar";
 import type { AdapterRegistry } from "./adapter-registry.js";
 import type { CapturedSession } from "./types.js";
 
-export type WatcherHealth = "healthy" | "degraded" | "error";
+type WatcherHealth = "healthy" | "degraded" | "error";
 
 interface FileState {
   mtime: number;
