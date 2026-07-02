@@ -16,10 +16,12 @@ import {
 } from "../db/queries";
 import { countOwnedProjects, findOrCreateProjectByGit } from "../db/queries/projects";
 import { detectAdapter, getAdapter } from "../lib/adapters";
+import { aiResolveProject } from "../lib/ai-resolve";
 import { authMiddleware } from "../lib/auth";
 import type { Env } from "../lib/env";
 import { ForbiddenError, NotFoundError } from "../lib/errors";
 import { idempotency } from "../lib/idempotency";
+import { isKeylessContext } from "../lib/project-correlation";
 import { type Tier, enforceProjectQuota, getConversationCapForTier } from "../lib/tier";
 
 import { parseBody, schemas } from "../lib/validate";
@@ -45,6 +47,12 @@ conversations.post("/", async (c) => {
 
   let projectId = body.project_id ?? null;
 
+  // AI project-correlation provenance. Defaults preserve the legacy git path;
+  // the keyless Tier-3 resolver below overrides them when it fires.
+  let embedding: string | null = null;
+  let assignmentMethod = "git";
+  let assignmentConfidence: number | null = null;
+
   if (!projectId) {
     const wc = (body.working_context ?? {}) as Record<string, unknown>;
     const gitRemoteUrl = typeof wc.git_origin_url === "string" ? wc.git_origin_url : null;
@@ -55,21 +63,55 @@ conversations.post("/", async (c) => {
     else if (typeof wc.cwd === "string") gitBasename = wc.cwd.split("/").filter(Boolean).pop() ?? null;
     else if (typeof wc.projectPath === "string") gitBasename = wc.projectPath.split("/").filter(Boolean).pop() ?? null;
 
-    projectId = await findOrCreateProjectByGit(
-      db,
-      user.id,
-      { git_remote_url: gitRemoteUrl, git_basename: gitBasename },
-      {
-        // Quota gate — only fires when we're about to create. Existing
-        // cwd/url matches bypass this entirely, so a user at the 50-cap
-        // can keep opening sessions in their existing projects — only
-        // attempts to materialize a 51st hit PROJECT_QUOTA_EXCEEDED (402).
-        onWillCreate: async () => {
-          const count = await countOwnedProjects(db, user.id);
-          enforceProjectQuota(count, c);
+    // Quota gate — only fires when we're about to create. Existing cwd/url
+    // matches bypass this entirely, so a user at the 50-cap can keep opening
+    // sessions in their existing projects — only a 51st hits 402.
+    const onWillCreate = async () => {
+      const count = await countOwnedProjects(db, user.id);
+      enforceProjectQuota(count, c);
+    };
+
+    // Tier 3 — AI semantic assignment for KEYLESS captures (no git remote and a
+    // synthetic synapse:// path or no cwd). Git captures keep the deterministic
+    // path. Degrades to the git/host path if embeddings are off or down.
+    const keyless = isKeylessContext(wc);
+    const seed = (body.title ?? "").trim();
+    const resolution = keyless && seed ? await aiResolveProject(db, c.env, user.id, seed) : null;
+
+    if (resolution && resolution.decision.action === "assign" && resolution.decision.projectId) {
+      projectId = resolution.decision.projectId;
+      embedding = resolution.embedding;
+      assignmentMethod = "ai_assign";
+      assignmentConfidence = resolution.decision.confidence;
+    } else if (resolution) {
+      // Create: route through the git helper so quota + membership + the 23505
+      // race recovery are reused, naming the project after the title. onWillCreate
+      // fires iff a NEW project is materialized; a title that name-matches an
+      // existing project is recorded as ai_assign instead.
+      embedding = resolution.embedding;
+      assignmentConfidence = resolution.decision.confidence;
+      let willCreate = false;
+      projectId = await findOrCreateProjectByGit(
+        db,
+        user.id,
+        { git_basename: seed },
+        {
+          onWillCreate: async () => {
+            willCreate = true;
+            await onWillCreate();
+          },
         },
-      },
-    );
+      );
+      assignmentMethod = willCreate ? "ai_create" : "ai_assign";
+    } else {
+      // Non-keyless, or embeddings unavailable → today's deterministic git/host path.
+      projectId = await findOrCreateProjectByGit(
+        db,
+        user.id,
+        { git_remote_url: gitRemoteUrl, git_basename: gitBasename },
+        { onWillCreate },
+      );
+    }
   } else {
     // When the caller supplied a project_id explicitly, enforce membership.
     await requireRole(db, projectId, user.id, "editor");
@@ -98,6 +140,9 @@ conversations.post("/", async (c) => {
     system_prompt: body.system_prompt ?? null,
     working_context: body.working_context ?? null,
     metadata: body.metadata ?? null,
+    embedding,
+    assignment_method: assignmentMethod,
+    assignment_confidence: assignmentConfidence,
   });
 
   await logActivity(db, {

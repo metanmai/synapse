@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   chooseMergeTarget,
   decideAssignment,
+  isKeylessContext,
   isStableCandidate,
   isSyntheticProjectName,
   orderPair,
@@ -90,5 +91,26 @@ describe("orderPair / isStableCandidate", () => {
     expect(isStableCandidate(100, 200)).toBe(true);
     expect(isStableCandidate(200, 200)).toBe(false);
     expect(isStableCandidate(300, 200)).toBe(false);
+  });
+});
+
+describe("isKeylessContext", () => {
+  it("is keyless for browser captures (synapse:// path, no git)", () => {
+    expect(isKeylessContext({ tool: "claude-ai", projectPath: "synapse://browser/claude.ai" })).toBe(true);
+  });
+
+  it("is keyless for pure non-code captures (no cwd, no git)", () => {
+    expect(isKeylessContext({})).toBe(true);
+  });
+
+  it("is NOT keyless when a git remote is present", () => {
+    expect(isKeylessContext({ git_origin_url: "https://github.com/me/repo.git", projectPath: "synapse://x" })).toBe(
+      false,
+    );
+  });
+
+  it("is NOT keyless for a real local folder (cwd / path, no git)", () => {
+    expect(isKeylessContext({ cwd: "/home/me/proj", projectPath: "/home/me/proj" })).toBe(false);
+    expect(isKeylessContext({ cwd: "/home/me/proj" })).toBe(false);
   });
 });

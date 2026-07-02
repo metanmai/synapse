@@ -38,6 +38,11 @@ export async function createConversation(
     fork_point?: number | null;
     metadata?: Record<string, unknown> | null;
     encrypted?: boolean;
+    // AI project correlation: pgvector text form ("[0.1,0.2,...]"), and how the
+    // project was chosen. Default method "git" preserves the legacy path's meaning.
+    embedding?: string | null;
+    assignment_method?: string | null;
+    assignment_confidence?: number | null;
   },
 ): Promise<Conversation> {
   const { data, error } = await db
@@ -54,11 +59,39 @@ export async function createConversation(
       fork_point: params.fork_point ?? null,
       metadata: params.metadata ?? null,
       encrypted: params.encrypted ?? false,
+      embedding: params.embedding ?? null,
+      assignment_method: params.assignment_method ?? "git",
+      assignment_confidence: params.assignment_confidence ?? null,
     })
     .select(CONVERSATION_COLUMNS)
     .single();
   if (error) throw error;
   return data as Conversation;
+}
+
+/**
+ * Owner-scoped semantic kNN over conversation embeddings (match_conversations RPC,
+ * migration 029). Returns project candidates with similarity scores. Vectors are
+ * passed as the pgvector text form, mirroring searchEntries/match_entries.
+ */
+export async function matchConversations(
+  db: SupabaseClient,
+  userId: string,
+  embedding: number[],
+  threshold: number,
+  count = 20,
+): Promise<{ project_id: string; similarity: number }[]> {
+  const { data, error } = await db.rpc("match_conversations", {
+    query_embedding: JSON.stringify(embedding),
+    match_user_id: userId,
+    match_threshold: threshold,
+    match_count: count,
+  });
+  if (error) {
+    console.error("[correlation] match_conversations failed:", error.message);
+    return [];
+  }
+  return (data ?? []) as { project_id: string; similarity: number }[];
 }
 
 export async function getConversation(db: SupabaseClient, conversationId: string): Promise<Conversation | null> {

@@ -71,3 +71,14 @@ export function orderPair(idA: string, idB: string): [string, string] {
 export function isStableCandidate(firstSeenAtMs: number, runStartMs: number): boolean {
   return firstSeenAtMs < runStartMs;
 }
+
+/**
+ * A capture is "keyless" — eligible for AI Tier-3 resolution — when it has no git
+ * remote and no real filesystem path. Browser captures (synapse:// projectPath) and
+ * pure non-code captures (no cwd) qualify; a real git remote or local folder does not.
+ */
+export function isKeylessContext(wc: Record<string, unknown>): boolean {
+  if (typeof wc.git_origin_url === "string" && wc.git_origin_url.length > 0) return false;
+  if (typeof wc.projectPath === "string") return wc.projectPath.startsWith("synapse://");
+  return !wc.cwd;
+}

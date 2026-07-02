@@ -193,3 +193,27 @@ describe("POST /api/conversations — schema accepts missing project_id (per-cwd
     expect(res.status).not.toBe(400);
   });
 });
+
+// AI project correlation (Tier 3): a KEYLESS browser capture — no project_id,
+// no git remote, a synapse:// projectPath — must be accepted by the schema and
+// reach the route's resolver branch (the AI assign/create logic + fallback are
+// covered deterministically in ai-resolve.test.ts and live in e2e-project-
+// correlation.mjs). Structural guard: don't 400 (schema) and don't 404 (route).
+describe("POST /api/conversations — schema accepts keyless browser captures (AI Tier-3)", () => {
+  it("accepts a body with a synapse:// projectPath and no git/project_id", async () => {
+    const req = new Request("http://localhost/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer invalid-key" },
+      body: JSON.stringify({
+        title: "Refactoring the auth flow",
+        fidelity_mode: "full",
+        working_context: { tool: "claude-ai", projectPath: "synapse://browser/claude.ai" },
+      }),
+    });
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(req, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(res.status).not.toBe(400);
+    expect(res.status).not.toBe(404);
+  });
+});
