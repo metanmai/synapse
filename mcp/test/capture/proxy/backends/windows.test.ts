@@ -72,10 +72,14 @@ describe("WindowsBackend.installCa", () => {
     //   6. Open Root/CurrentUser store ReadWrite and Add the cert.
     expect(ps.calls).toHaveLength(1);
     const installScript = ps.calls[0][0];
-    // Registry suppression — without this Add() hangs on CI.
-    expect(installScript).toContain("HKCU:\\Software\\Microsoft\\SystemCertificates\\Root\\ProtectedRoots");
-    expect(installScript).toContain("'Flags'");
-    expect(installScript).toMatch(/-Value 1 -Type DWord/);
+    // Registry suppression — without HKLM\...\Flags = 0x20
+    // (CERT_PROT_ROOT_DISABLE_USER_UI_FLAG) the Add() call hangs on CI.
+    // Wrapped in try/catch so non-admin user installs gracefully skip
+    // (and just see the trust dialog, which is the intended UX there).
+    expect(installScript).toContain("[Microsoft.Win32.Registry]::LocalMachine.CreateSubKey");
+    expect(installScript).toContain("SOFTWARE\\Microsoft\\SystemCertificates\\Root\\ProtectedRoots");
+    expect(installScript).toMatch(/SetValue\('Flags', 0x20, 'DWord'\)/);
+    expect(installScript).toContain("try {"); // soft-fail on non-admin
     // PEM decode pipeline.
     expect(installScript).toContain(`Get-Content -LiteralPath '${FAKE_CA_PATH}'`);
     expect(installScript).toContain("-----[^-]+-----"); // armor-strip regex
@@ -99,7 +103,7 @@ describe("WindowsBackend.installCa", () => {
     const cu = makeRunner([okExit]);
     WindowsBackend.installCa(FAKE_CA_PATH, backendOpts(ps.runner, cu.runner));
     const s = ps.calls[0][0];
-    const flagSetIdx = s.indexOf("Set-ItemProperty");
+    const flagSetIdx = s.indexOf("SetValue('Flags'");
     const addIdx = s.indexOf("$store.Add");
     expect(flagSetIdx).toBeGreaterThan(-1);
     expect(addIdx).toBeGreaterThan(-1);
