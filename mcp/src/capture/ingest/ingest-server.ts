@@ -8,7 +8,7 @@
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
 import type { CapturedSession } from "../types.js";
 import type { CaptureRateTracker } from "./capture-rate.js";
-import { handleDrift, handleHeartbeat, handleIngest } from "./ingest-route.js";
+import { handleDrift, handleHeartbeat, handleIngest, isExtensionOrigin } from "./ingest-route.js";
 
 const MAX_BODY_BYTES = 1_000_000; // 1 MB — conversations, not uploads
 
@@ -49,6 +49,27 @@ export async function startIngestServer(opts: IngestServerOptions): Promise<Runn
   const now = opts.now ?? (() => Date.now());
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    // CORS + Private Network Access: the browser extension's service worker does a
+    // cross-origin fetch to this loopback origin, which Chrome gates behind a
+    // preflight (the POST carries a custom token header + JSON body, so it is not
+    // a "simple" request, and 127.0.0.1 is a private-network target). Answer the
+    // preflight for extension origins so the capture POST can actually land — and
+    // echo Allow-Origin on every response so the browser doesn't block the read.
+    const origin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
+    if (origin && isExtensionOrigin(origin)) {
+      res.setHeader("access-control-allow-origin", origin);
+      res.setHeader("vary", "Origin");
+    }
+    if (req.method === "OPTIONS") {
+      if (origin && isExtensionOrigin(origin)) {
+        res.setHeader("access-control-allow-methods", "POST, OPTIONS");
+        res.setHeader("access-control-allow-headers", "content-type, x-synapse-ingest-token");
+        res.setHeader("access-control-allow-private-network", "true");
+      }
+      res.writeHead(204);
+      res.end();
+      return;
+    }
     if (req.method !== "POST") {
       res.writeHead(405);
       res.end();

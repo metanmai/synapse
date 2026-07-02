@@ -16,6 +16,7 @@
     "test:e2e:resilience": "node scripts/e2e-resilience.mjs",
     "test:e2e:cli": "node scripts/e2e-cli.mjs",
     "test:e2e:correlation": "node scripts/e2e-project-correlation.mjs",
+    "test:e2e:browser-mechanics": "node scripts/e2e-browser-mechanics.mjs",
     "test:pgvector": "node scripts/test-pgvector-rpcs.mjs",
     "test:e2e:smoke": "node scripts/e2e-smoke.mjs",
     "test:e2e:adapter-roundtrip": "node scripts/e2e-adapter-roundtrip.mjs",

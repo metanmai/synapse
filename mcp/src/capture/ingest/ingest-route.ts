@@ -41,7 +41,7 @@ function isLoopback(addr: string | undefined): boolean {
   return addr !== undefined && LOOPBACK.has(addr);
 }
 
-function isExtensionOrigin(origin: string): boolean {
+export function isExtensionOrigin(origin: string): boolean {
   return (
     origin.startsWith("chrome-extension://") ||
     origin.startsWith("moz-extension://") ||
