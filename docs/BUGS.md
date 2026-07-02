@@ -35,6 +35,34 @@ Phase 2 added a `migrate` job to `.github/workflows/ci.yml` that runs `supabase 
 
 ---
 
+### Configure SYNAPSE_E2E_API_KEY + ANTHROPIC_API_KEY so `happy-flow-e2e` matrix activates
+
+A `happy-flow-e2e` job in `.github/workflows/ci.yml` runs `npm run test:e2e` on **ubuntu-latest + windows-latest** to prove the merge gate's 5 scripts work cross-platform. Same graceful-skip pattern as `migrate` and `e2e` — the job stays GREEN until both secrets land on **metanmai/synapse**, at which point it actually exercises the universal LLM driver + curl-through-proxy + recall paths on each OS.
+
+**Why it matters:** Without this job actually running, "Linux/Windows compatible" rests on macOS-only validation. The merge-gate scripts now have zero `claude not on PATH → exit 0` soft-skips (refactor in commits `a818b7e` + earlier) — they use curl (universal) and the direct-API LLM driver (universal via ANTHROPIC_API_KEY) — but no CI machine is currently *running* them on Linux or Windows.
+
+**One-time setup steps:**
+
+1. Pick or create a SYNAPSE_E2E_API_KEY value. Two options:
+   - **Reuse the maintainer's personal key** (lives in `~/.synapse/config.json` on the dev machine). The merge gate's cleanup phase deletes test projects/conversations created during the run, so dashboard pollution is bounded.
+   - **Create a CI-specific Synapse account** (sign up via the website with a CI-only email) and use that key. Cleaner separation but more setup.
+2. Generate / locate an Anthropic API key with `messages:write` scope. The merge gate consumes ~$0.02-0.10 per run (2 LLM calls × ~$0.05).
+3. In https://github.com/metanmai/synapse/settings/secrets/actions, add two repository secrets:
+   - `SYNAPSE_E2E_API_KEY` → from step 1
+   - `ANTHROPIC_API_KEY` → from step 2
+4. Trigger a re-run of the latest workflow on metanmai (or push any commit). The `happy-flow-e2e` job's "Check secrets are configured" step should flip from "skipped" to "configured=true" and the matrix should actually run.
+
+**Verification after setup:** the `happy-flow-e2e` job's matrix entries on metanmai (ubuntu-latest + windows-latest) both reach the "Run merge gate" step and complete green. Each entry takes ~5-8 minutes (8-min budget per backend-arrival poll). Per-run cost ≈ $0.04-0.20 total across both matrix entries.
+
+**Risk acknowledged:** every push-to-main now consumes Anthropic credits on the metanmai runs. At ~$0.10/run × push frequency, this is bounded but non-trivial — if it gets noisy, gate the job with a `paths-ignore:` for docs-only changes.
+
+**Code locations:**
+- Job: `.github/workflows/ci.yml` (search for `happy-flow-e2e:` — below `proxy-windows-e2e`)
+- Scripts exercised: `scripts/e2e-happy-flow.mjs`, `e2e-adapter-roundtrip.mjs`, `e2e-proxy-layer5.mjs`, `e2e-proxy-source.mjs`, `e2e-proxy-lifecycle.mjs`
+- Universal driver: `scripts/e2e-llm-driver.mjs` (selects direct-API mode when ANTHROPIC_API_KEY is set)
+
+---
+
 ## P2 — Coverage gaps
 
 ### Creem webhook silently drops renewal events — `subscriptions` rows go stale after initial signup
