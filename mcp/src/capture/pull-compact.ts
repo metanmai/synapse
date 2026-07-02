@@ -423,7 +423,20 @@ async function triggerHostedCompaction(
       body: "{}",
     });
     if (!hosted.ok) {
-      log(`pull-compact: hosted compaction returned ${hosted.status}`);
+      // Surface the body so CI dumps can show the actual backend error
+      // (e.g. AnthropicProvider's "Anthropic API 401: ..." reflected as a
+      // 500 from the Hono default error handler). Without this, we only
+      // see the status code and have to guess between 503 (no
+      // COMPACTION_LLM_KEY), 500 (LLM call failed), and 5xx (DB error).
+      // Bounded at 500 chars so a runaway HTML error page doesn't bloat
+      // the bg log.
+      let errBody = "";
+      try {
+        errBody = (await hosted.text()).slice(0, 500);
+      } catch {
+        errBody = "(failed to read response body)";
+      }
+      log(`pull-compact: hosted compaction returned ${hosted.status} body=${errBody}`);
       return cachedHandoff;
     }
     // Re-fetch the conversation to get the newly-persisted handoff_markdown
