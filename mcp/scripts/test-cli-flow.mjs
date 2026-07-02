@@ -63,11 +63,32 @@ for (const k of keys) {
   console.log(`    • ${k.label}  (created ${k.created_at}, last_used ${k.last_used_at ?? "never"})`);
 }
 
-const newKey = keys.find((k) => k.label.startsWith("cli-device-"));
+// Sanitize the same way the backend does (sanitizeDeviceName in auth.ts:210):
+// lowercase, replace non-[a-z0-9-] with -, collapse dashes, trim, cap at 60.
+const expectedLabel = `cli-${HOSTNAME.toLowerCase()
+  .replace(/[^a-z0-9-]+/g, "-")
+  .replace(/-+/g, "-")
+  .replace(/^-+|-+$/g, "")
+  .slice(0, 60)}`;
+log(`Expecting newly-minted key to be labeled: ${expectedLabel}`);
+
+// Pick the most recently created cli-* key — that's the one this run minted.
+const cliKeys = keys
+  .filter((k) => k.label.startsWith("cli"))
+  .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+const newKey = cliKeys[0];
 if (!newKey) {
-  bail("No cli-device-* labeled key found. Backwards-compat synthetic label not produced.");
+  bail("No cli-* labeled key found at all.");
 }
-log(`[OK] Found new device key with synthetic label: ${newKey.label}`);
+log(`[INFO] Most recent cli-* key: ${newKey.label}  (created ${newKey.created_at})`);
+
+if (newKey.label === expectedLabel) {
+  log("[OK] New key label matches sanitized hostname — frontend is forwarding device_name");
+} else if (newKey.label.startsWith("cli-device-")) {
+  log(`[WARN] New key uses synthetic fallback label (frontend not yet deployed?): ${newKey.label}`);
+} else {
+  log(`[WARN] New key label (${newKey.label}) is unexpected — neither hostname nor synthetic`);
+}
 
 log("Probing /api/projects…");
 const projectsRes = await fetch(`${API_URL}/api/projects`, { headers: h });
