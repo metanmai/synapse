@@ -1,13 +1,22 @@
 <script lang="ts">
 import type { Entry, EntryListItem } from "$lib/types";
 
-let { entries, selectedPath, projectName, onSelect, onAction, onNewInFolder } = $props<{
+let {
+  entries,
+  selectedPath,
+  projectName,
+  onSelect,
+  onAction,
+  onNewInFolder,
+  canEdit = true,
+} = $props<{
   entries: EntryListItem[];
   selectedPath: string | null;
   projectName: string;
   onSelect: (path: string) => void;
   onAction: (action: "activity" | "share" | "delete" | "export", path: string, isFolder: boolean) => void;
   onNewInFolder?: (folderPath: string) => void;
+  canEdit?: boolean;
 }>();
 
 let searchQuery = $state("");
@@ -151,7 +160,7 @@ function menuPathIsFile(menuPath: string): boolean {
       onclick={() => { menuOpen = null; }}>
       Export
     </a>
-    {#if menuOpen && menuPathIsFile(menuOpen)}
+    {#if canEdit && menuOpen && menuPathIsFile(menuOpen)}
       <button role="menuitem" onclick={() => handleAction("delete", menuOpen!, false)}
         class="menu-item-danger block w-full text-left px-3 py-1.5 cursor-pointer">
         Delete
