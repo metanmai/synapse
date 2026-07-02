@@ -10,7 +10,11 @@ interface SessionData {
 }
 
 export function getSupabase() {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      flowType: "pkce",
+    },
+  });
 }
 
 export function setSessionCookie(cookies: Cookies, session: SessionData) {
