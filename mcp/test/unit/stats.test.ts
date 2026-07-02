@@ -248,3 +248,35 @@ describe("runStats() — API fetch structure", () => {
     expect(activityUrl).toContain("?limit=500");
   });
 });
+
+// =============================================================================
+// Transient validate ("unknown") must NOT masquerade as expired
+// =============================================================================
+// Regression guard: a slow /api/projects (~8s on big accounts), a 429, or a
+// timeout makes validateApiKey return "unknown" for a WORKING key. stats must
+// proceed (the untimed fetches below succeed), not print "API key expired or
+// invalid" and exit 1. See validateApiKey classification in api.test.ts.
+describe("runStats() — transient (unknown) validate proceeds, does not claim expired", () => {
+  it("proceeds to fetch workspace data when validateApiKey returns 'unknown'", async () => {
+    mockDetect.mockReturnValue({
+      apiKeys: ["sk_works_but_slow"],
+      configured: true,
+      locations: [".mcp.json"],
+    });
+    mockValidate.mockResolvedValue({ status: "unknown" });
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("exit");
+    });
+    mockFetch
+      .mockResolvedValueOnce(
+        jsonResponse(200, [{ id: "p1", name: "ws", created_at: "2025-01-01T00:00:00Z", role: "owner" }]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, []))
+      .mockResolvedValueOnce(jsonResponse(200, []));
+
+    await runStats();
+
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+});

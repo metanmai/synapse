@@ -11,7 +11,15 @@ export function renderBriefFromCache(project_id: string, viewer_user_id: string)
   if (!fs.existsSync(p)) {
     return `Project: ${project_id}\n(no cached context yet — daemon will populate on next sync)`;
   }
-  const status: ProjectStatus = JSON.parse(fs.readFileSync(p, "utf-8"));
+  let status: ProjectStatus;
+  try {
+    status = JSON.parse(fs.readFileSync(p, "utf-8"));
+  } catch {
+    // Corrupt/partial cache (e.g. an interrupted write) must not crash the
+    // SessionStart hook or `synapsesync brief` — degrade to the same fallback
+    // as a missing cache; the daemon rewrites it on the next sync.
+    return `Project: ${project_id}\n(cached context unreadable — daemon will repopulate on next sync)`;
+  }
   return render(status, viewer_user_id);
 }
 

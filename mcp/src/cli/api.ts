@@ -13,7 +13,12 @@ export async function validateApiKey(apiKey: string): Promise<{ status: KeyStatu
   try {
     const res = await fetch(`${API_URL}/api/projects`, {
       headers: { Authorization: `Bearer ${apiKey}` },
-      signal: AbortSignal.timeout(5000),
+      // 10s (was 5s) to match fetchMe: /api/projects can take ~8s for accounts
+      // with many projects, and corporate-proxy first-connect adds latency. A
+      // 5s cutoff made validateApiKey return "unknown" for working keys, which
+      // resolveKey/stats then mis-reported as "expired". See proceed-on-unknown
+      // in resolveKey (commands.ts) + runStats (stats.ts) for the matching guard.
+      signal: AbortSignal.timeout(10_000),
     });
     if (res.ok) return { status: "valid" };
     if (res.status === 401) {

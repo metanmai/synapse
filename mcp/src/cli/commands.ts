@@ -88,10 +88,17 @@ async function resolveKey(existing?: ExistingSetup): Promise<string> {
     clack.log.message(`  ${accent("synapsesync wizard")}`);
     process.exit(1);
   }
+  let fallback: string | null = null;
   for (const key of setup.apiKeys) {
     const s = await validateApiKey(key);
     if (s.status === "valid") return key;
+    // "unknown" = transient (slow endpoint / timeout / 429 / 5xx), NOT a
+    // confirmed auth failure. Keep it as a fallback so we never mis-report a
+    // working key as expired; the caller's own (untimed) API calls surface any
+    // real failure. Only "expired" (401 + auth code) is treated as dead.
+    if (s.status === "unknown" && !fallback) fallback = key;
   }
+  if (fallback) return fallback;
   clack.log.error(themeError("All API keys are expired. Sign in again:"));
   clack.log.message(`  ${accent("synapsesync wizard")}`);
   process.exit(1);

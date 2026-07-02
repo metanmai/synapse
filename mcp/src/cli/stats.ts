@@ -53,15 +53,22 @@ export async function runStats(): Promise<void> {
   spin.start("Connecting\u2026");
 
   let apiKey: string | null = null;
+  let fallback: string | null = null;
   for (const key of existing.apiKeys) {
     const status = await validateApiKey(key);
     if (status.status === "valid") {
       apiKey = key;
       break;
     }
+    // "unknown" = transient (slow /api/projects, timeout, 429, 5xx) — NOT a
+    // confirmed auth failure. Proceed with it rather than mis-reporting a
+    // working key as expired; the fetches below surface any real error.
+    if (status.status === "unknown" && !fallback) fallback = key;
   }
+  if (!apiKey) apiKey = fallback;
 
   if (!apiKey) {
+    // Only reached when every key was a CONFIRMED auth failure (401 + code).
     spin.stop(themeError("API key expired or invalid"));
     clack.log.error("Sign in again:");
     clack.log.message(`  ${accent("synapsesync wizard")}`);

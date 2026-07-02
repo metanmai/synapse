@@ -84,7 +84,7 @@ function printHelp(): void {
     c("handoff", "Compose a handoff brief to next session"),
     c("set-focus", "Set the active focus statement"),
     c("note", "Add a contextual note"),
-    c("issue create", "File a new issue or blocker"),
+    c("issue create", "File a decision or question to track"),
     c("issue resolve", "Mark an issue resolved"),
     c("issue supersede", "Replace an issue with a newer one"),
     c("invite", "Invite a collaborator to a project"),
