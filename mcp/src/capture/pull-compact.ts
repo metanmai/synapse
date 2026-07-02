@@ -9,6 +9,7 @@ import type { AdapterRegistry } from "./adapter-registry.js";
 import { resolveApiKey } from "./cloud-sync.js";
 import { defaultRegistry } from "./default-registry.js";
 import { synapseRoot } from "./handoff-paths.js";
+import { type ChatMessage, compactLocally } from "./llm-providers.js";
 import type { ToolAdapter } from "./types.js";
 
 interface ConversationListItem {
@@ -416,6 +417,17 @@ async function triggerHostedCompaction(
   cachedHandoff: string | null,
   log: (msg: string) => void,
 ): Promise<string | null> {
+  // 1. Try LOCAL compaction first when the user has an LLM key in env
+  //    (ANTHROPIC_API_KEY / OPENROUTER_API_KEY / DEEPSEEK_API_KEY). Keeps
+  //    the transcript on the user's machine for the LLM call, and means
+  //    the killer-feature handoff pipeline isn't a single point of failure
+  //    on the backend's hosted-compaction provider account (depleted
+  //    credits, revoked keys, rate limits, etc.). Quietly skips when no
+  //    local key is configured — callers with neither env keys nor a
+  //    working backend account still get a clear hosted-compaction error.
+  const localHandoff = await attemptLocalCompaction(apiUrl, auth, conv, log);
+  if (localHandoff) return localHandoff;
+
   try {
     const hosted = await fetch(`${apiUrl}/api/conversations/${conv.id}/compact`, {
       method: "POST",
@@ -516,6 +528,97 @@ function scanForFiles(root: string): string[] {
  * means cache freshness is bounded by recompute latency, not by user
  * activity.
  */
+/**
+ * Local-LLM compaction path: fetch the conversation's messages from the
+ * backend, call the user's locally-configured LLM (auto-detected from env)
+ * to generate a summary, then POST it back to /compact in precomputed
+ * mode — which sets `conversations.metadata.handoff_markdown` server-side
+ * without ever invoking the backend's hosted compaction LLM.
+ *
+ * Returns the produced handoff text on success; null on any failure so
+ * the caller falls through to the hosted path. The function never
+ * throws — every error is logged via the caller's log callback.
+ *
+ * BUG CLASS this guards: "the entire killer-feature handoff pipeline is
+ * a single point of failure on the backend's hosted-compaction provider
+ * account." Users with their own LLM keys should be able to compact even
+ * when the hosted account is unavailable.
+ */
+async function attemptLocalCompaction(
+  apiUrl: string,
+  auth: Record<string, string>,
+  conv: { id: string },
+  log: (msg: string) => void,
+): Promise<string | null> {
+  // Fetch the conversation's messages from the backend. The list-endpoint
+  // metadata-only response doesn't include messages — we need the full
+  // row's nested `messages` array.
+  let messages: ChatMessage[] = [];
+  let title: string | null = null;
+  try {
+    const res = await fetch(`${apiUrl}/api/conversations/${conv.id}`, { headers: auth });
+    if (!res.ok) {
+      log(`local-compact: full GET returned ${res.status}, skipping local path`);
+      return null;
+    }
+    const body = (await res.json()) as {
+      conversation?: { messages?: Array<{ role: string; content: string | null }>; title?: string | null };
+      messages?: Array<{ role: string; content: string | null }>;
+      title?: string | null;
+    };
+    const full = "conversation" in body && body.conversation ? body.conversation : body;
+    const rawMessages = full.messages ?? [];
+    messages = rawMessages
+      .filter((m) => typeof m.content === "string" && m.content.length > 0)
+      .map((m) => ({
+        role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+        content: m.content as string,
+      }));
+    title = full.title ?? null;
+  } catch (err) {
+    log(`local-compact: full GET threw: ${err instanceof Error ? err.message : err}`);
+    return null;
+  }
+
+  if (messages.length === 0) {
+    log("local-compact: conversation has no messages with content, skipping local path");
+    return null;
+  }
+
+  const result = await compactLocally(messages, title, process.env, log);
+  if (!result) return null;
+
+  // POST as precomputed — backend persists summary + handoff without
+  // calling its own LLM, so this path works even when
+  // COMPACTION_LLM_KEY is unset / out of credit / rate-limited.
+  try {
+    const post = await fetch(`${apiUrl}/api/conversations/${conv.id}/compact`, {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        summary: result.text,
+        model: `local:${result.provider}/${result.model}`,
+        handoff: result.text,
+      }),
+    });
+    if (!post.ok) {
+      let errBody = "";
+      try {
+        errBody = (await post.text()).slice(0, 300);
+      } catch {
+        errBody = "(failed to read response body)";
+      }
+      log(`local-compact: precomputed POST returned ${post.status} body=${errBody}`);
+      return null;
+    }
+    log(`local-compact: success via ${result.provider} (${result.text.length} chars)`);
+    return result.text;
+  } catch (err) {
+    log(`local-compact: precomputed POST threw: ${err instanceof Error ? err.message : err}`);
+    return null;
+  }
+}
+
 function spawnBackgroundRecompute(cwd: string, log: (msg: string) => void): void {
   try {
     const logFile = path.join(synapseRoot(), "pull-compact-bg.log");
