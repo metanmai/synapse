@@ -340,7 +340,7 @@ export function startHandoffLoop(a: HandoffLoopArgs): () => void {
     // is essential to that promise and must work for every tier. The
     // tier_override injection point remains for tests that want to
     // simulate tier-specific behavior without hitting the billing API.
-    const tier = a.tier_override ?? (await getTierCached(a.api_key, a.api_url, tierState));
+    const _tier = a.tier_override ?? (await getTierCached(a.api_key, a.api_url, tierState));
 
     // Re-scan the projects dir each cycle so dirs created after daemon
     // startup become visible without requiring a restart.
