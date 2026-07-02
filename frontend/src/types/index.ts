@@ -10,6 +10,7 @@ export interface Project {
   owner_id: string;
   google_drive_folder_id: string | null;
   created_at: string;
+  project_members?: ProjectMember[];
 }
 
 export interface Entry {
@@ -46,6 +47,7 @@ export interface ProjectMember {
   user_id: string;
   role: "owner" | "editor" | "viewer";
   joined_at: string;
+  email?: string;
 }
 
 export interface ShareLink {
