@@ -24,6 +24,46 @@ interface FullConversation {
   working_context?: Record<string, unknown> | null;
 }
 
+/**
+ * Width of the "fresh handoff" window in `isHandoffFresh`. Tuned to absorb
+ * the updateCompaction → updateConversation gap (the compact endpoint sets
+ * `handoff_at` then bumps `updated_at` microseconds later) and a slow CF
+ * replication tail. Real new messages bump `updated_at` far beyond this.
+ * Exported so the regression test asserts against the same value.
+ */
+export const FRESH_HANDOFF_WINDOW_MS = 5_000;
+
+/**
+ * Decide whether a conversation's cached handoff is "fresh enough" to serve
+ * without re-computing. The strict `handoff_at >= updated_at` semantics fail
+ * under a hidden race: the backend's `/compact` endpoint writes `handoff_at`
+ * then bumps `updated_at` microseconds later, so the strict check is ALWAYS
+ * false even when nothing real happened since. That triggers a needless
+ * re-compact AND another `updated_at` bump — and in multi-device flows the
+ * re-bump makes a stale conversation look "newer" than a fresh sibling,
+ * derailing the bidirectional handoff write-back.
+ *
+ * Returns true iff either:
+ *   - handoff_at is at or after updated_at (the strict path); OR
+ *   - updated_at - handoff_at is below the freshness window — the LAST
+ *     update WAS the compact itself, nothing has happened since.
+ *
+ * Pure function — no side effects, no clock reads. The unit test exercises
+ * the boundaries (zero diff, microsecond diff, window-edge, seconds beyond
+ * window) directly.
+ */
+export function isHandoffFresh(
+  handoffAtIso: string | null,
+  updatedAtIso: string,
+  windowMs = FRESH_HANDOFF_WINDOW_MS,
+): boolean {
+  if (!handoffAtIso) return false;
+  const handoffMs = new Date(handoffAtIso).getTime();
+  const updatedMs = new Date(updatedAtIso).getTime();
+  if (Number.isNaN(handoffMs) || Number.isNaN(updatedMs)) return false;
+  return handoffMs >= updatedMs || updatedMs - handoffMs < windowMs;
+}
+
 export interface PullHandoffOptions {
   /**
    * Original working dir for hook-driven pulls. Used to resolve the project
@@ -208,9 +248,10 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
   const convCached = typeof convMeta.handoff_markdown === "string" ? convMeta.handoff_markdown : null;
   const convAt = typeof convMeta.handoff_at === "string" ? convMeta.handoff_at : null;
 
-  // 2a. Newest has a fresh cache hit — done. The active session's handoff
-  //     postdates its last message: no work added since, serve cache.
-  if (convCached && convAt && convAt >= conv.updated_at) {
+  // 2a. Newest has a fresh cache hit — done. See `isHandoffFresh` for the
+  //     "fresh" semantics; strict `handoff_at >= updated_at` is too tight
+  //     because the backend writes the two timestamps microseconds apart.
+  if (convCached && isHandoffFresh(convAt, conv.updated_at)) {
     log(`pull-compact: cache hit for ${conv.id}`);
     return convCached;
   }
