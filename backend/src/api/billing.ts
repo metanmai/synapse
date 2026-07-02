@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { createSupabaseClient } from "../db/client";
 import {
   getActiveSubscription,
   getSubscriptionByProviderId,
@@ -33,7 +32,7 @@ billing.post("/webhook", async (c) => {
   const eventType = event.event_type as string;
   const obj = event.object;
 
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   switch (eventType) {
     case "checkout.completed": {
@@ -124,7 +123,7 @@ billing.use("/*", authMiddleware);
 // POST /api/billing/checkout
 billing.post("/checkout", async (c) => {
   const user = c.get("user");
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
   const appUrl = envOr(c.env, "APP_URL", "https://synapsesync.app");
 
   // Guard against duplicate subscriptions
@@ -154,7 +153,7 @@ billing.post("/checkout", async (c) => {
 // POST /api/billing/verify — verify checkout completion via Creem API (fallback for webhooks)
 billing.post("/verify", async (c) => {
   const user = c.get("user");
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   // Already activated?
   const existingSub = await getActiveSubscription(db, user.id);
@@ -204,7 +203,7 @@ billing.post("/verify", async (c) => {
 // POST /api/billing/portal
 billing.post("/portal", async (c) => {
   const user = c.get("user");
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   const sub = await getSubscriptionByUserId(db, user.id);
   if (!sub?.provider_customer_id) {
@@ -222,7 +221,7 @@ billing.post("/portal", async (c) => {
 billing.get("/status", async (c) => {
   const user = c.get("user");
   const tier = c.get("tier") ?? "free";
-  const db = createSupabaseClient(c.env);
+  const db = c.get("db");
 
   const sub = await getSubscriptionByUserId(db, user.id);
 
