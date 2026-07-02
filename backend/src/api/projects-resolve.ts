@@ -19,9 +19,7 @@ projectsResolve.post("/resolve", async (c) => {
     .select("project_id")
     .eq("user_id", user.id);
   if (memberErr) throw memberErr;
-  const accessibleIds = new Set<string>(
-    (memberRows ?? []).map((r: { project_id: string }) => r.project_id),
-  );
+  const accessibleIds = new Set<string>((memberRows ?? []).map((r: { project_id: string }) => r.project_id));
 
   if (accessibleIds.size === 0) {
     return c.json({ project_id: null, name: null, confidence: null, signal: "no_access" });
