@@ -39,6 +39,10 @@ export interface Env {
   COMPACTION_LLM_KEY?: string;
   COMPACTION_LLM_MODEL?: string;
   COMPACTION_SCHEDULER: DurableObjectNamespace;
+
+  // Internal ops trigger (optional — guards POST /api/internal/reconcile, used by
+  // E2E + manual ops to run the project reconciler on demand). 404 when unset.
+  INTERNAL_TRIGGER_TOKEN?: string;
 }
 
 // Helper to read env with defaults

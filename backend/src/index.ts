@@ -8,6 +8,7 @@ import { context } from "./api/context";
 import { conversations } from "./api/conversations";
 import { eventsBatch } from "./api/events-batch";
 import { insights } from "./api/insights";
+import { internal } from "./api/internal";
 import { invites } from "./api/invites";
 import { projectEvents } from "./api/project-events";
 import { projectStatus } from "./api/project-status";
@@ -15,6 +16,7 @@ import { projects } from "./api/projects";
 import { projectsResolve } from "./api/projects-resolve";
 import { share } from "./api/share";
 import { runDailyAggregation } from "./cron/aggregate";
+import { reconcileProjects } from "./cron/reconcile-projects";
 import { runDailyConsolidationRetry } from "./cron/retry-consolidations";
 import { CompactionScheduler } from "./durable-objects/compaction-scheduler";
 import type { Env } from "./lib/env";
@@ -84,6 +86,10 @@ app.route("/api", invites);
 app.route("/api/conversations", conversations);
 app.route("/api", compaction);
 
+// Internal ops trigger — mounted OUTSIDE /api so it isn't caught by the
+// /api/* auth wildcard (invites). Token-guarded; builds its own DB client.
+app.route("/internal", internal);
+
 // Mount MCP server (Streamable HTTP transport)
 app.mount("/mcp", SynapseAgent.serve("/mcp").fetch);
 
@@ -100,6 +106,9 @@ export default {
       // failed (LLM outage). Independent waitUntil so a failure in one
       // job doesn't poison the other; both share the 30s wall-clock budget.
       ctx.waitUntil(runDailyConsolidationRetry(env));
+      // AI project correlation: backfill conversation embeddings + merge
+      // fragmented projects (2-run hysteresis). Deterministic, LLM-free.
+      ctx.waitUntil(reconcileProjects(env));
     }
   },
 };
