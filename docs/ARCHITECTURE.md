@@ -41,15 +41,22 @@ Exact schemas live in `supabase/migrations/`.
 
 Optional **Python** sidecar in `embedding-service/` — not required to boot the stack; required for best semantic search results. Configured via Worker env (`EMBEDDING_SERVICE_*`).
 
-## Claude Code handoff layer
+## AI session handoff layer
 
-A local-first event log + background daemon sit between Claude Code and the Worker so that work done on one machine can be resumed on another without re-briefing.
+A local-first event log + background daemon sit between your AI coding tool and the Worker so that work done on one machine can be resumed on another without re-briefing. Three capture paths feed the same pipeline:
 
 ```text
-Claude Code hooks ──▶ ~/.synapse/projects/<id>/events.jsonl
+Claude Code hooks ──┐
+File-watcher        │
+adapters            ├──▶ ~/.synapse/projects/<id>/events.jsonl
+(cline, cursor,     │
+ codex, gemini,     │
+ roo-code, etc.)    │
+Universal proxy     │
+(TLS-MITM)          ┘
                                  │
                                  ▼
-                       capture daemon (launchd / systemd)
+                       capture daemon (launchd / systemd / Task Scheduler)
                                  │
                                  ├──▶ Worker (events, briefs, handoffs)
                                  │
