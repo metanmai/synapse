@@ -89,6 +89,9 @@ function handleSubmit() {
     <div class="form-card">
       <form method="POST" action="?/createProject" use:enhance={handleSubmit}>
         <div class="form-row">
+          <!-- svelte-ignore a11y_autofocus -->
+          <!-- Intentional: input lives inside an opened-on-demand "create project" panel.
+               Jumping focus on reveal matches modal-dialog UX and removes a tab stop. -->
           <input
             name="name"
             type="text"
