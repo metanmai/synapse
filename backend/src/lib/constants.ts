@@ -49,9 +49,10 @@ export const API_KEY_MAX_PER_USER = 10;
 
 // --- Device limits (CLI-installed keys, separate from API_KEY_MAX_PER_USER) ---
 // Each cli-* labeled key represents one device that has run `synapsesync wizard`.
-// Free users can connect 3 devices; Plus is unlimited.
+// Phase 03-05: Free=3, Plus=10 (was Infinity). Plus changed to a finite cap to
+// prevent runaway device-key creation in pathological CI/install loops.
 export const DEVICE_LIMIT_FREE = 3;
-export const DEVICE_LIMIT_PLUS = Number.POSITIVE_INFINITY;
+export const DEVICE_LIMIT_PLUS = 10;
 export const DEVICE_LABEL_PREFIX = "cli-";
 export const DEVICE_NAME_MAX_LENGTH = 60;
 

@@ -855,6 +855,7 @@ describe("api-keys queries", () => {
         key_hash: "h",
         label: "My Key",
         expires_at: "2099-01-01",
+        machine_id: null,
       });
       expect(db.chainable.select).toHaveBeenCalled();
       expect(db.chainable.single).toHaveBeenCalled();

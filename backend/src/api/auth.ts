@@ -7,11 +7,13 @@ import {
   createApiKey,
   createUser,
   deleteApiKey,
+  findApiKeyByMachineId,
   findUserByEmail,
   getActiveSubscription,
   listApiKeys,
   listCliKeys,
   recordDeletedAccount,
+  rotateApiKeyHash,
 } from "../db/queries";
 import { authMiddleware, hashApiKey } from "../lib/auth";
 import {
@@ -232,6 +234,11 @@ function displayName(label: string): string {
  * Issue a fresh CLI device key for a user. Shared by cli-session and
  * cli-revoke-and-session — both ultimately call this after their own
  * preconditions (limit check / revocation) are satisfied.
+ *
+ * Phase 03-05: optionally accepts `machineId` (per-machine UUID). When
+ * set, it's persisted on the api_keys row so future calls from the same
+ * machine can match on (user_id, machine_id) and skip the device-cap
+ * check entirely (see /auth/cli-session for the matching path).
  */
 async function mintCliSessionCode(args: {
   db: SupabaseClient;
@@ -239,10 +246,11 @@ async function mintCliSessionCode(args: {
   deviceLabel: string;
   codeChallenge: string;
   secret: string;
+  machineId?: string | null;
 }): Promise<string> {
   const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
   const apiKeyHash = await hashApiKey(apiKey);
-  await createApiKey(args.db, args.user.id, apiKeyHash, args.deviceLabel);
+  await createApiKey(args.db, args.user.id, apiKeyHash, args.deviceLabel, null, args.machineId ?? null);
 
   return encryptSession(
     {
@@ -268,6 +276,30 @@ auth.post("/cli-session", authMiddleware, async (c) => {
   const sub = await getActiveSubscription(db, user.id);
   const tier: "free" | "plus" = sub ? "plus" : "free";
   const limit = deviceLimitForTier(tier);
+
+  // Phase 03-05: if the CLI sent a machine_id and we already have a key
+  // registered for this (user_id, machine_id), ROTATE that key's hash and
+  // return — DO NOT create a new row that would burn a device-cap slot.
+  // This makes `synapsesync wizard` idempotent per-machine: re-running
+  // it never accidentally pushes the user over their cap.
+  if (body.machine_id) {
+    const existing = await findApiKeyByMachineId(db, user.id, body.machine_id);
+    if (existing) {
+      const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+      const apiKeyHash = await hashApiKey(apiKey);
+      await rotateApiKeyHash(db, existing.id, apiKeyHash);
+      const code = await encryptSession(
+        {
+          api_key: apiKey,
+          email: user.email ?? "",
+          code_challenge: body.code_challenge,
+          exp: Date.now() + CLI_SESSION_TTL_MS,
+        },
+        c.env.SUPABASE_SERVICE_KEY,
+      );
+      return c.json({ code, rotated: true });
+    }
+  }
 
   // Count existing devices (cli-* labeled keys)
   const deviceCount = await countCliKeys(db, user.id);
@@ -297,6 +329,7 @@ auth.post("/cli-session", authMiddleware, async (c) => {
     deviceLabel,
     codeChallenge: body.code_challenge,
     secret: c.env.SUPABASE_SERVICE_KEY,
+    machineId: body.machine_id ?? null,
   });
 
   return c.json({ code });
