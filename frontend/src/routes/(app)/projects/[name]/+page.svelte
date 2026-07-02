@@ -14,6 +14,25 @@
   let searchResults = $state<Entry[]>([]);
   let loading = $state(false);
 
+  // Resizable sidebar
+  let sidebarWidth = $state(220);
+  let dragging = $state(false);
+
+  function onDragStart(e: MouseEvent) {
+    e.preventDefault();
+    dragging = true;
+    const onMove = (e: MouseEvent) => {
+      sidebarWidth = Math.min(Math.max(e.clientX - 192, 140), 500);
+    };
+    const onUp = () => {
+      dragging = false;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
   async function selectEntry(path: string) {
     selectedPath = path;
     loading = true;
@@ -64,33 +83,37 @@
   function handleSearchSelect(path: string) {
     selectEntry(path);
   }
-
-  function handleSaved() {
-    // Reload entry after save
-    if (selectedPath) selectEntry(selectedPath);
-  }
 </script>
 
-<div class="flex h-full">
+<div class="flex h-full" style={dragging ? "user-select: none; cursor: col-resize;" : ""}>
   <!-- File tree sidebar -->
-  <div class="w-64 p-3 overflow-y-auto"
-    style="border-right: 1px solid var(--color-border); background-color: var(--color-bg-raised);">
-    <div class="flex items-center justify-between mb-3">
-      <span class="text-xs font-medium uppercase tracking-wide"
-        style="color: var(--color-text-muted);">Files</span>
+  <div class="p-2 overflow-y-auto shrink-0"
+    style="width: {sidebarWidth}px; border-right: 1px solid var(--color-border); background-color: var(--color-bg-raised);">
+    <div class="flex items-center justify-between mb-2 px-1">
+      <span class="font-medium uppercase tracking-wide"
+        style="color: var(--color-text-muted); font-size: 10px;">Files</span>
       <div class="flex gap-2">
         <button onclick={() => startSearch()}
-          class="text-xs cursor-pointer" style="color: var(--color-text-muted);">Search</button>
+          class="cursor-pointer" style="color: var(--color-text-muted); font-size: 10px;">Search</button>
         <button onclick={() => startNew()}
-          class="text-xs cursor-pointer" style="color: var(--color-link);">+ New</button>
+          class="cursor-pointer" style="color: var(--color-link); font-size: 10px;">+ New</button>
       </div>
     </div>
     <FolderTree entries={data.entries} {selectedPath}
       projectName={data.project.name} onSelect={selectEntry} />
   </div>
 
+  <!-- Resize handle -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div onmousedown={onDragStart}
+    class="w-1 shrink-0 cursor-col-resize hover:opacity-100 transition-opacity"
+    style="background-color: {dragging ? 'var(--color-pink)' : 'transparent'}; opacity: {dragging ? 1 : 0.5};"
+    onmouseenter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-pink)'}
+    onmouseleave={(e) => { if (!dragging) e.currentTarget.style.backgroundColor = 'transparent'; }}>
+  </div>
+
   <!-- Main content -->
-  <div class="flex-1 p-6 overflow-y-auto">
+  <div class="flex-1 p-6 overflow-y-auto min-w-0">
     {#if loading}
       <div class="text-center mt-20" style="color: var(--color-text-muted);">Loading...</div>
     {:else if mode === "search"}
@@ -128,7 +151,7 @@
     {:else if mode === "view" && entry}
       <EntryViewer {entry} projectName={data.project.name} onEdit={startEdit} />
     {:else}
-      <div class="text-center mt-20" style="color: var(--color-text-muted);">
+      <div class="text-center mt-20" style="color: var(--color-text-muted); font-size: 12px;">
         Select a file or create a new one
       </div>
     {/if}
