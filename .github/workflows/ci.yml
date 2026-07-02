@@ -438,11 +438,25 @@ jobs:
         run: npm run test:e2e
 
       - name: Dump daemon log on failure
+        # The Stage-6 background-recompute path spawns a detached
+        # `synapsesync pull-handoff` child whose stderr is redirected to
+        # ~/.synapse/pull-compact-bg.log (see spawnBackgroundRecompute in
+        # mcp/src/capture/pull-compact.ts:506). When Stage 6 times out
+        # waiting for handoff_markdown, that log is the load-bearing
+        # diagnostic — capture.log only shows the proxy capture/sync
+        # events, and daemon.log only shows daemon-proper's handoff loop.
+        # Without dumping pull-compact-bg.log we can't tell whether the
+        # spawn failed to start, the /compact endpoint returned 503, or
+        # something else entirely.
         if: failure() && steps.check.outputs.configured == 'true'
         run: |
           echo "--- ~/.synapse/capture.log (last 200 lines) ---"
           tail -200 "$HOME/.synapse/capture.log" 2>/dev/null || true
           echo "--- ~/.synapse/daemon.log (last 200 lines) ---"
           tail -200 "$HOME/.synapse/daemon.log" 2>/dev/null || true
+          echo "--- ~/.synapse/pull-compact-bg.log (last 400 lines) ---"
+          tail -400 "$HOME/.synapse/pull-compact-bg.log" 2>/dev/null || echo "(no pull-compact-bg.log — background recompute never spawned, or spawned and produced no stderr)"
           echo "--- ~/.synapse/proxy-config.json ---"
           cat "$HOME/.synapse/proxy-config.json" 2>/dev/null || true
+          echo "--- ~/.synapse/project-map.json ---"
+          cat "$HOME/.synapse/project-map.json" 2>/dev/null || echo "(no project-map.json)"
