@@ -286,6 +286,16 @@ export function callProviderViaProxy({
   const body = { model, messages: [{ role: "user", content: prompt }] };
   const providerArgs = provider.buildCurlArgs(apiKey, body);
 
+  // Windows curl ships with SChannel as its TLS backend (Git Bash, the
+  // default on GitHub Actions windows-latest). SChannel honours the system
+  // trust store — the Synapse CA already lives there after `proxy install`
+  // — but ALSO insists on a revocation check (CRL/OCSP) for every cert in
+  // the chain, including our self-signed root. There is no CRL or OCSP
+  // responder for a per-machine CA, so SChannel returns "the revocation
+  // status is unknown" and curl exits 60. `--ssl-no-revoke` tells SChannel
+  // to skip the check; ignored as a no-op on OpenSSL-backed curls.
+  const platformCurlFlags = process.platform === "win32" ? ["--ssl-no-revoke"] : [];
+
   const started = Date.now();
   const result = spawnSync(
     "curl",
@@ -294,6 +304,7 @@ export function callProviderViaProxy({
       proxy,
       "--cacert",
       caPath,
+      ...platformCurlFlags,
       "-sS",
       "-X",
       "POST",

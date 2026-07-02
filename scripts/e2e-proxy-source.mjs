@@ -295,6 +295,11 @@ function buildPongSse() {
 // the same event loop as this script. spawnSync would block the loop
 // and curl's CONNECT would time out before the proxy could respond.
 function postAnthropicViaProxy({ curlBin, proxyUrl, caCertPath, body, timeoutMs }) {
+  // Windows Git-Bash curl uses SChannel which forces a CRL/OCSP check
+  // and rejects our self-signed proxy CA with "revocation status unknown".
+  // `--ssl-no-revoke` skips the check on SChannel and is a no-op on other
+  // backends. See full rationale in scripts/e2e-llm-driver.mjs.
+  const platformCurlFlags = process.platform === "win32" ? ["--ssl-no-revoke"] : [];
   const args = [
     "-sS",
     "--max-time",
@@ -303,6 +308,7 @@ function postAnthropicViaProxy({ curlBin, proxyUrl, caCertPath, body, timeoutMs 
     proxyUrl,
     "--cacert",
     caCertPath,
+    ...platformCurlFlags,
     "-H",
     "Content-Type: application/json",
     "-H",

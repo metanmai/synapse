@@ -345,6 +345,11 @@ function buildPongSse() {
 // is fake — the fake upstream doesn't validate it; we only need the
 // proxy to recognize the endpoint shape.
 function postAnthropicViaProxy({ curlBin, proxyUrl, caCertPath, body, timeoutMs }) {
+  // Windows Git-Bash curl uses SChannel which forces a CRL/OCSP check
+  // and rejects our self-signed proxy CA with "revocation status unknown".
+  // `--ssl-no-revoke` skips the check on SChannel and is a no-op on other
+  // backends. See full rationale in scripts/e2e-llm-driver.mjs.
+  const platformCurlFlags = process.platform === "win32" ? ["--ssl-no-revoke"] : [];
   const args = [
     "-sS",
     "--max-time",
@@ -353,6 +358,7 @@ function postAnthropicViaProxy({ curlBin, proxyUrl, caCertPath, body, timeoutMs 
     proxyUrl,
     "--cacert",
     caCertPath,
+    ...platformCurlFlags,
     "-H",
     "Content-Type: application/json",
     "-H",
