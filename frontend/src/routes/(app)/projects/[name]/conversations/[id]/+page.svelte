@@ -95,7 +95,7 @@ function handleActionResult() {
             Export
           </button>
           {#if showExportMenu}
-            <div class="dropdown-menu" role="menu" onclick={(e: MouseEvent) => e.stopPropagation()}>
+            <div class="dropdown-menu" role="menu" tabindex="-1" onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') showExportMenu = false; }} onclick={(e: MouseEvent) => e.stopPropagation()}>
               <form method="POST" action="?/export" use:enhance={handleExportResult}>
                 <input type="hidden" name="format" value="raw" />
                 <button type="submit" class="dropdown-item" role="menuitem">Raw JSON</button>
