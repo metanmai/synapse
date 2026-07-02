@@ -451,3 +451,63 @@ export async function getRecentCompactedSummaries(
   if (error) throw error;
   return (data ?? []) as Array<{ id: string; title: string; compacted_summary: string; compacted_at: string }>;
 }
+
+// --- Phase 03-03: per-project conversation LRU (Free tier) ---
+
+/**
+ * Count active conversations in a project. Used by the Free-tier LRU
+ * eviction path to decide whether to evict before insert. Counts ALL
+ * statuses (active + archived) — the cap is on stored count, not visible
+ * count. If a user accumulates 10 archived conversations they can't add
+ * an 11th active one without eviction; that's intentional (Plus is the
+ * answer for higher capacity).
+ */
+export async function countConversationsForProject(db: SupabaseClient, projectId: string): Promise<number> {
+  const { count, error } = await db
+    .from("conversations")
+    .select("*", { count: "exact", head: true })
+    .eq("project_id", projectId);
+  if (error) {
+    console.error(`[db] countConversationsForProject ${projectId} failed: ${error.message}`);
+    throw error;
+  }
+  return count ?? 0;
+}
+
+/**
+ * Evict the oldest conversation in a project by updated_at ASC. Hard
+ * delete. Messages cascade-delete via FK constraint (migration 007 —
+ * `messages.conversation_id REFERENCES conversations(id) ON DELETE
+ * CASCADE`), so this single DELETE drops the conversation + all its
+ * messages atomically.
+ *
+ * Per Phase 03-03 design: eviction is SILENT — no warning, no toast.
+ * Returns the evicted ID on success or null on no-op (empty project,
+ * select error, delete error). Errors are LOGGED so the daemon log
+ * surfaces them, but never thrown — the eviction is a best-effort
+ * pre-step; the subsequent create should still succeed even if the
+ * eviction failed (the user would just go over-cap by 1 until next
+ * eviction attempt).
+ */
+export async function evictOldestConversationForProject(db: SupabaseClient, projectId: string): Promise<string | null> {
+  const { data: oldest, error: selErr } = await db
+    .from("conversations")
+    .select("id")
+    .eq("project_id", projectId)
+    .order("updated_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (selErr) {
+    console.error(`[db] evictOldestConversationForProject select ${projectId} failed: ${selErr.message}`);
+    return null;
+  }
+  if (!oldest) return null;
+
+  const evictId = (oldest as { id: string }).id;
+  const { error: delErr } = await db.from("conversations").delete().eq("id", evictId);
+  if (delErr) {
+    console.error(`[db] evictOldestConversationForProject delete ${evictId} failed: ${delErr.message}`);
+    return null;
+  }
+  return evictId;
+}

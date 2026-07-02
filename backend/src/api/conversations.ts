@@ -3,7 +3,9 @@ import { Hono } from "hono";
 import { logActivity } from "../db/activity-logger";
 import {
   appendMessages,
+  countConversationsForProject,
   createConversation,
+  evictOldestConversationForProject,
   getConversation,
   getConversationContext,
   getMessages,
@@ -18,7 +20,7 @@ import { authMiddleware } from "../lib/auth";
 import type { Env } from "../lib/env";
 import { ForbiddenError, NotFoundError } from "../lib/errors";
 import { idempotency } from "../lib/idempotency";
-import { enforceProjectQuota } from "../lib/tier";
+import { type Tier, enforceProjectQuota, getConversationCapForTier } from "../lib/tier";
 
 import { parseBody, schemas } from "../lib/validate";
 import { requireRole } from "../middleware/project-auth";
@@ -71,6 +73,21 @@ conversations.post("/", async (c) => {
   } else {
     // When the caller supplied a project_id explicitly, enforce membership.
     await requireRole(db, projectId, user.id, "editor");
+  }
+
+  // Phase 03-03: per-project conversation LRU on Free. If the user is at
+  // their per-tier cap, silently evict the oldest by updated_at before
+  // inserting the new one. Plus users skip this branch entirely (their
+  // 50-cap is enforced by slice 03-04 alongside the insight path, and
+  // is a much higher ceiling typical Plus users won't routinely hit).
+  // Eviction is destructive (messages cascade-delete via FK, migration 007).
+  const tier = (c.get("tier") ?? "free") as Tier;
+  if (tier === "free") {
+    const cap = getConversationCapForTier(tier);
+    const activeCount = await countConversationsForProject(db, projectId);
+    if (activeCount >= cap) {
+      await evictOldestConversationForProject(db, projectId);
+    }
   }
 
   const conversation = await createConversation(db, {
