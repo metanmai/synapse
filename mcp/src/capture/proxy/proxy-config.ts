@@ -23,6 +23,7 @@
  * to spawn the proxy.
  */
 
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { synapseRoot } from "../handoff-paths.js";
@@ -32,9 +33,26 @@ export interface ProxyConfig {
   enabled: boolean;
   /** ISO timestamp when enable was last invoked. Diagnostic only. */
   enabledAt?: string;
+  /**
+   * Loopback shared-secret for the browser-capture ingest route. Minted at
+   * wizard-enable; the extension sends it as X-Synapse-Ingest-Token. Its
+   * PRESENCE is what tells the daemon to start the ingest server — i.e. it is
+   * the browser-capture opt-in flag.
+   */
+  ingestToken?: string;
+  /** Loopback port for the ingest server. Defaults to DEFAULT_INGEST_PORT. */
+  ingestPort?: number;
 }
 
 const DEFAULT_CONFIG: ProxyConfig = { enabled: false };
+
+/** Default loopback port for the browser-capture ingest server. */
+export const DEFAULT_INGEST_PORT = 7726;
+
+/** Generate a fresh loopback shared-secret for the ingest route (wizard-enable). */
+export function mintIngestToken(): string {
+  return randomBytes(24).toString("hex");
+}
 
 /** Filesystem path to the persisted proxy-config json. */
 export function proxyConfigPath(): string {
@@ -56,6 +74,8 @@ export function readProxyConfig(): ProxyConfig {
     return {
       enabled: parsed.enabled === true,
       enabledAt: typeof parsed.enabledAt === "string" ? parsed.enabledAt : undefined,
+      ingestToken: typeof parsed.ingestToken === "string" ? parsed.ingestToken : undefined,
+      ingestPort: typeof parsed.ingestPort === "number" ? parsed.ingestPort : undefined,
     };
   } catch {
     // Malformed JSON or read error — fail safe to disabled rather than

@@ -3,7 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { CloudSyncer } from "./cloud-sync.js";
 import { defaultRegistry } from "./default-registry.js";
-import { effectiveProxyEnabled } from "./proxy/proxy-config.js";
+import { CaptureRateTracker } from "./ingest/capture-rate.js";
+import { type RunningIngestServer, startIngestServer } from "./ingest/ingest-server.js";
+import { DEFAULT_INGEST_PORT, effectiveProxyEnabled, readProxyConfig } from "./proxy/proxy-config.js";
 import { ProxySource } from "./proxy/proxy-source.js";
 import { SessionStore } from "./store.js";
 import { CaptureWatcher } from "./watcher.js";
@@ -105,19 +107,44 @@ async function main(): Promise<void> {
     log(`Proxy CA at ${caCertPath} (install in your trust store before pointing tools at the proxy)`);
   }
 
-  process.on("SIGTERM", async () => {
-    log("Received SIGTERM, shutting down");
-    if (proxySource) await proxySource.stop();
-    await watcher.stop();
-    process.exit(0);
-  });
+  // Optional: browser-capture ingest server. Opt-in is the PRESENCE of
+  // proxy-config.ingestToken (minted by the wizard). Loopback only.
+  const cfg = readProxyConfig();
+  let ingestServer: RunningIngestServer | null = null;
+  let staleTimer: ReturnType<typeof setInterval> | null = null;
+  if (cfg.ingestToken) {
+    const rateTracker = new CaptureRateTracker({ windowMs: 5 * 60 * 1000 });
+    ingestServer = await startIngestServer({
+      port: cfg.ingestPort ?? DEFAULT_INGEST_PORT,
+      token: cfg.ingestToken,
+      sync: (session) => syncer.sync(session),
+      rateTracker,
+      log,
+    });
+    log(`Browser-capture ingest listening on 127.0.0.1:${ingestServer.port}`);
+    // Active R2 signal: a CAPTURE_HOST tab was active but produced zero turns.
+    staleTimer = setInterval(() => {
+      const stale = rateTracker.staleHosts(Date.now());
+      if (stale.length > 0) {
+        log(
+          `WARNING: browser capture produced zero turns for active host(s): ${stale.join(", ")} — adapter may be broken`,
+        );
+      }
+    }, 60 * 1000);
+    if (typeof staleTimer.unref === "function") staleTimer.unref();
+  }
 
-  process.on("SIGINT", async () => {
-    log("Received SIGINT, shutting down");
+  async function shutdown(signal: string): Promise<void> {
+    log(`Received ${signal}, shutting down`);
+    if (staleTimer) clearInterval(staleTimer);
+    if (ingestServer) await ingestServer.close();
     if (proxySource) await proxySource.stop();
     await watcher.stop();
     process.exit(0);
-  });
+  }
+
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 
   await watcher.start();
   log(`Watching: ${registry.allWatchPaths().join(", ")}`);

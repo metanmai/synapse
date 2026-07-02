@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleIngest } from "../../src/capture/ingest/ingest-route.js";
+import { handleHeartbeat, handleIngest } from "../../src/capture/ingest/ingest-route.js";
 
 const ok = { remoteAddress: "127.0.0.1", token: "T", expectedToken: "T", origin: "chrome-extension://abc" };
 
@@ -43,5 +43,25 @@ describe("handleIngest", () => {
   it("rejects a non-allowlisted host", async () => {
     const r = await handleIngest({ host: "evil.com", messages: [] }, { ...ok, sync: vi.fn() });
     expect(r.status).toBe(400);
+  });
+});
+
+describe("handleHeartbeat", () => {
+  it("accepts an active CAPTURE_HOST tab and returns the host", () => {
+    const r = handleHeartbeat({ host: "claude.ai" }, ok);
+    expect(r.ok).toBe(true);
+    expect(r.host).toBe("claude.ai");
+  });
+
+  it("rejects a bad token", () => {
+    expect(handleHeartbeat({ host: "claude.ai" }, { ...ok, token: "WRONG" }).status).toBe(401);
+  });
+
+  it("rejects non-loopback", () => {
+    expect(handleHeartbeat({ host: "claude.ai" }, { ...ok, remoteAddress: "10.0.0.5" }).status).toBe(403);
+  });
+
+  it("rejects a non-allowlisted host", () => {
+    expect(handleHeartbeat({ host: "evil.com" }, ok).status).toBe(400);
   });
 });

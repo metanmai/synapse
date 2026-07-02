@@ -56,6 +56,18 @@ function tokensMatch(a: string, b: string): boolean {
   return timingSafeEqual(ba, bb);
 }
 
+/**
+ * Shared transport guards for every ingest endpoint:
+ * loopback(403) → shared-secret(401) → extension-Origin(403).
+ * Returns a rejection status, or null to proceed.
+ */
+function checkGuards(ctx: Omit<IngestContext, "sync">): number | null {
+  if (!isLoopback(ctx.remoteAddress)) return 403;
+  if (!ctx.token || !tokensMatch(ctx.token, ctx.expectedToken)) return 401;
+  if (ctx.origin && !isExtensionOrigin(ctx.origin)) return 403;
+  return null;
+}
+
 /** Stable id from host + first message, so continuations of one conversation collapse. */
 function sessionIdFromContent(host: string, messages: SessionMessage[]): string {
   const seed = `${host}:${messages[0]?.role ?? ""}:${messages[0]?.content ?? ""}`;
@@ -74,14 +86,9 @@ interface RawTurn {
 }
 
 export async function handleIngest(body: unknown, ctx: IngestContext): Promise<IngestResult> {
-  // 1. loopback only
-  if (!isLoopback(ctx.remoteAddress)) return { ok: false, status: 403 };
-
-  // 2. shared secret (constant-time)
-  if (!ctx.token || !tokensMatch(ctx.token, ctx.expectedToken)) return { ok: false, status: 401 };
-
-  // 3. reject web origins (absent is fine — some extension transports omit Origin)
-  if (ctx.origin && !isExtensionOrigin(ctx.origin)) return { ok: false, status: 403 };
+  // 1-3. loopback + shared-secret + origin guards
+  const rejected = checkGuards(ctx);
+  if (rejected !== null) return { ok: false, status: rejected };
 
   // 4. allowlist schema — read ONLY host + messages, nothing else
   const b = (body ?? {}) as IngestBody;
@@ -112,4 +119,23 @@ export async function handleIngest(body: unknown, ctx: IngestContext): Promise<I
 
   await ctx.sync(session);
   return { ok: true };
+}
+
+export interface HeartbeatResult {
+  ok: boolean;
+  status?: number;
+  host?: CaptureHost;
+}
+
+/**
+ * Page-visit heartbeat (R2 / P1). Same transport guards as ingest, but no
+ * messages — just records that a CAPTURE_HOST tab was active so a silently-
+ * broken adapter (zero captures despite an active tab) is detectable.
+ */
+export function handleHeartbeat(body: unknown, ctx: Omit<IngestContext, "sync">): HeartbeatResult {
+  const rejected = checkGuards(ctx);
+  if (rejected !== null) return { ok: false, status: rejected };
+  const host = (body as { host?: unknown }).host;
+  if (typeof host !== "string" || !isCaptureHost(host)) return { ok: false, status: 400 };
+  return { ok: true, host };
 }
