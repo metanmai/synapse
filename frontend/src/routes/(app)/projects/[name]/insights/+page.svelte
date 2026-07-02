@@ -6,6 +6,7 @@ import type { InsightType } from "$lib/types";
 let { data, form } = $props();
 
 let showForm = $state(false);
+let saving = $state(false);
 
 const insightTypes: { value: InsightType; label: string }[] = [
   { value: "decision", label: "Decision" },
@@ -16,7 +17,9 @@ const insightTypes: { value: InsightType; label: string }[] = [
 ];
 
 function handleSubmit() {
+  saving = true;
   return async ({ result, update }: { result: { type: string }; update: () => Promise<void> }) => {
+    saving = false;
     if (result.type === "success") {
       showForm = false;
     }
@@ -77,7 +80,9 @@ function handleSubmit() {
         </div>
 
         <div class="flex justify-end mt-4">
-          <button type="submit" class="submit-btn cursor-pointer">Create Insight</button>
+          <button type="submit" class="submit-btn cursor-pointer" disabled={saving}>
+            {saving ? "Creating..." : "Create Insight"}
+          </button>
         </div>
       </form>
     </div>
