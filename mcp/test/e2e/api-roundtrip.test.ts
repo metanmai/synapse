@@ -100,7 +100,7 @@ suite("Full User Journey", () => {
   describe("Auth: Signup validation", () => {
     it("signup does not return an API key (requires verification)", async () => {
       const testEmail = `e2e-signup-${Date.now()}@synapsesync.app`;
-      const { status, data } = await api("POST", "/auth/signup", undefined, { email: testEmail });
+      const { data } = await api("POST", "/auth/signup", undefined, { email: testEmail });
       // Either 200 (OTP sent) or rate-limited — never returns an API key
       expect(data.api_key).toBeUndefined();
     });
@@ -137,7 +137,7 @@ suite("Full User Journey", () => {
     });
 
     it("rejects wrong code", async () => {
-      const { status, data } = await api("POST", "/auth/verify-email", undefined, {
+      const { status } = await api("POST", "/auth/verify-email", undefined, {
         email: "nobody@synapsesync.app",
         code: "000000",
       });
@@ -702,8 +702,18 @@ suite("Full User Journey", () => {
       const { status, data } = await api("POST", `/api/conversations/${CONVERSATION_ID}/messages`, KEY, {
         messages: [
           { role: "user", content: "Fix the auth bug", source_agent: "claude-code" },
-          { role: "assistant", content: "I'll look at the auth middleware.", source_agent: "claude-code", source_model: "claude-opus-4-6" },
-          { role: "assistant", content: "Found the issue.", source_agent: "claude-code", tool_interaction: { name: "Read", summary: "Read auth.ts (45 lines)" } },
+          {
+            role: "assistant",
+            content: "I'll look at the auth middleware.",
+            source_agent: "claude-code",
+            source_model: "claude-opus-4-6",
+          },
+          {
+            role: "assistant",
+            content: "Found the issue.",
+            source_agent: "claude-code",
+            tool_interaction: { name: "Read", summary: "Read auth.ts (45 lines)" },
+          },
         ],
       });
       expect(status).toBe(200);
