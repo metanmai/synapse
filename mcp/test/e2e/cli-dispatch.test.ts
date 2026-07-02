@@ -11,14 +11,11 @@
  * It does not run the commands to completion (most require network or
  * prompts); it just verifies the dispatch path is intact.
  *
- * Run: TEST_E2E=1 npm run test:e2e
+ * Run: npm run test:e2e
  */
 import child_process from "node:child_process";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-
-const RUN = process.env.TEST_E2E === "1";
-const suite = RUN ? describe : describe.skip;
 
 const BIN = path.resolve(__dirname, "../../dist/index.js");
 
@@ -78,7 +75,7 @@ function runCli(args: string[]): Promise<{ stdout: string; stderr: string }> {
   });
 }
 
-suite("CLI dispatcher", () => {
+describe("CLI dispatcher", () => {
   describe("registered subcommands dispatch", () => {
     for (const cmd of REGISTERED_COMMANDS) {
       it(`\`${cmd}\` is not rejected as Unknown command`, async () => {

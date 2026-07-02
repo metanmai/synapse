@@ -6,7 +6,7 @@
  *   API Key Management → Billing → Insights →
  *   Conversations → Account Deletion
  *
- * Run:  TEST_E2E=1 npm run test:e2e
+ * Run:  npm run test:e2e
  *
  * Requires secrets: TEST_SUPABASE_URL, TEST_SUPABASE_SERVICE_KEY
  * Optional: TEST_API_URL (defaults to https://api.synapsesync.app)
@@ -19,8 +19,6 @@ import { afterAll, describe, expect, it } from "vitest";
 const API = process.env.TEST_API_URL || "https://api.synapsesync.app";
 const SUPABASE_URL = process.env.TEST_SUPABASE_URL || "";
 const SUPABASE_KEY = process.env.TEST_SUPABASE_SERVICE_KEY || "";
-const RUN = process.env.TEST_E2E === "1";
-const suite = RUN ? describe : describe.skip;
 
 // biome-ignore lint/suspicious/noExplicitAny: dynamic API responses
 type R = Record<string, any>;
@@ -78,7 +76,7 @@ let PROJECT_ID: string;
 let SECOND_KEY: string;
 let SECOND_KEY_ID: string;
 
-suite("Full User Journey", () => {
+describe("Full User Journey", () => {
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  SETUP — create test user via admin
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

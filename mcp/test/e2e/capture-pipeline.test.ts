@@ -5,9 +5,7 @@
  * session store CRUD, validation, safe-read, watcher dedup, event queue dedup,
  * health tracking, daemon PID management, and parse error tracking.
  *
- * Run:  TEST_E2E=1 npx vitest run test/e2e/capture-pipeline.test.ts
- *
- * Without TEST_E2E=1 the suite is skipped.
+ * Run:  npm run test:e2e -- test/e2e/capture-pipeline.test.ts
  */
 import child_process from "node:child_process";
 import fs from "node:fs";
@@ -29,13 +27,6 @@ import { safeReadFile } from "../../src/capture/safe-read.js";
 import { SessionStore } from "../../src/capture/store.js";
 import { type CapturedSession, sessionIdFromNative } from "../../src/capture/types.js";
 import { CaptureWatcher } from "../../src/capture/watcher.js";
-
-/* ------------------------------------------------------------------ */
-/*  Test gating                                                       */
-/* ------------------------------------------------------------------ */
-
-const RUN = process.env.TEST_E2E === "1";
-const suite = RUN ? describe : describe.skip;
 
 const BIN = path.resolve(__dirname, "../../dist/index.js");
 
@@ -242,7 +233,7 @@ const COPILOT_CLI_JSONL = [
 /*  1. CLI Lifecycle                                                  */
 /* ------------------------------------------------------------------ */
 
-suite("Capture Pipeline E2E", () => {
+describe("Capture Pipeline E2E", () => {
   let tmpHome: string;
 
   function freshHome(): string {
@@ -1582,6 +1573,7 @@ suite("Capture Pipeline E2E", () => {
       }
     });
 
+    // biome-ignore lint/suspicious/noDuplicateTestHooks: `syncSuite` is a distinct nested describe (gated by SYNC_KEY); biome can't statically resolve the variable to a describe call, so it false-flags this as a sibling of the outer afterAll on L249.
     afterAll(async () => {
       // Best-effort cleanup of any conversations created during these tests
       for (const id of createdConversationIds) {

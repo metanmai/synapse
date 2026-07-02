@@ -34,12 +34,21 @@ if (existsSync(resultsFile)) rmSync(resultsFile);
 
 const userArgs = process.argv.slice(2);
 
+// Auto-select the e2e vitest config when any forwarded arg references
+// `test/e2e` — keeps `node ./scripts/run-tests.mjs test/e2e/` working
+// verbatim from both bash and pwsh (env-prefix syntax is bash-only).
+// Skip injection if the caller already passed --config / -c (don't override).
+const hasExplicitConfig = userArgs.some((a) => a === "--config" || a === "-c" || a.startsWith("--config="));
+const wantsE2eConfig = !hasExplicitConfig && userArgs.some((a) => a.replace(/\\/g, "/").includes("test/e2e"));
+const configArgs = wantsE2eConfig ? ["--config", "vitest.e2e.config.ts"] : [];
+
 const vitestArgs = [
   "vitest",
   "run",
   "--reporter=default",
   "--reporter=json",
   `--outputFile.json=${resultsFile}`,
+  ...configArgs,
   ...userArgs,
 ];
 
