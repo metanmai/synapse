@@ -4,8 +4,9 @@ import { z } from "zod";
 
 import {
   getAllEntries,
-  getEntry,
   getPreferences,
+  getProjectContext,
+  getRecentCompactedSummaries,
   getRecentEntries,
   listEntries,
   searchEntries,
@@ -25,22 +26,52 @@ export function registerContextRetrievalTools(
 ) {
   server.tool(
     "get_context",
-    "Retrieve a specific context entry by its path within a project.",
+    "Get the aggregated project context summary. Returns a dense summary of all recent work on the project — decisions, architecture, current state. This is the primary way to load project knowledge.",
     {
       project: z.string().describe("Project name"),
-      path: z.string().describe("Path to the entry, e.g., 'decisions/chose-postgres.md'"),
     },
-    async ({ project, path }) => {
+    async ({ project }) => {
       const userId = requireMcpUserId(getContext);
 
       const proj = await mcpResolveProject(db, project, userId);
       if (!proj) return mcpError(`Project "${project}" not found.`);
 
-      const entry = await getEntry(db, proj.id, path);
-      if (!entry) return mcpError(`No entry found at "${path}".`);
+      // Try aggregated project context first
+      const projectContext = await getProjectContext(db, proj.id);
+      if (projectContext?.summary) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `# Project Context: ${project}\n\nUpdated: ${projectContext.updated_at}\nConversations: ${projectContext.conversation_count}\nModel: ${projectContext.model}\n\n${projectContext.summary}`,
+            },
+          ],
+        };
+      }
+
+      // Fall back to recent compacted conversation summaries
+      const compacted = await getRecentCompactedSummaries(db, proj.id, 5);
+      if (compacted.length > 0) {
+        const joined = compacted
+          .map((c) => `## ${c.title ?? "Conversation"}\nCompacted: ${c.compacted_at}\n\n${c.compacted_summary}`)
+          .join("\n\n---\n\n");
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `# Project Context: ${project} (from ${compacted.length} recent conversations)\n\n${joined}`,
+            },
+          ],
+        };
+      }
 
       return {
-        content: [{ type: "text", text: entry.content }],
+        content: [
+          {
+            type: "text" as const,
+            text: `No aggregated context available yet for "${project}". Context will appear automatically as conversations are compacted.`,
+          },
+        ],
       };
     },
   );
