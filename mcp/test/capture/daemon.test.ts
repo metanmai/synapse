@@ -22,6 +22,7 @@ describe("handoff daemon loop", () => {
       api_url: "https://api.test",
       pull_ms: 100,
       healthcheck_ms: 100,
+      tier_override: "plus",
     });
     await new Promise((r) => setTimeout(r, 250));
     expect(fs.existsSync(path.join(tmp, "daemon.healthcheck"))).toBe(true);
@@ -38,6 +39,7 @@ describe("handoff daemon loop", () => {
       api_url: "https://api.test",
       pull_ms: 10000,
       healthcheck_ms: 1000,
+      tier_override: "plus",
     });
     fs.writeFileSync(path.join(tmp, "daemon-flush-now"), "");
     await new Promise((r) => setTimeout(r, 200));
@@ -63,6 +65,7 @@ describe("handoff daemon loop", () => {
       api_url: "https://api.test",
       pull_ms: 10000,
       healthcheck_ms: 1000,
+      tier_override: "plus",
     });
 
     // Wait long enough for at least one cycle to fire on the empty list.
@@ -115,6 +118,7 @@ describe("handoff daemon loop", () => {
       api_url: "https://api.test",
       pull_ms: 10000,
       healthcheck_ms: 1000,
+      tier_override: "plus",
     });
     fs.writeFileSync(path.join(tmp, "daemon-flush-now"), "");
     await new Promise((r) => setTimeout(r, 250));
