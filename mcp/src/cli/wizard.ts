@@ -1,5 +1,6 @@
 import * as clack from "@clack/prompts";
 import { browserAuth } from "./browser-auth.js";
+import type { SetupScope } from "./editors.js";
 import { detectEditors, writeEditorConfigs } from "./editors.js";
 import { createGlyphSpinner } from "./spinner.js";
 import { accent, bold, muted, success, error as themeError } from "./theme.js";
@@ -63,8 +64,22 @@ export async function runWizard(version: string): Promise<void> {
     apiKey = key.trim();
   }
 
-  // Step 5: Editor selection
-  const allEditors = detectEditors();
+  // Step 5: Scope
+  const scope = await clack.select({
+    message: "Where should Synapse be configured?",
+    options: [
+      { value: "local" as const, label: "This project only", hint: "writes config to current directory" },
+      { value: "global" as const, label: "Globally", hint: "available in all projects" },
+    ],
+  });
+
+  if (clack.isCancel(scope)) {
+    clack.cancel("Cancelled.");
+    process.exit(0);
+  }
+
+  // Step 6: Editor selection
+  const allEditors = detectEditors(scope as SetupScope);
   const editorChoice = await clack.multiselect({
     message: "Which tools should Synapse connect to?",
     options: allEditors.map((e) => ({
