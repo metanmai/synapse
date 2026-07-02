@@ -26,8 +26,12 @@ describe("GeminiAdapter", () => {
     try {
       expect(adapter.watchPaths()).toEqual(["/tmp/synapse-test-gemini-watch"]);
     } finally {
-      if (prev === undefined) delete process.env.SYNAPSE_TEST_GEMINI_PATH;
-      else process.env.SYNAPSE_TEST_GEMINI_PATH = prev;
+      if (prev === undefined) {
+        // biome-ignore lint/performance/noDelete: assigning undefined to process.env.X coerces to string "undefined" (truthy), which would leak the override into other tests
+        delete process.env.SYNAPSE_TEST_GEMINI_PATH;
+      } else {
+        process.env.SYNAPSE_TEST_GEMINI_PATH = prev;
+      }
     }
   });
 
