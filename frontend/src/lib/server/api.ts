@@ -67,6 +67,30 @@ export function createApi(token: string | null) {
         method: "POST",
         body: JSON.stringify({ email, role }),
       }),
+
+    // Cross-device link / merge (Phase 2 IDENT-02 D-07)
+    mergeProjects: (sourceProjectId: string, targetProjectId: string) =>
+      request<{ ok: true; project_id: string }>(
+        `/api/projects/${sourceProjectId}/merge-into/${targetProjectId}`,
+        token,
+        { method: "POST" },
+      ),
+    // Returns auto-match candidates by shared git_remote_url. Backend doesn't
+    // yet expose `matched_by_remote` in the projects-list response; for now
+    // this returns an empty list and the LinkPicker simply omits the
+    // "Suggested matches" section. Wire up the real surface when the
+    // backend match-candidates endpoint lands.
+    listLinkCandidates: (
+      _sourceProjectName: string,
+    ): Promise<
+      Array<{
+        id: string;
+        name: string;
+        conversation_count: number;
+        last_activity?: string;
+        matched_by_remote: boolean;
+      }>
+    > => Promise.resolve([]),
     updateMemberRole: (projectId: string, email: string, role: string) =>
       request<void>(`/api/projects/${projectId}/members/${encodeURIComponent(email)}`, token, {
         method: "PATCH",
