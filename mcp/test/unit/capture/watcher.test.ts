@@ -6,6 +6,20 @@ import { AdapterRegistry } from "../../../src/capture/adapter-registry.js";
 import type { CapturedSession, ToolAdapter } from "../../../src/capture/types.js";
 import { CaptureWatcher, buildChokidarOptions } from "../../../src/capture/watcher.js";
 
+// Poll-with-deadline helper. The fixed-timeout pattern is too tight on
+// Windows: `usePolling: true, interval: 500` adds up to 500ms of poll
+// latency, awaitWriteFinish.stabilityThreshold adds another 500ms, the
+// 500ms scanInterval adds another 500ms — minimum ~1500ms before a
+// session emits. On a busy CI runner with NTFS + Defender, even 3s is
+// occasionally too tight. Poll-with-deadline waits for the assertion
+// to become true instead of guessing how long that will take.
+async function pollUntil(check: () => boolean, deadlineMs: number): Promise<void> {
+  const deadline = Date.now() + deadlineMs;
+  while (!check() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
 function makeFakeAdapter(tool: string, watchDir: string): ToolAdapter {
   return {
     tool,
@@ -86,7 +100,10 @@ describe("CaptureWatcher", () => {
     const testFile = path.join(tmpDir, "dedup.jsonl");
     fs.writeFileSync(testFile, '{"test": true}\n');
 
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    // Wait for the first emission. Generous deadline because Windows
+    // polling + awaitWriteFinish + scan interval stack up to ~1.5s
+    // minimum; CI runners can stretch this further.
+    await pollUntil(() => sessions.length >= 1, 10000);
     expect(sessions.length).toBe(1);
 
     // Write same content again -- mtime changes but size doesn't always.
@@ -96,7 +113,7 @@ describe("CaptureWatcher", () => {
     await new Promise((resolve) => setTimeout(resolve, 3000));
     // May or may not emit again depending on mtime -- the point is it doesn't crash
     // and the dedup logic runs. Exact count depends on OS mtime resolution.
-  });
+  }, 15000);
 
   it("reports running state", async () => {
     expect(watcher.isRunning()).toBe(false);
