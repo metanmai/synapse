@@ -5,6 +5,7 @@ import { resolveActor } from "../capture/actor.js";
 import { appendEvent } from "../capture/events-log.js";
 import { briefCachePath, currentSessionPath, projectDir } from "../capture/handoff-paths.js";
 import { pullHandoffWithTimeout } from "../capture/pull-compact.js";
+import { pullInsightsSection } from "../capture/pull-insights.js";
 import { canonicalCwd } from "../cli/hook-dispatch.js";
 
 const PULL_HANDOFF_TIMEOUT_MS = 10_000;
@@ -64,7 +65,21 @@ export async function runSessionStartHook(args: SessionStartArgs): Promise<void>
     handoff = null;
   }
 
-  const composed = handoff ? `${brief.trim()}\n\n## Last conversation handoff\n\n${handoff.trim()}` : brief.trim();
+  // Pull recent insights AFTER pullHandoff (which warms the project-map
+  // cache via Tier 2 routing) so the cwd → project_id lookup hits the
+  // local map. Best-effort: any failure falls through to no-insights
+  // rather than blocking the hook output.
+  let insightsSection = "";
+  try {
+    insightsSection = await pullInsightsSection(rawCwd);
+  } catch {
+    insightsSection = "";
+  }
+
+  const parts = [brief.trim()];
+  if (insightsSection) parts.push(insightsSection);
+  if (handoff) parts.push(`## Last conversation handoff\n\n${handoff.trim()}`);
+  const composed = parts.join("\n\n");
   args.stdout.write(`<synapse-brief>\n${composed}\n</synapse-brief>\n`);
 
   appendEvent(projectDir(args.project_id), {
