@@ -51,6 +51,52 @@ jobs:
       - name: Test
         run: npm test
 
+  cleanup-e2e-account:
+    # Hygiene gate for the shared E2E test account. Every E2E run creates
+    # test projects; failed/cancelled runs leak them past their own sweeps.
+    # At ~15 leaked runs the account hits the 50-project cap and the backend
+    # returns 402 PROJECT_QUOTA_EXCEEDED on every create — CI red that LOOKS
+    # like an adapter-roundtrip flake but is quota noise (root-caused
+    # 2026-06-09/10, LAUNCH-READINESS #5). This job force-deletes projects
+    # older than 45 minutes BEFORE the account-using jobs run. The 45-min
+    # threshold is the concurrency guard: the parallel e2e + happy-flow
+    # matrix legs (and any just-cancelled prior run) only own projects
+    # younger than that, so a sweep can never delete in-flight work.
+    # Graceful-skip pattern: green no-op on tanmain where secrets are absent.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: prod
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check secrets are configured
+        id: check
+        env:
+          SYNAPSE_E2E_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+        run: |
+          if [ -z "$SYNAPSE_E2E_API_KEY" ]; then
+            echo "::notice::cleanup-e2e-account skipped — SYNAPSE_E2E_API_KEY not configured. Mirror to metanmai/synapse for the validated run."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sweep stale test-account projects
+        # Zero-dep script — no npm install needed. Exit 0 even when single
+        # deletes fail (hygiene must not mask the real e2e signal); exit 2
+        # only on preflight failures (no key / list endpoint down).
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SYNAPSE_E2E_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+        run: node scripts/cleanup-test-account.mjs --yes
+
   migrate:
     # Applies pending Supabase migrations on push-to-main. Gracefully skips
     # (job stays GREEN) when secrets aren't configured yet — see BUGS.md
@@ -106,7 +152,10 @@ jobs:
     # surfaces.
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
-    needs: verify
+    # cleanup-e2e-account ordering: the capture-pipeline Cloud Sync suite
+    # (TEST_SYNAPSE_API_KEY below) writes to the shared E2E account, so it
+    # must run after the stale-project sweep, same as happy-flow-e2e.
+    needs: [verify, cleanup-e2e-account]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: prod
     strategy:
@@ -195,10 +244,14 @@ jobs:
         # `npm test` script wiring already in place for the verify job.
         run: node ./scripts/run-tests.mjs test/e2e/
         env:
-          TEST_E2E: "1"
+          # TEST_E2E flag retired — e2e collection moved to vitest.e2e.config.ts
+          # (selected automatically by run-tests.mjs for test/e2e paths).
+          # TEST_SYNAPSE_API_KEY un-skips the capture-pipeline Cloud Sync
+          # suite (5 tests) against the live API using the E2E account.
           TEST_API_URL: ${{ secrets.TEST_API_URL }}
           TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
           TEST_SUPABASE_SERVICE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_KEY }}
+          TEST_SYNAPSE_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
 
       - name: Upload Playwright report
         if: failure() && steps.check.outputs.configured == 'true'
@@ -297,7 +350,9 @@ jobs:
     # provider API key are configured.
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
-    needs: verify
+    # Runs after the stale-project sweep so the merge-gate scripts have
+    # quota headroom on the shared E2E account (50-project cap).
+    needs: [verify, cleanup-e2e-account]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: prod
     strategy:
@@ -460,3 +515,58 @@ jobs:
           cat "$HOME/.synapse/proxy-config.json" 2>/dev/null || true
           echo "--- ~/.synapse/project-map.json ---"
           cat "$HOME/.synapse/project-map.json" 2>/dev/null || echo "(no project-map.json)"
+
+  project-cap-e2e:
+    # LAUNCH-READINESS #7 — continuous coverage of the structured 402
+    # PROJECT_QUOTA_EXCEEDED contract: the exact bug class that turned CI
+    # red for two days when the E2E account organically hit the cap.
+    #
+    # DELIBERATELY SERIAL, NOT part of the per-leg merge gate: the script
+    # saturates the 50-project cap to assert the 402, which would starve
+    # any job running concurrently against the same account. So it needs
+    # BOTH happy-flow legs to finish first, runs on one OS only (the cap
+    # logic is backend-side; OS coverage adds nothing), and the script
+    # pre-cleans its own e2e-cap-test-* residue from crashed prior runs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Needs BOTH account-using jobs (all matrix legs) done — saturating the
+    # cap while either is still creating projects would 402 their creates.
+    needs: [happy-flow-e2e, e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: prod
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check secrets are configured
+        id: check
+        env:
+          SYNAPSE_E2E_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+        run: |
+          if [ -z "$SYNAPSE_E2E_API_KEY" ]; then
+            echo "::notice::project-cap-e2e skipped — SYNAPSE_E2E_API_KEY not configured. Mirror to metanmai/synapse for the validated run."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sweep stale test-account projects (headroom for saturation)
+        # The cap script skips itself when the account holds > 45 projects
+        # (its safety guard against eating a real account's headroom). The
+        # happy-flow legs that just finished left fresh residue, so sweep
+        # again — anything they leaked is fair game once the legs are done,
+        # hence a tighter 10-minute threshold here.
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SYNAPSE_E2E_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+        run: node scripts/cleanup-test-account.mjs --yes --older-than-minutes 10
+
+      - name: Run project-cap e2e (402 quota contract)
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SYNAPSE_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+        run: node scripts/e2e-project-cap.mjs
