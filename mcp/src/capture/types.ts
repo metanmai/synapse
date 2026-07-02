@@ -31,7 +31,23 @@ export interface CapturedSession {
 export const SYNAPSE_INTERNAL_MARKER = "[SYNAPSE_INTERNAL_COMPACTION]";
 
 export interface CompactResult {
+  /**
+   * Short prose description for the dashboard — 3-5 sentences, human-facing.
+   * Stored in `conversations.compacted_summary`.
+   */
   summary: string;
+  /**
+   * Structured markdown handoff document for the NEXT agent that picks up
+   * this work — sections for task, state, next action, decisions, files,
+   * open questions, gotchas, last user prompt. Read by a fresh Claude Code
+   * session (or any agent) instead of re-deriving context from the
+   * transcript. Stored in `conversations.metadata.handoff_markdown` (JSON
+   * column — no schema migration needed).
+   *
+   * Optional: an adapter may produce only a description if its `compact()`
+   * implementation hasn't been extended to handoff format yet.
+   */
+  handoff?: string;
   /**
    * Tag identifying the local source — e.g. `"claude-code:local-haiku"`.
    * Persisted on the conversation row so the dashboard can attribute the
