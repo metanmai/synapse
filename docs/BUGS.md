@@ -37,6 +37,38 @@ Phase 2 added a `migrate` job to `.github/workflows/ci.yml` that runs `supabase 
 
 ## P2 — Coverage gaps
 
+### Creem webhook silently drops renewal events — `subscriptions` rows go stale after initial signup
+
+Every active `provider='creem'` row in production has `updated_at == created_at`, meaning the row has never been touched since the original `checkout.completed` webhook landed. Confirmed via SQL on 2026-05-23:
+
+| user_id | sub_id | status | created_at | current_period_end | updated_at |
+|---|---|---|---|---|---|
+| c2e77627… (dogfood) | sub_cxnPAzSODdVKgJh93fQ4Z | active | 2026-03-29 | 2026-04-29 (24d stale) | 2026-03-29 |
+| 1a26dee0… (real customer) | sub_5J1fe0K3ILt48oUYOeAmXm | active | 2026-04-01 | 2026-05-01 (22d stale) | 2026-04-01 |
+| bd5be0f2… (churned) | sub_3zczzl4C75f3u8rkPZyhLH | inactive | 2026-03-29 | 2026-04-29 | 2026-04-13 |
+
+The churned row (`bd5be0f2`) updated once — almost certainly on the `subscription.canceled` event — proving the webhook endpoint is reachable and the signature check passes. So renewal events specifically are being lost.
+
+**Likely root cause (need Creem dashboard data to confirm):** `backend/src/api/billing.ts:37-115` switch only handles `checkout.completed`, `subscription.{active,paid,scheduled_cancel,canceled,expired,past_due}`. There is **no case** for what Creem fires on monthly renewal — likely `subscription.renewed` or `invoice.paid` or `invoice.succeeded`. And there is **no `default:` branch**, so unknown event_types fall through to `return c.json({ received: true })` with no log line — invisible from both Creem's side (200 OK) and ours (no entry in `wrangler tail`).
+
+**User-visible symptom:** account page billing card shows a renewal date in the past (e.g., "renews April 29, 2026" when viewed in May). The user still has Plus access because tier resolution uses status, not period_end — but a future churn would also drop silently.
+
+**Diagnostic steps deferred:** open Creem dashboard, look up `sub_cxnPAzSODdVKgJh93fQ4Z`, check (a) does Creem report a future next_billing_date — i.e. did Creem actually attempt renewal, (b) Webhooks → Logs delivery history 2026-04-28 to 2026-05-01, capture the exact event_type Creem fires on monthly renewal, (c) the response status our endpoint returned. Repeat for `sub_5J1fe0K3ILt48oUYOeAmXm` if needed.
+
+**Defensive patch worth shipping before the proper fix:** add `default:` to the switch with `console.warn("[billing] unhandled webhook event_type", { event_type, sub_id })` so the next missed event leaves breadcrumbs in `wrangler tail`. ~3 lines, no functional risk.
+
+**Proper fix:** once Creem dashboard reveals the renewal event_type name, add a case that updates `current_period_end` from `obj.current_period_end` (matching the shape used in `billing.ts:67`).
+
+**Code refs:**
+- `backend/src/api/billing.ts:37` — switch (the missing case lives here)
+- `backend/src/api/billing.ts:115` — fall-through to silent 200 (the missing default lives here)
+- `backend/src/db/queries/subscriptions.ts:5` — `getActiveSubscription` filters by status — not affected, but explains why users keep Plus access despite stale period_end
+- `frontend/src/lib/components/account/BillingCard.svelte` — renders the stale date directly without checking whether it's in the past
+
+**Adjacent UI bug worth folding into the fix:** BillingCard doesn't check if `current_period_end` is in the past — should render "expired" / "renewal pending" rather than showing a date in the past as if it's a future renewal.
+
+---
+
 ### 5a. Backend integration tests skip the actual handler logic for events-batch + 6 other endpoints
 
 10+ `.skip`'d tests in `backend/test/api/` are gated on "requires valid auth token + DB". They cover the happy paths for `events-batch`, `events-batch-auto-create`, `project-status`, `project-events`, and `invites` — exactly the endpoints we'd want to regression-test against the actual reducer + DB schema. The active tests only verify auth enforcement (401 without bearer), not the handler logic itself.
