@@ -61,10 +61,9 @@ async function main(): Promise<void> {
     const stored = store.load(session.id);
     if (!stored) return;
 
-    // Pass the adapter through so the syncer can invoke its local-CLI
-    // `compact()` method on first sync. Adapters without compact() skip
-    // local-CLI compaction; the dashboard falls back to the hosted path.
-    const ok = await syncer.sync(stored, adapter);
+    // Compaction is no longer triggered here — it's owned by the pull path
+    // (SessionStart hook → handoff-brief). Sync only pushes messages.
+    const ok = await syncer.sync(stored);
     if (ok) {
       log(`Synced session ${stored.id} to cloud (${stored.messages.length} messages)`);
     }
