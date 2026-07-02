@@ -673,6 +673,7 @@ suite("Full User Journey", () => {
       ["GET", "/api/context/TestProject/search?q=test"],
       ["GET", "/api/context/TestProject/test.md"],
       ["DELETE", "/api/context/TestProject/test.md"],
+      ["DELETE", "/api/account"],
     ];
 
     for (const [method, path] of protectedEndpoints) {
@@ -684,38 +685,42 @@ suite("Full User Journey", () => {
   });
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  ACCOUNT DELETION — must be LAST (destroys the test user)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  describe("Account deletion", () => {
+    it("deletes the user and all their data", async () => {
+      const { status, data } = await api("DELETE", "/api/account", KEY);
+      expect(status).toBe(200);
+      expect(data.ok).toBe(true);
+    });
+
+    it("API key no longer works after deletion", async () => {
+      const { status } = await api("GET", "/api/projects", KEY);
+      expect(status).toBe(401);
+    });
+
+    it("signing up with same email works again", async () => {
+      const { status, data } = await api("POST", "/auth/signup", undefined, { email: EMAIL });
+      expect(status).toBe(201);
+      expect(data.api_key).toBeTruthy();
+      // Update KEY for afterAll cleanup
+      KEY = data.api_key;
+    });
+  });
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   //  CLEANUP
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   afterAll(async () => {
     if (!KEY) return;
 
-    // 1. Delete all remaining entries
-    if (PROJECT_NAME) {
-      try {
-        const { data } = await api("GET", `/api/context/${enc(PROJECT_NAME)}/list`, KEY);
-        if (Array.isArray(data)) {
-          for (const entry of data) {
-            await api("DELETE", `/api/context/${enc(PROJECT_NAME)}/${enc(entry.path)}`, KEY);
-          }
-        }
-      } catch {
-        // best-effort
-      }
-    }
-
-    // 2. Revoke all API keys except the primary one (which we're using)
+    // Delete the test user and ALL their data (entries, projects, keys, subscriptions)
     try {
-      const { data: keys } = await api("GET", "/api/account/keys", KEY);
-      if (Array.isArray(keys)) {
-        for (const key of keys) {
-          if (key.label !== "default") {
-            await api("DELETE", `/api/account/keys/${key.id}`, KEY);
-          }
-        }
-      }
+      await api("DELETE", "/api/account", KEY);
     } catch {
-      // best-effort
+      // best-effort — if this fails, data is orphaned but harmless
     }
   });
 });
