@@ -9,6 +9,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chatgptAdapter } from "../src/content/adapters/chatgpt.js";
 import { claudeAdapter } from "../src/content/adapters/claude-ai.js";
+import { createDriftSentinel } from "../src/content/drift-sentinel.js";
 import type { CaptureAdapter } from "../src/content/adapters/types.js";
 import { type PostFn, makeHookedFetch } from "../src/content/main.js";
 import { handleRelayMessage } from "../src/content/relay.js";
@@ -195,5 +196,40 @@ describe("handleRelayMessage — origin/window/tag guards", () => {
     handleRelayMessage(ev({ data: { __synapse: false } })); // untagged → dropped
 
     expect(sent).toHaveLength(1);
+  });
+});
+
+describe("drift detection in the hook", () => {
+  it("posts a drift signal after 3 matched-but-empty completions", async () => {
+    const post = vi.fn();
+    // An adapter that matches but never parses (simulates a wire-format change).
+    const brokenAdapter: CaptureAdapter = {
+      host: "claude.ai",
+      matchesCompletion: () => true,
+      parseRequest: () => null,
+      parseResponse: () => null,
+    };
+    const origFetch = (async () =>
+      new Response("event: unknown\ndata: {}\n\n", { status: 200 })) as unknown as typeof fetch;
+    const hooked = makeHookedFetch(origFetch, brokenAdapter, post, createDriftSentinel({ threshold: 3 }));
+    for (let i = 0; i < 3; i++) await hooked("https://claude.ai/c/completion", { method: "POST" });
+    await waitFor(() => post.mock.calls.some((c) => c[0] === "drift"));
+    const drift = post.mock.calls.find((c) => c[0] === "drift");
+    expect(drift?.[1]).toMatchObject({ eventNames: ["unknown"] });
+  });
+
+  it("stays silent while the adapter keeps parsing successfully", async () => {
+    const post = vi.fn();
+    const okAdapter: CaptureAdapter = {
+      host: "claude.ai",
+      matchesCompletion: () => true,
+      parseRequest: () => null,
+      parseResponse: () => ({ role: "assistant", content: "ok" }),
+    };
+    const origFetch = (async () => new Response("event: x\ndata: {}\n\n", { status: 200 })) as unknown as typeof fetch;
+    const hooked = makeHookedFetch(origFetch, okAdapter, post, createDriftSentinel({ threshold: 3 }));
+    for (let i = 0; i < 5; i++) await hooked("https://claude.ai/c/completion", { method: "POST" });
+    await waitFor(() => post.mock.calls.some((c) => c[0] === "turn"));
+    expect(post.mock.calls.some((c) => c[0] === "drift")).toBe(false);
   });
 });

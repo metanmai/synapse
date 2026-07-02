@@ -5,6 +5,8 @@
 // (MAIN world cannot use chrome.runtime). Reads conversation data only.
 
 import type { CaptureAdapter } from "./adapters/types.js";
+import { type DriftSentinel, createDriftSentinel } from "./drift-sentinel.js";
+import { summarizeShape } from "./drift-shape.js";
 import { adapterForHost } from "./registry.js";
 
 export type PostFn = (kind: string, payload?: Record<string, unknown>) => void;
@@ -28,7 +30,12 @@ export async function readAll(resp: Response): Promise<string> {
  * requests, extracts the user + assistant turns and forwards them via `post`.
  * Pure (no globals) so it can be driven directly in tests.
  */
-export function makeHookedFetch(origFetch: typeof fetch, adapter: CaptureAdapter, post: PostFn): typeof fetch {
+export function makeHookedFetch(
+  origFetch: typeof fetch,
+  adapter: CaptureAdapter,
+  post: PostFn,
+  sentinel?: DriftSentinel,
+): typeof fetch {
   return async (...args: Parameters<typeof fetch>): Promise<Response> => {
     const input = args[0];
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -50,6 +57,12 @@ export function makeHookedFetch(origFetch: typeof fetch, adapter: CaptureAdapter
         void readAll(res.clone()).then((text) => {
           const turn = adapter.parseResponse(text);
           if (turn) post("turn", { role: turn.role, content: turn.content });
+          if (sentinel) {
+            const outcome = { matched: true, hadBody: text.trim().length > 0, parsedOk: !!turn };
+            if (sentinel.record(adapter.host, outcome) === "drift") {
+              post("drift", { ...summarizeShape(text) });
+            }
+          }
         });
       }
     } catch {
@@ -76,7 +89,7 @@ export function installFetchHook(win: Window = window, loc: Location = location,
   pingIfVisible();
   setInterval(pingIfVisible, 60_000);
 
-  win.fetch = makeHookedFetch(win.fetch.bind(win), adapter, post);
+  win.fetch = makeHookedFetch(win.fetch.bind(win), adapter, post, createDriftSentinel());
 }
 
 if (typeof window !== "undefined") installFetchHook();
