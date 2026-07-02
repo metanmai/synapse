@@ -4,12 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { API_URL } from "../cli/config.js";
 import { upsertProjectMapping } from "../cli/project-map.js";
+import { type SyncState, loadSyncStates, saveSyncStates } from "./sync-state-store.js";
 import type { CapturedSession, SessionMessage, ToolAdapter } from "./types.js";
-
-interface SyncState {
-  cloudConversationId: string;
-  lastSyncedMessageCount: number;
-}
 
 interface Project {
   id: string;
@@ -72,7 +68,7 @@ function mapMessages(messages: SessionMessage[]): Array<{
 
 export class CloudSyncer {
   private apiKey: string | null;
-  private syncStates = new Map<string, SyncState>();
+  private syncStates: Map<string, SyncState>;
   private projectId: string | null = null;
   private projectName: string | null = null;
   private log: (msg: string) => void;
@@ -80,6 +76,12 @@ export class CloudSyncer {
   constructor(log?: (msg: string) => void) {
     this.apiKey = resolveApiKey();
     this.log = log ?? (() => {});
+    // Restore the conversation-id ↔ session-id map from disk so that a daemon
+    // restart doesn't recreate a fresh /api/conversations row for a session
+    // that's already on the backend. Any corruption / missing file silently
+    // starts fresh (worst case: we recreate one conversation, same as before
+    // this commit).
+    this.syncStates = loadSyncStates(this.log);
 
     if (!this.apiKey) {
       this.log("Cloud sync disabled: no API key found");
@@ -121,6 +123,7 @@ export class CloudSyncer {
         const ok = await this.appendMessages(existing.cloudConversationId, newMessages);
         if (ok) {
           existing.lastSyncedMessageCount = session.messages.length;
+          saveSyncStates(this.syncStates, this.log);
           this.updateProjectMap(session.projectPath, projectId);
         }
         return ok;
@@ -136,6 +139,7 @@ export class CloudSyncer {
           cloudConversationId: conversationId,
           lastSyncedMessageCount: session.messages.length,
         });
+        saveSyncStates(this.syncStates, this.log);
         this.updateProjectMap(session.projectPath, projectId);
 
         // Local-CLI compaction (non-blocking for sync success). If the
