@@ -33,7 +33,7 @@ import { createServer as createHttpsServer } from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { rootCertificates } from "node:tls";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 // Opt-out of the daemon's skip-ephemeral-cwd predicate — tests use
 // tmpdir() paths that the predicate normally drops.
@@ -58,8 +58,10 @@ if (!hasFile(DIST_PROXY_SOURCE) || !hasFile(DIST_TLS)) {
   process.exit(2);
 }
 
-const { ProxySource } = await import(DIST_PROXY_SOURCE);
-const { TlsManager } = await import(DIST_TLS);
+// Convert absolute paths to file:// URLs before dynamic import — same
+// Windows ESM loader quirk as e2e-proxy-layer5.mjs.
+const { ProxySource } = await import(pathToFileURL(DIST_PROXY_SOURCE).href);
+const { TlsManager } = await import(pathToFileURL(DIST_TLS).href);
 
 // ── Test setup ───────────────────────────────────────────────────────────
 

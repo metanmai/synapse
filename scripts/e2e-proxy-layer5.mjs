@@ -35,7 +35,7 @@ import { createServer as createHttpsServer } from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { rootCertificates } from "node:tls";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 // Opt-out of the daemon's skip-ephemeral-cwd predicate — tests use
 // tmpdir() paths that the predicate normally drops.
@@ -62,8 +62,13 @@ if (!hasFile(DIST_PROXY_SERVER) || !hasFile(DIST_TLS)) {
   process.exit(2);
 }
 
-const { createProxyServer } = await import(DIST_PROXY_SERVER);
-const { TlsManager } = await import(DIST_TLS);
+// Convert absolute paths to file:// URLs before dynamic import. Windows
+// rejects bare absolute paths in import() — `D:\path\to\x.js` fails
+// with ERR_UNSUPPORTED_ESM_URL_SCHEME because the ESM loader reads
+// `d:` as a URL scheme. pathToFileURL produces a portable file:// URL
+// that works on every platform.
+const { createProxyServer } = await import(pathToFileURL(DIST_PROXY_SERVER).href);
+const { TlsManager } = await import(pathToFileURL(DIST_TLS).href);
 
 // ── Test state ───────────────────────────────────────────────────────────
 
