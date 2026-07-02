@@ -86,7 +86,6 @@ export type {
   ConversationMessage,
   ConversationMediaRecord,
   ConversationContext,
-  ConversationLimits,
   ConversationStatus,
   FidelityMode,
   MessageRole,
