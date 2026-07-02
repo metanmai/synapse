@@ -63,19 +63,23 @@ Plans:
 **Research needed:** yes — daemon currently emits `"default"` placeholder; need to study how `~/.synapse/config.json` is set vs. read, and what the cross-device sync flow looks like for events the daemon hasn't yet pulled. `/gsd:discuss-phase 2` should invoke a researcher before planning.
 **UI hint**: no
 
-### Phase 3: Telemetry — Quality & Speed Signals
-**Mode:** mvp
-**Goal:** A user (or the operator) can answer "is this brief useful?" and "how fast is the user back to productive work?" per project, observable on the dashboard.
-**Depends on:** Phase 1 (broken pipe = no telemetry); benefits from Phase 2 (per-user attribution makes ratings meaningful).
-**Requirements:** MEAS-01, MEAS-02, MEAS-03, MEAS-04
+### Phase 3: Free/Plus Tier Redesign
+**Mode:** standard
+**Goal:** Free tier is substantively usable for a solo single-device user; Plus differentiates on per-project capacity, auto-sync, link sharing, and project context — not on project count. Telemetry (the original Phase 3) is retired indefinitely; surface it later as a separate phase if user feedback warrants.
+**Depends on:** Phase 2 (tier model + per-user identity already wired). Independent of Phase 4-7.
+**Requirements:** TIER-01, TIER-02, TIER-03, TIER-04, TIER-05, TIER-06, TIER-07, TIER-08
 **Success Criteria** (what must be TRUE):
-  1. After a Claude Code session with a Synapse brief, running `/synapse-rate up` (or `down`) stores a rating against the rendered brief and increments a per-project rating count
-  2. The same brief rendered twice produces identical `brief_hash` values; rating either dedupes server-side to the same brief identity
-  3. The server can compute the elapsed-ms between `BriefRendered` (at SessionStart) and `FirstNonOrientationPrompt` (first `UserPromptSubmit` followed within 30s by a `ToolUsed`) for any captured session
-  4. The dashboard view at `synapsesync.app/dashboard` (or equivalent) displays per-project rating-rate (% thumbs-up over last N) and median time-to-context (last N sessions) for a project with ≥5 rated briefs and ≥5 timed sessions
+  1. Free user can create 50 projects (same cap as Plus). 51st create attempt returns a structured `PROJECT_QUOTA_EXCEEDED` error rendered in the CLI sync flow, the browser UI, and the SessionStart brief's `## Sync error` section.
+  2. Free user's 11th save into a project's insights silently evicts the oldest insight (by `updated_at`); same shape for 11th conversation save. Reads (GET) do NOT bump `updated_at`.
+  3. Plus user's 51st insight save triggers async LLM consolidation via Haiku and `ctx.waitUntil` — produces 3-5 merged replacements with `supersedes` wired to the originals; on LLM failure the user is temporarily over-cap (no eviction) and a daily catchup retries.
+  4. Free user limited to 3 devices; 4th `synapsesync init` from a new machine surfaces a sign-out picker listing existing devices. Re-init from the same machine returns the existing key (never creates a duplicate).
+  5. Plus user limited to 10 devices with the same picker UX at cap.
+  6. Free user's daemon does NOT run the 5-min auto-sync cycle. Hooks still push inline at session boundaries (PreCompact, SessionEnd). `synapsesync sync` CLI fires one cycle on demand with streaming progress lines + final summary, exit 0 on success / 1 on any step failure.
+  7. Tier-flip (free→plus) propagates to daemon within seconds via an IPC channel — no daemon restart required.
+  8. Free user remains paywalled out of project context summaries; Plus user gets them automatically.
 **Plans**: TBD
-**Research status:** covered by `research/SUMMARY.md` (D3, D4, D5, D6, Q4, Q6)
-**UI hint**: yes
+**Research status:** locked design decisions captured in CONTEXT.md; no separate research phase (mirrors existing tier.ts dual-surface pattern and compact.ts Haiku-call pattern)
+**UI hint**: yes (device sign-out picker + settings device-list UI + quota error renderings)
 
 ### Phase 4: Cross-User Collaboration
 **Mode:** mvp
