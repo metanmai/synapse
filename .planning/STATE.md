@@ -126,6 +126,7 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 | 260621-hsl | Neutralize CI migrate prod-wipe landmine (relocate teardown scripts, drop --include-all, 3-secret guard) | 2026-06-21 | 7395a0fe | [260621-hsl-neutralize-ci-migrate-prod-wipe-landmine](./quick/260621-hsl-neutralize-ci-migrate-prod-wipe-landmine/) |
 | 260621-jig | CI e2e driver prefers DeepSeek over OpenRouter (cheaper); cost-guard test; production unchanged | 2026-06-21 | 9fe1b84a | [260621-jig-ci-e2e-driver-prefer-deepseek-over-openr](./quick/260621-jig-ci-e2e-driver-prefer-deepseek-over-openr/) |
 | 260621-kya | Full-chain browser-capture e2e (extension → real daemon ingest); 12 tests; closes the worker↔ingest seam | 2026-06-21 | ab451768 | [260621-kya-full-chain-browser-capture-e2e-extension](./quick/260621-kya-full-chain-browser-capture-e2e-extension/) |
+| 260623-vs2 | Slice A: capture-scoped keys + POST /api/capture/browser (self-sufficient extension foundation) — LOCAL, held for review (not pushed) | 2026-06-23 | a3805174 | [260623-vs2-slice-a-capture-scoped-key-browser-inges](./quick/260623-vs2-slice-a-capture-scoped-key-browser-inges/) |
 
 ### Recent activity
 
