@@ -31,11 +31,16 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { removeLocalProjectState, removeLocalProjectsByBasename, sweepArtifacts } from "./e2e-cleanup.mjs";
 import { generateSession } from "./e2e-llm-driver.mjs";
 
 // ── Configuration ────────────────────────────────────────────────────────
-const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+// fileURLToPath, NOT `new URL(...).pathname` — the latter produces /C:/... on
+// Windows (the leading slash makes path.resolve below resolve to a path that
+// doesn't exist, breaking existsSync(MCP_DIST) on Windows CI even when the
+// build did produce dist/index.js). Documented Synapse repo lesson.
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MCP_DIST = path.join(REPO_ROOT, "mcp", "dist", "index.js");
 const API_BASE = process.env.SYNAPSE_API_BASE ?? "https://api.synapsesync.app";
 
@@ -180,12 +185,31 @@ function preflight() {
   }
   info(`API key resolved (${apiKey.slice(0, 12)}...)`);
 
-  const claude = spawnSync("which", ["claude"], { encoding: "utf-8" });
-  if (claude.status !== 0) {
-    fail("preflight", "claude CLI not on PATH");
+  // claude on PATH is OPTIONAL — IR2's `generateSession` picks direct-API mode
+  // (curl through the Synapse proxy) when ANTHROPIC/OPENROUTER/DEEPSEEK API
+  // KEY is set, and falls back to spawning claude -p otherwise. When neither
+  // capture path is available the script can't honestly exercise the
+  // insight → brief loop, so soft-skip with exit 0 — matching the
+  // e2e-proxy-layer5/source pattern documented in docs/E2E-PROTOCOL.md.
+  // `which` is *NIX-only; Windows Git Bash needs `where` as a fallback to
+  // detect claude.
+  const claudeWhich = spawnSync("which", ["claude"], { encoding: "utf-8" });
+  const claudeWhere =
+    claudeWhich.status === 0 ? claudeWhich : spawnSync("where", ["claude"], { encoding: "utf-8", shell: false });
+  const claudeOnPath = claudeWhich.status === 0 || claudeWhere.status === 0;
+  const hasDirectApi = !!(
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.OPENROUTER_API_KEY ||
+    process.env.DEEPSEEK_API_KEY
+  );
+  if (!claudeOnPath && !hasDirectApi) {
+    info("claude CLI not on PATH AND no direct-API key — soft-skipping insight-roundtrip");
+    info("(neither capture path available; the brief-recall loop has no honest way to be exercised here)");
+    process.exitCode = 0;
     return false;
   }
-  info(`claude at ${claude.stdout.trim()}`);
+  if (claudeOnPath) info(`claude at ${(claudeWhich.status === 0 ? claudeWhich : claudeWhere).stdout.trim()}`);
+  else info("claude not on PATH — IR2 capture will run via direct-API mode (universal driver)");
   ok("preflight", "all prereqs satisfied");
   return true;
 }
@@ -359,7 +383,10 @@ async function main() {
   log(`MCP: ${MCP_DIST}`);
   log(`RUN_ID: ${RUN_ID}`);
 
-  if (!preflight()) process.exit(2);
+  // preflight() returns false either as a hard error (set exitCode=2) or
+  // as a soft-skip (set exitCode=0). Honor whichever the function chose
+  // instead of forcing exit 2 on every false return.
+  if (!preflight()) process.exit(process.exitCode ?? 2);
 
   try {
     await ir1_setup();

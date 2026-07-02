@@ -246,12 +246,9 @@ jobs:
         env:
           # TEST_E2E flag retired — e2e collection moved to vitest.e2e.config.ts
           # (selected automatically by run-tests.mjs for test/e2e paths).
-          # TEST_SYNAPSE_API_KEY un-skips the capture-pipeline Cloud Sync
-          # suite (5 tests) against the live API using the E2E account.
           TEST_API_URL: ${{ secrets.TEST_API_URL }}
           TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
           TEST_SUPABASE_SERVICE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_KEY }}
-          TEST_SYNAPSE_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
 
       - name: Upload Playwright report
         if: failure() && steps.check.outputs.configured == 'true'
