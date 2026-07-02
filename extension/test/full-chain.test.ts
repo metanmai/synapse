@@ -9,8 +9,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chatgptAdapter } from "../src/content/adapters/chatgpt.js";
 import { claudeAdapter } from "../src/content/adapters/claude-ai.js";
-import { createDriftSentinel } from "../src/content/drift-sentinel.js";
 import type { CaptureAdapter } from "../src/content/adapters/types.js";
+import { createDriftSentinel } from "../src/content/drift-sentinel.js";
 import { type PostFn, makeHookedFetch } from "../src/content/main.js";
 import { handleRelayMessage } from "../src/content/relay.js";
 import { installWorker } from "../src/worker/index.js";
