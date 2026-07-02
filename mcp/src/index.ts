@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-const API_URL = process.env.SYNAPSE_API_URL || "https://synapse.tanmai.workers.dev";
+const API_URL = process.env.SYNAPSE_API_URL || "https://api.synapsesync.app";
 
 // --- Interfaces for API response shapes ---
 
