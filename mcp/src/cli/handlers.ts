@@ -144,7 +144,7 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
       if (!result.ok) process.exit(1);
     }
   },
-  refresh: async () => runRefresh(),
+  refresh: async (args) => runRefresh({ dryRun: args.includes("--dry-run") }),
   // Phase 03-05: `sync` is Free-tier's manual flush+pull command (the
   // daemon's 5-min auto-cycle is gated off on Free). Streams progress
   // per step + final summary. Plus users can also use it as a debug
@@ -154,7 +154,7 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
     const code = await runSync();
     if (code !== 0) process.exit(code);
   },
-  upgrade: async () => runUpgrade(),
+  upgrade: async (args) => runUpgrade({ dryRun: args.includes("--dry-run") }),
   whoami: async () => runWhoami(),
   capture: async (args) => runCapture(args),
   hook: async (args) => runHook(args),
@@ -164,8 +164,8 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
   // recompute large transcripts; this pre-warms the backend cache so the
   // next SessionStart hits cache instead of timing out.
   "pull-handoff": async (args) => runPullHandoff(args),
-  reset: async () => runReset(),
-  uninstall: async () => runUninstall(),
+  reset: async (args) => runReset({ yes: args.includes("--yes"), dryRun: args.includes("--dry-run") }),
+  uninstall: async (args) => runUninstall({ yes: args.includes("--yes") }),
   init: async (args) => {
     const flagIdx = args.indexOf("--api-key");
     const api_key = flagIdx >= 0 ? (args[flagIdx + 1] ?? "") : (args.find((a) => !a.startsWith("--")) ?? "");
@@ -212,12 +212,13 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
   // <conv> = UUID or the literal "latest"; <project> = UUID or name
   // (exact, then unique-substring fuzzy match).
   move: async (args) => {
-    const conv = args[0];
-    const project = args[1];
-    if (!conv || !project || conv.startsWith("--") || project.startsWith("--")) {
-      throw new Error("usage: synapsesync move <conv-uuid|latest> <project-uuid|name>");
+    const positional = args.filter((a) => !a.startsWith("--"));
+    const conv = positional[0];
+    const project = positional[1];
+    if (!conv || !project) {
+      throw new Error("usage: synapsesync move <conv-uuid|latest> <project-uuid|name> [--dry-run]");
     }
-    await runMoveCmd({ conv, project });
+    await runMoveCmd({ conv, project, dryRun: args.includes("--dry-run") });
   },
   // `purge-empty` bulk-deletes the user's empty (zero-conversation,
   // zero-insight) projects. Defaults to a dry-run; pass --yes to actually

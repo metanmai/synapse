@@ -301,7 +301,7 @@ export async function runStatus(): Promise<void> {
 //  refresh — new API key, update all configs
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-export async function runRefresh(): Promise<void> {
+export async function runRefresh(opts: { dryRun?: boolean } = {}): Promise<void> {
   clack.intro(`${accent("\u25C6")} ${bold("Refresh API Key")}`);
 
   const existing = detectExistingSetup();
@@ -314,6 +314,17 @@ export async function runRefresh(): Promise<void> {
   const spin = createGlyphSpinner();
   spin.start("Validating current key\u2026");
   const oldKey = await resolveKey(existing);
+
+  // --dry-run: prove we can reach the validation step (proving the
+  // command's surface + key-resolution path) without actually minting
+  // a new key. The destructive part is the POST below.
+  if (opts.dryRun) {
+    spin.stop(
+      `${success("\u2713")} [dry-run] Current key validated \u2014 would POST /api/account/keys to mint new key`,
+    );
+    clack.outro(muted("synapsesync.app"));
+    return;
+  }
 
   spin.update("Creating new API key\u2026");
   const result = await apiFetch<{ api_key: string }>(oldKey, "/api/account/keys", "POST", { label: "cli" });
@@ -382,7 +393,7 @@ export async function runWhoami(): Promise<void> {
 //  reset — wipe all data, keep account
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-export async function runReset(): Promise<void> {
+export async function runReset(opts: { yes?: boolean; dryRun?: boolean } = {}): Promise<void> {
   clack.intro(`${accent("\u25C6")} ${bold("Reset Account Data")}`);
 
   const apiKey = await resolveKey();
@@ -400,23 +411,37 @@ export async function runReset(): Promise<void> {
     ].join("\n"),
   );
 
-  const confirm = await clack.confirm({
-    message: "Are you sure you want to reset all data?",
-    initialValue: false,
-  });
+  // --yes bypasses the two-step interactive confirm (clack confirm +
+  // "type RESET"). --dry-run skips the actual POST so e2e tests can
+  // verify the command's surface against a real account without
+  // wiping any data. Both flags together give a non-interactive
+  // preview path; without either, the destructive interactive flow
+  // is unchanged.
+  if (!opts.yes) {
+    const confirm = await clack.confirm({
+      message: "Are you sure you want to reset all data?",
+      initialValue: false,
+    });
 
-  if (clack.isCancel(confirm) || !confirm) {
-    clack.outro(muted("Reset cancelled."));
-    return;
+    if (clack.isCancel(confirm) || !confirm) {
+      clack.outro(muted("Reset cancelled."));
+      return;
+    }
+
+    const doubleConfirm = await clack.text({
+      message: `Type ${bold("RESET")} to confirm:`,
+      validate: (val) => (val !== "RESET" ? 'Please type "RESET" to confirm.' : undefined),
+    });
+
+    if (clack.isCancel(doubleConfirm)) {
+      clack.outro(muted("Reset cancelled."));
+      return;
+    }
   }
 
-  const doubleConfirm = await clack.text({
-    message: `Type ${bold("RESET")} to confirm:`,
-    validate: (val) => (val !== "RESET" ? 'Please type "RESET" to confirm.' : undefined),
-  });
-
-  if (clack.isCancel(doubleConfirm)) {
-    clack.outro(muted("Reset cancelled."));
+  if (opts.dryRun) {
+    clack.log.info("[dry-run] Would POST /api/account/reset \u2014 no data wiped");
+    clack.outro(muted("synapsesync.app"));
     return;
   }
 
@@ -451,7 +476,7 @@ export async function runReset(): Promise<void> {
 //  upgrade — open checkout or show sub info
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-export async function runUpgrade(): Promise<void> {
+export async function runUpgrade(opts: { dryRun?: boolean } = {}): Promise<void> {
   clack.intro(`${accent("\u25C6")} ${bold("Synapse Plus")}`);
 
   const spin = createGlyphSpinner();
@@ -496,14 +521,21 @@ export async function runUpgrade(): Promise<void> {
       ].join("\n"),
     );
 
-    // Open browser
+    // Open browser unless suppressed. --dry-run skips the browser launch
+    // (e2e tests can't drive a browser anyway). SYNAPSE_NO_BROWSER=1 env
+    // var does the same — set by CI to keep runners headless.
     const url = checkout.url;
-    try {
-      const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-      child_process.exec(`${cmd} "${url}"`);
-      clack.log.success("Opened checkout in your browser.");
-    } catch {
-      clack.log.message(`Open this URL to complete checkout:\n  ${accent(url)}`);
+    const suppressBrowser = opts.dryRun || process.env.SYNAPSE_NO_BROWSER === "1";
+    if (suppressBrowser) {
+      clack.log.info(`[dry-run] Checkout URL ready (browser launch suppressed):\n  ${accent(url)}`);
+    } else {
+      try {
+        const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+        child_process.exec(`${cmd} "${url}"`);
+        clack.log.success("Opened checkout in your browser.");
+      } catch {
+        clack.log.message(`Open this URL to complete checkout:\n  ${accent(url)}`);
+      }
     }
   } catch (_err) {
     spin.stop(themeError("Could not create checkout"));
@@ -517,7 +549,7 @@ export async function runUpgrade(): Promise<void> {
 //  uninstall — remove all Synapse configs
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-export async function runUninstall(): Promise<void> {
+export async function runUninstall(opts: { yes?: boolean } = {}): Promise<void> {
   clack.intro(`${accent("\u25C6")} ${bold("Uninstall Synapse")}`);
 
   const home = os.homedir();
@@ -699,10 +731,15 @@ export async function runUninstall(): Promise<void> {
     `${bold("Found Synapse in these locations:")}\n${targets.map((t) => `  ${themeError("\u2022")} ${muted(t.label)}`).join("\n")}`,
   );
 
-  const confirm = await clack.confirm({
-    message: `Remove Synapse from all ${targets.length} locations?`,
-    initialValue: false,
-  });
+  // --yes bypasses the interactive confirmation. Designed for scripted /
+  // e2e runs where a non-TTY stdin would otherwise auto-cancel clack
+  // prompts. The interactive path remains the default for safety.
+  const confirm = opts.yes
+    ? true
+    : await clack.confirm({
+        message: `Remove Synapse from all ${targets.length} locations?`,
+        initialValue: false,
+      });
 
   if (clack.isCancel(confirm) || !confirm) {
     clack.outro(muted("Uninstall cancelled."));

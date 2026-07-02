@@ -30,7 +30,30 @@ function formatLocationStatus(loc: ConfigLocation, keyValid: boolean | null): st
   return `  ${muted("?")} ${muted(label)} ${muted("unchecked")}`;
 }
 
-export async function runWizard(version: string): Promise<void> {
+export interface WizardOptions {
+  /** Skip all interactive prompts — delegate directly to runInit. */
+  nonInteractive?: boolean;
+  /** API key to use when nonInteractive=true. Required in that mode. */
+  apiKey?: string;
+  /** Pass through to runInit. Default false (matches interactive wizard). */
+  skipService?: boolean;
+}
+
+export async function runWizard(version: string, opts: WizardOptions = {}): Promise<void> {
+  // Non-interactive bypass. When --non-interactive --api-key X is set the
+  // wizard short-circuits to the same code path init uses. This makes the
+  // wizard CLI surface testable in e2e without driving clack prompts via
+  // piped stdin (which clack maps to isCancel anyway, so the interactive
+  // path is structurally untestable). Without this branch wizard is the
+  // only top-level command with no e2e coverage at all.
+  if (opts.nonInteractive) {
+    if (!opts.apiKey) {
+      throw new Error("usage: synapsesync wizard --non-interactive --api-key <key> [--skip-service]");
+    }
+    await runInit({ api_key: opts.apiKey, skip_service: opts.skipService ?? false });
+    return;
+  }
+
   // Step 1: Animated welcome
   await showWelcome(version);
 

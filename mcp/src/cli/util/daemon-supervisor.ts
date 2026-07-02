@@ -22,8 +22,22 @@ const LAUNCHCTL_PID_REGEX = /^\s*pid\s*=\s*(\d+)/m;
  * Pitfall 1: stdio is `["ignore","pipe","ignore"]` so we get exit-code semantics
  * without piping (piped exit codes mask the real exit and become 0).
  * Pitfall 5: `process.getuid()` is undefined on Windows — guard before use.
+ *
+ * Test/sandbox bypass: when `SYNAPSE_SKIP_SUPERVISOR_CHECK=1` is set in the
+ * environment, we short-circuit to "no supervisor" without querying the
+ * system. This is the only way to make daemon-related CLI commands
+ * (`capture start`, `capture stop`, `uninstall`) testable in isolation —
+ * launchctl/systemctl/schtasks are GLOBAL OS state that env-var-based
+ * HOME/SYNAPSE_HOME sandboxing can't reach. Without this bypass, a
+ * sandboxed e2e test sees the user's real daemon and either bails out
+ * ("already running") or, worse, kills it on `capture stop`. The bypass
+ * is intentionally scoped to a single env var so it can never be set by
+ * accident in normal use.
  */
 export function checkSupervisor(): SupervisorStatus {
+  if (process.env.SYNAPSE_SKIP_SUPERVISOR_CHECK === "1") {
+    return { running: false, pid: null, supervisor: null };
+  }
   const platform = process.platform;
 
   if (platform === "darwin") {

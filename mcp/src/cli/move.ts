@@ -25,6 +25,7 @@ import { API_URL } from "./config.js";
 export interface MoveArgs {
   conv: string;
   project: string;
+  dryRun?: boolean;
 }
 
 interface SynapseConfig {
@@ -145,6 +146,14 @@ export async function runMoveCmd(args: MoveArgs): Promise<void> {
   const apiKey = readApiKey();
   const convId = await resolveConvId(args.conv, apiKey);
   const projectId = await resolveProjectId(args.project, apiKey);
+
+  // --dry-run prints the resolved IDs and exits without POSTing. Used by
+  // e2e tests to verify the resolver + auth path without mutating the
+  // user's account.
+  if (args.dryRun) {
+    process.stdout.write(`[dry-run] Would POST /api/conversations/${convId}/reassign → project ${projectId}\n`);
+    return;
+  }
 
   const res = await fetch(`${API_URL}/api/conversations/${convId}/reassign`, {
     method: "POST",

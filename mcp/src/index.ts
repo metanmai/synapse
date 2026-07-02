@@ -53,7 +53,13 @@ function readPackageVersion(): string {
 // Register the `wizard` handler — it lives in index.ts rather than handlers.ts
 // because it needs the local `readPackageVersion` helper (which reads the
 // package.json sitting next to this file via `import.meta.url`).
-HANDLERS.wizard = async () => runWizard(readPackageVersion());
+HANDLERS.wizard = async (args) => {
+  const nonInteractive = args.includes("--non-interactive");
+  const keyIdx = args.indexOf("--api-key");
+  const apiKey = keyIdx >= 0 ? args[keyIdx + 1] : undefined;
+  const skipService = args.includes("--skip-service");
+  await runWizard(readPackageVersion(), { nonInteractive, apiKey, skipService });
+};
 
 // Wire `help` (the printer is defined just below) into the dispatch table.
 // `printHelp` is a function declaration so it's hoisted — safe to reference
