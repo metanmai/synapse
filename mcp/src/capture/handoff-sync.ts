@@ -34,10 +34,22 @@ export async function runFlushCycle(a: FlushArgs): Promise<FlushResult> {
   const pending = wm ? all.filter((e) => e.event_id > wm) : all;
   if (pending.length === 0) return { flushed: 0 };
 
+  // Phase 2 (D-08): events tagged with `_pulled: true` were pulled FROM the
+  // backend by runEagerPullCycle on a fresh-install machine. Do NOT echo them
+  // back to /events/batch — they're already durable server-side, and pinging
+  // them back creates a feedback loop. The watermark still advances past them
+  // (we've "seen" them, so the next flush starts after them) per RESEARCH
+  // §Pitfall 4 — belt-and-suspenders against watermark-only filtering.
+  const flushable = pending.filter((e) => !(e as { _pulled?: boolean })._pulled);
+  if (flushable.length === 0) {
+    fs.writeFileSync(wmPath, pending[pending.length - 1].event_id);
+    return { flushed: 0 };
+  }
+
   const res = await fetch(`${a.api_url}/api/events/batch`, {
     method: "POST",
     headers: { Authorization: `Bearer ${a.api_key}`, "content-type": "application/json" },
-    body: JSON.stringify({ events: pending }),
+    body: JSON.stringify({ events: flushable }),
   });
   if (!res.ok) throw new Error(`batch failed: ${res.status}`);
 
@@ -66,7 +78,7 @@ export async function runFlushCycle(a: FlushArgs): Promise<FlushResult> {
   if (!canonicalId) {
     fs.writeFileSync(wmPath, pending[pending.length - 1].event_id);
   }
-  return { flushed: pending.length, canonical_project_id: canonicalId };
+  return { flushed: flushable.length, canonical_project_id: canonicalId };
 }
 
 export async function runPullCycle(a: FlushArgs): Promise<{ pulled: number }> {
