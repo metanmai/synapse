@@ -2,6 +2,8 @@
 
 Synapse captures AI coding sessions and surfaces cross-session insights. SvelteKit frontend → Cloudflare Workers backend → Supabase Postgres, plus an MCP CLI (`synapsesync-mcp`) that runs locally as a capture daemon.
 
+**Repository mirroring:** `metanmai/synapse` (this repo) and `tanmain/synapse` (private) are kept in sync via a bidirectional sync bot. Commits have the same messages but **different commit hashes** across repos — never assume a hash from one repo exists in the other.
+
 ## Essential Commands
 
 ```bash

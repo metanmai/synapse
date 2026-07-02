@@ -261,13 +261,20 @@ function preflight() {
   }
   info(`curl at ${curl.stdout.trim().split("\n")[0]}`);
 
-  // Driver selection: either ANTHROPIC_API_KEY (direct-API mode) OR a
-  // working AI CLI on PATH (CLI-driver mode). Most macOS users have
-  // claude installed but auth via OAuth (no plain API key) — they
-  // fall into CLI-driver mode. WSL2 users with crush set
-  // SYNAPSE_E2E_DRIVER="crush run". Either path works equivalently.
-  if (process.env.ANTHROPIC_API_KEY) {
-    info("ANTHROPIC_API_KEY present — Stage 3 will use direct-API mode");
+  // Driver selection: check for any direct-API key (ANTHROPIC, OPENROUTER,
+  // DEEPSEEK) first; fall back to CLI-driver mode. Direct-API mode is
+  // preferred because it works without any AI CLI installed — truly
+  // portable across macOS, Linux, Windows.
+  const directKeys = [
+    { env: "ANTHROPIC_API_KEY", label: "Anthropic" },
+    { env: "OPENROUTER_API_KEY", label: "OpenRouter" },
+    { env: "DEEPSEEK_API_KEY", label: "DeepSeek" },
+  ].filter((k) => process.env[k.env]);
+
+  if (directKeys.length > 0) {
+    info(
+      `${directKeys.map((k) => k.env).join(" / ")} present — Stage 3 will use direct-API mode (${directKeys.map((k) => k.label).join(" → ")})`,
+    );
   } else {
     const driverCmd = process.env.SYNAPSE_E2E_DRIVER ?? "claude -p";
     const driverBin = driverCmd.trim().split(/\s+/)[0];
@@ -275,7 +282,7 @@ function preflight() {
     if (whichDriver.status !== 0) {
       fail(
         "preflight",
-        `no LLM driver available — ANTHROPIC_API_KEY unset AND "${driverBin}" not on PATH. Either set ANTHROPIC_API_KEY (direct-API mode) or install an AI CLI (claude, crush, etc.) and set SYNAPSE_E2E_DRIVER if not "claude -p".`,
+        `no LLM driver available — no direct-API key set (ANTHROPIC_API_KEY / OPENROUTER_API_KEY / DEEPSEEK_API_KEY) AND "${driverBin}" not on PATH. Either set one of the API key env vars (direct-API mode) or install an AI CLI (claude, crush, etc.) and set SYNAPSE_E2E_DRIVER if not "claude -p".`,
       );
       return false;
     }

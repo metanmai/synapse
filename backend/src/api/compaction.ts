@@ -10,7 +10,6 @@ import { authMiddleware } from "../lib/auth";
 import type { Env } from "../lib/env";
 import { AppError, NotFoundError } from "../lib/errors";
 import { aggregateProjectContext, compactConversation } from "../lib/llm/compact";
-import { requirePlus } from "../lib/tier";
 import { requireRole } from "../middleware/project-auth";
 
 const compaction = new Hono<{ Bindings: Env }>();
@@ -30,7 +29,6 @@ compaction.use("/projects/*", authMiddleware);
 // Mode is selected by request-body shape. An empty/missing body falls
 // back to hosted mode for backwards compatibility with existing clients.
 compaction.post("/conversations/:id/compact", async (c) => {
-  requirePlus(c, "Conversation compaction");
 
   const user = c.get("user");
   const conversationId = c.req.param("id");
