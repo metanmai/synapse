@@ -184,6 +184,18 @@ This is sufficient for a solo-dev project. When the team grows or external contr
 | Lifecycle race-guard `EADDRINUSE` / port-never-bound | Real regression in `restartDaemon` polling | Check `cli.ts:restartDaemon` + `waitForProcessExit` — was the timeout shortened? |
 | Proxy Layer 5/7 skipped on this run | `claude` not on PATH (expected) | Install Claude Code if proxy-subsystem coverage matters for the changeset |
 
+## Browser capture (manual, per release)
+
+Browser capture (`claude.ai` / `chatgpt.com` via the MV3 extension) is **not** in the automated merge gate — the wire/DOM formats are private and only verifiable against a real logged-in session. Run this by hand before any release that touches `extension/` or `mcp/src/capture/ingest/`.
+
+1. **Setup.** `synapsesync wizard` → answer **yes** to browser capture; note the printed ingest token. Restart the daemon. `npm run bundle -w @synapse/extension`, load `extension/dist/` unpacked in Chrome, paste the token in the extension Options.
+2. **Capture + redaction (R3).** Open a real `claude.ai` session, send a message, wait for the reply. Confirm:
+   - a `CapturedSession` reaches the backend (a `claude-ai` sync line in `~/.synapse/capture.log`, and the conversation shows on the dashboard);
+   - the synced payload contains **no** cookie / token / `sessionKey` — the allowlist + scrub held end-to-end.
+   - Repeat on `chatgpt.com`. This also confirms the **deferred ChatGPT SSE shape** — if the assistant turn is empty, the adapter needs correcting against the real wire format.
+3. **Buffer survival (P6).** With a conversation open, **stop the daemon** (kill the capture-worker), send a few more turns, then **restart** it. Confirm the buffered turns flush and arrive (the extension badge count drains to empty).
+4. **Zero-capture signal (R2).** If an adapter is broken (no turns despite an active tab), the daemon log shows `WARNING: browser capture produced zero turns for active host(s): …` within the window — confirm it fires.
+
 ## The bigger picture
 
 This protocol exists because Synapse's value is "the next session always knows where the last one left off." That promise is broken if **any** of the 9 stages above fails. A user whose handoff is missing for one new session may forgive it. A user who sees it twice in a row will uninstall.

@@ -1,6 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import * as clack from "@clack/prompts";
+import {
+  DEFAULT_INGEST_PORT,
+  mintIngestToken,
+  readProxyConfig,
+  writeProxyConfig,
+} from "../capture/proxy/proxy-config.js";
 import { validateApiKey } from "./api.js";
 import { browserAuth } from "./browser-auth.js";
 import { getOrCreateMachineId } from "./device-id.js";
@@ -351,6 +357,37 @@ async function runEditorSetup(apiKey: string): Promise<void> {
     for (const e of result.errors) {
       clack.log.warn(`${themeError("\u2717")} ${e.editor}: ${e.error}`);
     }
+  }
+
+  // Optional, default-OFF: browser AI-session capture (claude.ai, chatgpt.com)
+  // via the browser extension. The PRESENCE of an ingest token in
+  // proxy-config.json is what makes the daemon start its loopback ingest server.
+  const browserCapture = await clack.confirm({
+    message: "Also capture browser AI sessions? (claude.ai, chatgpt.com)",
+    initialValue: false,
+  });
+  if (!clack.isCancel(browserCapture) && browserCapture) {
+    const cfg = readProxyConfig();
+    const token = cfg.ingestToken ?? mintIngestToken();
+    const port = cfg.ingestPort ?? DEFAULT_INGEST_PORT;
+    writeProxyConfig({ ...cfg, ingestToken: token, ingestPort: port });
+    clack.log.message(
+      [
+        `${success("\u2713")} Browser capture enabled.`,
+        `  ${muted("\u2022 A small browser extension reads only your conversations on those two sites.")}`,
+        `  ${muted("\u2022 It sends them to your Synapse via the local daemon \u2014 nothing else leaves the page.")}`,
+        `  ${muted("\u2022 If the daemon is off, the extension buffers briefly, then drops oldest (no data leaves).")}`,
+        "",
+        `  Load the extension (Chrome/Edge) \u2014 see ${muted("extension/README.md")}.`,
+        "  Open its options and paste this ingest token:",
+        `    ${bold(token)}`,
+        `  Daemon ingest port: ${muted(String(port))}`,
+        "",
+        muted(
+          `  Restart the capture daemon so it starts the ingest server: ${"synapsesync capture proxy enable"} (or reboot).`,
+        ),
+      ].join("\n"),
+    );
   }
 
   // Offer to start session capture. Capture is Claude Code-specific \u2014 it
