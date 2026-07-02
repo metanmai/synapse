@@ -1,0 +1,5 @@
+{
+  "snapshots": ["Hello", "Hello! How can", "Hello! How can I help you today?"],
+  "expectedAssistant": "Hello! How can I help you today?",
+  "appendDeltas": ["Hello", "! How can", " I help you today?"]
+}
