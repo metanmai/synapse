@@ -47,6 +47,7 @@ import { runMoveCmd } from "./move.js";
 import { readProjectMap } from "./project-map.js";
 import { runPurgeEmptyCmd } from "./purge-empty.js";
 import { runDaemon } from "./run-daemon.js";
+import { runPullHandoff } from "./run-pull-handoff.js";
 import { runStats } from "./stats.js";
 import { runDoctor as runHandoffDoctor, runStatus as runHandoffStatus } from "./status.js";
 
@@ -136,6 +137,12 @@ export const HANDLERS: Record<string, (args: string[]) => Promise<void>> = {
   whoami: async () => runWhoami(),
   capture: async (args) => runCapture(args),
   hook: async (args) => runHook(args),
+  // `pull-handoff` is the same code path the SessionStart hook uses, but
+  // exposed as a CLI so PreCompact can spawn it detached + run in the
+  // background. The next session's 10s hook budget is too tight to
+  // recompute large transcripts; this pre-warms the backend cache so the
+  // next SessionStart hits cache instead of timing out.
+  "pull-handoff": async (args) => runPullHandoff(args),
   reset: async () => runReset(),
   uninstall: async () => runUninstall(),
   init: async (args) => {
