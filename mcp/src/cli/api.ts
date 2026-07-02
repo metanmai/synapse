@@ -43,19 +43,24 @@ export async function cliAuthLogin(email: string, password: string, label: strin
   return { ok: true, data: (await res.json()) as LoginResponse };
 }
 
-export type KeyStatus = "valid" | "expired" | "error";
+export type KeyStatus = "valid" | "expired" | "unknown";
 
 /** Validate an API key by making a lightweight authenticated request. */
-export async function validateApiKey(apiKey: string): Promise<{ status: KeyStatus; email?: string }> {
+export async function validateApiKey(apiKey: string): Promise<{ status: KeyStatus }> {
   try {
     const res = await fetch(`${API_URL}/api/projects`, {
       headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(5000),
     });
     if (res.ok) return { status: "valid" };
-    if (res.status === 401) return { status: "expired" };
-    return { status: "error" };
+    if (res.status === 401) {
+      // Confirm it's actually an auth error, not some other issue
+      const body = (await res.json().catch(() => ({}))) as { code?: string };
+      if (body.code === "UNAUTHORIZED" || body.code === "AUTH_ERROR") return { status: "expired" };
+    }
+    return { status: "unknown" };
   } catch {
-    return { status: "error" };
+    return { status: "unknown" };
   }
 }
 
