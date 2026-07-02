@@ -35,7 +35,11 @@ function detectFormat(content: string) {
     }
 
     // OpenAI format: has "role" and "content" as string, may have "name" or "function_call"
-    if (sample.role && typeof sample.content === "string" && ("name" in sample || "function_call" in sample || "tool_calls" in sample)) {
+    if (
+      sample.role &&
+      typeof sample.content === "string" &&
+      ("name" in sample || "function_call" in sample || "tool_calls" in sample)
+    ) {
       format = "openai";
       return;
     }
