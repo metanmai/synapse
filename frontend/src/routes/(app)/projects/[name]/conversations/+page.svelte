@@ -35,6 +35,9 @@ function pageUrl(page: number): string {
             <span class="meta-item">
               {convo.message_count} message{convo.message_count === 1 ? "" : "s"}
             </span>
+            {#if convo.compacted_at}
+              <span class="badge-compacted" title="Compacted">&#10003;</span>
+            {/if}
             <span class="meta-separator"></span>
             <span class="meta-item">
               {formatRelativeDate(convo.updated_at)}
@@ -135,6 +138,19 @@ function pageUrl(page: number): string {
   .meta-separator::after {
     content: "\00b7";
     color: var(--color-text-muted);
+    font-weight: 700;
+  }
+
+  .badge-compacted {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(46, 125, 50, 0.1);
+    color: #2e7d32;
+    font-size: 11px;
     font-weight: 700;
   }
 
