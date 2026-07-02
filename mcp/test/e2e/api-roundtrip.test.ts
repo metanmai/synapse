@@ -891,6 +891,7 @@ suite("Full User Journey", () => {
       ["GET", "/api/account/keys"],
       ["POST", "/api/account/keys"],
       ["DELETE", "/api/account"],
+      ["POST", "/api/account/reset"],
       ["GET", "/api/billing/status"],
       ["POST", "/api/billing/checkout"],
       ["POST", "/api/billing/verify"],
@@ -920,6 +921,45 @@ suite("Full User Journey", () => {
         expect(status).toBe(401);
       });
     }
+  });
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  ACCOUNT RESET — wipe data, keep user alive
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  describe("Account reset", () => {
+    it("resets user data and returns a new API key", async () => {
+      // Precondition: user has projects, insights, entries, and conversations
+      const { data: projectsBefore } = await api("GET", "/api/projects", KEY);
+      expect((projectsBefore as R[]).length).toBeGreaterThan(0);
+
+      const { status, data } = await api("POST", "/api/account/reset", KEY);
+      expect(status).toBe(200);
+      expect(data.ok).toBe(true);
+      expect(data.api_key).toBeTruthy();
+      expect(data.api_key).not.toBe(KEY);
+
+      // Save the new key for subsequent tests
+      const NEW_KEY = data.api_key;
+
+      // Old key should stop working
+      const { status: oldKeyStatus } = await api("GET", "/api/projects", KEY);
+      expect(oldKeyStatus).toBe(401);
+
+      // New key should work and return empty projects
+      const { status: newKeyStatus, data: projectsAfter } = await api("GET", "/api/projects", NEW_KEY);
+      expect(newKeyStatus).toBe(200);
+      expect(projectsAfter).toEqual([]);
+
+      // Update shared KEY so subsequent tests (account deletion) use the new key
+      KEY = NEW_KEY;
+    });
+
+    it("user can still create data after reset", async () => {
+      const { status, data } = await api("POST", "/api/projects", KEY, { name: `E2E-PostReset-${Date.now()}` });
+      expect(status).toBe(201);
+      expect(data.id).toBeTruthy();
+    });
   });
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

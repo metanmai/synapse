@@ -8,6 +8,7 @@ import {
   deleteUser,
   findUserByEmail,
   listApiKeys,
+  resetUser,
 } from "../db/queries";
 import { authMiddleware, hashApiKey } from "../lib/auth";
 import {
@@ -378,6 +379,21 @@ account.delete("/keys/:id", async (c) => {
   }
 
   return c.json({ ok: true });
+});
+
+// POST /api/account/reset — wipe all user data but keep the auth user alive
+account.post("/reset", async (c) => {
+  const user = c.get("user");
+  const db = c.get("db");
+
+  await resetUser(db, user.id);
+
+  // Create a fresh API key
+  const apiKey = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+  const apiKeyHash = await hashApiKey(apiKey);
+  await createApiKey(db, user.id, apiKeyHash, "default");
+
+  return c.json({ ok: true, api_key: apiKey });
 });
 
 // DELETE /api/account — delete the authenticated user and all their data
