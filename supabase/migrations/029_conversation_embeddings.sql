@@ -6,8 +6,12 @@
 -- time, and a daily reconciler can merge fragmented projects.
 --
 -- All additive + nullable: existing conversations keep working with
--- embedding = NULL until the reconciler backfills them. pgvector was enabled
--- in 005_pgvector.sql.
+-- embedding = NULL until the reconciler backfills them.
+
+-- Ensure pgvector is available even if 005 didn't reach this database (manual
+-- migration drift). Idempotent — no-op if already enabled. Without this, the
+-- `vector(768)` references below fail with 42704 "type vector does not exist".
+CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Embedding column + HNSW cosine index (mirrors entries in 005).
 ALTER TABLE conversations ADD COLUMN embedding vector(768);
