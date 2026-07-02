@@ -56,4 +56,20 @@ export const actions: Actions = {
     const api = createApi(locals.token);
     await api.deleteShareLink(projectId, token);
   },
+
+  importProject: async ({ request, locals }) => {
+    const formData = await request.formData();
+    const file = formData.get("file") as File;
+    const projectId = formData.get("projectId") as string;
+
+    if (!file || !projectId) return fail(400, { error: "File and project ID required" });
+
+    const api = createApi(locals.token);
+    try {
+      const result = await api.importProject(projectId, file);
+      return { importResult: result };
+    } catch (err) {
+      return fail(400, { error: err instanceof Error ? err.message : "Import failed" });
+    }
+  },
 };
