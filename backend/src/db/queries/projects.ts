@@ -153,10 +153,38 @@ export async function removeMember(db: SupabaseClient, projectId: string, userId
  *
  * Returns the resolved/created project id.
  */
+/**
+ * Count the projects this user owns. Used by tier-quota enforcement to gate
+ * NEW-project creation paths (POST /api/projects, conversations auto-create,
+ * events-batch cwd_<hash> remap, MCP create_project). Doesn't include
+ * projects the user is a member of but doesn't own — the quota is owner-
+ * scoped, not membership-scoped (shared projects don't count against the
+ * inviter's quota).
+ */
+export async function countOwnedProjects(db: SupabaseClient, userId: string): Promise<number> {
+  const { count, error } = await db
+    .from("projects")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", userId);
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export async function findOrCreateProjectByGit(
   db: SupabaseClient,
   userId: string,
   opts: { git_remote_url?: string | null; git_basename?: string | null },
+  hooks?: {
+    /**
+     * Called RIGHT BEFORE the Tier 3 INSERT — only when we're about to
+     * actually create a project (existing matches skip this entirely).
+     * Throw from here to abort the create. Used by quota enforcement so
+     * a free user at 5 projects can still ACCESS existing ones via this
+     * helper but can't materialize new ones via the auto-create path
+     * (events-batch, conversations capture, etc.).
+     */
+    onWillCreate?: () => Promise<void> | void;
+  },
 ): Promise<string> {
   const gitBasename = opts.git_basename ?? "untitled";
   const gitRemoteUrl = opts.git_remote_url ?? null;
@@ -236,6 +264,13 @@ export async function findOrCreateProjectByGit(
   }
 
   if (existingId) return existingId;
+
+  // Last-mile gate: a quota-bearing caller (events-batch / conversations
+  // capture / MCP create_project) plugs in here to refuse the create if the
+  // user is at tier limit. Existing matches bypass this entirely. The hook
+  // throws AppError on violation — we DON'T catch here so it propagates up
+  // to the route handler's normal 403 response.
+  if (hooks?.onWillCreate) await hooks.onWillCreate();
 
   // Tier 3 — INSERT a new project. Vulnerable to a race where two
   // workers both passed Tier 1 with `null` and both reach this INSERT

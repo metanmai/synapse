@@ -1,8 +1,9 @@
 import { Hono } from "hono";
-import { findOrCreateProjectByGit } from "../db/queries/projects";
+import { countOwnedProjects, findOrCreateProjectByGit } from "../db/queries/projects";
 import { authMiddleware } from "../lib/auth";
 import type { Env } from "../lib/env";
 import { recomputeProjectStatus } from "../lib/handoff-reducer";
+import { enforceProjectQuota } from "../lib/tier";
 
 const SKEW_LIMIT_MS = 5 * 60 * 1000;
 const CWD_HASH_PATTERN = /^cwd_[a-f0-9]{12}$/;
@@ -80,10 +81,23 @@ eventsBatch.post("/batch", async (c) => {
     for (const cwdHash of cwdHashIds) {
       const sample = body.events.find((e) => String(e.project_id) === cwdHash);
       const payload = (sample?.payload ?? {}) as { git_basename?: string; git_remote_url?: string };
-      const resolvedId = await findOrCreateProjectByGit(db, user.id, {
-        git_basename: payload.git_basename,
-        git_remote_url: payload.git_remote_url,
-      });
+      // The daemon's primary new-project creation path. Free users come
+      // through here every time they `cd` into a fresh repo and run their
+      // AI tool — far more often than POST /api/projects. Without this
+      // gate, the quota check on the POST endpoint is window dressing.
+      // The callback re-counts on every potential INSERT so multiple
+      // new-project cwdHashes in one batch each see the updated count.
+      const resolvedId = await findOrCreateProjectByGit(
+        db,
+        user.id,
+        { git_basename: payload.git_basename, git_remote_url: payload.git_remote_url },
+        {
+          onWillCreate: async () => {
+            const count = await countOwnedProjects(db, user.id);
+            enforceProjectQuota(count, c);
+          },
+        },
+      );
       idMapping.set(cwdHash, resolvedId);
     }
 

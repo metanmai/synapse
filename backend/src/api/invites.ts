@@ -1,6 +1,8 @@
 import { Hono } from "hono";
+import { countMembers } from "../db/queries/projects";
 import { authMiddleware } from "../lib/auth";
 import type { Env } from "../lib/env";
+import { enforceMemberLimitForTier, getTierForUser } from "../lib/tier";
 
 /** 24 random bytes → 32-char base64url string (web-crypto, runs in Workers). */
 function generateInviteToken(): string {
@@ -55,6 +57,16 @@ invites.post("/projects/:id/invites", async (c) => {
     .maybeSingle();
   if (!membership) return c.json({ error: "not a project member" }, 403);
 
+  // Tier-member-limit enforcement on the OWNER's tier. Any member can mint
+  // an invite (existing design), but the limit applies to the project's
+  // owner. Without this gate, a free user's project could grow past the 2-
+  // teammate cap simply by routing the invite through a non-owner member.
+  const { data: ownerRow } = await db.from("projects").select("owner_id").eq("id", project_id).maybeSingle();
+  if (!ownerRow) return c.json({ error: "project not found" }, 404);
+  const ownerTier = await getTierForUser(db, (ownerRow as { owner_id: string }).owner_id);
+  const memberCount = await countMembers(db, project_id);
+  enforceMemberLimitForTier(memberCount, ownerTier, c.env as unknown as Record<string, string>);
+
   const token = generateInviteToken();
   const expiresAt = new Date(Date.now() + INVITE_TTL_MS).toISOString();
 
@@ -88,6 +100,17 @@ invites.post("/invites/:token/accept", async (c) => {
   const row = invite as InviteRow;
   if (row.accepted_at) return c.json({ error: "already accepted" }, 409);
   if (new Date(row.expires_at).getTime() < Date.now()) return c.json({ error: "expired" }, 410);
+
+  // Re-check the owner's tier limit at accept time. The mint endpoint
+  // already enforces, but the project's member roster may have grown
+  // between mint and accept (multiple invites outstanding, owner
+  // downgraded plus→free, etc.). Without this gate the limit could be
+  // crossed by N invites issued concurrently when only 1 slot existed.
+  const { data: ownerRow } = await db.from("projects").select("owner_id").eq("id", row.project_id).maybeSingle();
+  if (!ownerRow) return c.json({ error: "project not found" }, 404);
+  const ownerTier = await getTierForUser(db, (ownerRow as { owner_id: string }).owner_id);
+  const memberCount = await countMembers(db, row.project_id);
+  enforceMemberLimitForTier(memberCount, ownerTier, c.env as unknown as Record<string, string>);
 
   const { error: memberErr } = await db
     .from("project_members")
