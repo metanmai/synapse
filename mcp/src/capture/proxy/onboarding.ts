@@ -46,6 +46,8 @@ export interface OnboardingOptions {
   runOpenssl?: OpensslRunner;
   runSudo?: SudoRunner;
   runCp?: (args: string[]) => CommandResult;
+  /** Windows — `certutil` runner; injectable for tests. */
+  runCertutil?: (args: string[]) => CommandResult;
   readOsRelease?: () => string | null;
   /** Override `process.platform` for tests. */
   platform?: NodeJS.Platform;
@@ -183,6 +185,7 @@ function buildBackendOptions(opts: OnboardingOptions, proxyPort: number): Backen
     runOpenssl: opts.runOpenssl,
     runSudo: opts.runSudo,
     runCp: opts.runCp,
+    runCertutil: opts.runCertutil,
     readOsRelease: opts.readOsRelease,
     proxyPort,
   };
