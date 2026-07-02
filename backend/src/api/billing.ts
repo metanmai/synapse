@@ -34,12 +34,39 @@ billing.post("/webhook", async (c) => {
 
   const db = c.get("db");
 
+  await dispatchCreemWebhookEvent(db, eventType, obj);
+
+  return c.json({ received: true });
+});
+
+/**
+ * Pure dispatcher for Creem webhook events. Extracted from the Hono handler
+ * so unit tests can exercise the switch (including the `default:` branch)
+ * without computing HMAC signatures or spinning up the worker.
+ *
+ * Returns `{ handled }` so callers can metric handled/unhandled rates.
+ * Currently the handler ignores the return value (still returns 200), but
+ * test code asserts on it to guard the bug class "an event_type Creem
+ * starts emitting falls through silently."
+ *
+ * @param db   the Hono-context-derived `db` client (real SupabaseClient in
+ *             production, mock object in tests).
+ * @param eventType  Creem's `event_type` string.
+ * @param obj  Creem's `object` payload (subscription / checkout shape).
+ */
+export async function dispatchCreemWebhookEvent(
+  // biome-ignore lint/suspicious/noExplicitAny: db client is typed at the Hono Bindings layer; pure-fn export keeps shape generic for tests.
+  db: any,
+  eventType: string,
+  // biome-ignore lint/suspicious/noExplicitAny: obj shape varies per event_type (Creem's API isn't typed in our deps).
+  obj: any,
+): Promise<{ handled: boolean }> {
   switch (eventType) {
     case "checkout.completed": {
       const userId = obj.metadata?.synapse_user_id;
       if (!userId) {
         console.warn("[billing] checkout.completed missing synapse_user_id in metadata");
-        break;
+        return { handled: true };
       }
 
       await upsertSubscription(db, {
@@ -51,13 +78,13 @@ billing.post("/webhook", async (c) => {
         current_period_end: obj.subscription?.current_period_end ?? null,
         cancel_at_period_end: false,
       });
-      break;
+      return { handled: true };
     }
 
     case "subscription.active":
     case "subscription.paid": {
       const existing = await getSubscriptionByProviderId(db, obj.id);
-      if (!existing) break;
+      if (!existing) return { handled: true };
 
       await upsertSubscription(db, {
         user_id: existing.user_id,
@@ -67,12 +94,12 @@ billing.post("/webhook", async (c) => {
         current_period_end: obj.current_period_end ?? existing.current_period_end,
         cancel_at_period_end: false,
       });
-      break;
+      return { handled: true };
     }
 
     case "subscription.scheduled_cancel": {
       const existing = await getSubscriptionByProviderId(db, obj.id);
-      if (!existing) break;
+      if (!existing) return { handled: true };
 
       await upsertSubscription(db, {
         user_id: existing.user_id,
@@ -81,13 +108,13 @@ billing.post("/webhook", async (c) => {
         current_period_end: obj.current_period_end ?? existing.current_period_end,
         cancel_at_period_end: true,
       });
-      break;
+      return { handled: true };
     }
 
     case "subscription.canceled":
     case "subscription.expired": {
       const existing = await getSubscriptionByProviderId(db, obj.id);
-      if (!existing) break;
+      if (!existing) return { handled: true };
 
       await upsertSubscription(db, {
         user_id: existing.user_id,
@@ -96,12 +123,12 @@ billing.post("/webhook", async (c) => {
         current_period_end: null,
         cancel_at_period_end: false,
       });
-      break;
+      return { handled: true };
     }
 
     case "subscription.past_due": {
       const existing = await getSubscriptionByProviderId(db, obj.id);
-      if (!existing) break;
+      if (!existing) return { handled: true };
 
       await upsertSubscription(db, {
         user_id: existing.user_id,
@@ -110,12 +137,29 @@ billing.post("/webhook", async (c) => {
         current_period_end: obj.current_period_end ?? existing.current_period_end,
         cancel_at_period_end: existing.cancel_at_period_end,
       });
-      break;
+      return { handled: true };
+    }
+
+    default: {
+      // Bug-class diagnostic: production has rows where created_at ==
+      // updated_at on every active Creem subscription — renewal events
+      // are firing but no case here handles them, so they fall through
+      // and we silently return 200 OK with no log line. Without this
+      // default, the next missed event leaves zero breadcrumbs in
+      // `wrangler tail`. Once Creem dashboard reveals the actual
+      // renewal event_type (likely `subscription.renewed`, `invoice
+      // .paid`, or `invoice.succeeded`), add a case above to update
+      // current_period_end. See docs/BUGS.md "Creem webhook silently
+      // drops renewal events" for the diagnostic trail.
+      console.warn("[billing] unhandled Creem webhook event_type", {
+        event_type: eventType,
+        sub_id: obj?.id ?? obj?.subscription?.id ?? null,
+        customer_id: obj?.customer?.id ?? null,
+      });
+      return { handled: false };
     }
   }
-
-  return c.json({ received: true });
-});
+}
 
 // All routes below require auth
 billing.use("/*", authMiddleware);
