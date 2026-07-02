@@ -138,6 +138,45 @@ export async function updateApiKeyLastUsed(db: SupabaseClient, keyId: string): P
   // Fire-and-forget — don't throw on error
 }
 
+/**
+ * Fetch a single api_keys row scoped to the user. Used by the rename
+ * endpoint to read the current label so the cli- prefix can be
+ * preserved on save (display name is the prefix-stripped form, but the
+ * row's actual label must keep the prefix so countCliKeys/listCliKeys
+ * keep counting it).
+ */
+export async function getApiKeyByIdForUser(
+  db: SupabaseClient,
+  keyId: string,
+  userId: string,
+): Promise<Omit<ApiKey, "key_hash"> | null> {
+  const { data, error } = await db
+    .from("api_keys")
+    .select("id, user_id, label, expires_at, last_used_at, created_at")
+    .eq("id", keyId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as Omit<ApiKey, "key_hash"> | null) ?? null;
+}
+
+/**
+ * Update an api_keys row's label. Scoped to (id, user_id) so a user
+ * cannot rename keys they don't own.
+ *
+ * Returns the number of rows updated — 0 means "key not found or
+ * not owned" (404), 1 means "renamed."
+ */
+export async function renameApiKey(db: SupabaseClient, keyId: string, userId: string, label: string): Promise<number> {
+  const { error, count } = await db
+    .from("api_keys")
+    .update({ label }, { count: "exact" })
+    .eq("id", keyId)
+    .eq("user_id", userId);
+  if (error) throw error;
+  return count ?? 0;
+}
+
 // Count CLI-installed device keys (label like 'cli-%'). Distinct from
 // countApiKeys() which counts ALL keys for the global API_KEY_MAX_PER_USER cap.
 export async function countCliKeys(db: SupabaseClient, userId: string): Promise<number> {

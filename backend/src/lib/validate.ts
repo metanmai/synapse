@@ -70,6 +70,14 @@ export const schemas = {
     expires_at: z.string().nullable().optional(),
   }),
 
+  // BUG #6: dashboard inline-edit for api_keys labels. Schema is just the
+  // label string (we use the URL param for the key id). Capped at 80 chars
+  // (display sits in a single dashboard row); trimmed so trailing space
+  // doesn't get persisted. The cli- prefix logic lives in the handler.
+  renameApiKey: z.object({
+    label: z.string().min(1, "Label is required").max(80, "Label too long (80 char max)").trim(),
+  }),
+
   // Project resolve
   resolveProject: z.object({
     cwd: z.string().min(1, "cwd is required"),

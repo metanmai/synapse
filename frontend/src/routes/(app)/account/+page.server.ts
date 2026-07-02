@@ -69,6 +69,24 @@ export const actions: Actions = {
     }
   },
 
+  // BUG #6: inline-rename for API keys. The backend handles the cli-
+  // prefix preservation; here we just trim + relay.
+  renameKey: async ({ request, locals }) => {
+    const api = createApi(locals.token);
+    const formData = await request.formData();
+    const keyId = formData.get("keyId") as string;
+    const label = (formData.get("label") as string | null)?.trim() ?? "";
+
+    if (!keyId || !label) {
+      return fail(400, { keyError: "Label is required" });
+    }
+    try {
+      await api.renameApiKey(keyId, label);
+    } catch (err) {
+      return fail(400, { keyError: err instanceof Error ? err.message : "Failed to rename key" });
+    }
+  },
+
   connectOAuth: async ({ request, cookies, url }) => {
     const data = await request.formData();
     const provider = data.get("provider") as "google" | "github";
