@@ -13,13 +13,11 @@ requirements: [TIER-01]
 
 must_haves:
   truths:
-    - "TIER_LIMITS table or equivalent constant block exists in backend/src/lib/constants.ts with all per-tier caps"
+    - "New per-tier capacity constants exist in backend/src/lib/constants.ts: FREE/PLUS_INSIGHTS_PER_PROJECT, FREE/PLUS_CONVERSATIONS_PER_PROJECT, AUTO_SYNC_TIERS"
     - "Accessors exist in backend/src/lib/tier.ts: getInsightCapForTier, getConversationCapForTier, getDeviceCapForTier, isAutoSyncEnabledForTier"
     - "All accessors follow the dual-surface pattern (tier-string canonical + Context-flavored delegate)"
-    - "FREE_MAX_PROJECTS = 50 (changed from 5)"
-    - "DEVICE_LIMIT_PLUS = 10 (changed from Number.POSITIVE_INFINITY)"
-    - "No behavior change to existing endpoints in this slice — only constant values change and new accessors are added"
-    - "Existing enforceProjectQuotaForTier still uses FREE_MAX_PROJECTS / PLUS_MAX_PROJECTS (no rename); subsequent slices may change the call sites"
+    - "PURE ADDITIVE: NO existing constant values are changed in this slice. FREE_MAX_PROJECTS stays at 5, DEVICE_LIMIT_PLUS stays at Infinity. Those changes happen in slices 03-02 (FREE_MAX_PROJECTS 5→50) and 03-05 (DEVICE_LIMIT_PLUS ∞→10) where the corresponding enforcement behavior is being shipped."
+    - "No existing tests need modification (no behavior change)"
     - "All unit tests pass: npm run test --workspace=backend"
   artifacts:
     - path: "backend/src/lib/constants.ts"
@@ -82,11 +80,9 @@ export function enforceMemberLimit(currentMemberCount: number, c: Context<{ Bind
   - .planning/phases/03-free-plus-tier-redesign/03-CONTEXT.md (locked numerical values)
 </read_first>
 <action>
-Edit `backend/src/lib/constants.ts`:
+Edit `backend/src/lib/constants.ts` — PURE ADDITIVE. Do not change any existing constant values; only add new ones.
 
-1. Change `FREE_MAX_PROJECTS = 5` → `FREE_MAX_PROJECTS = 50` (keep `PLUS_MAX_PROJECTS = 50` as-is).
-2. Change `DEVICE_LIMIT_PLUS = Number.POSITIVE_INFINITY` → `DEVICE_LIMIT_PLUS = 10`.
-3. Add new block above `// --- Rate limiting ---`:
+Add new block above `// --- Rate limiting ---`:
 ```typescript
 // --- Per-project capacity limits (per tier) ---
 export const FREE_INSIGHTS_PER_PROJECT = 10;
@@ -98,7 +94,8 @@ export const PLUS_CONVERSATIONS_PER_PROJECT = 50;
 // Free users sync manually via `synapsesync sync`; Plus runs the 5-min daemon cycle.
 export const AUTO_SYNC_TIERS = ["plus"] as const;
 ```
-Do not change other constants. Do not reorder existing groups.
+
+Do not change FREE_MAX_PROJECTS, PLUS_MAX_PROJECTS, DEVICE_LIMIT_FREE, or DEVICE_LIMIT_PLUS in this slice. Those changes happen in 03-02 and 03-05 where the corresponding enforcement is being changed (keeps the constant change adjacent to the test updates it requires).
 </action>
 <acceptance_criteria>
   - `grep -c "FREE_INSIGHTS_PER_PROJECT = 10" backend/src/lib/constants.ts` returns 1
@@ -106,8 +103,8 @@ Do not change other constants. Do not reorder existing groups.
   - `grep -c "FREE_CONVERSATIONS_PER_PROJECT = 10" backend/src/lib/constants.ts` returns 1
   - `grep -c "PLUS_CONVERSATIONS_PER_PROJECT = 50" backend/src/lib/constants.ts` returns 1
   - `grep -c "AUTO_SYNC_TIERS" backend/src/lib/constants.ts` returns 1
-  - `grep "FREE_MAX_PROJECTS = " backend/src/lib/constants.ts` outputs `export const FREE_MAX_PROJECTS = 50;`
-  - `grep "DEVICE_LIMIT_PLUS = " backend/src/lib/constants.ts` outputs `export const DEVICE_LIMIT_PLUS = 10;`
+  - `grep "FREE_MAX_PROJECTS = " backend/src/lib/constants.ts` outputs `export const FREE_MAX_PROJECTS = 5;` (UNCHANGED — slice 03-02 will change this)
+  - `grep "DEVICE_LIMIT_PLUS = " backend/src/lib/constants.ts` outputs `export const DEVICE_LIMIT_PLUS = Number.POSITIVE_INFINITY;` (UNCHANGED — slice 03-05 will change this)
   - `npm run typecheck --workspace=backend` exits 0
 </acceptance_criteria>
 </task>
@@ -208,9 +205,11 @@ describe("per-tier capacity accessors", () => {
     expect(getConversationCapForTier("free")).toBe(10);
     expect(getConversationCapForTier("plus")).toBe(50);
   });
-  it("getDeviceCapForTier returns 3 for free, 10 for plus", () => {
+  it("getDeviceCapForTier returns 3 for free and the current Plus value", () => {
     expect(getDeviceCapForTier("free")).toBe(3);
-    expect(getDeviceCapForTier("plus")).toBe(10);
+    // Plus device cap currently Infinity (slice 03-05 will change to 10);
+    // pin the contract that "plus >= free" rather than a specific value.
+    expect(getDeviceCapForTier("plus")).toBeGreaterThan(getDeviceCapForTier("free"));
   });
   it("isAutoSyncEnabledForTier returns false for free, true for plus", () => {
     expect(isAutoSyncEnabledForTier("free")).toBe(false);
