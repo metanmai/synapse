@@ -20,6 +20,17 @@ describe("CursorAdapter", () => {
     expect(paths[0]).toContain("Cursor");
   });
 
+  it("honors SYNAPSE_TEST_CURSOR_PATH override (test-affordance for E2E adapter-roundtrip)", () => {
+    const prev = process.env.SYNAPSE_TEST_CURSOR_PATH;
+    process.env.SYNAPSE_TEST_CURSOR_PATH = "/tmp/synapse-test-cursor-watch";
+    try {
+      expect(adapter.watchPaths()).toEqual(["/tmp/synapse-test-cursor-watch"]);
+    } finally {
+      if (prev === undefined) delete process.env.SYNAPSE_TEST_CURSOR_PATH;
+      else process.env.SYNAPSE_TEST_CURSOR_PATH = prev;
+    }
+  });
+
   it("parses a JSON chat file into CapturedSession", () => {
     const session = adapter.parse(FIXTURE);
     expect(session).not.toBeNull();

@@ -19,6 +19,17 @@ describe("CodexAdapter", () => {
     expect(paths[0]).toContain(".codex/sessions");
   });
 
+  it("honors SYNAPSE_TEST_CODEX_PATH override (test-affordance for E2E adapter-roundtrip)", () => {
+    const prev = process.env.SYNAPSE_TEST_CODEX_PATH;
+    process.env.SYNAPSE_TEST_CODEX_PATH = "/tmp/synapse-test-codex-watch";
+    try {
+      expect(adapter.watchPaths()).toEqual(["/tmp/synapse-test-codex-watch"]);
+    } finally {
+      if (prev === undefined) delete process.env.SYNAPSE_TEST_CODEX_PATH;
+      else process.env.SYNAPSE_TEST_CODEX_PATH = prev;
+    }
+  });
+
   it("parses a rollout JSONL file into CapturedSession", () => {
     const session = adapter.parse(FIXTURE);
     expect(session).not.toBeNull();

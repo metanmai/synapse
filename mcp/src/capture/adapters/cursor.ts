@@ -22,6 +22,8 @@ export class CursorAdapter implements ToolAdapter {
   tool = "cursor";
 
   watchPaths(): string[] {
+    const override = process.env.SYNAPSE_TEST_CURSOR_PATH;
+    if (override) return [override];
     const base = path.join(os.homedir(), "Library", "Application Support", "Cursor", "User", "workspaceStorage");
     return [base];
   }
