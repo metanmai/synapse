@@ -347,14 +347,18 @@ jobs:
         if: steps.check.outputs.configured == 'true'
         run: npm run build --workspace=mcp
 
-      - name: Enable proxy (starts the daemon)
+      - name: Enable proxy (spawns capture-worker)
         # `capture proxy enable` writes proxy-config.json + spawns a fresh
-        # detached daemon. SYNAPSE_API_KEY is exported on the step so the
-        # spawned daemon inherits it (it reads the env at startup before
-        # falling back to ~/.synapse/config.json). One step kicks off both
-        # the daemon and the proxy worker — no separate "start daemon"
-        # bash spawn needed (which would create a non-detached child the
-        # next step's restartDaemon would just bounce anyway).
+        # detached capture-worker process (which owns the file watcher +
+        # the TLS-MITM proxy listening on 7727). SYNAPSE_API_KEY is
+        # exported so any process spawned in this shell session inherits
+        # it.
+        #
+        # NOTE: this step does NOT start the daemon-proper (the process
+        # that owns the handoff sync loop + writes daemon.healthcheck).
+        # On a real machine the OS service (launchd / systemd / Task
+        # Scheduler) starts daemon-proper. CI runners don't have that,
+        # so the next step starts it manually.
         if: steps.check.outputs.configured == 'true'
         env:
           SYNAPSE_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
@@ -362,12 +366,26 @@ jobs:
           mkdir -p "$HOME/.synapse"
           node mcp/dist/index.js capture proxy enable
 
+      - name: Start daemon-proper (handoff loop + healthcheck heartbeat)
+        # The daemon-proper is a separate process from the capture-worker.
+        # It owns the per-project flush/pull cycle, the pull-handoff
+        # pre-warm, and the daemon.healthcheck heartbeat that the next
+        # step polls for. Locally an OS service unit (launchd plist /
+        # systemd unit / Task Scheduler XML) runs it; in CI we have to
+        # background it manually. `nohup ... &` works in both Bash on
+        # Linux and Git Bash on Windows.
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SYNAPSE_API_KEY: ${{ secrets.SYNAPSE_E2E_API_KEY }}
+        run: |
+          nohup node mcp/dist/index.js daemon > "$HOME/.synapse/daemon.log" 2>&1 &
+          echo "daemon-proper backgrounded (PID $!) — log: $HOME/.synapse/daemon.log"
+
       - name: Wait for daemon healthcheck
-        # Daemon writes ~/.synapse/daemon.healthcheck on its supervisor
-        # loop (~1s cadence). The detached spawn from `proxy enable`
-        # returns immediately; we need to wait for the proxy worker to
-        # actually bind 7727 before the merge gate runs. 30s budget is
-        # generous; tighter would mask a slow-start regression.
+        # daemon-proper's startHandoffLoop() writes ~/.synapse/daemon.healthcheck
+        # on a setInterval cadence (default 10s). 30s budget gives the
+        # spawned process plenty of time to import modules + reach the
+        # first interval tick.
         if: steps.check.outputs.configured == 'true'
         run: |
           for i in $(seq 1 30); do
@@ -378,7 +396,10 @@ jobs:
             sleep 1
           done
           echo "::error::Daemon never wrote healthcheck file after 30s"
-          cat "$HOME/.synapse/capture.log" 2>/dev/null || true
+          echo "--- ~/.synapse/daemon.log ---"
+          cat "$HOME/.synapse/daemon.log" 2>/dev/null || echo "(no daemon.log)"
+          echo "--- ~/.synapse/capture.log ---"
+          cat "$HOME/.synapse/capture.log" 2>/dev/null || echo "(no capture.log)"
           exit 1
 
       - name: Run merge gate (npm run test:e2e)
