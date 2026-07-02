@@ -44,7 +44,9 @@ describe("shouldSkipDispatch", () => {
     const worktree = path.join(home, ".claude", "worktrees", "agent-abc123");
     const result = shouldSkipDispatch(worktree, {}, { homeDir: home });
     expect(result.skip).toBe(true);
-    if (result.skip) expect(result.reason).toContain(".claude/worktrees");
+    // path.join() produces "/" on POSIX, "\\" on Windows — matches whatever
+    // path separator the source uses to build the reason string.
+    if (result.skip) expect(result.reason).toContain(path.join(".claude", "worktrees"));
   });
 
   it("skips when cwd is a deeply-nested worktree subdir", () => {
@@ -151,7 +153,9 @@ describe("shouldSkipDispatch", () => {
       { homeDir: home, tmpPrefixes: [] },
     );
     expect(result.skip).toBe(true);
-    if (result.skip) expect(result.reason).toContain(".claude/worktrees");
+    // path.join() produces "/" on POSIX, "\\" on Windows — matches whatever
+    // path separator the source uses to build the reason string.
+    if (result.skip) expect(result.reason).toContain(path.join(".claude", "worktrees"));
   });
 
   // ── Combinations: env beats everything (short-circuit) ────────────────────
