@@ -14,6 +14,8 @@ Phase 2 added a `migrate` job to `.github/workflows/ci.yml` that runs `supabase 
 
 **Why it matters:** This is the same class of problem as P0 BUG-01 (which was about schema drift between repo migrations and prod going undetected). Until secrets are configured, migrations still require manual `supabase db push` from a CF-enabled machine — and "forgetting to push" is exactly how `merge_projects` is currently missing from prod (Phase 2 LinkPicker 5xx's because the function isn't there).
 
+> **⚠️ Near-miss fixed 2026-06-21 (`260621-hsl`):** when `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_REF` were first added (DB password still blank), this job activated and ran `supabase db push **--include-all**`, which forced the out-of-sequence `000_rollback_all.sql` (a DROP-everything teardown) into a **prod** push. It only aborted on a non-CASCADE `DROP FUNCTION update_updated_at()` hitting migration 023's trigger — prod was saved by luck. Fix: (1) the `000_*` maintenance scripts moved to `supabase/maintenance/` (outside the `db push` path); (2) `--include-all` removed (forward-only); (3) the skip guard now requires all THREE secrets so a partial config skips instead of firing. When you finish configuring, the job applies only migrations newer than the remote watermark — teardown scripts can never auto-run.
+
 **One-time setup steps:**
 
 1. Open https://supabase.com/dashboard → **Account → Access Tokens** → "Generate new token" (label it `synapse-ci`). Copy.
