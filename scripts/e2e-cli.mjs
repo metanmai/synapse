@@ -988,7 +988,15 @@ async function main() {
       });
     }
   }
-  process.exit(summary());
+  // Node 24 + Windows libuv has a shutdown race: process.exit() during
+  // open fetch keep-alive sockets triggers an assertion in async.c:94
+  // (UV_HANDLE_CLOSING). The metanmai run 27127974386 surfaced it as
+  // exit 127 after "✅ CLI E2E PASSED.". Set exitCode and let the event
+  // loop drain naturally — no forced handle teardown, no assertion.
+  // Fallback unref'd timer forces exit if the loop hangs for >5s
+  // (it shouldn't — sweep is the last awaited work).
+  process.exitCode = summary();
+  setTimeout(() => process.exit(process.exitCode ?? 0), 5_000).unref();
 }
 
 main().catch((err) => {
