@@ -486,8 +486,7 @@ export async function runUpgrade(): Promise<void> {
       [
         `${bold("Synapse Plus")} \u2014 $5.99/mo`,
         "",
-        `  ${accent("\u2713")} 500 files (vs 50 free)`,
-        `  ${accent("\u2713")} Unlimited connections`,
+        `  ${accent("\u2713")} 50 projects (vs 5 free)`,
         `  ${accent("\u2713")} Full version history`,
         `  ${accent("\u2713")} Unlimited team members`,
       ].join("\n"),

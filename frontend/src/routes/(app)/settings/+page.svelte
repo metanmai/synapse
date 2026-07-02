@@ -9,7 +9,7 @@ let createLoading = $state(false);
 let checkoutLoading = $state(false);
 let portalLoading = $state(false);
 
-const projectLimit = $derived(data.tier === "free" ? 3 : 50);
+const projectLimit = $derived(data.tier === "free" ? 5 : 50);
 const usagePercent = $derived(Math.min(100, Math.round((data.projectCount / projectLimit) * 100)));
 const showUpgradeSuccess = $state($page.url.searchParams.has("upgraded"));
 

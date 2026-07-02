@@ -18,7 +18,7 @@
     <h3>Workspace Content</h3>
     <p>Files, notes, decisions, and other content you store in your Synapse workspace. This includes file paths, tags, and content you create or import.</p>
 
-    <h3>Conversation Data (Plus plan)</h3>
+    <h3>Conversation Data</h3>
     <p>If you use conversation sync, we store conversation transcripts and associated media that you choose to sync.</p>
 
     <h3>Activity Logs</h3>
