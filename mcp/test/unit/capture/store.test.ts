@@ -78,4 +78,44 @@ describe("SessionStore", () => {
     store.delete("ses_del");
     expect(store.load("ses_del")).toBeNull();
   });
+
+  describe("default-dir resolution (Windows regression guard)", () => {
+    // Bug class: the constructor used `process.env.HOME ?? "~"` as the fallback.
+    // On Windows, HOME is undefined by default (Windows uses USERPROFILE), so
+    // the fallback was a LITERAL `"~"` directory created in the current working
+    // directory — not the user's home. This caused capture sessions to land in
+    // a stray `./~/.synapse/sessions/` folder on Windows, which the reader
+    // never looked in. Fixed by switching to `os.homedir()`.
+
+    it("resolves the default sessions dir under os.homedir() (no literal '~' anywhere)", () => {
+      // Construct WITHOUT explicit dir so the default-path branch runs.
+      // Save state we'll restore so other tests aren't affected.
+      const origCwd = process.cwd();
+      const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-store-cwd-"));
+      try {
+        process.chdir(sandbox);
+        const s = new SessionStore();
+        // Save a session via the default-dir path so the constructor's
+        // mkdirSync actually fires against the real resolved path.
+        s.save(makeSession({ id: "ses_default_dir" }));
+
+        // Regression guard 1: no literal `~` directory created in CWD.
+        // (Pre-fix, `path.join("~", ".synapse", "sessions")` made one.)
+        expect(fs.existsSync(path.join(sandbox, "~"))).toBe(false);
+
+        // Regression guard 2: the file landed under os.homedir().
+        // We don't assert the EXACT path (would clobber the user's real
+        // ~/.synapse/sessions in dev) — instead we read it back and confirm
+        // the load roundtrip works from the default location.
+        const loaded = s.load("ses_default_dir");
+        expect(loaded?.id).toBe("ses_default_dir");
+
+        // Cleanup the test session from the real homedir so we don't leak.
+        s.delete("ses_default_dir");
+      } finally {
+        process.chdir(origCwd);
+        fs.rmSync(sandbox, { recursive: true, force: true });
+      }
+    });
+  });
 });
