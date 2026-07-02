@@ -176,10 +176,10 @@ describe("synapse init — IDENT-01 user_id bootstrap", () => {
 
   it("persists user_id + email to ~/.synapse/config.json on /me success (D-01)", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ user_id: "11111111-2222-3333-4444-555555555555", email: "tanmai@peepal.co" }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
+      new Response(JSON.stringify({ user_id: "11111111-2222-3333-4444-555555555555", email: "tanmai@peepal.co" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
     );
 
     await runInit({ api_key: "sk-ok", skip_service: true });
@@ -194,10 +194,10 @@ describe("synapse init — IDENT-01 user_id bootstrap", () => {
 
   it("is idempotent on re-run with same key — config.json contents stable (D-01)", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({ user_id: "22222222-3333-4444-5555-666666666666", email: "a@b.co" }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
+      new Response(JSON.stringify({ user_id: "22222222-3333-4444-5555-666666666666", email: "a@b.co" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
     );
 
     await runInit({ api_key: "sk-idem", skip_service: true });
