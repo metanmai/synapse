@@ -21,10 +21,42 @@ export interface CapturedSession {
   parseErrors?: string[];
 }
 
+/**
+ * Marker prepended to internal Synapse-spawned `claude -p` (or equivalent)
+ * invocations so adapters can recognize and skip those session files instead
+ * of recursively capturing + compacting them. Adapters with a `compact()`
+ * method MUST filter out sessions whose first user message starts with this
+ * marker.
+ */
+export const SYNAPSE_INTERNAL_MARKER = "[SYNAPSE_INTERNAL_COMPACTION]";
+
+export interface CompactResult {
+  summary: string;
+  /**
+   * Tag identifying the local source — e.g. `"claude-code:local-haiku"`.
+   * Persisted on the conversation row so the dashboard can attribute the
+   * summary back to the local CLI vs the backend's hosted compaction.
+   */
+  model: string;
+}
+
 export interface ToolAdapter {
   tool: string;
   watchPaths(): string[];
   parse(filePath: string): CapturedSession | null;
+  /**
+   * Optional: compact a captured session via this tool's local one-shot CLI
+   * (e.g., `claude -p` for Claude Code). Cost shifts from Synapse's hosted
+   * LLM to the user's own subscription, and transcripts never leave the
+   * user's machine for a separate LLM endpoint.
+   *
+   * Adapters whose tools lack a usable one-shot mode should omit this; the
+   * caller falls back to the backend's server-side compaction path.
+   *
+   * Failure (CLI missing, exit non-zero, etc.) should reject — the caller
+   * decides whether to retry or surface a degraded mode.
+   */
+  compact?(session: CapturedSession): Promise<CompactResult>;
 }
 
 /**

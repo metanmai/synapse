@@ -1,5 +1,10 @@
 import { Hono } from "hono";
-import { getConversation, getProjectContext, getRecentCompactedSummaries } from "../db/queries/conversations";
+import {
+  getConversation,
+  getProjectContext,
+  getRecentCompactedSummaries,
+  updateCompaction,
+} from "../db/queries/conversations";
 import { authMiddleware } from "../lib/auth";
 import type { Env } from "../lib/env";
 import { AppError, NotFoundError } from "../lib/errors";
@@ -11,7 +16,18 @@ const compaction = new Hono<{ Bindings: Env }>();
 compaction.use("/conversations/*", authMiddleware);
 compaction.use("/projects/*", authMiddleware);
 
-// POST /api/conversations/:id/compact — manual compaction trigger
+// POST /api/conversations/:id/compact — compact a conversation.
+//
+// Two modes:
+//   1. Hosted (default): server runs the LLM via COMPACTION_LLM_KEY.
+//   2. Local-CLI (preferred when the caller has it): caller passes a
+//      precomputed { summary, model } in the body and the server just
+//      persists it. The caller is typically the capture-worker shelling
+//      out to `claude -p` (or equivalent for other agents), so the
+//      transcript never leaves the user's machine for a third-party LLM.
+//
+// Mode is selected by request-body shape. An empty/missing body falls
+// back to hosted mode for backwards compatibility with existing clients.
 compaction.post("/conversations/:id/compact", async (c) => {
   requirePlus(c, "Conversation compaction");
 
@@ -27,6 +43,28 @@ compaction.post("/conversations/:id/compact", async (c) => {
     throw new AppError("Only the conversation owner can compact", 403, "FORBIDDEN");
   }
 
+  // Inspect body — if a precomputed summary was provided, persist it
+  // directly and skip the hosted LLM call.
+  const body = (await c.req.json().catch(() => ({}))) as {
+    summary?: unknown;
+    model?: unknown;
+  };
+  const precomputedSummary = typeof body.summary === "string" ? body.summary.trim() : null;
+  const precomputedModel = typeof body.model === "string" ? body.model.trim() : null;
+
+  if (precomputedSummary && precomputedSummary.length > 0) {
+    const modelTag = precomputedModel && precomputedModel.length > 0 ? precomputedModel : "client";
+    await updateCompaction(db, conversationId, precomputedSummary, modelTag);
+    return c.json({
+      compacted_summary: precomputedSummary,
+      compacted_at: new Date().toISOString(),
+      compaction_model: modelTag,
+      message_count: null,
+      source: "client",
+    });
+  }
+
+  // Hosted path (existing behavior).
   const apiKey = c.env.COMPACTION_LLM_KEY;
   if (!apiKey) {
     throw new AppError("Compaction is not configured on this server", 503, "SERVICE_UNAVAILABLE");
@@ -44,6 +82,7 @@ compaction.post("/conversations/:id/compact", async (c) => {
     compacted_at: new Date().toISOString(),
     compaction_model: result.model,
     message_count: result.messageCount,
+    source: "server",
   });
 });
 
