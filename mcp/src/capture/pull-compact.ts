@@ -102,12 +102,21 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
     }
   }
 
-  // 1. Most recent conversation (listConversations orders by updated_at desc).
+  // 1. Recent conversations (listConversations orders by updated_at desc).
+  //    We fetch a small batch rather than just the newest because the daemon
+  //    creates a conversation row at session START (before any PreCompact
+  //    has posted a handoff). For short-lived sessions / claude -p subprocesses
+  //    / tools without compaction, those rows linger as the "newest" forever
+  //    with empty handoff_markdown. Without batching, the SessionStart hook
+  //    would surface a bare brief even though older conversations in the
+  //    same project hold valid handoff text.
+  const LIST_BATCH = 5;
   let listed: ConversationListItem[];
   try {
-    const res = await fetch(`${apiUrl}/api/conversations?project_id=${encodeURIComponent(projectUuid)}&limit=1`, {
-      headers: auth,
-    });
+    const res = await fetch(
+      `${apiUrl}/api/conversations?project_id=${encodeURIComponent(projectUuid)}&limit=${LIST_BATCH}`,
+      { headers: auth },
+    );
     if (!res.ok) {
       log(`pull-compact: list returned ${res.status}`);
       // 404 here means the cached project_id is dead (deleted server-side
@@ -132,16 +141,31 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
     log("pull-compact: no conversations in project");
     return null;
   }
+
+  // 2. Find the most-recent conversation with a FRESH cached handoff —
+  //    cached handoff postdating the last message means no work has been
+  //    added since the brief was written. This walks past empty-newest
+  //    rows (session-started-but-not-yet-compacted) to reach the real
+  //    "where I left off" content. Track the newest non-fresh cachedHandoff
+  //    as a fallback for when the recompute path below also fails.
+  let staleFallback: string | null = null;
+  for (const c of listed) {
+    const m = (c.metadata ?? {}) as Record<string, unknown>;
+    const cached = typeof m.handoff_markdown === "string" ? m.handoff_markdown : null;
+    const at = typeof m.handoff_at === "string" ? m.handoff_at : null;
+    if (cached && at && at >= c.updated_at) {
+      log(`pull-compact: cache hit for ${c.id}`);
+      return cached;
+    }
+    if (cached && !staleFallback) staleFallback = cached;
+  }
+
+  // 3. No fresh cache anywhere — recompute against the newest conversation
+  //    (where the active session would be writing). This is unchanged from
+  //    the original single-row path; only the cached-hit fan-out above is new.
   const conv = listed[0];
   const meta = (conv.metadata ?? {}) as Record<string, unknown>;
-  const cachedHandoff = typeof meta.handoff_markdown === "string" ? meta.handoff_markdown : null;
-  const handoffAt = typeof meta.handoff_at === "string" ? meta.handoff_at : null;
-
-  // 2. Fresh? Cached handoff postdates the last message → serve cache.
-  if (cachedHandoff && handoffAt && handoffAt >= conv.updated_at) {
-    log(`pull-compact: cache hit for ${conv.id}`);
-    return cachedHandoff;
-  }
+  const cachedHandoff = (typeof meta.handoff_markdown === "string" ? meta.handoff_markdown : null) ?? staleFallback;
 
   // 3. Stale or missing — recompute. We need working_context.capturedSessionId
   //    to find the local transcript; the list endpoint doesn't return it,
