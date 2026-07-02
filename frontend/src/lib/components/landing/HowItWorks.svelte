@@ -6,20 +6,20 @@ const steps = [
     number: 1,
     title: "Capture",
     description: "A background daemon silently records your sessions from Claude Code, Cursor, Codex, and Gemini",
-    illustration: "config",
+    illustration: "capture",
   },
   {
     number: 2,
     title: "Distill",
     description: "An LLM extracts decisions, architecture, and learnings — the signal from the noise",
-    illustration: "sync",
+    illustration: "distill",
   },
   {
     number: 3,
     title: "Remember",
     description:
       "Next session, your AI tools search the workspace and already have context from every past conversation",
-    illustration: "team",
+    illustration: "remember",
   },
 ];
 </script>
@@ -39,65 +39,68 @@ const steps = [
           <div class="step">
             <div class="step-number">{step.number}</div>
             <div class="step-illustration step-{step.illustration}">
-              {#if step.illustration === "config"}
-                <!-- Stylized terminal with .mcp.json config -->
-                <div class="illus-terminal">
-                  <div class="terminal-bar">
-                    <span class="terminal-dot"></span>
-                    <span class="terminal-dot"></span>
-                    <span class="terminal-dot"></span>
-                    <span class="terminal-filename">.mcp.json</span>
+              {#if step.illustration === "capture"}
+                <!-- Live capture feed: events streaming in from 4 tools -->
+                <div class="illus-capture">
+                  <div class="capture-header">
+                    <span class="capture-dot"></span>
+                    <span class="capture-status">capturing</span>
                   </div>
-                  <div class="terminal-body">
-                    <div class="code-line"><span class="code-brace">&#123;</span></div>
-                    <div class="code-line indent-1"><span class="code-key">"mcpServers"</span><span class="code-colon">:</span> <span class="code-brace">&#123;</span></div>
-                    <div class="code-line indent-2"><span class="code-key">"synapse"</span><span class="code-colon">:</span> <span class="code-brace">&#123;</span></div>
-                    <div class="code-line indent-3"><span class="code-key">"command"</span><span class="code-colon">:</span> <span class="code-string">"npx"</span></div>
-                    <div class="code-line indent-2"><span class="code-brace">&#125;</span></div>
-                    <div class="code-line indent-1"><span class="code-brace">&#125;</span></div>
-                    <div class="code-line"><span class="code-brace">&#125;</span></div>
+                  <div class="capture-feed">
+                    <div class="capture-row">
+                      <span class="capture-tool tool-claude">claude</span>
+                      <span class="capture-event">session-start</span>
+                    </div>
+                    <div class="capture-row">
+                      <span class="capture-tool tool-cursor">cursor</span>
+                      <span class="capture-event">user-prompt</span>
+                    </div>
+                    <div class="capture-row">
+                      <span class="capture-tool tool-codex">codex</span>
+                      <span class="capture-event">tool-use</span>
+                    </div>
+                    <div class="capture-row capture-row-fade">
+                      <span class="capture-tool tool-gemini">gemini</span>
+                      <span class="capture-event">session-end</span>
+                    </div>
                   </div>
                 </div>
-              {:else if step.illustration === "sync"}
-                <!-- Split view: Claude left, ChatGPT right, shared context center -->
-                <div class="illus-splitview">
-                  <div class="split-panel split-left">
-                    <div class="split-label">Claude</div>
-                    <div class="split-line"></div>
-                    <div class="split-line short"></div>
+              {:else if step.illustration === "distill"}
+                <!-- Transcript on left → distilled insight cards on right -->
+                <div class="illus-distill">
+                  <div class="distill-transcript">
+                    <div class="transcript-line transcript-user"></div>
+                    <div class="transcript-line transcript-assistant"></div>
+                    <div class="transcript-line transcript-user short"></div>
+                    <div class="transcript-line transcript-assistant"></div>
+                    <div class="transcript-line transcript-user"></div>
+                    <div class="transcript-line transcript-assistant short"></div>
                   </div>
-                  <div class="split-center">
-                    <div class="split-sync-icon">
-                      <div class="sync-ring"></div>
-                      <span class="sync-s">S</span>
-                    </div>
-                    <div class="sync-pulse"></div>
-                  </div>
-                  <div class="split-panel split-right">
-                    <div class="split-label">ChatGPT</div>
-                    <div class="split-line"></div>
-                    <div class="split-line short"></div>
+                  <div class="distill-arrow" aria-hidden="true">→</div>
+                  <div class="distill-insights">
+                    <div class="insight-pill insight-decision">Decision</div>
+                    <div class="insight-pill insight-arch">Architecture</div>
+                    <div class="insight-pill insight-learning">Learning</div>
                   </div>
                 </div>
               {:else}
-                <!-- Two user avatars with shared project folder -->
-                <div class="illus-share">
-                  <div class="share-avatar share-avatar-a">
-                    <span>A</span>
-                  </div>
-                  <div class="share-folder-group">
-                    <div class="share-folder">
-                      <div class="folder-tab"></div>
-                      <div class="folder-body">
-                        <div class="folder-file"></div>
-                        <div class="folder-file"></div>
-                        <div class="folder-file"></div>
+                <!-- Brief / context card the AI sees at session start -->
+                <div class="illus-remember">
+                  <div class="brief-card">
+                    <div class="brief-header">
+                      <span class="brief-badge">CONTEXT LOADED</span>
+                    </div>
+                    <div class="brief-body">
+                      <div class="brief-section">
+                        <span class="brief-label">Last session</span>
+                        <div class="brief-line"></div>
+                        <div class="brief-line short"></div>
+                      </div>
+                      <div class="brief-section">
+                        <span class="brief-label">Next step</span>
+                        <div class="brief-line"></div>
                       </div>
                     </div>
-                    <span class="share-folder-label">shared project</span>
-                  </div>
-                  <div class="share-avatar share-avatar-b">
-                    <span>B</span>
                   </div>
                 </div>
               {/if}
@@ -213,222 +216,212 @@ const steps = [
     overflow: hidden;
   }
 
-  /* ── Terminal / Config illustration ── */
-  .illus-terminal {
+  /* ── Capture illustration: live event feed ── */
+  .illus-capture {
     width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
   }
 
-  .terminal-bar {
+  .capture-header {
     display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 6px 10px;
-    background: rgba(86, 28, 36, 0.08);
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(86, 28, 36, 0.06);
     border-bottom: 1px solid rgba(199, 183, 163, 0.25);
   }
 
-  .terminal-dot {
+  .capture-dot {
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--color-tan);
+    background: #4a7c59;
+    box-shadow: 0 0 0 0 rgba(74, 124, 89, 0.6);
+    animation: capture-pulse 1.8s ease-out infinite;
+  }
+
+  @keyframes capture-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(74, 124, 89, 0.6); }
+    70% { box-shadow: 0 0 0 8px rgba(74, 124, 89, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(74, 124, 89, 0); }
+  }
+
+  .capture-status {
+    font-family: monospace;
+    font-size: 0.5625rem;
+    color: var(--color-burgundy);
+    opacity: 0.6;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .capture-feed {
+    flex: 1;
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    overflow: hidden;
+  }
+
+  .capture-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: monospace;
+    font-size: 0.5625rem;
+  }
+
+  .capture-row-fade {
+    opacity: 0.45;
+  }
+
+  .capture-tool {
+    flex-shrink: 0;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    color: var(--color-cream);
+    font-size: 0.5rem;
+    letter-spacing: 0.02em;
+  }
+
+  .tool-claude { background: #561c24; }
+  .tool-cursor { background: #2563eb; }
+  .tool-codex { background: #6b7280; }
+  .tool-gemini { background: #16a34a; }
+
+  .capture-event {
+    color: var(--color-burgundy);
+    opacity: 0.6;
+  }
+
+  /* ── Distill illustration: transcript → insight pills ── */
+  .illus-distill {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+  }
+
+  .distill-transcript {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px;
+    background: rgba(232, 216, 196, 0.25);
+    border: 1px solid rgba(199, 183, 163, 0.3);
+    border-radius: 6px;
+  }
+
+  .transcript-line {
+    height: 4px;
+    border-radius: 2px;
     opacity: 0.5;
   }
 
-  .terminal-filename {
-    margin-left: auto;
-    font-size: 0.5625rem;
-    font-family: monospace;
+  .transcript-line.transcript-user { background: var(--color-tan); }
+  .transcript-line.transcript-assistant { background: var(--color-burgundy); opacity: 0.35; }
+  .transcript-line.short { width: 60%; }
+
+  .distill-arrow {
     color: var(--color-burgundy);
-    opacity: 0.4;
+    font-size: 1rem;
+    opacity: 0.5;
+    flex-shrink: 0;
   }
 
-  .terminal-body {
-    flex: 1;
-    padding: 8px 12px;
-    font-family: monospace;
-    font-size: 0.625rem;
-    line-height: 1.5;
+  .distill-insights {
     display: flex;
     flex-direction: column;
-    gap: 0;
+    gap: 4px;
+    flex-shrink: 0;
   }
 
-  .code-line {
+  .insight-pill {
+    padding: 3px 8px;
+    border-radius: 9999px;
+    font-size: 0.5rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    text-align: center;
+    color: var(--color-cream);
     white-space: nowrap;
   }
 
-  .indent-1 { padding-left: 12px; }
-  .indent-2 { padding-left: 24px; }
-  .indent-3 { padding-left: 36px; }
+  .insight-decision { background: #561c24; }
+  .insight-arch { background: #6d2932; }
+  .insight-learning { background: #4a7c59; }
 
-  .code-key { color: var(--color-brown); font-weight: 600; }
-  .code-colon { color: var(--color-burgundy); opacity: 0.4; }
-  .code-string { color: #4a7c59; }
-  .code-brace { color: var(--color-burgundy); opacity: 0.5; }
-
-  /* ── Split view illustration ── */
-  .illus-splitview {
+  /* ── Remember illustration: brief / context card ── */
+  .illus-remember {
+    width: 100%;
+    height: 100%;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0 0.75rem;
+    justify-content: center;
+    padding: 8px 14px;
+  }
+
+  .brief-card {
     width: 100%;
-  }
-
-  .split-panel {
-    flex: 1;
-    background: rgba(232, 216, 196, 0.3);
-    border: 1px solid rgba(199, 183, 163, 0.3);
+    background: rgba(86, 28, 36, 0.04);
+    border: 1px solid rgba(86, 28, 36, 0.15);
     border-radius: 8px;
-    padding: 10px;
+    overflow: hidden;
   }
 
-  .split-label {
-    font-size: 0.5625rem;
+  .brief-header {
+    padding: 4px 8px;
+    border-bottom: 1px solid rgba(86, 28, 36, 0.1);
+    background: rgba(86, 28, 36, 0.06);
+  }
+
+  .brief-badge {
+    font-family: monospace;
+    font-size: 0.5rem;
     font-weight: 700;
     color: var(--color-burgundy);
-    opacity: 0.6;
-    margin-bottom: 6px;
+    letter-spacing: 0.08em;
   }
 
-  .split-line {
+  .brief-body {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .brief-section {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .brief-label {
+    font-size: 0.5rem;
+    font-weight: 700;
+    color: var(--color-burgundy);
+    opacity: 0.55;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .brief-line {
     height: 4px;
     background: var(--color-tan);
     border-radius: 2px;
-    opacity: 0.4;
-    margin-bottom: 4px;
+    opacity: 0.5;
   }
 
-  .split-line.short {
-    width: 60%;
-  }
-
-  .split-center {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
-    position: relative;
-  }
-
-  .split-sync-icon {
-    width: 36px;
-    height: 36px;
-    background: var(--color-burgundy);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    z-index: 1;
-  }
-
-  .sync-s {
-    color: var(--color-cream);
-    font-size: 0.75rem;
-    font-weight: 700;
-  }
-
-  .sync-ring {
-    position: absolute;
-    inset: -4px;
-    border: 2px solid rgba(86, 28, 36, 0.15);
-    border-radius: 50%;
-    animation: pulse-ring 2s ease-out infinite;
-  }
-
-  .sync-pulse {
-    position: absolute;
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(86, 28, 36, 0.08) 0%, transparent 70%);
-    animation: pulse-ring 2s ease-out infinite 1s;
-  }
-
-  @keyframes pulse-ring {
-    0% { transform: scale(1); opacity: 0.6; }
-    100% { transform: scale(1.8); opacity: 0; }
-  }
-
-  /* ── Share illustration ── */
-  .illus-share {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0 0.75rem;
-  }
-
-  .share-avatar {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.875rem;
-    font-weight: 700;
-    color: var(--color-cream);
-    flex-shrink: 0;
-    box-shadow: 0 2px 8px rgba(86, 28, 36, 0.15);
-  }
-
-  .share-avatar-a {
-    background: linear-gradient(135deg, var(--color-burgundy), var(--color-brown));
-  }
-
-  .share-avatar-b {
-    background: linear-gradient(135deg, var(--color-brown), #9b4a56);
-  }
-
-  .share-folder-group {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .share-folder {
-    width: 56px;
-    position: relative;
-  }
-
-  .folder-tab {
-    width: 24px;
-    height: 8px;
-    background: var(--color-tan);
-    border-radius: 3px 3px 0 0;
-  }
-
-  .folder-body {
-    width: 100%;
-    height: 36px;
-    background: var(--color-tan);
-    border-radius: 0 6px 6px 6px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 3px;
-    padding: 6px 8px;
-  }
-
-  .folder-file {
-    height: 3px;
-    background: rgba(255, 253, 248, 0.6);
-    border-radius: 1px;
-  }
-
-  .share-folder-label {
-    font-size: 0.5rem;
-    font-weight: 600;
-    color: var(--color-burgundy);
-    opacity: 0.4;
-    white-space: nowrap;
+  .brief-line.short {
+    width: 70%;
   }
 
   .step-title {
