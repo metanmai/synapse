@@ -184,18 +184,6 @@ export async function countEntries(db: SupabaseClient, projectId: string): Promi
   return count ?? 0;
 }
 
-export async function countUniqueConnections(db: SupabaseClient, projectId: string): Promise<number> {
-  // Count unique sources that have written to this project
-  const { data, error } = await db
-    .from("activity_log")
-    .select("source")
-    .eq("project_id", projectId)
-    .in("action", ["entry_created", "entry_updated"]);
-  if (error) throw error;
-  const uniqueSources = new Set((data ?? []).map((d: { source: string }) => d.source));
-  return uniqueSources.size;
-}
-
 export async function getEntryHistory(db: SupabaseClient, projectId: string, path: string): Promise<EntryHistory[]> {
   // First get the entry ID
   const { data: entry } = await db.from("entries").select("id").eq("project_id", projectId).eq("path", path).single();
@@ -211,10 +199,3 @@ export async function getEntryHistory(db: SupabaseClient, projectId: string, pat
   return (data ?? []) as EntryHistory[];
 }
 
-export async function updateEmbedding(db: SupabaseClient, entryId: string, embedding: number[]): Promise<void> {
-  const { error } = await db
-    .from("entries")
-    .update({ embedding: JSON.stringify(embedding) })
-    .eq("id", entryId);
-  if (error) console.error(`[embeddings] Failed to save embedding for ${entryId}:`, error.message);
-}
