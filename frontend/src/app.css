@@ -3,13 +3,15 @@
 :root {
   --color-bg: #faf8f5;
   --color-bg-raised: #ffffff;
-  --color-bg-muted: #f5f0ea;
+  --color-bg-muted: #fce8ee;
   --color-border: #ebe5dd;
   --color-text: #3d3327;
   --color-text-muted: #8a7e72;
   --color-accent: #667BC6;
   --color-accent-hover: #5568b0;
-  --color-link: #4a6fa5;
+  --color-link: #DA7297;
+  --color-pink: #FFB4C2;
+  --color-pink-dark: #DA7297;
   --color-success: #4ade80;
   --color-danger: #ef4444;
 }
