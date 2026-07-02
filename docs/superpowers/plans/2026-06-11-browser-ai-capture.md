@@ -84,26 +84,33 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 - [ ] **Step 3: Load it** — Chrome → `chrome://extensions` → enable Developer mode → "Load unpacked" → select `spike/browser-ext/`. Confirm it loads with no manifest errors.
 
-### Task 2: Probe A — fetch/XHR hook (page context)
+### Task 2: Probe A — fetch/XHR hook (MAIN world)
 
-**Files:** Modify `spike/browser-ext/content.js`, `spike/browser-ext/inject.js`
+**Files:** Modify `spike/browser-ext/manifest.json`, `spike/browser-ext/content.js`
 
-Content scripts run in an isolated world and cannot see the page's `window.fetch` calls, so we inject a script into the *page* context that monkeypatches fetch/XHR and relays via `window.postMessage`.
+> **P6 fix:** use MV3 `"world": "MAIN"` (Chrome 111+) so the content script runs directly in the page's JS context — this **eliminates `inject.js`, the `postMessage` relay, AND the `document_start` race** where the page's first fetch beats async injection. (If the spike confirms GO-FETCH, Phase 4 inherits this simpler shape.) A MAIN-world script can't use `chrome.runtime.sendMessage`; log to `console` for the probe (it's throwaway), and **also log every same-origin fetch URL with no body** so the endpoint filter can be corrected live rather than producing a false negative.
 
-- [ ] **Step 1: Write the page-context hook** — `inject.js`:
+- [ ] **Step 1: Add a MAIN-world content script** to `manifest.json` (second `content_scripts` entry):
+
+```json
+  { "matches": ["https://claude.ai/*", "https://chatgpt.com/*"], "js": ["content-main.js"], "run_at": "document_start", "world": "MAIN" }
+```
+
+- [ ] **Step 2: Write the hook** — `spike/browser-ext/content-main.js`:
 
 ```javascript
 (function () {
   const origFetch = window.fetch;
   window.fetch = async function (...args) {
+    const url = typeof args[0] === "string" ? args[0] : args[0]?.url;
+    if (url && url.startsWith(location.origin)) console.log("[spike] ALL-URL", url); // correct the filter live
     const res = await origFetch.apply(this, args);
     try {
-      const url = typeof args[0] === "string" ? args[0] : args[0]?.url;
-      if (url && /\/(api|chat|conversation|messages|completion)/i.test(url)) {
+      if (url && /\/(api|chat|conversation|messages|completion|append|prompt)/i.test(url)) {
         const clone = res.clone();
         const ct = clone.headers.get("content-type") || "";
-        const body = ct.includes("text/event-stream") ? "[SSE stream]" : await clone.text();
-        window.postMessage({ __synapseSpike: true, url, ct, body: String(body).slice(0, 5000) }, "*");
+        const body = ct.includes("text/event-stream") ? "[SSE stream — needs stream-read]" : await clone.text();
+        console.log("[spike] A-fetch", url, ct, String(body).slice(0, 5000));
       }
     } catch (e) { /* probe only */ }
     return res;
@@ -111,28 +118,9 @@ Content scripts run in an isolated world and cannot see the page's `window.fetch
 })();
 ```
 
-- [ ] **Step 2: Write the content-script relay** — `content.js`:
+- [ ] **Step 3: Run the probe** — reload, open `claude.ai`, send one message ("say hello"). Open the **page** devtools console (not the SW console — MAIN world logs there). Record: did conversation payloads appear? Body JSON or `[SSE stream]`? Compare the `ALL-URL` lines against the filter regex and note the real conversation endpoints. If SSE, flag that the response is streamed (the hook sees the request but the body needs stream-reading).
 
-```javascript
-const s = document.createElement("script");
-s.src = chrome.runtime.getURL("inject.js");
-(document.head || document.documentElement).appendChild(s);
-window.addEventListener("message", (e) => {
-  if (e.data && e.data.__synapseSpike) {
-    chrome.runtime.sendMessage({ probe: "A-fetch", url: e.data.url, ct: e.data.ct, body: e.data.body });
-  }
-});
-```
-
-- [ ] **Step 3: Add `inject.js` to web_accessible_resources** in `manifest.json`:
-
-```json
-  "web_accessible_resources": [{ "resources": ["inject.js"], "matches": ["https://claude.ai/*", "https://chatgpt.com/*"] }]
-```
-
-- [ ] **Step 4: Run the probe** — reload the extension, open `claude.ai`, send one message ("say hello"). Open the service-worker console (chrome://extensions → "service worker"). Record: did conversation payloads appear? Is the body JSON or `[SSE stream]`? If SSE, note that the response is streamed (the hook sees the request but the body needs stream-reading — flag for the findings).
-
-- [ ] **Step 5: Repeat on `chatgpt.com`** — same message, record the same.
+- [ ] **Step 4: Repeat on `chatgpt.com`** — same message, record the same.
 
 ### Task 3: Probe B — DOM observation
 
@@ -237,31 +225,33 @@ export function isCaptureHost(host: string): host is CaptureHost {
 
 ## Phase 3: Daemon loopback ingest + redaction (architecture-independent — specified)
 
-### Task 7: Credential redaction (R3)
+### Task 7: Credential value-scrub — defense-in-depth (R3 / P3)
+
+> **P3 fix:** the primary privacy boundary is the **allowlist schema** in Task 8 (unknown keys never survive), NOT a key-name blocklist. This function is the *second* layer: it scrubs token-shaped **values** inside the allowed `content` strings (an `sk-…`, a `Bearer …`, a cookie-shaped pair that a model pasted into a message). It runs over `content` after the schema has already dropped every non-allowed key.
 
 **Files:**
 - Create: `mcp/src/capture/ingest/redact.ts`
 - Test: `mcp/test/unit/redact.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing test** — value-pattern scrub, not key-name:
 
 ```typescript
 import { describe, expect, it } from "vitest";
-import { redactCredentials } from "../../src/capture/ingest/redact.js";
+import { scrubSecretValues } from "../../src/capture/ingest/redact.js";
 
-describe("redactCredentials", () => {
-  it("strips cookie/authorization/token-shaped fields anywhere in the payload", () => {
-    const dirty = {
-      messages: [{ role: "user", content: "hi" }],
-      headers: { cookie: "sessionKey=abc123", authorization: "Bearer sk-live-xyz" },
-      meta: { set_cookie: "x", access_token: "t0ken", sessionId: "s" },
-    };
-    const clean = redactCredentials(dirty);
-    const serialized = JSON.stringify(clean);
-    expect(serialized).not.toContain("abc123");
-    expect(serialized).not.toContain("sk-live-xyz");
-    expect(serialized).not.toContain("t0ken");
-    expect(clean.messages[0].content).toBe("hi"); // conversation preserved
+describe("scrubSecretValues", () => {
+  it("redacts token-shaped values inside a string regardless of surrounding key", () => {
+    const s = "my key is sk-live-abc123def456ghi789 and auth Bearer eyJhbGciOiJ.payload.sig";
+    const out = scrubSecretValues(s);
+    expect(out).not.toContain("sk-live-abc123def456ghi789");
+    expect(out).not.toContain("eyJhbGciOiJ.payload.sig");
+    expect(out).toContain("my key is"); // surrounding prose preserved
+  });
+  it("redacts cookie-shaped pairs", () => {
+    expect(scrubSecretValues("sessionKey=abc123def456")).not.toContain("abc123def456");
+  });
+  it("leaves ordinary conversation text untouched", () => {
+    expect(scrubSecretValues("how do I write a for loop")).toBe("how do I write a for loop");
   });
 });
 ```
@@ -271,71 +261,95 @@ describe("redactCredentials", () => {
 - [ ] **Step 3: Implement** — `mcp/src/capture/ingest/redact.ts`:
 
 ```typescript
-const REDACT_KEY = /^(cookie|set-cookie|authorization|.*token|.*api[-_]?key|session[-_]?key)$/i;
-export function redactCredentials<T>(value: T): T {
-  if (Array.isArray(value)) return value.map(redactCredentials) as unknown as T;
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) {
-      out[k] = REDACT_KEY.test(k) ? "[REDACTED]" : redactCredentials(v);
-    }
-    return out as T;
-  }
-  return value;
+const PATTERNS: RegExp[] = [
+  /\bsk-[A-Za-z0-9_-]{16,}\b/g,                 // provider API keys
+  /\bBearer\s+[A-Za-z0-9._-]{16,}\b/gi,         // bearer tokens
+  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, // JWTs
+  /\b[A-Za-z0-9_-]*(?:session|cookie|token|secret)[A-Za-z0-9_-]*=\s*[A-Za-z0-9._-]{8,}/gi,
+];
+export function scrubSecretValues(text: string): string {
+  let out = text;
+  for (const re of PATTERNS) out = out.replace(re, "[REDACTED]");
+  return out;
 }
 ```
 
 - [ ] **Step 4: Run it, verify it passes** — `npm test -w mcp -- redact` → PASS.
 
-- [ ] **Step 5: Commit** — `git add mcp/src/capture/ingest/redact.ts mcp/test/unit/redact.test.ts && git commit -m "feat(ingest): credential redaction before persistence (R3)"`
+- [ ] **Step 5: Commit** — `git add mcp/src/capture/ingest/redact.ts mcp/test/unit/redact.test.ts && git commit -m "feat(ingest): token-shaped value scrub (R3 defense-in-depth)"`
 
-### Task 8: Loopback ingest route → CloudSyncer
+### Task 8: Loopback ingest route → CloudSyncer (allowlist schema + shared secret)
+
+> **P3 fix:** the body is **schema-allowlisted** — only `{ host ∈ CAPTURE_HOSTS, messages: [{role, content, ts}] }` survives; every other key (headers, cookies, anything the extension shouldn't be sending and per spec §Privacy doesn't) is dropped before anything is built. Then `scrubSecretValues` (Task 7) runs over each `content`. Unknown keys never survive — security by construction, not by enumerating bad names.
+> **P5 fix:** resolved the open question → **require a loopback shared-secret.** Loopback binding alone doesn't stop other local processes or a webpage POSTing to `127.0.0.1`. Ingest requires an `X-Synapse-Ingest-Token` matching the token minted at wizard-enable (stored in `proxy-config.json` + the extension's options), AND rejects any request carrying a web `Origin` that isn't the extension's origin.
 
 **Files:**
 - Create: `mcp/src/capture/ingest/ingest-route.ts`
+- Modify: `packages/shared/src/capture-hosts.ts` (add the host→tool map, P6)
 - Test: `mcp/test/unit/ingest-route.test.ts`
-- Read first: `mcp/src/capture/cloud-sync.ts` (the `CapturedSession` shape + `CloudSyncer.sync`), `mcp/src/capture/types.ts`
+- Read first: `mcp/src/capture/cloud-sync.ts` (`CapturedSession` + `CloudSyncer.sync`), `mcp/src/capture/types.ts`
 
-- [ ] **Step 1: Write the failing test** — assert the route (a) rejects non-loopback origins, (b) redacts, (c) normalizes a browser payload to a `CapturedSession`, (d) calls an injected `sync` fn. Inject the syncer so no network:
+- [ ] **Step 1: Add the host→tool map (P6)** to `packages/shared/src/capture-hosts.ts` — no string hacks:
+
+```typescript
+export const HOST_TOOL: Record<CaptureHost, string> = { "claude.ai": "claude-ai", "chatgpt.com": "chatgpt" };
+```
+
+- [ ] **Step 2: Write the failing test** — assert (a) loopback + valid token + allowlisted host syncs; (b) non-loopback → 403; (c) bad/missing token → 401; (d) non-allowlisted host → 400; (e) **extra keys are dropped** (the allowlist, not a blocklist); (f) token-shaped values inside `content` are scrubbed:
 
 ```typescript
 import { describe, expect, it, vi } from "vitest";
 import { handleIngest } from "../../src/capture/ingest/ingest-route.js";
 
+const ok = { remoteAddress: "127.0.0.1", token: "T", expectedToken: "T", origin: "chrome-extension://abc" };
+
 describe("handleIngest", () => {
-  it("redacts, normalizes, and syncs a browser capture", async () => {
+  it("allowlists body, maps host→tool, scrubs values, syncs", async () => {
     const sync = vi.fn().mockResolvedValue(true);
     const body = {
       host: "claude.ai",
-      messages: [{ role: "user", content: "hi", ts: "2026-06-11T00:00:00Z" }],
-      headers: { cookie: "sessionKey=LEAK" },
+      messages: [{ role: "user", content: "key sk-live-abcdef0123456789", ts: "2026-06-11T00:00:00Z" }],
+      headers: { cookie: "sessionKey=LEAK" },        // MUST be dropped by the allowlist
+      evilExtra: { nested: "drop me" },
     };
-    const res = await handleIngest(body, { remoteAddress: "127.0.0.1", sync });
+    const res = await handleIngest(body, { ...ok, sync });
     expect(res.ok).toBe(true);
     const sent = sync.mock.calls[0][0];
-    expect(JSON.stringify(sent)).not.toContain("LEAK");
-    expect(sent.tool).toBe("claude-ai");
-    expect(sent.messages[0].content).toBe("hi");
+    const blob = JSON.stringify(sent);
+    expect(blob).not.toContain("LEAK");          // dropped key
+    expect(blob).not.toContain("drop me");       // dropped key
+    expect(blob).not.toContain("sk-live-abcdef0123456789"); // scrubbed value
+    expect(sent.tool).toBe("claude-ai");          // host→tool map
+    expect(sent.messages[0].content).toContain("key"); // prose preserved
   });
-  it("rejects a non-loopback caller", async () => {
-    const res = await handleIngest({}, { remoteAddress: "10.0.0.5", sync: vi.fn() });
-    expect(res.ok).toBe(false);
-    expect(res.status).toBe(403);
+  it("rejects non-loopback", async () => {
+    expect((await handleIngest({}, { ...ok, remoteAddress: "10.0.0.5", sync: vi.fn() })).status).toBe(403);
+  });
+  it("rejects a bad token", async () => {
+    expect((await handleIngest({}, { ...ok, token: "WRONG", sync: vi.fn() })).status).toBe(401);
+  });
+  it("rejects a non-allowlisted host", async () => {
+    const r = await handleIngest({ host: "evil.com", messages: [] }, { ...ok, sync: vi.fn() });
+    expect(r.status).toBe(400);
   });
 });
 ```
 
-- [ ] **Step 2: Run it, verify it fails** — `npm test -w mcp -- ingest-route` → FAIL.
+- [ ] **Step 3: Run it, verify it fails** — `npm test -w mcp -- ingest-route` → FAIL.
 
-- [ ] **Step 3: Implement** `handleIngest(body, { remoteAddress, sync })`: guard `remoteAddress` is loopback (`127.0.0.1`/`::1`) else `{ok:false,status:403}`; `redactCredentials(body)`; map `{host, messages}` → `CapturedSession` (`tool: host.replace(/\..*/, "") === "claude" ? "claude-ai" : "chatgpt"`, synthesize `id` from a content hash mirroring `sessionIdFromNative`, `projectPath` from a browser-sentinel); `await sync(session)`; return `{ok:true}`. (Wire the HTTP listener into the daemon in Step 5.)
+- [ ] **Step 4: Implement** `handleIngest(body, { remoteAddress, token, expectedToken, origin, sync })`:
+  1. `remoteAddress` loopback (`127.0.0.1`/`::1`) else `{ok:false,status:403}`.
+  2. `token === expectedToken` (constant-time compare) else `401`.
+  3. `origin` absent OR starts with `chrome-extension://`/`moz-extension://` else `403` (reject web origins).
+  4. **Allowlist**: `isCaptureHost(body.host)` else `400`; build `messages` by mapping ONLY `{role: m.role, content: scrubSecretValues(String(m.content)), ts: m.ts}` — read no other field from `body`.
+  5. Build `CapturedSession`: `tool: HOST_TOOL[body.host]`, `id` from a content hash mirroring `sessionIdFromNative`, `projectPath` from a browser sentinel (e.g. `synapse://browser/<host>`).
+  6. `await sync(session)`; return `{ok:true}`.
 
-- [ ] **Step 4: Run it, verify it passes** — `npm test -w mcp -- ingest-route` → PASS.
+- [ ] **Step 5: Run it, verify it passes** — `npm test -w mcp -- ingest-route` → PASS.
 
-- [ ] **Step 5: Mount on the daemon** — add a loopback `http.createServer` on the capture-worker bound to `127.0.0.1:<ingestport>` (persist port in `proxy-config.json`), routing `POST /capture` → `handleIngest(body, { remoteAddress: req.socket.remoteAddress, sync: (s) => this.syncer.sync(s) })`. Bind loopback only (never `0.0.0.0`).
+- [ ] **Step 6: Mount on the daemon** — loopback `http.createServer` on the capture-worker bound to `127.0.0.1:<ingestport>` (persist port + token in `proxy-config.json`), routing `POST /capture` → `handleIngest(body, { remoteAddress: req.socket.remoteAddress, token: req.headers["x-synapse-ingest-token"], expectedToken: cfg.ingestToken, origin: req.headers.origin, sync: (s) => this.syncer.sync(s) })`. Also handle `POST /heartbeat` (`{host}`) → `rateTracker.heartbeat(host, Date.now())` (Task 14). Bind loopback only (never `0.0.0.0`).
 
-- [ ] **Step 6: Commit** — `git add mcp/src/capture/ingest/ && git commit -m "feat(ingest): loopback /capture route → CloudSyncer with redaction"`
-
-> **Open question for the user (spec §Open):** require a loopback shared-secret header on `/capture` (defends against other localhost processes posting fake sessions), or is loopback-binding enough? Default in this plan: loopback-only for v1; add the secret if the user wants it (one extra header check + a token in the extension config).
+- [ ] **Step 7: Commit** — `git add mcp/src/capture/ingest/ packages/shared/src/capture-hosts.ts && git commit -m "feat(ingest): allowlist-schema /capture route + shared-secret + host→tool map"`
 
 ---
 
@@ -357,7 +371,7 @@ Planned tasks (to be made bite-sized post-gate):
 - **Task 9:** MV3 production manifest + content entry that selects the adapter by `location.host` against `CAPTURE_HOSTS`; web_accessible_resources only if GO-FETCH.
 - **Task 10:** `claude-ai` adapter — golden-fixture test first (fixture = the real captured shape from the spike), then implement `start/stop` via the gated method.
 - **Task 11:** `chatgpt` adapter — same pattern.
-- **Task 12:** Service worker — batch turns into a session, dedupe by content hash, exponential back-off, `POST` to the daemon ingest port; golden test with a mocked `fetch`.
+- **Task 12:** Service worker. **P4 fix (MV3 lifecycle — architecture-independent, decide pre-gate):** MV3 service workers are evicted after ~30s idle, so in-memory batch/dedupe state is lost on every eviction → data loss + duplicate sessions. Therefore: buffer captured turns and the dedupe-hash set in `chrome.storage.session` (fall back to `.local` with a size cap), flush-on-wake, and POST to the daemon ingest port with the `X-Synapse-Ingest-Token`. **Daemon-unreachable policy:** buffer up to N turns (cap, e.g. 500), drop oldest beyond the cap, and surface the buffered/dropped state in the extension action badge. **P1 heartbeat:** on a CAPTURE_HOST tab becoming active, POST `{host}` to `/heartbeat` (independent of any extraction) so the daemon's `CaptureRateTracker` can detect a silently-broken adapter. Tests: golden test with mocked `fetch`; eviction-survival test (state restored from `chrome.storage` after a simulated worker restart); buffer-cap test (oldest dropped at N).
 - **Task 13:** Anti-drift test — extension manifest `matches` hosts ⊆ `CAPTURE_HOSTS` ⊆ adapter-covered hosts.
 
 ---
@@ -370,30 +384,37 @@ Planned tasks (to be made bite-sized post-gate):
 - Create: `mcp/src/capture/ingest/capture-rate.ts`
 - Test: `mcp/test/unit/capture-rate.test.ts`
 
-- [ ] **Step 1: Write the failing test** — a tracker fed (host, timestamp, didCapture) events; `staleHosts(nowMs)` returns hosts that had activity (CONNECT/ingest attempts) but zero successful captures over a rolling window:
+> **P1 fix (BLOCKING):** the "attempt" record must come from a **page-visit heartbeat**, not from a malformed-event. Under the extension architecture a broken adapter emits *nothing* — zero events — so a signal keyed on "events arrived but none captured" would stay silent in the single most likely failure mode (UI/wire change). The extension's service worker (Task 12) sends a `heartbeat` ping whenever a CAPTURE_HOST tab is active; that ping is recorded as `didCapture:false`. A real captured turn is recorded as `didCapture:true`. So "tab was open and active, yet zero turns captured over the window" becomes detectable.
+
+- [ ] **Step 1: Write the failing test** — `staleHosts(nowMs)` returns hosts that had heartbeats (the user was active on that host) but zero successful captures over a rolling window:
 
 ```typescript
 import { describe, expect, it } from "vitest";
 import { CaptureRateTracker } from "../../src/capture/ingest/capture-rate.js";
 
 describe("CaptureRateTracker", () => {
-  it("flags a host with attempts but zero captures over the window", () => {
+  it("flags a host with heartbeats but zero captures (the broken-adapter case)", () => {
     const t = new CaptureRateTracker({ windowMs: 60_000 });
-    t.record("claude.ai", 1000, false);
-    t.record("claude.ai", 2000, false);
+    t.heartbeat("claude.ai", 1000);   // tab active, adapter emitted nothing
+    t.heartbeat("claude.ai", 2000);
     expect(t.staleHosts(3000)).toContain("claude.ai");
   });
-  it("does not flag a host that is capturing", () => {
+  it("does not flag a host that is capturing turns", () => {
     const t = new CaptureRateTracker({ windowMs: 60_000 });
-    t.record("claude.ai", 1000, true);
+    t.heartbeat("claude.ai", 1000);
+    t.capture("claude.ai", 1500);     // a real turn landed
     expect(t.staleHosts(2000)).not.toContain("claude.ai");
+  });
+  it("does not flag a host with no activity at all (user just isn't using it)", () => {
+    const t = new CaptureRateTracker({ windowMs: 60_000 });
+    expect(t.staleHosts(5000)).not.toContain("claude.ai");
   });
 });
 ```
 
 - [ ] **Step 2: Run it, verify it fails** — `npm test -w mcp -- capture-rate` → FAIL.
 
-- [ ] **Step 3: Implement** `CaptureRateTracker`: ring of `{host, ts, ok}` events pruned to `windowMs`; `staleHosts(now)` = hosts with ≥1 attempt and 0 `ok` in-window.
+- [ ] **Step 3: Implement** `CaptureRateTracker`: ring of `{host, ts, kind: "heartbeat"|"capture"}` pruned to `windowMs`; `heartbeat(host,ts)` and `capture(host,ts)` append; `staleHosts(now)` = hosts with ≥1 heartbeat and 0 captures in-window. The daemon ingest route calls `heartbeat()` on a `{type:"heartbeat",host}` ping and `capture()` on a real session ingest.
 
 - [ ] **Step 4: Run it, verify it passes** — `npm test -w mcp -- capture-rate` → PASS.
 
@@ -405,7 +426,17 @@ describe("CaptureRateTracker", () => {
 
 **Files:** Modify `mcp/src/cli/wizard.ts`; Read first: the existing `runEditorSetup` / capture-confirm pattern (around `clack.confirm` usage)
 
-- [ ] **Step 1:** After the base capture step, add a `clack.confirm` (default false) with the spec §1 copy ("Also capture browser AI sessions? … restores to a direct connection automatically if Synapse stops" — wording per R4). On yes: print install instructions (load the extension; dev-mode or unlisted-store per the resolved open question) and verify the daemon ingest port responds. On no/cancel: skip, no state change.
+- [ ] **Step 1:** After the base capture step, add a `clack.confirm` (default false). **P2 fix:** the old draft carried over the retired MITM line ("restores to a direct connection automatically if Synapse stops") — there is no proxy in the extension architecture, nothing to restore. Use extension-appropriate copy:
+
+```
+? Also capture browser AI sessions? (claude.ai, chatgpt.com)
+    • A small browser extension reads only your conversations on those two sites
+    • Sends them to your Synapse via the local daemon — nothing else leaves the page
+    • If the daemon is off, the extension buffers briefly, then drops oldest (no data leaves)
+  (y/N)
+```
+
+On yes: print install instructions (load the extension; dev-mode or unlisted-store per the resolved channel), write the loopback shared-secret (P5) into `proxy-config.json`, and verify the daemon ingest port responds. On no/cancel: skip, no state change.
 
 - [ ] **Step 2:** Manual verification — run `node mcp/dist/index.js wizard` in a scratch HOME, walk the prompt, confirm yes/no both behave and the daemon ingest check runs. (No unit test for the clack flow — matches the existing wizard's tested-surface boundary; the testable logic lives in the ingest route + adapters.)
 
@@ -415,7 +446,7 @@ describe("CaptureRateTracker", () => {
 
 **Files:** Modify `docs/E2E-PROTOCOL.md`; Create `extension/README.md` (load/build instructions)
 
-- [ ] **Step 1:** Add a "Browser capture (manual, per release)" section to E2E-PROTOCOL.md: load the extension in Chrome, open a real claude.ai + chatgpt.com session, confirm a `CapturedSession` reaches the backend AND that the synced payload contains no cookie/token (R3 redaction holds end-to-end).
+- [ ] **Step 1:** Add a "Browser capture (manual, per release)" section to E2E-PROTOCOL.md: (a) load the extension in Chrome, open a real claude.ai + chatgpt.com session, confirm a `CapturedSession` reaches the backend AND the synced payload contains no cookie/token (R3 end-to-end); (b) **buffer-survival (P6):** stop the daemon mid-conversation, send a few more turns, restart the daemon → confirm the buffered turns flush and arrive (validates the P4 `chrome.storage` buffer + flush-on-wake).
 - [ ] **Step 2:** Write `extension/README.md` — build (`npm run build -w extension`), load-unpacked / store-install instructions, and the "best-effort, may need periodic adapter updates" expectation (R2).
 - [ ] **Step 3: Commit** — `git add docs/E2E-PROTOCOL.md extension/README.md && git commit -m "docs: browser-capture manual smoke + extension README"`
 
@@ -423,7 +454,8 @@ describe("CaptureRateTracker", () => {
 
 ## Self-review notes (planner)
 
-- **Spec coverage:** browser capture (Phases 1+4), CAPTURE_HOSTS source of truth (Task 6), daemon ingest reusing CloudSyncer (Task 8), credential redaction R3 (Task 7 + smoke Task 16), zero-capture signal R2 (Task 14), wizard opt-in + softened copy R4 (Task 15), bake-off spike-first R1/R6.3 (Phase 1), native apps cut / MITM deferred (not built — correct). Covered.
-- **Deliberately deferred to post-gate:** Phase 4 adapter internals (method-dependent — the spec's own decision gate). This is a planned re-invocation, not a placeholder.
-- **Open questions surfaced for the user:** loopback shared-secret on ingest (Task 8 note); extension distribution channel (Task 15); Safari scope. None block Phase 1.
+- **Spec coverage:** browser capture (Phases 1+4), CAPTURE_HOSTS source of truth + host→tool map (Task 6/8), daemon ingest reusing CloudSyncer (Task 8), R3 privacy — **allowlist schema** primary + value-scrub defense-in-depth (Task 8 + Task 7) + end-to-end smoke (Task 16), R2 zero-capture signal **driven by a page-visit heartbeat** so a silently-broken adapter is detectable (Task 12 heartbeat → Task 14 tracker), wizard opt-in + extension-correct copy (Task 15), bake-off spike-first R1/R6.3 (Phase 1, MAIN-world per P6), native apps cut / MITM deferred. Covered.
+- **Round-2 plan review (REVIEW.md) applied:** P1 heartbeat (Task 12/14), P2 wizard copy (Task 15), P3 allowlist-not-blocklist (Task 7/8), P4 MV3 SW buffer in `chrome.storage` + daemon-down policy (Task 12), P5 loopback shared-secret + Origin reject — **resolved: required** (Task 8/15), P6 host→tool map + MAIN-world spike + log-all-URLs + buffer-survival smoke (Task 6/2/16).
+- **Deliberately deferred to post-gate:** Phase 4 adapter internals (method-dependent — the spec's own decision gate). Planned re-invocation, not a placeholder.
+- **Remaining open questions for the user (none block Phase 1):** extension distribution channel — unlisted store vs dev-mode sideload (Task 15); Safari in v1 or Chromium+Firefox only.
 ```
