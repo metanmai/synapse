@@ -235,8 +235,14 @@ describe("CaptureWatcher", () => {
     // No idle yet (800ms timeout hasn't passed since last change)
     expect(idlePaths.length).toBe(0);
 
-    // Wait for idle timeout to pass (800ms + scan interval 300ms + overhead)
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // Poll for the idle event instead of asserting after one fixed sleep. On
+    // slow/contended CI runners (notably the Windows chokidar-polling path) the
+    // idle tick lands well after a fixed 1500ms window, so a fixed sleep here
+    // flakes (metanmai run 27542357561). Wait up to 8s for the behavior itself.
+    const idleDeadline = Date.now() + 8000;
+    while (idlePaths.length < 1 && Date.now() < idleDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
 
     expect(idlePaths.length).toBe(1);
     expect(idlePaths[0]).toBe(testFile);
@@ -244,5 +250,5 @@ describe("CaptureWatcher", () => {
     // Should not fire again for the same file
     await new Promise((resolve) => setTimeout(resolve, 1000));
     expect(idlePaths.length).toBe(1);
-  }, 15000);
+  }, 20000);
 });
