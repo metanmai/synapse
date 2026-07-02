@@ -299,6 +299,130 @@ export async function findOrCreateProjectByGit(
   return createdId;
 }
 
+export interface ResolveResult {
+  project_id: string | null;
+  name: string | null;
+  confidence: "high" | "medium" | null;
+  signal: string;
+}
+
+/**
+ * Read-path counterpart to {@link findOrCreateProjectByGit}: given the git
+ * signals a daemon collects for a cwd, find the EXISTING project the user can
+ * already see. Never creates — a true miss returns `signal: "no_match"` so the
+ * SessionStart brief renders without a (wrong) handoff.
+ *
+ * Tier precedence (highest-confidence first):
+ *   1. `git_remote_url` exact match — authoritative. The project row stores the
+ *      real remote URL at create time, so this is immune to the basename
+ *      asymmetry that breaks Tier 2: the WRITE path names a project after the
+ *      *folder* basename (`git rev-parse --show-toplevel`), while the READ path
+ *      derives `git_basename` from the *URL*. A renamed clone
+ *      (`git clone <url> other-name`) makes them diverge, so Tier 2 silently
+ *      misses on a second device even though the project plainly exists.
+ *   2. Project name (= read-path git_basename) match.
+ *   3. Historical cwd match against captured conversations' working_context.
+ *   4. Historical git_origin_url match against captured conversations.
+ *
+ * Extracted from the POST /api/projects/resolve handler so the tier logic is
+ * unit-testable with a mock db (the Workers test env has no SUPABASE_URL, so
+ * handler-level db logic can't be exercised through worker.fetch).
+ */
+export async function resolveProjectFromSignals(
+  db: SupabaseClient,
+  userId: string,
+  signals: { cwd: string; git_origin_url?: string | null; git_basename?: string | null },
+): Promise<ResolveResult> {
+  const { cwd, git_origin_url, git_basename } = signals;
+
+  // Collaboration-aware: owners are added to project_members on creation,
+  // so a single query covers both owned and shared projects.
+  const { data: memberRows, error: memberErr } = await db
+    .from("project_members")
+    .select("project_id")
+    .eq("user_id", userId);
+  if (memberErr) throw memberErr;
+  const accessibleIds = new Set<string>((memberRows ?? []).map((r: { project_id: string }) => r.project_id));
+
+  if (accessibleIds.size === 0) {
+    return { project_id: null, name: null, confidence: null, signal: "no_access" };
+  }
+  const accessibleArray = Array.from(accessibleIds);
+
+  // 1. Project URL match (highest confidence). The project row stores the
+  //    actual git_remote_url at create time (events-batch → findOrCreateProjectByGit),
+  //    so matching it directly is authoritative and sidesteps the basename
+  //    asymmetry described above. migration 021's unique index on
+  //    (owner_id, git_remote_url) keeps this unambiguous per owner; .limit(1)
+  //    guards the rare shared-across-owners collision from throwing in
+  //    .maybeSingle(). NB: the projects table has no updated_at column, so we
+  //    do NOT .order() here.
+  if (git_origin_url) {
+    const { data: byUrl, error: urlErr } = await db
+      .from("projects")
+      .select("id, name")
+      .in("id", accessibleArray)
+      .eq("git_remote_url", git_origin_url)
+      .limit(1)
+      .maybeSingle();
+    if (urlErr) throw urlErr;
+    if (byUrl) {
+      return { project_id: byUrl.id, name: byUrl.name, confidence: "high", signal: "project_url" };
+    }
+  }
+
+  // 2. Name match
+  if (git_basename) {
+    const { data: byName, error: nameErr } = await db
+      .from("projects")
+      .select("id, name")
+      .in("id", accessibleArray)
+      .eq("name", git_basename)
+      .limit(1)
+      .maybeSingle();
+    if (nameErr) throw nameErr;
+    if (byName) {
+      return { project_id: byName.id, name: byName.name, confidence: "high", signal: "name" };
+    }
+  }
+
+  // 3. Historical cwd match
+  {
+    const { data: byCwd, error: cwdErr } = await db
+      .from("conversations")
+      .select("project_id, projects!inner(name)")
+      .in("project_id", accessibleArray)
+      .eq("working_context->>cwd", cwd)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (cwdErr) throw cwdErr;
+    if (byCwd) {
+      const row = byCwd as unknown as { project_id: string; projects: { name: string } };
+      return { project_id: row.project_id, name: row.projects.name, confidence: "high", signal: "cwd_history" };
+    }
+  }
+
+  // 4. Historical git origin match
+  if (git_origin_url) {
+    const { data: byOrigin, error: originErr } = await db
+      .from("conversations")
+      .select("project_id, projects!inner(name)")
+      .in("project_id", accessibleArray)
+      .eq("working_context->>git_origin_url", git_origin_url)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (originErr) throw originErr;
+    if (byOrigin) {
+      const row = byOrigin as unknown as { project_id: string; projects: { name: string } };
+      return { project_id: row.project_id, name: row.projects.name, confidence: "medium", signal: "git_origin" };
+    }
+  }
+
+  return { project_id: null, name: null, confidence: null, signal: "no_match" };
+}
+
 export async function getProjectStats(db: SupabaseClient, projectId: string) {
   const [convResult, insightResult] = await Promise.all([
     db
