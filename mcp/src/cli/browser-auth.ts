@@ -58,10 +58,20 @@ export interface BrowserAuthResult {
   email: string;
 }
 
-export interface BrowserAuthCallbacks {
+export interface BrowserAuthOptions {
   /** Called with the auth URL — display this as a fallback for the user to open manually. */
   onUrl?: (url: string, autoOpened: boolean) => void;
+  /**
+   * Device name to associate with the new API key (typically os.hostname()).
+   * Passed to the frontend as `?device=…` query param. The frontend forwards
+   * it to /auth/cli-session as `device_name`. Optional — when absent, the
+   * backend falls back to a synthetic `cli-device-<ts>` label.
+   */
+  deviceName?: string;
 }
+
+// Backwards-compatible alias for the original name (was {@link BrowserAuthCallbacks}).
+export type BrowserAuthCallbacks = BrowserAuthOptions;
 
 /**
  * Browser-based CLI authentication using PKCE.
@@ -74,7 +84,7 @@ export interface BrowserAuthCallbacks {
  * Handles Chrome preconnects by ignoring requests that don't have valid state+code.
  * Detects SSH/CI environments and skips browser open (URL-only mode).
  */
-export async function browserAuth(callbacks?: BrowserAuthCallbacks): Promise<BrowserAuthResult> {
+export async function browserAuth(options?: BrowserAuthOptions): Promise<BrowserAuthResult> {
   const codeVerifier = generateVerifier();
   const codeChallenge = generateChallenge(codeVerifier);
   const state = crypto.randomUUID();
@@ -157,13 +167,21 @@ export async function browserAuth(callbacks?: BrowserAuthCallbacks): Promise<Bro
       }
 
       const port = addr.port;
-      const authUrl = `${APP_URL}/cli-auth?challenge=${encodeURIComponent(codeChallenge)}&state=${encodeURIComponent(state)}&port=${port}`;
+      const params = new URLSearchParams({
+        challenge: codeChallenge,
+        state,
+        port: String(port),
+      });
+      if (options?.deviceName) {
+        params.set("device", options.deviceName);
+      }
+      const authUrl = `${APP_URL}/cli-auth?${params.toString()}`;
 
       // Try to open browser — skip in SSH/CI/headless
       const autoOpened = canOpenBrowser() && openBrowser(authUrl);
 
       // Always notify caller with the URL
-      callbacks?.onUrl?.(authUrl, autoOpened);
+      options?.onUrl?.(authUrl, autoOpened);
     });
   });
 }

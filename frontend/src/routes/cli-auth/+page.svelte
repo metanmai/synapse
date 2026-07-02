@@ -36,6 +36,7 @@ let loading = $state(false);
         <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
         <input type="hidden" name="cli_state" value={data.state ?? ""} />
         <input type="hidden" name="cli_port" value={data.port ?? ""} />
+        <input type="hidden" name="cli_device" value={data.device ?? ""} />
         <button type="submit" disabled={loading} aria-label="Continue as {data.email}" class="btn-primary w-full cursor-pointer">
           {#if loading}
             <span class="flex items-center justify-center gap-2">
@@ -52,6 +53,7 @@ let loading = $state(false);
           <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
           <input type="hidden" name="cli_state" value={data.state ?? ""} />
           <input type="hidden" name="cli_port" value={data.port ?? ""} />
+        <input type="hidden" name="cli_device" value={data.device ?? ""} />
           <button type="submit" class="cursor-pointer text-sm" style="color: var(--color-link);">
             Use a different account
           </button>
@@ -103,6 +105,7 @@ let loading = $state(false);
           <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
           <input type="hidden" name="cli_state" value={data.state ?? ""} />
           <input type="hidden" name="cli_port" value={data.port ?? ""} />
+        <input type="hidden" name="cli_device" value={data.device ?? ""} />
           <button type="submit" aria-label="Continue with Google" class="btn-secondary w-full cursor-pointer">
             Continue with Google
           </button>
@@ -112,6 +115,7 @@ let loading = $state(false);
           <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
           <input type="hidden" name="cli_state" value={data.state ?? ""} />
           <input type="hidden" name="cli_port" value={data.port ?? ""} />
+        <input type="hidden" name="cli_device" value={data.device ?? ""} />
           <button type="submit" aria-label="Continue with GitHub" class="btn-secondary w-full cursor-pointer">
             Continue with GitHub
           </button>
@@ -139,6 +143,7 @@ let loading = $state(false);
             <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
             <input type="hidden" name="cli_state" value={data.state ?? ""} />
             <input type="hidden" name="cli_port" value={data.port ?? ""} />
+        <input type="hidden" name="cli_device" value={data.device ?? ""} />
             <label for="cli-login-email" class="sr-only">Email</label>
             <input id="cli-login-email" type="email" name="email" placeholder="Email" required
               value={form?.email ?? ""}
@@ -174,6 +179,7 @@ let loading = $state(false);
             <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
             <input type="hidden" name="cli_state" value={data.state ?? ""} />
             <input type="hidden" name="cli_port" value={data.port ?? ""} />
+        <input type="hidden" name="cli_device" value={data.device ?? ""} />
             <label for="cli-magic-email" class="sr-only">Email</label>
             <input id="cli-magic-email" type="email" name="email" placeholder="Email" required
               value={form?.email ?? ""}
@@ -219,6 +225,7 @@ let loading = $state(false);
           <input type="hidden" name="cli_challenge" value={data.challenge ?? ""} />
           <input type="hidden" name="cli_state" value={data.state ?? ""} />
           <input type="hidden" name="cli_port" value={data.port ?? ""} />
+        <input type="hidden" name="cli_device" value={data.device ?? ""} />
           <label for="cli-signup-email" class="sr-only">Email</label>
           <input id="cli-signup-email" type="email" name="email" placeholder="Email" required
             value={form?.email ?? ""}

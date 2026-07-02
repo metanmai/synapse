@@ -2,40 +2,26 @@ import { env } from "$env/dynamic/private";
 import { getSupabase } from "$lib/server/auth";
 import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
+import { buildRedirect, getCliParams } from "./cli-params";
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   const challenge = url.searchParams.get("challenge");
   const state = url.searchParams.get("state");
   const port = url.searchParams.get("port");
+  const device = url.searchParams.get("device");
   const hasCli = Boolean(challenge && state && port);
 
   return {
     challenge,
     state,
     port,
+    device,
     hasCli,
     authenticated: Boolean(locals.user),
     email: locals.user?.email ?? null,
     error: null,
   };
 };
-
-function getCliParams(formData: FormData): { challenge: string | null; state: string | null; port: string | null } {
-  return {
-    challenge: (formData.get("cli_challenge") as string) || null,
-    state: (formData.get("cli_state") as string) || null,
-    port: (formData.get("cli_port") as string) || null,
-  };
-}
-
-function buildRedirect(cli: { challenge: string | null; state: string | null; port: string | null }): string {
-  const params = new URLSearchParams();
-  if (cli.challenge) params.set("challenge", cli.challenge);
-  if (cli.state) params.set("state", cli.state);
-  if (cli.port) params.set("port", cli.port);
-  const qs = params.toString();
-  return qs ? `/cli-auth?${qs}` : "/cli-auth";
-}
 
 export const actions: Actions = {
   login: async ({ request, cookies }) => {
@@ -136,7 +122,10 @@ export const actions: Actions = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${locals.token}`,
       },
-      body: JSON.stringify({ code_challenge: cli.challenge }),
+      body: JSON.stringify({
+        code_challenge: cli.challenge,
+        ...(cli.device ? { device_name: cli.device } : {}),
+      }),
     });
 
     if (!res.ok) {
