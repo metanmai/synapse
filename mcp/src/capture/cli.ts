@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import * as clack from "@clack/prompts";
 import { accent, bold, muted, success } from "../cli/theme.js";
 import { DaemonManager } from "./daemon.js";
-import { caStatus, installCa, uninstallCa } from "./proxy/onboarding.js";
+import { OpensslMissingError, caStatus, installCa, uninstallCa } from "./proxy/onboarding.js";
 import {
   deleteProxyConfig,
   effectiveProxyEnabled,
@@ -197,7 +197,20 @@ function proxyHelp(): void {
 
 function proxyInstall(): void {
   clack.intro(`${accent("◆")} ${bold("Synapse Proxy")} — install CA`);
-  const r = installCa();
+  let r: ReturnType<typeof installCa>;
+  try {
+    r = installCa();
+  } catch (err) {
+    // Surface `OpensslMissingError` as a clean operator-facing message with
+    // the platform-specific install hint, instead of a raw stack trace.
+    if (err instanceof OpensslMissingError) {
+      clack.log.error("Missing prerequisite: openssl");
+      clack.log.message(muted(`  ${err.installHint}`));
+      clack.outro(muted("Install openssl and re-run `synapsesync capture proxy install`."));
+      process.exit(1);
+    }
+    throw err;
+  }
   clack.log.message(
     [`  ${bold("CA path:")}      ${r.caPath}`, `  ${bold("Fingerprint:")}  ${muted(r.fingerprint)}`].join("\n"),
   );
