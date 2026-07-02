@@ -15,7 +15,7 @@ const dayGroups = $derived(groupByDay(feed));
       <div class="empty-icon">📋</div>
       <p class="empty-title">No activity yet</p>
       <p class="empty-desc">
-        Run <code>synapsesync-mcp capture start</code> to begin capturing sessions.
+        Run <code>synapsesync capture start</code> to begin capturing sessions.
         Activity will appear here as sessions are captured and knowledge is extracted.
       </p>
     </div>

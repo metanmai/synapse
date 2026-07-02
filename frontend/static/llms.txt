@@ -19,8 +19,8 @@ Synapse gives AI tools (Claude, ChatGPT, Cursor) persistent memory across sessio
 - GET /api/context/:project/search?q= - Search historical files (semantic + full-text + keyword)
 
 ## MCP Server
-npm package: synapsesync-mcp
-Install: npm install -g synapsesync-mcp && synapsesync-mcp wizard
+npm package: synapsesync
+Install: npm install -g synapsesync && synapsesync wizard
 
 Agents save new knowledge via `save_insight`. Reads for historical filesystem browsing are available too.
 

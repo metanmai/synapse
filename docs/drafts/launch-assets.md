@@ -18,7 +18,7 @@ So I built Synapse. It has three stages:
 
 The cycle is automatic: sessions in, knowledge out, context everywhere.
 
-Setup: `npm install -g synapsesync-mcp && synapsesync-mcp wizard && synapsesync-mcp capture start`
+Setup: `npm install -g synapsesync && synapsesync wizard && synapsesync capture start`
 
 Supports Anthropic, OpenAI, and Google for the distillation step. Workspace has semantic search, version history, E2E encryption, and team sharing.
 
@@ -61,9 +61,9 @@ Next session, your tools already know what you decided last time.
 Setup is three commands:
 
 ```
-npm install -g synapsesync-mcp
-synapsesync-mcp wizard
-synapsesync-mcp capture start
+npm install -g synapsesync
+synapsesync wizard
+synapsesync capture start
 ```
 
 Go back to work. Synapse handles the rest.
@@ -99,7 +99,7 @@ So I built Synapse. It does three things:
 **1. Captures automatically.** A background daemon watches Claude Code's session files (and Cursor, Codex, Gemini). You don't do anything -- it just runs.
 
 ```
-synapsesync-mcp capture start
+synapsesync capture start
 ```
 
 **2. Distills the knowledge.** When a session goes idle, Synapse sends it to an LLM that extracts decisions, architecture notes, and learnings. Trivial exchanges are skipped. Only the valuable stuff is kept.
@@ -148,11 +148,11 @@ Adapter pattern makes adding new tools trivial -- implement `watchPaths()` and `
 Tech: TypeScript, Cloudflare Workers + Hono, Supabase, SvelteKit dashboard, chokidar for filesystem watching.
 
 ```
-synapsesync-mcp capture start
-synapsesync-mcp distill --latest
+synapsesync capture start
+synapsesync distill --latest
 ```
 
-MIT license. npm: synapsesync-mcp. https://synapsesync.app
+MIT license. npm: synapsesync. https://synapsesync.app
 
 Interested in how others are handling context persistence across MCP clients.
 
