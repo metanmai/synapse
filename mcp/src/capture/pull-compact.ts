@@ -550,9 +550,12 @@ async function attemptLocalCompaction(
   conv: { id: string },
   log: (msg: string) => void,
 ): Promise<string | null> {
-  // Fetch the conversation's messages from the backend. The list-endpoint
-  // metadata-only response doesn't include messages — we need the full
-  // row's nested `messages` array.
+  // Fetch the conversation's messages from the backend. The backend's
+  // GET /api/conversations/:id returns `{conversation, messages, context}`
+  // with the messages array as a TOP-LEVEL field, NOT nested inside
+  // conversation. Older callers that read `conversation.messages` get
+  // an empty array and silently skip — that's what was happening to the
+  // local-compact path before this fix.
   let messages: ChatMessage[] = [];
   let title: string | null = null;
   try {
@@ -562,19 +565,17 @@ async function attemptLocalCompaction(
       return null;
     }
     const body = (await res.json()) as {
-      conversation?: { messages?: Array<{ role: string; content: string | null }>; title?: string | null };
+      conversation?: { title?: string | null };
       messages?: Array<{ role: string; content: string | null }>;
-      title?: string | null;
     };
-    const full = "conversation" in body && body.conversation ? body.conversation : body;
-    const rawMessages = full.messages ?? [];
+    const rawMessages = body.messages ?? [];
     messages = rawMessages
       .filter((m) => typeof m.content === "string" && m.content.length > 0)
       .map((m) => ({
         role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
         content: m.content as string,
       }));
-    title = full.title ?? null;
+    title = body.conversation?.title ?? null;
   } catch (err) {
     log(`local-compact: full GET threw: ${err instanceof Error ? err.message : err}`);
     return null;
