@@ -24,7 +24,13 @@ let confirmDelete = $state(false);
 let actionLoading = $state("");
 
 const projectName = $derived(data.project.name);
-const encodedProject = $derived(encodeURIComponent(projectName));
+// Shared projects use `<owner_email>~<name>` as the URL slug; bare name only
+// works for owner-role projects. `projectName` stays as the display name; the
+// encoded slug is what we put in /projects/<...> URLs.
+const projectSlug = $derived(
+  data.project.role === "owner" ? data.project.name : `${data.project.owner_email}~${data.project.name}`,
+);
+const encodedProject = $derived(encodeURIComponent(projectSlug));
 
 const sourceTool = $derived(
   (conv?.metadata?.source_tool as string | undefined) ?? (messages.length > 0 ? messages[0].source_agent : undefined),

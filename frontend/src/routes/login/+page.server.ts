@@ -1,4 +1,5 @@
 import { getSupabase } from "$lib/server/auth";
+import { safeRedirectTarget } from "$lib/server/safe-redirect";
 import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -28,14 +29,14 @@ export const actions: Actions = {
       return fail(400, { error: error.message, email });
     }
 
-    const redirectTo = url.searchParams.get("redirect") || "/dashboard";
+    const redirectTo = safeRedirectTarget(url.searchParams.get("redirect"));
     redirect(303, redirectTo);
   },
 
   magicLink: async ({ request, cookies, url }) => {
     const data = await request.formData();
     const email = data.get("email") as string;
-    const redirectTo = url.searchParams.get("redirect") || "/dashboard";
+    const redirectTo = safeRedirectTarget(url.searchParams.get("redirect"));
 
     const supabase = getSupabase(cookies);
     const { error } = await supabase.auth.signInWithOtp({
@@ -53,7 +54,7 @@ export const actions: Actions = {
   oauth: async ({ request, cookies, url }) => {
     const data = await request.formData();
     const provider = data.get("provider") as "google" | "github";
-    const redirectTo = url.searchParams.get("redirect") || "/dashboard";
+    const redirectTo = safeRedirectTarget(url.searchParams.get("redirect"));
 
     const supabase = getSupabase(cookies);
     const { data: oauthData, error } = await supabase.auth.signInWithOAuth({

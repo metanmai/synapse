@@ -26,7 +26,10 @@ async function request<T>(path: string, token: string | null, options: RequestIn
 
   const url = `${API_URL}${path}`;
   const method = options.method ?? "GET";
-  console.log(`[api] ${method} ${url}`);
+  // Per-request stdout log removed: paths contain user emails (e.g.
+  // /api/projects/<owner_email>~<name>/...) which leaked to Cloudflare
+  // Workers logs as PII. Re-enable behind an env flag if needed for debug.
+  if (env.LOG_API_CALLS === "1") console.log(`[api] ${method} ${url}`);
 
   let res: Response;
   try {

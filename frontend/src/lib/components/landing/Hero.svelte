@@ -37,6 +37,7 @@ onMount(() => {
         learnings — into a curated knowledge layer your next session opens with.
       </p>
       <div class="hero-actions">
+        <a href="/signup" class="hero-primary">Get started — free</a>
         <a href="#how-it-works" class="hero-secondary">See how it works</a>
       </div>
     </div>
@@ -257,6 +258,27 @@ onMount(() => {
     align-items: center;
     gap: 1.5rem;
     flex-wrap: wrap;
+  }
+
+  .hero-primary {
+    background: var(--color-burgundy);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: none;
+    padding: 0.85rem 1.5rem;
+    border-radius: 8px;
+    transition: background 0.2s, transform 0.1s;
+    box-shadow: 0 4px 12px rgba(109, 41, 50, 0.25);
+  }
+
+  .hero-primary:hover {
+    background: var(--color-burgundy-dark, #5a2129);
+    transform: translateY(-1px);
+  }
+
+  .hero-primary:active {
+    transform: translateY(0);
   }
 
   .hero-secondary {

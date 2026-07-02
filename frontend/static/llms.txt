@@ -25,8 +25,8 @@ Install: npm install -g synapsesync && synapsesync wizard
 Agents save new knowledge via `save_insight` and browse existing entries via `list_insights`. (The v1.0 filesystem-style MCP tools were removed in v1.1 — use the REST API for project/context reads.)
 
 ## Tiers
-- Free: 50 files, 3 connections, 3 version history, 2 team members, insights included
-- Plus ($5.99/mo): 500 files, unlimited connections, full history, unlimited members, AI-generated project context
+- Free: up to 5 projects, all capture features, MCP access, team sharing
+- Plus ($5.99/mo): up to 50 projects, unlimited team members per project
 
 ## Documentation
 - API docs: https://synapsesync.app/docs.md
