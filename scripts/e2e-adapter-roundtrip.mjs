@@ -407,6 +407,28 @@ async function main() {
       ok(`pipeline-${tool}`, `captured + synced (${tool}, ${expectedSesId.slice(0, 12)}…)`);
     } else if (captured && !synced) {
       fail(`pipeline-${tool}`, `${tool} captured locally but NOT synced to cloud — backend POST failed silently`);
+      // DIAGNOSTIC: surface every daemon log line that mentions this
+      // tool's session id. CloudSync logs "Failed to create conversation
+      // after 3 attempts: HTTP <status>" and capture-worker logs
+      // "Sync FAILED for session..." — without echoing these to stdout,
+      // the test framework swallows the actual error from view.
+      const relevantLines = logSlice
+        .split("\n")
+        .filter(
+          (l) =>
+            l.includes(expectedSesId) ||
+            l.includes(`from ${tool}`) ||
+            l.includes("Failed") ||
+            l.includes("Sync FAILED") ||
+            l.includes("Cloud sync error"),
+        );
+      if (relevantLines.length > 0) {
+        for (const line of relevantLines.slice(-15)) {
+          info(`[daemon log] ${line.slice(0, 250)}`);
+        }
+      } else {
+        info(`[daemon log] (no relevant lines found for ${expectedSesId} or 'from ${tool}')`);
+      }
     } else if (!captured) {
       fail(`pipeline-${tool}`, `${tool} NOT captured — watcher/adapter never fired (chokidar missed the file?)`);
     }
