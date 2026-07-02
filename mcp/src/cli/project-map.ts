@@ -1,0 +1,35 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+export interface ProjectMapping {
+  project_id: string;
+  project_name: string;
+  updated_at: string;
+}
+
+export type ProjectMap = Record<string, ProjectMapping>;
+
+export function getProjectMapPath(): string {
+  return path.join(os.homedir(), ".synapse", "project-map.json");
+}
+
+export function readProjectMap(): ProjectMap {
+  try {
+    const raw = fs.readFileSync(getProjectMapPath(), "utf-8");
+    return JSON.parse(raw) as ProjectMap;
+  } catch {
+    return {};
+  }
+}
+
+export function upsertProjectMapping(
+  cwd: string,
+  entry: { project_id: string; project_name: string },
+): void {
+  const p = getProjectMapPath();
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  const map = readProjectMap();
+  map[cwd] = { ...entry, updated_at: new Date().toISOString() };
+  fs.writeFileSync(p, JSON.stringify(map, null, 2));
+}
