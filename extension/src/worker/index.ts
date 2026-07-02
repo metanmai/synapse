@@ -38,7 +38,7 @@ async function updateBadge(buffer: CaptureBuffer): Promise<void> {
   await Promise.resolve();
 }
 
-async function postCapture(port: number, token: string, host: string, turns: BufferedTurn[]): Promise<boolean> {
+export async function postCapture(port: number, token: string, host: string, turns: BufferedTurn[]): Promise<boolean> {
   try {
     const res = await fetch(`http://127.0.0.1:${port}/capture`, {
       method: "POST",
@@ -90,26 +90,31 @@ async function heartbeat(host: string): Promise<void> {
   }
 }
 
-async function handleTurn(turn: BufferedTurn): Promise<void> {
+export async function handleTurn(turn: BufferedTurn): Promise<void> {
   const buffer = await loadBuffer();
   buffer.add(turn);
   await saveBuffer(buffer);
   await flush();
 }
 
-chrome.runtime.onMessage.addListener((message) => {
-  const m = message as RelayMessage;
-  if (!m || m.__synapse !== true || typeof m.host !== "string") return;
-  if (m.kind === "heartbeat") {
-    void heartbeat(m.host);
-    return;
-  }
-  if (m.kind === "turn" && typeof m.content === "string") {
-    void handleTurn({
-      host: m.host,
-      role: m.role === "assistant" ? "assistant" : "user",
-      content: m.content,
-      ts: new Date().toISOString(),
-    });
-  }
-});
+/** Register the relay→worker message listener. Called at load in the worker; tests call it after stubbing chrome. */
+export function installWorker(): void {
+  chrome.runtime.onMessage.addListener((message) => {
+    const m = message as RelayMessage;
+    if (!m || m.__synapse !== true || typeof m.host !== "string") return;
+    if (m.kind === "heartbeat") {
+      void heartbeat(m.host);
+      return;
+    }
+    if (m.kind === "turn" && typeof m.content === "string") {
+      void handleTurn({
+        host: m.host,
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: m.content,
+        ts: new Date().toISOString(),
+      });
+    }
+  });
+}
+
+if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) installWorker();
