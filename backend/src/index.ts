@@ -8,6 +8,7 @@ import { context } from "./api/context";
 import { conversations } from "./api/conversations";
 import { insights } from "./api/insights";
 import { projects } from "./api/projects";
+import { projectsResolve } from "./api/projects-resolve";
 import { share } from "./api/share";
 import { sync } from "./api/sync";
 import { runDailyAggregation } from "./cron/aggregate";
@@ -66,6 +67,7 @@ app.route("/auth", auth);
 
 // Authenticated routes
 app.route("/api/context", context);
+app.route("/api/projects", projectsResolve);
 app.route("/api/projects", projects);
 app.route("/api/sync", sync);
 app.route("/api/share", share);
