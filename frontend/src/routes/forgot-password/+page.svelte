@@ -41,9 +41,15 @@ let loading = $state(false);
         {/if}
         <button type="submit" disabled={loading}
           class="btn-primary w-full cursor-pointer"
-          style={loading ? 'opacity: 0.6;' : ''}
         >
-          {loading ? "Sending..." : "Send reset link"}
+          {#if loading}
+            <span class="flex items-center justify-center gap-2">
+              <span class="spinner spinner-sm spinner-white"></span>
+              Sending...
+            </span>
+          {:else}
+            Send reset link
+          {/if}
         </button>
       </form>
 
