@@ -308,31 +308,43 @@ if (!isMcpServerMode(args)) {
   // --- save_insight: store a decision/learning/preference/architecture/action_item ---
   server.tool(
     "save_insight",
-    "Save a key insight about the project — a decision, learning, preference, architecture note, or action item. Call this whenever something worth remembering comes up during a session.",
+    "Save a key insight about the project — a decision, learning, preference, architecture note, or action item. Call this whenever something worth remembering comes up during a session. Optionally pass `supersedes` with insight IDs that this new one replaces; those will be marked superseded and excluded from future briefs.",
     {
       project: z.string().describe("Project name"),
       type: z.enum(["decision", "learning", "preference", "architecture", "action_item"]).describe("Type of insight"),
       summary: z.string().describe("Short summary of the insight"),
       detail: z.string().optional().describe("Optional longer explanation or context"),
+      supersedes: z
+        .array(z.string().uuid())
+        .optional()
+        .describe(
+          "Optional list of insight IDs that this new insight replaces. Pass when your save makes an earlier insight obsolete or wrong. The named insights will be marked as 'superseded' and excluded from future briefs.",
+        ),
     },
     { destructiveHint: true },
-    async ({ project, type, summary, detail }) => {
+    async ({ project, type, summary, detail, supersedes }) => {
       const projectId = await resolveProjectId(project, true);
       if (!projectId) {
         return { content: [{ type: "text" as const, text: `Project "${project}" not found.` }], isError: true };
       }
 
       try {
-        const insight = (await api("POST", "/api/insights", {
+        const body: Record<string, unknown> = {
           project_id: projectId,
           type,
           summary,
           detail: detail ?? null,
           source: { type: "session", agent: SOURCE },
-        })) as InsightResponse;
+        };
+        if (supersedes && supersedes.length > 0) {
+          body.supersedes = supersedes;
+        }
+        const insight = (await api("POST", "/api/insights", body)) as InsightResponse;
 
+        const supersedeNote =
+          supersedes && supersedes.length > 0 ? ` (superseded ${supersedes.length} prior insight(s))` : "";
         return {
-          content: [{ type: "text" as const, text: `Saved ${type} insight: "${insight.summary}"` }],
+          content: [{ type: "text" as const, text: `Saved ${type} insight: "${insight.summary}"${supersedeNote}` }],
         };
       } catch (_e) {
         return {

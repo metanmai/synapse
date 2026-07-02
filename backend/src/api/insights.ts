@@ -32,13 +32,17 @@ insights.get("/", async (c) => {
   const offsetStr = c.req.query("offset");
   const limit = limitStr ? Number.parseInt(limitStr) : undefined;
   const offset = offsetStr ? Number.parseInt(offsetStr) : undefined;
+  // Curation knob (migration 024). Default false — briefs / dashboards
+  // should NOT show superseded rows. Pass `?include_superseded=true` to
+  // get the full audit history including replaced insights.
+  const includeSuperseded = c.req.query("include_superseded") === "true";
 
   const db = c.get("db");
 
   // Verify the user is a member of the project
   await requireRole(db, projectId, user.id);
 
-  const result = await listInsights(db, projectId, { type, limit, offset });
+  const result = await listInsights(db, projectId, { type, limit, offset, includeSuperseded });
   return c.json(result);
 });
 
@@ -59,6 +63,10 @@ insights.post("/", async (c) => {
     summary: body.summary,
     detail: body.detail ?? null,
     source: body.source ?? null,
+    // Pass-through curation list. createInsight() does the project-scoped,
+    // idempotent UPDATE post-insert; failures there are non-fatal and
+    // logged, so the API response shape stays stable regardless.
+    supersedes: body.supersedes,
   });
 
   await logActivity(db, {

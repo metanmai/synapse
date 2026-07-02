@@ -3,9 +3,10 @@ import { singleOrNull } from "../query-helpers";
 import { mergeSearchTiers, runFulltextSearch, runIlikeSearch } from "../search-helpers";
 import type { Insight, InsightListItem, InsightSource, InsightType } from "../types";
 
-const INSIGHT_COLUMNS = "id, project_id, user_id, type, summary, detail, source, encrypted, created_at, updated_at";
+const INSIGHT_COLUMNS =
+  "id, project_id, user_id, type, summary, detail, source, encrypted, created_at, updated_at, superseded_by";
 
-const INSIGHT_LIST_COLUMNS = "id, type, summary, source, created_at, updated_at";
+const INSIGHT_LIST_COLUMNS = "id, type, summary, source, created_at, updated_at, superseded_by";
 
 export async function createInsight(
   db: SupabaseClient,
@@ -17,6 +18,20 @@ export async function createInsight(
     detail?: string | null;
     source?: InsightSource | null;
     encrypted?: boolean;
+    /**
+     * Optional list of insight UUIDs this new insight replaces. After the
+     * INSERT succeeds, those rows get `superseded_by = <new_id>` set so
+     * they stop appearing in default brief / list queries.
+     *
+     * Scope rules (enforced in the UPDATE WHERE clause, not the caller):
+     *   - same project only (no cross-project supersession)
+     *   - only already-active rows get stamped (idempotent on retry)
+     *
+     * Failures stamping individual rows are non-fatal — they're logged and
+     * swallowed. The contract is "the new insight saved"; the supersession
+     * stamp is a best-effort cleanup that the next call can re-apply.
+     */
+    supersedes?: string[];
   },
 ): Promise<Insight> {
   const { data, error } = await db
@@ -33,19 +48,51 @@ export async function createInsight(
     .select(INSIGHT_COLUMNS)
     .single();
   if (error) throw error;
-  return data as Insight;
+  const insight = data as Insight;
+
+  // Best-effort supersession stamp. Empty / undefined → no-op.
+  if (params.supersedes && params.supersedes.length > 0) {
+    try {
+      const { error: supersedeError } = await db
+        .from("insights")
+        .update({ superseded_by: insight.id })
+        .in("id", params.supersedes)
+        // SECURITY: only stamp rows in the same project — prevents a
+        // malicious caller from pointing supersedes at insight ids in
+        // projects they don't own.
+        .eq("project_id", params.project_id)
+        // IDEMPOTENT: if a row was already superseded by a previous call,
+        // leave its existing pointer alone. Re-running save_insight with
+        // the same supersedes list should be a no-op, not a re-stamp.
+        .is("superseded_by", null);
+      if (supersedeError) {
+        console.error(
+          `[db] createInsight: supersession stamp failed for ${params.supersedes.length} row(s) — ${supersedeError.message}`,
+        );
+      }
+    } catch (e) {
+      console.error(`[db] createInsight: supersession stamp threw — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  return insight;
 }
 
 export async function listInsights(
   db: SupabaseClient,
   projectId: string,
-  options?: { type?: InsightType; limit?: number; offset?: number },
+  options?: { type?: InsightType; limit?: number; offset?: number; includeSuperseded?: boolean },
 ): Promise<{ insights: InsightListItem[]; total: number }> {
+  const includeSuperseded = options?.includeSuperseded ?? false;
+
   // Get total count
   let countQuery = db.from("insights").select("*", { count: "exact", head: true }).eq("project_id", projectId);
 
   if (options?.type) {
     countQuery = countQuery.eq("type", options.type);
+  }
+  if (!includeSuperseded) {
+    countQuery = countQuery.is("superseded_by", null);
   }
 
   const { count, error: countError } = await countQuery;
@@ -60,6 +107,9 @@ export async function listInsights(
 
   if (options?.type) {
     query = query.eq("type", options.type);
+  }
+  if (!includeSuperseded) {
+    query = query.is("superseded_by", null);
   }
   if (options?.limit) {
     query = query.limit(options.limit);

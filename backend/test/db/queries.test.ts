@@ -58,6 +58,7 @@ function createSequentialMockDb(...responses: { data?: unknown; error?: unknown;
       "eq",
       "neq",
       "in",
+      "is",
       "like",
       "or",
       "overlaps",
