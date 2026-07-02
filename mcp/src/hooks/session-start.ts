@@ -4,6 +4,7 @@ import { EventKind } from "@synapse/shared/handoff/events.js";
 import { resolveActor } from "../capture/actor.js";
 import { appendEvent } from "../capture/events-log.js";
 import { briefCachePath, currentSessionPath, projectDir } from "../capture/handoff-paths.js";
+import { pullHandoff } from "../capture/pull-compact.js";
 
 const MAX_BRIEF_LINES = 30;
 
@@ -35,7 +36,20 @@ export async function runSessionStartHook(args: SessionStartArgs): Promise<void>
   } else if (!args.skipFallback) {
     brief = `Project: ${args.project_id}\n(no cached context — daemon will populate on next sync)`;
   }
-  args.stdout.write(`<synapse-brief>\n${brief.trim()}\n</synapse-brief>\n`);
+
+  // Pull the most-recent conversation's "where I left off" handoff so the
+  // new agent inherits the previous one's working memory. Best-effort: any
+  // failure (no API key, no project mapping, network error) leaves the
+  // brief unchanged. Commit 4 adds a hard timeout around this call.
+  let handoff: string | null = null;
+  try {
+    handoff = await pullHandoff({ cwd });
+  } catch {
+    handoff = null;
+  }
+
+  const composed = handoff ? `${brief.trim()}\n\n## Last conversation handoff\n\n${handoff.trim()}` : brief.trim();
+  args.stdout.write(`<synapse-brief>\n${composed}\n</synapse-brief>\n`);
 
   appendEvent(projectDir(args.project_id), {
     project_id: args.project_id,
