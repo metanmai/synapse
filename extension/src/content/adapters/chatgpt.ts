@@ -46,6 +46,15 @@ export function parseChatGPTResponse(responseText: string): CapturedTurn | null 
       }
     }
 
+    // New "patch" format: {o:"patch", v:[{p:"/message/content/parts/0", o:"append", v:"text"}]}
+    if (e.o === "patch" && Array.isArray(e.v)) {
+      for (const op of e.v as Array<{ p?: unknown; o?: unknown; v?: unknown }>) {
+        if (op.p === "/message/content/parts/0" && op.o === "append" && typeof op.v === "string") {
+          appended += op.v;
+        }
+      }
+    }
+
     // Legacy delta format: {o:"append", p:".../parts/0", v:"..."}
     if (typeof e.v === "string" && (e.o === "append" || typeof e.p === "undefined" || String(e.p).includes("parts"))) {
       appended += e.v;

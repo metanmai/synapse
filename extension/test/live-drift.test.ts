@@ -82,10 +82,10 @@ async function captureLiveTurn(adapter: CaptureAdapter, openUrl: string, label: 
     await page.waitForSelector('div[contenteditable="true"], textarea, [role="textbox"]', { timeout: 15_000 });
     const input = page.locator('div[contenteditable="true"], textarea, [role="textbox"]').first();
     await input.click();
-    await page.keyboard.type("hello", { delay: 30 });
+    await page.keyboard.type("What are 3 interesting facts about octopuses?", { delay: 10 });
     await page.keyboard.press("Enter");
     // eslint-disable-next-line no-console
-    console.log(`  [${label}] Typed "hello" and pressed Enter`);
+    console.log(`  [${label}] Typed prompt and pressed Enter`);
   } catch {
     // eslint-disable-next-line no-console
     console.log(`  [${label}] Could not find input — page may require login (title: "${await page.title().catch(() => "?")}")`);
