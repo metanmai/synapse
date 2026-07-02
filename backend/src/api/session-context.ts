@@ -44,13 +44,19 @@ sessionContext.get("/workspace/recent-projects", async (c) => {
 
   const { data, error } = await db
     .from("projects")
-    .select("id, name, updated_at")
-    .eq("user_id", user.id)
-    .order("updated_at", { ascending: false })
+    .select("id, name, created_at, project_members!inner(user_id)")
+    .eq("project_members.user_id", user.id)
+    .order("created_at", { ascending: false })
     .limit(5);
   if (error) throw error;
 
-  return c.json({ projects: data ?? [] });
+  return c.json({
+    projects: (data ?? []).map((p: { id: string; name: string; created_at: string }) => ({
+      id: p.id,
+      name: p.name,
+      updated_at: p.created_at, // expose as updated_at for API stability — schema only has created_at today
+    })),
+  });
 });
 
 export { sessionContext };
