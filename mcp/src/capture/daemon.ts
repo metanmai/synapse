@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { EventKind } from "@synapse/shared/handoff/events.js";
-import { type Supervisor, checkSupervisor } from "../cli/util/daemon-supervisor.js";
+import { type Supervisor, type SupervisorStatus, checkSupervisor } from "../cli/util/daemon-supervisor.js";
 import { BASE_DELAY_MS, computeNextDelay } from "./daemon-backoff.js";
 import { spawnInferNextStep } from "./daemon-cc.js";
 import { appendEvent, readEvents } from "./events-log.js";
@@ -33,16 +33,48 @@ interface DaemonStatus {
   supervisor: Supervisor;
 }
 
+/**
+ * Dependency-injection options for `DaemonManager`. Tests pass these to
+ * exercise the supervisor branches (tier-1) and the PID-file fallback
+ * (tier-2) without touching real OS service supervisors. Production callers
+ * omit the bag entirely — defaults wire the real `checkSupervisor` and
+ * real `process.kill` signal-0 probe.
+ */
+export interface DaemonManagerOptions {
+  /** Override the supervisor probe. Default: the real `checkSupervisor`. */
+  supervisorCheck?: () => SupervisorStatus;
+  /**
+   * Override the liveness probe used in the PID-file fallback. Default:
+   * `process.kill(pid, 0)` — throws when the PID is dead, returns void when
+   * alive. Tests can pass an alive/dead-predicate-style fake to avoid having
+   * to find a real running PID on the host.
+   */
+  processAlive?: (pid: number) => boolean;
+}
+
 export class DaemonManager {
   private dir: string;
   private pidFile: string;
   private logFile: string;
+  private supervisorCheck: () => SupervisorStatus;
+  private processAlive: (pid: number) => boolean;
 
-  constructor(dir?: string) {
+  constructor(dir?: string, opts: DaemonManagerOptions = {}) {
     this.dir = dir ?? process.env.SYNAPSE_HOME ?? path.join(os.homedir(), ".synapse");
     fs.mkdirSync(this.dir, { recursive: true });
     this.pidFile = path.join(this.dir, "capture.pid");
     this.logFile = path.join(this.dir, "capture.log");
+    this.supervisorCheck = opts.supervisorCheck ?? checkSupervisor;
+    this.processAlive =
+      opts.processAlive ??
+      ((pid) => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      });
   }
 
   writePid(pid: number): void {
@@ -65,18 +97,16 @@ export class DaemonManager {
   }
 
   status(): DaemonStatus {
-    const sup = checkSupervisor();
+    const sup = this.supervisorCheck();
     if (sup.running) return sup;
     // Tier-2 fallback: PID file + signal-0 check.
     const pid = this.readPid();
     if (pid === null) return { running: false, pid: null, supervisor: null };
-    try {
-      process.kill(pid, 0);
+    if (this.processAlive(pid)) {
       return { running: true, pid, supervisor: null };
-    } catch {
-      this.cleanup();
-      return { running: false, pid: null, supervisor: null };
     }
+    this.cleanup();
+    return { running: false, pid: null, supervisor: null };
   }
 
   getLogFile(): string {
@@ -371,6 +401,15 @@ export function startHandoffLoop(a: HandoffLoopArgs): () => void {
           // history immediately, not after a fresh round of activity.
           await runEagerPullCycle({ project_id: effectiveId, api_key: a.api_key, api_url: a.api_url });
         }
+        // Still-unresolved cwd_ placeholders exist only on THIS machine —
+        // the backend learns about them (and answers with a canonical id)
+        // exclusively through the events flush above. Pulling / brief-
+        // writing / prewarming one before that remap lands just errors
+        // against the backend on every cycle (observed 2026-06-10: one
+        // stale placeholder spammed `pull failed: 500` for days). Flush-
+        // only until remapped; reconcileProjects prunes abandoned
+        // placeholders once their local dir is deleted.
+        if (effectiveId.startsWith("cwd_")) continue;
         await runPullCycle({ project_id: effectiveId, api_key: a.api_key, api_url: a.api_url });
         if (a.user_id) writeBrief(effectiveId, a.user_id);
         // Continuous handoff pre-warm — the killer-feature fix. Without

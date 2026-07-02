@@ -150,6 +150,58 @@ describe("handoff daemon loop", () => {
 
     stop();
   });
+
+  // Regression guard: bug class "daemon pulls/prewarms a project id the
+  // backend has never heard of". An UNRESOLVED cwd_<hash> placeholder is
+  // local-only until the events flush returns its canonical id; pulling it
+  // before then errors against the backend on EVERY cycle (observed
+  // 2026-06-10: one stale placeholder spammed `pull failed: 500` for days).
+  // The cycle must be flush-only for placeholders: no pull, no prewarm.
+  it("does not pull or prewarm an unresolved cwd_ placeholder (flush-only)", async () => {
+    const pseudoId = "cwd_feedface";
+    global.fetch = vi.fn(async (url: unknown) => {
+      // Flush succeeds but returns NO canonical mapping — the placeholder
+      // stays unresolved (e.g. backend at quota, or auth lacks project
+      // visibility). Any OTHER endpoint hit is the regression.
+      if (String(url).endsWith("/api/events/batch")) {
+        return new Response(JSON.stringify({ accepted: 1 }), { status: 200 });
+      }
+      return new Response("should not be called", { status: 500 });
+    }) as typeof fetch;
+    const prewarm = vi.fn();
+
+    const projectsDir = path.join(tmp, "projects");
+    const pseudoDir = path.join(projectsDir, pseudoId);
+    fs.mkdirSync(pseudoDir, { recursive: true });
+    fs.writeFileSync(path.join(pseudoDir, "events.jsonl"), `${JSON.stringify(makeEv("01EVENT_PLACEHOLDER"))}\n`);
+
+    const stop = startHandoffLoop({
+      projects: [pseudoId],
+      projects_dir: projectsDir,
+      api_key: "k",
+      api_url: "https://api.test",
+      _spawnPrewarmFn: prewarm,
+      pull_ms: 10000,
+      healthcheck_ms: 1000,
+      tier_override: "plus",
+      user_id: "u1",
+    });
+    fs.writeFileSync(path.join(tmp, "daemon-flush-now"), "");
+    await new Promise((r) => setTimeout(r, 250));
+
+    const urls = vi.mocked(global.fetch).mock.calls.map((c) => String(c[0]));
+    expect(
+      urls.some((u) => u.endsWith("/api/events/batch")),
+      "flush must still run for placeholders",
+    ).toBe(true);
+    expect(
+      urls.filter((u) => u.includes(`/api/projects/${pseudoId}/`)),
+      "no pull/status/brief calls for an unresolved placeholder",
+    ).toEqual([]);
+    expect(prewarm, "no prewarm spawn for an unresolved placeholder").not.toHaveBeenCalled();
+
+    stop();
+  });
 });
 
 function makeEv(eventId = "01HZA") {

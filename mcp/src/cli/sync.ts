@@ -22,9 +22,42 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { readEvents } from "../capture/events-log.js";
-import { projectDir } from "../capture/handoff-paths.js";
+import { projectDir, synapseRoot } from "../capture/handoff-paths.js";
 import { runFlushCycle, runPullCycle } from "../capture/handoff-sync.js";
 import { readProjectMap } from "./project-map.js";
+
+/**
+ * Union of project ids known to the map AND project dirs present on disk.
+ *
+ * The map alone is NOT enough: a first-contact cwd's placeholder queue
+ * (`projects/cwd_<hash>/events.jsonl`, written by hook-dispatch before any
+ * backend round-trip) has no map entry yet — map entries appear only after
+ * a successful sync or resolve. A map-only listing therefore silently
+ * skipped exactly the queues that most need the manual kick, leaving
+ * first-contact events stranded until the daemon's next projects-dir
+ * re-scan (~minutes). Mirrors the daemon's reconcileProjects disk-scan
+ * model. Exported for unit tests.
+ */
+export function listLocalProjectIds(
+  mapProjectIds: string[],
+  projectsDir: string,
+  fsApi: Pick<typeof fs, "readdirSync" | "statSync"> = fs,
+): string[] {
+  const ids = new Set(mapProjectIds);
+  try {
+    for (const name of fsApi.readdirSync(projectsDir)) {
+      if (typeof name !== "string" || name.startsWith(".")) continue;
+      try {
+        if (fsApi.statSync(path.join(projectsDir, name)).isDirectory()) ids.add(name);
+      } catch {
+        // dir vanished between readdir and stat — treat as gone
+      }
+    }
+  } catch {
+    // projects dir absent — fresh install, map ids are all we have
+  }
+  return [...ids];
+}
 
 const API_URL = process.env.SYNAPSE_API_URL ?? "https://api.synapsesync.app";
 
@@ -80,7 +113,10 @@ export async function runSync(): Promise<number> {
   startStep("Reading local event queue");
   const t1 = Date.now();
   const map = readProjectMap();
-  const projectIds = [...new Set(Object.values(map).map((m) => m.project_id))];
+  const projectIds = listLocalProjectIds(
+    Object.values(map).map((m) => m.project_id),
+    path.join(synapseRoot(), "projects"),
+  );
   let totalEvents = 0;
   for (const pid of projectIds) {
     try {
