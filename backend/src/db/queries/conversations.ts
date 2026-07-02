@@ -9,13 +9,14 @@ import type {
   ConversationStatus,
   FidelityMode,
   MessageRole,
+  ProjectContext,
   ToolInteraction,
 } from "../types";
 
 const CONVERSATION_COLUMNS =
-  "id, project_id, user_id, title, status, fidelity_mode, system_prompt, working_context, forked_from, fork_point, message_count, media_size, metadata, encrypted, created_at, updated_at";
+  "id, project_id, user_id, title, status, fidelity_mode, system_prompt, working_context, forked_from, fork_point, message_count, media_size, metadata, encrypted, created_at, updated_at, compacted_summary, compacted_at, compaction_model";
 
-const CONVERSATION_LIST_COLUMNS = "id, title, status, message_count, metadata, updated_at";
+const CONVERSATION_LIST_COLUMNS = "id, title, status, message_count, metadata, updated_at, compacted_at";
 
 const MESSAGE_COLUMNS =
   "id, conversation_id, sequence, role, content, tool_interaction, source_agent, source_model, token_count, cost, attachments_summary, parent_message_id, encrypted, created_at";
@@ -343,4 +344,74 @@ export async function getConversationContext(
     .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []) as ConversationContext[];
+}
+
+// --- Compaction ---
+
+export async function updateCompaction(
+  db: SupabaseClient,
+  conversationId: string,
+  summary: string,
+  model: string,
+): Promise<void> {
+  const { error } = await db
+    .from("conversations")
+    .update({
+      compacted_summary: summary,
+      compacted_at: new Date().toISOString(),
+      compaction_model: model,
+    })
+    .eq("id", conversationId);
+  if (error) throw error;
+}
+
+export async function getProjectContext(
+  db: SupabaseClient,
+  projectId: string,
+): Promise<ProjectContext | null> {
+  const { data, error } = await db
+    .from("project_context")
+    .select("id, project_id, summary, conversation_count, model, updated_at")
+    .eq("project_id", projectId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as ProjectContext) ?? null;
+}
+
+export async function upsertProjectContext(
+  db: SupabaseClient,
+  projectId: string,
+  summary: string,
+  conversationCount: number,
+  model: string,
+): Promise<void> {
+  const { error } = await db
+    .from("project_context")
+    .upsert(
+      {
+        project_id: projectId,
+        summary,
+        conversation_count: conversationCount,
+        model,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "project_id" },
+    );
+  if (error) throw error;
+}
+
+export async function getRecentCompactedSummaries(
+  db: SupabaseClient,
+  projectId: string,
+  limit = 5,
+): Promise<Array<{ id: string; title: string; compacted_summary: string; compacted_at: string }>> {
+  const { data, error } = await db
+    .from("conversations")
+    .select("id, title, compacted_summary, compacted_at")
+    .eq("project_id", projectId)
+    .not("compacted_summary", "is", null)
+    .order("compacted_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as Array<{ id: string; title: string; compacted_summary: string; compacted_at: string }>;
 }
