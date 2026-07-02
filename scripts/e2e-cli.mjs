@@ -41,6 +41,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
+import { sweepArtifacts } from "./e2e-cleanup.mjs";
 
 // ── Config ────────────────────────────────────────────────────────────────
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -672,7 +673,7 @@ function summary() {
   return 0;
 }
 
-function main() {
+async function main() {
   log("Synapse CLI contract test (deterministic, isolated)");
   log(`MCP: ${MCP_DIST}`);
   log(`RUN: ${RUN}`);
@@ -700,8 +701,22 @@ function main() {
         info(`WARN: failed to clean ${ROOT}: ${e.message}`);
       }
     }
+    // Defensive sweep: cli.mjs is documented local-only, but the
+    // direct-fetch family (purge-empty, invite, move) and setup_and_capture
+    // section can in some failure modes leave backend artifacts. Sweep by
+    // RUN tag for symmetry with other suites.
+    if (REAL_KEY) {
+      await sweepArtifacts({
+        apiKey: REAL_KEY,
+        patterns: [`-${RUN}`, `synapse-cli-e2e-${RUN}`],
+        log: (m) => log(m),
+      });
+    }
   }
   process.exit(summary());
 }
 
-main();
+main().catch((err) => {
+  console.error("fatal:", err);
+  process.exit(2);
+});

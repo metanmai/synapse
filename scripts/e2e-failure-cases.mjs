@@ -45,11 +45,18 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { sweepArtifacts } from "./e2e-cleanup.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const MCP_DIST = path.join(REPO_ROOT, "mcp", "dist", "index.js");
 const API_BASE = process.env.SYNAPSE_API_BASE ?? "https://api.synapsesync.app";
 const UNREACHABLE_API_BASE = "https://api-not-a-real-synapse-host-12345.invalid";
+
+// Single per-run timestamp embedded in every temp-dir basename. The daemon
+// auto-creates a backend project per unique git remote, named after the
+// cwd basename — so embedding RUN_ID makes every test-induced project name
+// sweepable with one substring match.
+const RUN_ID = Date.now();
 
 const results = [];
 let apiKey = null;
@@ -189,7 +196,7 @@ async function stageF1_2_bad_api_key() {
   }
 
   // Run hook with a bogus key
-  const cwd = mkdtempSync(path.join(tmpdir(), "f1-2-cwd-"));
+  const cwd = mkdtempSync(path.join(tmpdir(), `f1-2-cwd-${RUN_ID}-`));
   cleanupPaths.push(cwd);
   spawnSync("git", ["init", "-q"], { cwd });
 
@@ -253,7 +260,7 @@ async function stageF1_3_unreachable() {
 async function stageF2_1_no_git() {
   header("F2.1 · Cwd is a directory but not a git repo");
 
-  const cwd = mkdtempSync(path.join(tmpdir(), "f2-1-no-git-"));
+  const cwd = mkdtempSync(path.join(tmpdir(), `f2-1-no-git-${RUN_ID}-`));
   cleanupPaths.push(cwd);
 
   const { code, stdout } = fireHook("session-start", { session_id: "f2-1", cwd, source: "startup" });
@@ -269,7 +276,7 @@ async function stageF2_1_no_git() {
 async function stageF2_2_missing_cwd() {
   header("F2.2 · Cwd path does not exist");
 
-  const cwd = `/tmp/this-path-truly-does-not-exist-${Date.now()}`;
+  const cwd = `/tmp/this-path-truly-does-not-exist-${RUN_ID}`;
 
   const { code, stdout } = fireHook("session-start", { session_id: "f2-2", cwd, source: "startup" });
 
@@ -613,7 +620,7 @@ async function stageF_list_bogus() {
 async function stageF_recover() {
   header("F-RECOVER · System recovers after auth is restored");
 
-  const cwd = mkdtempSync(path.join(tmpdir(), "f-recover-"));
+  const cwd = mkdtempSync(path.join(tmpdir(), `f-recover-${RUN_ID}-`));
   cleanupPaths.push(cwd);
   spawnSync("git", ["init", "-q"], { cwd });
 
@@ -651,11 +658,23 @@ async function stageF_recover() {
 }
 
 // ── Cleanup ─────────────────────────────────────────────────────────────
-function cleanup() {
+async function cleanup() {
   for (const p of cleanupPaths) {
     try {
       rmSync(p, { recursive: true, force: true });
     } catch {}
+  }
+  // Sweep backend projects auto-created by the daemon during failure stages.
+  // Pre-fix this was completely absent — failure-cases never deleted any
+  // backend artifact, so every full e2e run leaked ~6-8 projects from this
+  // suite alone. Pattern matches our RUN_ID embedded in every cwd basename.
+  if (apiKey) {
+    await sweepArtifacts({
+      apiKey,
+      apiUrl: API_BASE,
+      patterns: [`-${RUN_ID}`],
+      log,
+    });
   }
 }
 
@@ -689,7 +708,7 @@ async function main() {
     results.push({ id: "uncaught", status: "FAIL", detail: err.message });
   } finally {
     header("CLEANUP");
-    cleanup();
+    await cleanup();
   }
 
   header("SUMMARY");

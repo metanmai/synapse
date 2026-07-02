@@ -37,6 +37,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { removeLocalProjectState, sweepArtifacts } from "./e2e-cleanup.mjs";
 
 // ── Configuration ────────────────────────────────────────────────────────
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -166,7 +167,17 @@ async function cleanup() {
     });
     if (res.ok) log(`  · cleanup: deleted project ${pid}`);
     else log(`  · cleanup: WARN failed to delete project ${pid} (HTTP ${res.status})`);
+    removeLocalProjectState(pid, { log });
   }
+  // Belt-and-suspenders sweep: the resilience test deliberately exercises
+  // edge cases (renamed folders, asymmetric URLs, no-origin) that can land
+  // 2-3 extra projects per stage — easy to miss in the explicit ID set.
+  await sweepArtifacts({
+    apiKey,
+    apiUrl: API_BASE,
+    patterns: [`-${RUN_ID}`],
+    log,
+  });
   for (const d of cleanupDirs) {
     if (existsSync(d)) {
       try {

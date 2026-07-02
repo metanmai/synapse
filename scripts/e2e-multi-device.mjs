@@ -48,6 +48,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { removeLocalProjectState, sweepArtifacts } from "./e2e-cleanup.mjs";
 
 // ── Configuration ────────────────────────────────────────────────────────
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -217,6 +218,15 @@ async function cleanup() {
     deviceBDaemonProc = null;
   }
 
+  // Belt-and-suspenders sweep: device-B daemon may have created auxiliary
+  // projects via auto-route; the named testProjectId may not be the only one.
+  await sweepArtifacts({
+    apiKey,
+    apiUrl: API_BASE,
+    patterns: [`-${RUN_ID}`],
+    log,
+  });
+
   if (testProjectId) {
     const res = await fetch(`${API_BASE}/api/projects/${testProjectId}?force=true`, {
       method: "DELETE",
@@ -224,6 +234,7 @@ async function cleanup() {
     });
     if (res.ok) log(`  · cleanup: deleted test project ${testProjectId}`);
     else log(`  · cleanup: WARN failed to delete project (HTTP ${res.status})`);
+    removeLocalProjectState(testProjectId, { log });
   }
 
   for (const d of [deviceADir, deviceBCwd, deviceBSynapseHome]) {
