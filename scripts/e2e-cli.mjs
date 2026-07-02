@@ -588,10 +588,58 @@ function section_destructive_guards() {
 
 // ── 7. Direct-fetch family (move / purge-empty) ────────────────────────────
 function section_direct_fetch() {
-  header("7 · DIRECT-FETCH FAMILY (move / purge-empty)");
+  header("7 · DIRECT-FETCH FAMILY (invite / sync / move / purge-empty)");
 
+  // ── invite ────────────────────────────────────────────────────────────
+  // Mints a project invite token. The happy path POSTs to /api/projects/
+  // <id>/invites and returns a join URL — testing it for real would land
+  // a row in the backend invites table. We cover the surface (no-key,
+  // missing-email, missing-project) without sending a real invitation.
+  let r = runCli(["invite"], { home: sb.empty });
+  expect(
+    "invite.usage",
+    r.code === 1 && r.all.includes("usage: synapsesync invite"),
+    `invite (no email) → exit 1 + usage (got exit ${r.code})`,
+  );
+  r = runCli(["invite", "test@example.com"], { home: sb.empty });
+  expect(
+    "invite.noKey",
+    r.code === 1 && r.all.includes("no API key configured"),
+    `invite <email> (no key) → exit 1 + "no API key configured" (got exit ${r.code})`,
+  );
+  // Has key + email but sb.keyed has no project map → resolveProjectIdFromCwd
+  // returns undefined and runInviteCmd throws "no project — run from a
+  // tracked project directory or pass --project <id>". Tests the
+  // project-resolution surface without making any network call.
+  r = runCli(["invite", "test@example.com"], { home: sb.keyed, key: REAL_KEY });
+  expect(
+    "invite.noProject",
+    r.code === 1 && r.all.includes("no project"),
+    `invite <email> (keyed, no project tracked) → exit 1 + "no project" (got exit ${r.code})`,
+  );
+
+  // ── sync ──────────────────────────────────────────────────────────────
+  // Manual flush trigger — pushes any queued local events to backend.
+  // sb.keyed has no .synapse/projects/ dir, so the "no projects tracked"
+  // branch fires: readProjectMap returns empty, projectIds.length === 0,
+  // prints "Nothing to sync" + exit 0. Safe happy-path proof without
+  // mutating any real account state.
+  r = runCli(["sync"], { home: sb.empty });
+  expect(
+    "sync.noKey",
+    r.code === 1 && r.all.includes("No API key found"),
+    `sync (no key) → exit 1 + "No API key found" (got exit ${r.code})`,
+  );
+  r = runCli(["sync"], { home: sb.keyed, key: REAL_KEY });
+  expect(
+    "sync.happy",
+    r.code === 0 && (r.all.includes("Nothing to sync") || r.all.includes("Sync complete")),
+    `sync (keyed, no projects in sandbox) → exit 0 + "Nothing to sync" (got exit ${r.code})`,
+  );
+
+  // ── move ──────────────────────────────────────────────────────────────
   // move: no key → refuse
-  let r = runCli(["move", "11111111-1111-4111-8111-111111111111", "someproject"], { home: sb.empty });
+  r = runCli(["move", "11111111-1111-4111-8111-111111111111", "someproject"], { home: sb.empty });
   expect(
     "move.noKey",
     r.code === 1 && r.all.includes("no API key configured"),
