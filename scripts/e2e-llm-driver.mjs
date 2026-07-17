@@ -303,6 +303,25 @@ export function toWellFormedUnicode(input) {
   return result;
 }
 
+/**
+ * Passing a Unicode JSON body as a Windows process argument can corrupt valid
+ * surrogate pairs before curl sees them. Move the body to curl's stdin so
+ * Node writes UTF-8 bytes directly and the command line remains ASCII-only.
+ *
+ * @param {string[]} args
+ * @returns {{ args: string[], input: string }}
+ */
+export function prepareCurlStdinPayload(args) {
+  const dataIndex = args.lastIndexOf("-d");
+  if (dataIndex < 0 || dataIndex + 1 >= args.length) {
+    throw new Error("provider curl args must include -d followed by a JSON body");
+  }
+  return {
+    args: [...args.slice(0, dataIndex), "--data-binary", "@-", ...args.slice(dataIndex + 2)],
+    input: args[dataIndex + 1],
+  };
+}
+
 // ── Direct-API: multi-provider ──────────────────────────────────────────
 
 /**
@@ -329,6 +348,7 @@ export function callProviderViaProxy({
 
   const body = { model, messages: [{ role: "user", content: toWellFormedUnicode(prompt) }] };
   const providerArgs = provider.buildCurlArgs(apiKey, body);
+  const { args: providerCurlArgs, input: requestBody } = prepareCurlStdinPayload(providerArgs);
 
   // Windows curl ships with SChannel as its TLS backend (Git Bash, the
   // default on GitHub Actions windows-latest). SChannel honours the system
@@ -365,13 +385,14 @@ export function callProviderViaProxy({
       "-H",
       "Content-Type: application/json",
       ...cwdHeader,
-      ...providerArgs,
+      ...providerCurlArgs,
       "--max-time",
       String(Math.ceil(timeoutMs / 1000)),
       provider.endpoint,
     ],
     {
       encoding: "utf-8",
+      input: requestBody,
       // Pass extraEnv through for consistency with CLI-driver mode. Curl
       // itself doesn't care about most app vars, but callers shouldn't have
       // to know which mode will fire to pass env.

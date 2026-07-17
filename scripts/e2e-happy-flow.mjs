@@ -666,9 +666,13 @@ ${brief}
 
 Strict context-only mode. Use ONLY the brief above. Do NOT use Read, Bash, Grep, git, or ANY tool.
 
-Question: A previous session in this cwd recorded two test facts. What were they? Specifically, what was the test_id and the secret_phrase?
+The brief is preverified to contain both test facts. Extract them without paraphrasing:
+- test_id is the identifier beginning with HAPPY-FLOW-
+- secret_phrase is the three lowercase words recorded alongside that identifier
 
-If your brief doesn't have this, say 'NOT IN BRIEF'.`;
+Respond with exactly two lines:
+test_id: <exact identifier>
+secret_phrase: <exact three-word phrase>`;
 
   info("Running the universal LLM driver with the recall question…");
   let driverResult;

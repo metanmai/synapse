@@ -14,7 +14,7 @@
 // driver is side-effect-free (no top-level main run).
 
 import { describe, expect, it } from "vitest";
-import { detectProvider, toWellFormedUnicode } from "../../../scripts/e2e-llm-driver.mjs";
+import { detectProvider, prepareCurlStdinPayload, toWellFormedUnicode } from "../../../scripts/e2e-llm-driver.mjs";
 
 describe("e2e-llm-driver detectProvider — precedence (cost guard)", () => {
   it("prefers DeepSeek over OpenRouter when BOTH keys are set (the cost guard)", () => {
@@ -68,5 +68,18 @@ describe("e2e-llm-driver provider payload Unicode", () => {
     const input = "<synapse-brief>\ntest_id=HAPPY-FLOW-1\nsecret_phrase=butterfly mountain seven\n</synapse-brief>";
 
     expect(toWellFormedUnicode(input)).toBe(input);
+  });
+
+  it("moves the JSON body from process arguments to curl stdin", () => {
+    const body = JSON.stringify({ messages: [{ content: "brief 🚀" }] });
+
+    expect(prepareCurlStdinPayload(["-H", "Authorization: Bearer key", "-d", body])).toEqual({
+      args: ["-H", "Authorization: Bearer key", "--data-binary", "@-"],
+      input: body,
+    });
+  });
+
+  it("fails closed when a provider forgets to supply a request body", () => {
+    expect(() => prepareCurlStdinPayload(["-H", "x-test: true"])).toThrow("must include -d");
   });
 });
