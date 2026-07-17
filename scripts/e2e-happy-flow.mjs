@@ -114,6 +114,11 @@ const HOOK_FAST_TIMEOUT_MS = process.platform === "win32" ? 7_500 : 5_000;
 const POLL_BACKEND_MAX_MS = 8 * 60_000;
 const POLL_BACKEND_INTERVAL_MS = 10_000;
 const POLL_BACKEND_FLUSH_INTERVAL_MS = 30_000;
+// Stage 6 proves the handoff has landed on the backend, but the local daemon
+// cache refreshes independently. Stage 7 must not ask an LLM to recall facts
+// until the hook output actually contains them. In CI the refresh normally
+// takes one extra hook/background cycle (~2s); 30s covers a full daemon cycle.
+const POLL_BRIEF_MAX_MS = 30_000;
 
 // ── State ────────────────────────────────────────────────────────────────
 const results = []; // [{ id, label, status, detail, elapsedMs }]
@@ -617,29 +622,40 @@ async function stage7_recall() {
   header("STAGE 7 · NEW session recalls prior facts via brief (universal)");
 
   // Step 1: get the brief that any harness would see by firing the
-  // SessionStart hook directly. This is the source of truth — same
-  // text Claude Code (or any other hook-protocol harness) would
-  // prepend to the agent's context.
-  const {
-    stdout: hookStdout,
-    code: hookCode,
-    stderr: hookErr,
-  } = fireHook("session-start", {
-    session_id: "e2e-s7-recall",
-    cwd: testDir,
-    source: "startup",
-    hook_event_name: "SessionStart",
-  });
-  if (hookCode !== 0) {
-    fail("7.1 brief from hook", `hook exit ${hookCode}: ${(hookErr ?? "").slice(0, 200)}`);
+  // SessionStart hook directly. Stage 6 verifies backend state, while the
+  // hook reads a daemon-local cache that may still be one refresh behind.
+  // Poll until the exact facts are present so Stage 7 measures LLM recall,
+  // not an unrelated cache race (Stage 7b still independently pins content).
+  let hookAttempts = 0;
+  let lastHookProblem = "brief did not contain the test facts";
+  const brief = await waitFor(() => {
+    hookAttempts += 1;
+    const { stdout, code, stderr } = fireHook("session-start", {
+      session_id: `e2e-s7-recall-${hookAttempts}`,
+      cwd: testDir,
+      source: "startup",
+      hook_event_name: "SessionStart",
+    });
+    if (code !== 0) {
+      lastHookProblem = `hook exit ${code}: ${(stderr ?? "").slice(0, 200)}`;
+      return null;
+    }
+    const match = stdout.match(/<synapse-brief>([\s\S]*?)<\/synapse-brief>/);
+    if (!match) {
+      lastHookProblem = "no <synapse-brief> tag in hook output";
+      return null;
+    }
+    if (!match[0].includes(TEST_ID) || !match[0].includes(TEST_PHRASE)) {
+      lastHookProblem = "brief did not contain both test facts yet";
+      return null;
+    }
+    return match[0]; // include the tags so the agent sees them verbatim
+  }, POLL_BRIEF_MAX_MS);
+  if (!brief) {
+    fail("7.1 brief from hook", `${lastHookProblem} after ${hookAttempts} attempts / ${POLL_BRIEF_MAX_MS / 1000}s`);
     return;
   }
-  const briefMatch = hookStdout.match(/<synapse-brief>([\s\S]*?)<\/synapse-brief>/);
-  if (!briefMatch) {
-    fail("7.1 brief from hook", "no <synapse-brief> tag in hook output");
-    return;
-  }
-  const brief = briefMatch[0]; // include the tags so the agent sees them verbatim
+  info(`Fact-bearing brief ready after ${hookAttempts} hook attempt${hookAttempts === 1 ? "" : "s"}`);
 
   // Step 2: build the recall prompt. We give the agent the brief and ask
   // for the two facts; we explicitly forbid tool use so the answer comes

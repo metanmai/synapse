@@ -272,6 +272,37 @@ export function detectProvider(env) {
   return { provider: null, apiKey: null };
 }
 
+/**
+ * Provider APIs require JSON strings to contain Unicode scalar values. A
+ * Windows hook/process boundary can occasionally leave a lone UTF-16
+ * surrogate in captured brief text; JSON.stringify preserves it as a
+ * \uD800-style escape, which DeepSeek rejects as an invalid code point.
+ * Replace only unpaired surrogates and preserve valid pairs (including emoji).
+ *
+ * @param {string} input
+ * @returns {string}
+ */
+export function toWellFormedUnicode(input) {
+  let result = "";
+  for (let index = 0; index < input.length; index += 1) {
+    const code = input.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = input.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        result += input[index] + input[index + 1];
+        index += 1;
+      } else {
+        result += "\ufffd";
+      }
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      result += "\ufffd";
+    } else {
+      result += input[index];
+    }
+  }
+  return result;
+}
+
 // ── Direct-API: multi-provider ──────────────────────────────────────────
 
 /**
@@ -296,7 +327,7 @@ export function callProviderViaProxy({
     throw new Error("curl not on PATH (required by direct-API mode — ships natively on macOS, Linux, Windows 10+)");
   }
 
-  const body = { model, messages: [{ role: "user", content: prompt }] };
+  const body = { model, messages: [{ role: "user", content: toWellFormedUnicode(prompt) }] };
   const providerArgs = provider.buildCurlArgs(apiKey, body);
 
   // Windows curl ships with SChannel as its TLS backend (Git Bash, the

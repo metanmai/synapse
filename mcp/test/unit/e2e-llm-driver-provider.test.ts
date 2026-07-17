@@ -14,7 +14,7 @@
 // driver is side-effect-free (no top-level main run).
 
 import { describe, expect, it } from "vitest";
-import { detectProvider } from "../../../scripts/e2e-llm-driver.mjs";
+import { detectProvider, toWellFormedUnicode } from "../../../scripts/e2e-llm-driver.mjs";
 
 describe("e2e-llm-driver detectProvider — precedence (cost guard)", () => {
   it("prefers DeepSeek over OpenRouter when BOTH keys are set (the cost guard)", () => {
@@ -54,5 +54,19 @@ describe("e2e-llm-driver detectProvider — precedence (cost guard)", () => {
     const { provider, apiKey } = detectProvider({});
     expect(provider).toBeNull();
     expect(apiKey).toBeNull();
+  });
+});
+
+describe("e2e-llm-driver provider payload Unicode", () => {
+  it("replaces lone UTF-16 surrogates while preserving valid pairs", () => {
+    const input = "before\ud800 middle \ud83d\ude80 after\udfff";
+
+    expect(toWellFormedUnicode(input)).toBe("before� middle 🚀 after�");
+  });
+
+  it("leaves ordinary multiline brief content unchanged", () => {
+    const input = "<synapse-brief>\ntest_id=HAPPY-FLOW-1\nsecret_phrase=butterfly mountain seven\n</synapse-brief>";
+
+    expect(toWellFormedUnicode(input)).toBe(input);
   });
 });
