@@ -11,6 +11,9 @@ export interface Env {
   // Default: "http://localhost:5173,https://synapsesync.app"
   CORS_ORIGINS?: string;
 
+  // Observability (optional — Sentry is disabled when unset)
+  SENTRY_DSN?: string;
+
   // App URLs
   APP_URL?: string; // Default: "https://synapsesync.app"
 
