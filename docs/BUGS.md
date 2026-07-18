@@ -171,6 +171,12 @@ Migration `015_handoff_layer.sql` created `handoff_sessions` and `handoff_issues
 
 ## Closed
 
+### Background recompute could lose completed handoff on one upload blip — closed 2026-07-18
+
+The detached `pull-handoff` process could spend 30–60 seconds generating a local handoff and then make exactly one precomputed `POST /api/conversations/:id/compact`. A network exception or transient 408, 429, or 5xx response discarded that completed work; the next session received the stale cached handoff and had to recompute again.
+
+The computation and upload failure boundaries are now separate. Local compaction runs once, while only its precomputed upload receives three bounded attempts (250 ms and 1 s backoff). Permanent 4xx responses fail immediately, and exhausted retries return the cached handoff without falling through to a second hosted LLM call. Unit coverage pins transient recovery, permanent-error fail-fast behavior, retry exhaustion, and the single-compaction invariant.
+
 ### Projects could commit without their owner membership — closed 2026-07-18
 
 Project creation used two independent database writes: insert `projects`, then insert the owner's `project_members` row. A failure between them left an invisible orphan project. The production audit found four such rows; all were generated `E2E-Quota-*` / `multi-account-*` artifacts, so the exact projects and their cascaded synthetic rows were deleted. The post-cleanup invariant returned zero projects whose `owner_id` lacked an owner membership.

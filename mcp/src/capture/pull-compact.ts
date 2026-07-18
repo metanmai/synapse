@@ -36,6 +36,18 @@ interface FullConversation {
 export const FRESH_HANDOFF_WINDOW_MS = 5_000;
 
 /**
+ * Delays between precomputed /compact upload attempts. The expensive local
+ * compaction runs before this retry loop, so a transient upload failure never
+ * repeats the LLM work. Three total attempts keep the detached background job
+ * bounded while covering short network and rate-limit blips.
+ */
+export const COMPACT_UPLOAD_RETRY_DELAYS_MS = [250, 1_000] as const;
+
+type SleepFn = (delayMs: number) => Promise<void>;
+
+const defaultSleep: SleepFn = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs));
+
+/**
  * Decide whether a conversation's cached handoff is "fresh enough" to serve
  * without re-computing. The strict `handoff_at >= updated_at` semantics fail
  * under a hidden race: the backend's `/compact` endpoint writes `handoff_at`
@@ -98,6 +110,8 @@ export interface PullHandoffOptions {
    * the `synapsesync pull-handoff` CLI (which IS the background process).
    */
   fast?: boolean;
+  /** Test seam for compact-upload retry delays. Production uses setTimeout. */
+  retrySleep?: SleepFn;
 }
 
 /**
@@ -342,23 +356,82 @@ export async function pullHandoff(opts: PullHandoffOptions): Promise<string | nu
     return triggerHostedCompaction(apiUrl, auth, conv, cachedHandoff, log);
   }
 
+  let result: Awaited<ReturnType<NonNullable<ToolAdapter["compact"]>>>;
   try {
-    const result = await found.adapter.compact(found.session);
-    const post = await fetch(`${apiUrl}/api/conversations/${conv.id}/compact`, {
-      method: "POST",
-      headers: { ...auth, "Content-Type": "application/json" },
-      body: JSON.stringify({ summary: result.summary, model: result.model, handoff: result.handoff }),
-    });
-    if (!post.ok) {
-      log(`pull-compact: POST /compact returned ${post.status}`);
-      return cachedHandoff;
-    }
-    return result.handoff ?? result.summary ?? cachedHandoff;
+    result = await found.adapter.compact(found.session);
   } catch (err) {
     log(`pull-compact: compact failed: ${err instanceof Error ? err.message : err}`);
     log("pull-compact: falling back to hosted compaction after local compact failure");
     return triggerHostedCompaction(apiUrl, auth, conv, cachedHandoff, log);
   }
+
+  const post = await postPrecomputedCompactWithRetry(
+    `${apiUrl}/api/conversations/${conv.id}/compact`,
+    {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ summary: result.summary, model: result.model, handoff: result.handoff }),
+    },
+    log,
+    opts.retrySleep ?? defaultSleep,
+  );
+  if (!post?.ok) {
+    if (post) log(`pull-compact: POST /compact returned ${post.status}`);
+    return cachedHandoff;
+  }
+  return result.handoff ?? result.summary ?? cachedHandoff;
+}
+
+function isTransientCompactUploadStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+/**
+ * Upload a handoff that has already been computed. Only transient failures
+ * are retried: network exceptions, request timeout, rate limiting, and 5xx.
+ * Other 4xx responses represent permanent request/auth problems and return
+ * immediately. This helper never throws, so exhausted retries degrade to the
+ * caller's cached handoff without accidentally invoking another LLM path.
+ */
+async function postPrecomputedCompactWithRetry(
+  url: string,
+  init: RequestInit,
+  log: (msg: string) => void,
+  sleep: SleepFn,
+): Promise<Response | null> {
+  const maxAttempts = COMPACT_UPLOAD_RETRY_DELAYS_MS.length + 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(url, init);
+      if (response.ok || !isTransientCompactUploadStatus(response.status) || attempt === maxAttempts) {
+        return response;
+      }
+      const delayMs = COMPACT_UPLOAD_RETRY_DELAYS_MS[attempt - 1];
+      log(
+        `pull-compact: POST /compact returned ${response.status}; retrying in ${delayMs}ms ` +
+          `(attempt ${attempt + 1}/${maxAttempts})`,
+      );
+      await sleep(delayMs);
+    } catch (err) {
+      if (attempt === maxAttempts) {
+        log(
+          `pull-compact: POST /compact failed after ${maxAttempts} attempts: ${
+            err instanceof Error ? err.message : err
+          }`,
+        );
+        return null;
+      }
+      const delayMs = COMPACT_UPLOAD_RETRY_DELAYS_MS[attempt - 1];
+      log(
+        `pull-compact: POST /compact error: ${err instanceof Error ? err.message : err}; ` +
+          `retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxAttempts})`,
+      );
+      await sleep(delayMs);
+    }
+  }
+
+  return null;
 }
 
 /**

@@ -448,6 +448,187 @@ describe("pullHandoff", () => {
     fs.rmSync(watchDir, { recursive: true, force: true });
   });
 
+  it("retries transient compact upload failures without recomputing", async () => {
+    writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversations: [
+              {
+                id: "conv_retry",
+                updated_at: "2026-05-24T03:30:00Z",
+                metadata: { handoff_markdown: "## stale", handoff_at: "2026-05-24T03:00:00Z" },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversation: {
+              id: "conv_retry",
+              updated_at: "2026-05-24T03:30:00Z",
+              working_context: { capturedSessionId: "ses_retry" },
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockRejectedValueOnce(new Error("socket reset"))
+      .mockResolvedValueOnce(new Response("busy", { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+    const watchDir = fs.mkdtempSync(path.join(os.tmpdir(), "watchdir-"));
+    const filePath = path.join(watchDir, "ses_retry.jsonl");
+    fs.writeFileSync(filePath, "irrelevant payload");
+    const compactFn = vi.fn(async () => ({
+      summary: "retry summary",
+      handoff: "## uploaded after retry",
+      model: "claude-code:local-haiku",
+    }));
+    const registry = new AdapterRegistry();
+    registry.register(
+      makeAdapter({
+        tool: "claude-code",
+        watchDir,
+        parsedFor: new Map([[filePath, session("ses_retry")]]),
+        compact: compactFn,
+      }),
+    );
+    const retrySleep = vi.fn(async (_delayMs: number) => {});
+
+    const result = await pullHandoff({ cwd: CWD, registry, retrySleep });
+
+    expect(result).toBe("## uploaded after retry");
+    expect(compactFn).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(5);
+    expect(retrySleep.mock.calls.map(([delayMs]) => delayMs)).toEqual([250, 1_000]);
+    fs.rmSync(watchDir, { recursive: true, force: true });
+  });
+
+  it("does not retry a permanent compact upload rejection", async () => {
+    writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversations: [
+              {
+                id: "conv_bad_request",
+                updated_at: "2026-05-24T03:30:00Z",
+                metadata: { handoff_markdown: "## cached", handoff_at: "2026-05-24T03:00:00Z" },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversation: {
+              id: "conv_bad_request",
+              updated_at: "2026-05-24T03:30:00Z",
+              working_context: { capturedSessionId: "ses_bad_request" },
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("invalid", { status: 400 }));
+
+    const watchDir = fs.mkdtempSync(path.join(os.tmpdir(), "watchdir-"));
+    const filePath = path.join(watchDir, "ses_bad_request.jsonl");
+    fs.writeFileSync(filePath, "irrelevant payload");
+    const compactFn = vi.fn(async () => ({
+      summary: "not accepted",
+      handoff: "## not accepted",
+      model: "claude-code:local-haiku",
+    }));
+    const registry = new AdapterRegistry();
+    registry.register(
+      makeAdapter({
+        tool: "claude-code",
+        watchDir,
+        parsedFor: new Map([[filePath, session("ses_bad_request")]]),
+        compact: compactFn,
+      }),
+    );
+    const retrySleep = vi.fn(async (_delayMs: number) => {});
+
+    const result = await pullHandoff({ cwd: CWD, registry, retrySleep });
+
+    expect(result).toBe("## cached");
+    expect(compactFn).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(retrySleep).not.toHaveBeenCalled();
+    fs.rmSync(watchDir, { recursive: true, force: true });
+  });
+
+  it("returns the cached handoff after compact upload retries are exhausted", async () => {
+    writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversations: [
+              {
+                id: "conv_exhausted",
+                updated_at: "2026-05-24T03:30:00Z",
+                metadata: { handoff_markdown: "## cached", handoff_at: "2026-05-24T03:00:00Z" },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversation: {
+              id: "conv_exhausted",
+              updated_at: "2026-05-24T03:30:00Z",
+              working_context: { capturedSessionId: "ses_exhausted" },
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("busy", { status: 503 }))
+      .mockResolvedValueOnce(new Response("busy", { status: 503 }))
+      .mockResolvedValueOnce(new Response("busy", { status: 503 }));
+
+    const watchDir = fs.mkdtempSync(path.join(os.tmpdir(), "watchdir-"));
+    const filePath = path.join(watchDir, "ses_exhausted.jsonl");
+    fs.writeFileSync(filePath, "irrelevant payload");
+    const compactFn = vi.fn(async () => ({
+      summary: "not uploaded",
+      handoff: "## not uploaded",
+      model: "claude-code:local-haiku",
+    }));
+    const registry = new AdapterRegistry();
+    registry.register(
+      makeAdapter({
+        tool: "claude-code",
+        watchDir,
+        parsedFor: new Map([[filePath, session("ses_exhausted")]]),
+        compact: compactFn,
+      }),
+    );
+    const retrySleep = vi.fn(async (_delayMs: number) => {});
+
+    const result = await pullHandoff({ cwd: CWD, registry, retrySleep });
+
+    expect(result).toBe("## cached");
+    expect(compactFn).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(5);
+    expect(retrySleep.mock.calls.map(([delayMs]) => delayMs)).toEqual([250, 1_000]);
+    fs.rmSync(watchDir, { recursive: true, force: true });
+  });
+
   it("falls back to cached handoff when stale but no local session file is found", async () => {
     writeProjectMap(tmpHome, { [CWD]: { project_id: PROJECT_UUID, project_name: "P" } });
 
