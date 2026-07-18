@@ -425,7 +425,7 @@ describe("dispatcher invariants", () => {
   it("caStatus on linux with CA present + known distro: inKeychain reflects runCp result", () => {
     tlsManager.ensureCa();
     const sec = makeRunner([okExit]);
-    const cp = makeRunner([okExit]); // test -f returns 0 = file exists
+    const cp = makeRunner([okExit]); // cmp returns 0 = active CA matches trusted CA
     const r = caStatus({
       tlsManager,
       platform: "linux",
@@ -439,6 +439,6 @@ describe("dispatcher invariants", () => {
     expect(r.inKeychain).toBe(true); // runCp returned 0
     expect(sec.calls).toHaveLength(0); // mac runner never touched
     expect(cp.calls).toHaveLength(1);
-    expect(cp.calls[0]).toEqual(["test", "-f", "/etc/ssl/certs/synapse.pem"]);
+    expect(cp.calls[0]).toEqual(["cmp", "-s", tlsManager.caCertPath(), "/etc/ssl/certs/synapse.pem"]);
   });
 });

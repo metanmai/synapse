@@ -279,7 +279,7 @@ export const LinuxBackend: PlatformBackend = {
     return { removed: upd.status === 0 };
   },
 
-  checkInstall(_caPath, opts): InstallCheckResult {
+  checkInstall(caPath, opts): InstallCheckResult {
     const readOsRelease = opts.readOsRelease ?? defaultReadOsRelease;
     const runCp = opts.runCp ?? defaultRunCp;
     const family = detectDistroFamily(readOsRelease());
@@ -288,7 +288,11 @@ export const LinuxBackend: PlatformBackend = {
       return { caExists: true, inTrustStore: false, fingerprint: null };
     }
     const { check } = TRUST_PATHS[family];
-    const r = runCp(["test", "-f", check]);
+    // Existence alone is insufficient: a regenerated local CA can coexist
+    // with an older system anchor at the same path. Compare certificate bytes
+    // so status never claims the currently active proxy CA is trusted when
+    // only a stale predecessor is installed.
+    const r = runCp(["cmp", "-s", caPath, check]);
     return { caExists: true, inTrustStore: r.status === 0, fingerprint: null };
   },
 

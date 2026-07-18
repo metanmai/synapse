@@ -264,26 +264,26 @@ describe("LinuxBackend.uninstallCa", () => {
 // ── checkInstall ─────────────────────────────────────────────────────────
 
 describe("LinuxBackend.checkInstall", () => {
-  it("debian: tests /etc/ssl/certs/synapse.pem existence and reports inTrustStore", () => {
+  it("debian: compares the active CA with /etc/ssl/certs/synapse.pem", () => {
     const sudo = makeRunner([okExit]);
     const cp = makeRunner([okExit]);
     const r = LinuxBackend.checkInstall(FAKE_CA_PATH, backendOpts("debian", sudo, cp));
     expect(cp.calls).toHaveLength(1);
-    expect(cp.calls[0]).toEqual(["test", "-f", "/etc/ssl/certs/synapse.pem"]);
+    expect(cp.calls[0]).toEqual(["cmp", "-s", FAKE_CA_PATH, "/etc/ssl/certs/synapse.pem"]);
     expect(r.inTrustStore).toBe(true);
   });
 
-  it("rhel: tests rhel anchor path existence", () => {
+  it("rhel: compares the active CA with the rhel anchor", () => {
     const sudo = makeRunner([okExit]);
     const cp = makeRunner([okExit]);
     const r = LinuxBackend.checkInstall(FAKE_CA_PATH, backendOpts("fedora", sudo, cp));
-    expect(cp.calls[0]).toEqual(["test", "-f", "/etc/pki/ca-trust/source/anchors/synapse.pem"]);
+    expect(cp.calls[0]).toEqual(["cmp", "-s", FAKE_CA_PATH, "/etc/pki/ca-trust/source/anchors/synapse.pem"]);
     expect(r.inTrustStore).toBe(true);
   });
 
-  it("file absent: inTrustStore:false", () => {
+  it("missing or mismatched CA: inTrustStore:false", () => {
     const sudo = makeRunner([okExit]);
-    const cp = makeRunner([errExit]); // test -f exits non-zero
+    const cp = makeRunner([errExit]); // cmp exits non-zero
     const r = LinuxBackend.checkInstall(FAKE_CA_PATH, backendOpts("debian", sudo, cp));
     expect(r.inTrustStore).toBe(false);
   });
