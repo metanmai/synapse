@@ -5,7 +5,7 @@ import wranglerSource from "../../wrangler.jsonc?raw";
 describe("Sentry observability wiring", () => {
   it("registers Sentry before every other Hono middleware", () => {
     const firstMiddleware = indexSource.indexOf("app.use(");
-    const sentryMiddleware = indexSource.indexOf("app.use(sentry(");
+    const sentryMiddleware = indexSource.search(/app\.use\(\s*sentry\(/);
 
     expect(sentryMiddleware).toBeGreaterThan(-1);
     expect(sentryMiddleware).toBe(firstMiddleware);

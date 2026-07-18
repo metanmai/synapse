@@ -1,3 +1,5 @@
+import * as Sentry from "@sentry/cloudflare";
+import { sentry } from "@sentry/hono/cloudflare";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { admin } from "./api/admin";
@@ -23,11 +25,27 @@ import { CompactionScheduler } from "./durable-objects/compaction-scheduler";
 import type { Env } from "./lib/env";
 import { envList } from "./lib/env";
 import { AppError } from "./lib/errors";
+import { scrubPayload } from "./lib/observability";
 import { rateLimit } from "./lib/rate-limit";
 import { SynapseAgent } from "./mcp/agent";
 import { dbMiddleware } from "./middleware/db";
 
 const app = new Hono<{ Bindings: Env }>();
+
+app.use(
+  sentry(app, (env) => {
+    if (!env.SENTRY_DSN) {
+      console.warn("[observability] SENTRY_DSN unset — Sentry disabled");
+    }
+    return {
+      dsn: env.SENTRY_DSN,
+      enabled: Boolean(env.SENTRY_DSN),
+      sendDefaultPii: false,
+      tracesSampleRate: 0.1,
+      beforeSend: scrubPayload,
+    };
+  }),
+);
 
 // CORS for frontend
 app.use("*", (c, next) => {
@@ -59,6 +77,7 @@ app.onError((err, c) => {
   if (err instanceof AppError) {
     return c.json({ error: err.message, code: err.code }, err.status as 400 | 401 | 402 | 403 | 404 | 409 | 410 | 500);
   }
+  Sentry.captureException(err);
   console.error(`[error] ${c.req.method} ${c.req.path}:`, err.message, err.stack);
   return c.json(
     {

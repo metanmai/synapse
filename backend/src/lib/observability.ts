@@ -4,7 +4,7 @@ import type { Env } from "./env";
 
 const SAFE_EVENT_KEYS = new Set(["event_id", "project_id", "kind", "actor_user_id", "occurred_at"]);
 
-export function scrubPayload(event: Event, _hint: EventHint): Event | null {
+export function scrubPayload<T extends Event>(event: T, _hint: EventHint): T | null {
   if (event.extra) {
     for (const key of Object.keys(event.extra)) {
       const value = event.extra[key];

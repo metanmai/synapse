@@ -37,6 +37,7 @@
   // do NOT define them as vars here or they will be overwritten with empty
   // values on every deploy.
   // COMPACTION_LLM_KEY is set via `wrangler secret put`
+  // SENTRY_DSN is set via `wrangler secret put SENTRY_DSN` before deploy.
   "vars": {
     "COMPACTION_LLM_MODEL": "claude-haiku-4-5-20251001"
   },
