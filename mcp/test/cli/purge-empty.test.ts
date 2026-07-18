@@ -11,7 +11,8 @@ const UUID_C = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 
 // Pure-function tests for the candidate selector. The bug class here is
 // "we delete something the user actually cares about" — so the selector
-// MUST exclude any project with a conversation, an insight, or a name
+// MUST exclude any project with a synced conversation, handoff session,
+// insight, or a name
 // outside the allowlist (default: only `untitled`).
 describe("selectPurgeCandidates", () => {
   it("excludes projects with conversations even if they're named 'untitled'", async () => {
@@ -25,6 +26,19 @@ describe("selectPurgeCandidates", () => {
   it("excludes projects with insights even when zero conversations", async () => {
     const candidates = selectPurgeCandidates([
       { id: UUID_A, name: "untitled", conversation_count: 0, insight_count: 3 },
+    ]);
+    expect(candidates).toEqual([]);
+  });
+
+  it("excludes projects with handoff sessions even when no transcript was synced", async () => {
+    const candidates = selectPurgeCandidates([
+      {
+        id: UUID_A,
+        name: "untitled",
+        conversation_count: 0,
+        handoff_session_count: 2,
+        insight_count: 0,
+      },
     ]);
     expect(candidates).toEqual([]);
   });
@@ -55,7 +69,7 @@ describe("selectPurgeCandidates", () => {
     expect(candidates.map((c) => c.id).sort()).toEqual([UUID_B, UUID_C].sort());
   });
 
-  it("treats missing conversation_count/insight_count as zero (defensive parsing)", async () => {
+  it("treats missing stats as zero for backward-compatible defensive parsing", async () => {
     // The /api/projects response is enriched by getProjectStats — but if a
     // backend change ever drops those fields, the selector must default
     // safely. Defaulting them to zero would make a project look empty when

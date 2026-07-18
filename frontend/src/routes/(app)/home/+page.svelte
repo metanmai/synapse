@@ -135,7 +135,9 @@ function handleSubmit() {
             <span class="project-time">{relativeTime(project.created_at)}</span>
           </div>
           <div class="card-stats">
-            {project.conversation_count ?? 0} conversations &middot; {project.insight_count ?? 0} insights
+            {project.conversation_count ?? 0} synced conversations &middot;
+            {project.handoff_session_count ?? 0} handoff sessions &middot;
+            {project.insight_count ?? 0} insights
           </div>
           {#if project.tools && project.tools.length > 0}
             <div class="card-tools">

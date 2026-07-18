@@ -272,7 +272,7 @@ projects.post("/:id/merge-into/:target_id", async (c) => {
 
 // DELETE /api/projects/:id
 // Owner-only. Default behavior: refuse if the project still holds
-// conversations or insights (returns 409 PROJECT_NOT_EMPTY with the
+// conversations, handoff sessions, or insights (returns 409 PROJECT_NOT_EMPTY with the
 // counts in the body) so the caller can decide whether to migrate the
 // data first via /merge-into or accept the loss with ?force=true.
 //
@@ -296,12 +296,13 @@ projects.delete("/:id", async (c) => {
 
   if (!force) {
     const stats = await getProjectStats(db, projectId);
-    if (stats.conversation_count > 0 || stats.insight_count > 0) {
+    if (stats.conversation_count > 0 || stats.handoff_session_count > 0 || stats.insight_count > 0) {
       return c.json(
         {
-          error: `Project still holds ${stats.conversation_count} conversation(s) and ${stats.insight_count} insight(s). Merge into another project via POST /merge-into/:target_id, or pass ?force=true to delete anyway.`,
+          error: `Project still holds ${stats.conversation_count} synced conversation(s), ${stats.handoff_session_count} handoff session(s), and ${stats.insight_count} insight(s). Merge into another project via POST /merge-into/:target_id, or pass ?force=true to delete anyway.`,
           code: "PROJECT_NOT_EMPTY",
           conversation_count: stats.conversation_count,
+          handoff_session_count: stats.handoff_session_count,
           insight_count: stats.insight_count,
         },
         409,

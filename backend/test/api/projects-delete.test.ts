@@ -76,13 +76,14 @@ describe("DELETE /api/projects/:id — data paths (mocked Supabase)", () => {
     db.tables.project_members = {
       single: () => ({ data: { role: "owner" }, error: null }),
     };
-    // getProjectStats: 0 conversations, 0 insights (the project is empty).
-    // getProjectStats issues TWO awaited selects — both return count: 0
+    // getProjectStats: 0 conversations, 0 handoff sessions, 0 insights.
+    // getProjectStats issues THREE awaited selects — all return count: 0
     // via the default `select` path (the route reads .count off the Promise
     // result, which our mock surfaces via `count: 0` when head:true OR via
     // the data array length when not). Configure both.
     db.tables.conversations = { count: 0, select: () => ({ data: [], count: 0, error: null }) };
     db.tables.insights = { count: 0, select: () => ({ data: [], count: 0, error: null }) };
+    db.tables.handoff_events = { count: 0 };
     // After the empty check, the route reads the project's name then deletes.
     db.tables.projects = {
       single: () => ({ data: { name: "my-empty-project" }, error: null }),
@@ -121,6 +122,7 @@ describe("DELETE /api/projects/:id — data paths (mocked Supabase)", () => {
     // 5 conversations, 2 insights — project is NOT empty.
     db.tables.conversations = { count: 5, select: () => ({ data: [], count: 5, error: null }) };
     db.tables.insights = { count: 2, select: () => ({ data: [], count: 2, error: null }) };
+    db.tables.handoff_events = { count: 3 };
     setMockDb(db);
 
     const req = new Request(`http://localhost/api/projects/${PROJECT_ID}`, {
@@ -135,14 +137,41 @@ describe("DELETE /api/projects/:id — data paths (mocked Supabase)", () => {
     const body = (await res.json()) as {
       code?: string;
       conversation_count?: number;
+      handoff_session_count?: number;
       insight_count?: number;
     };
     expect(body.code).toBe("PROJECT_NOT_EMPTY");
     expect(body.conversation_count).toBe(5);
+    expect(body.handoff_session_count).toBe(3);
     expect(body.insight_count).toBe(2);
     // Crucially: the delete must NOT have happened.
     const projectDeletes = db.calls.filter((c) => c.table === "projects" && c.op === "delete");
     expect(projectDeletes).toHaveLength(0);
+  });
+
+  it("returns 409 when a project has handoff sessions but no synced conversations", async () => {
+    const db = makeMockSupabase();
+    seedApiKeyAuth(db, { id: "user-1", email: "t@t.test" });
+    db.tables.project_members = {
+      single: () => ({ data: { role: "owner" }, error: null }),
+    };
+    db.tables.conversations = { count: 0, select: () => ({ data: [], count: 0, error: null }) };
+    db.tables.insights = { count: 0, select: () => ({ data: [], count: 0, error: null }) };
+    db.tables.handoff_events = { count: 4 };
+    setMockDb(db);
+
+    const req = new Request(`http://localhost/api/projects/${PROJECT_ID}`, {
+      method: "DELETE",
+      headers: bearer("k"),
+    });
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(req, makeContractTestEnv(), ctx);
+    await waitOnExecutionContext(ctx);
+
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { handoff_session_count?: number };
+    expect(body.handoff_session_count).toBe(4);
+    expect(db.calls.filter((c) => c.table === "projects" && c.op === "delete")).toHaveLength(0);
   });
 
   it("returns 200 with ?force=true even when project has children", async () => {

@@ -6,7 +6,8 @@ import { traceFetch } from "./util/trace-fetch.js";
 
 /**
  * `synapsesync purge-empty` — bulk-delete every project owned by the
- * authenticated user that has zero conversations AND zero insights.
+ * authenticated user that has zero synced conversations, handoff sessions,
+ * AND insights.
  *
  * Use case: the dashboard accumulates orphan "untitled" placeholders and
  * test artifacts over time. Pre-launch, those balloon the projects table
@@ -37,6 +38,7 @@ interface ProjectListItem {
   id: string;
   name: string;
   conversation_count?: number;
+  handoff_session_count?: number;
   insight_count?: number;
 }
 
@@ -88,7 +90,8 @@ export function selectPurgeCandidates(
   opts: { includeNamed?: string } = {},
 ): ProjectListItem[] {
   return projects.filter((p) => {
-    const isEmpty = (p.conversation_count ?? 0) === 0 && (p.insight_count ?? 0) === 0;
+    const isEmpty =
+      (p.conversation_count ?? 0) === 0 && (p.handoff_session_count ?? 0) === 0 && (p.insight_count ?? 0) === 0;
     if (!isEmpty) return false;
     if (opts.includeNamed) return p.name.includes(opts.includeNamed);
     return p.name === "untitled";

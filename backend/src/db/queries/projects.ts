@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { EventKind } from "@synapse/shared/handoff/events.js";
 import { singleOrNull } from "../query-helpers";
 import type { Project, ProjectMember } from "../types";
 
@@ -459,13 +460,22 @@ export async function resolveProjectFromSignals(
 }
 
 export async function getProjectStats(db: SupabaseClient, projectId: string) {
-  const [convResult, insightResult] = await Promise.all([
+  const [convResult, insightResult, handoffSessionResult] = await Promise.all([
     db
       .from("conversations")
       .select("id, metadata", { count: "exact", head: false })
       .eq("project_id", projectId)
       .neq("status", "deleted"),
     db.from("insights").select("id", { count: "exact", head: true }).eq("project_id", projectId),
+    // handoff_sessions is intentionally not materialized by the event-sourced
+    // pipeline. One idempotent SessionOpened event is the durable session
+    // boundary, so counting that kind avoids confusing many tool/file events
+    // with many sessions.
+    db
+      .from("handoff_events")
+      .select("event_id", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .eq("kind", EventKind.SessionOpened),
   ]);
 
   const tools: string[] = [];
@@ -480,6 +490,7 @@ export async function getProjectStats(db: SupabaseClient, projectId: string) {
 
   return {
     conversation_count: convResult.count ?? 0,
+    handoff_session_count: handoffSessionResult.count ?? 0,
     insight_count: insightResult.count ?? 0,
     tools,
   };

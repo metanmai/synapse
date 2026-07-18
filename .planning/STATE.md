@@ -79,11 +79,11 @@ The 5 critical issues diagnosed 2026-05-21/22 during UAT walkthrough:
 
 2. ✅ **RESOLVED 2026-07-18** — Creem renewal events are documented `subscription.paid` payloads. The handler incorrectly read `event_type` instead of `eventType` and `current_period_end` instead of `current_period_end_date`. Canonical parsing, legacy fallbacks, signed worker-level tests, and stale-date UI copy are now in place.
 
-3. ❓ **UNVERIFIED** — Test pollution in `~/.synapse/project-map.json`. Not surfaced in recent commits as a known issue; may have been swept during pre-launch hardening. Worth a one-line check next time `~/.synapse/` is inspected.
+3. ✅ **VERIFIED CLEAN 2026-07-18** — Test pollution in `~/.synapse/project-map.json`. The default local path was checked directly and no project-map file exists, so there is no stale test mapping to clean up on this machine.
 
 4. ✅ **PRESUMED RESOLVED** — 2 Playwright fixture-route tests failing in CI. CI has been green on metanmai across post-2026-05-22 commits, so either the State E + F flakes were fixed or the tests adapted. No active failure surface today.
 
-5. ⏳ **STILL OPEN** — Dashboard "conversations" count excludes Claude Code activity. Architecture-level mismatch — `getProjectStats` reads `conversations` table, Claude Code activity flows to `handoff_events`. Users who work primarily in Claude Code see "0 conversations · 0 insights" forever. No fix committed. Probably wants a design call: surface both counts separately, or unify under a "captured events" metric. The proxy daemon (post-launch) ALSO writes via the `conversations` path through CloudSyncer, so once enabled it would naturally lift Claude Code session counts.
+5. ✅ **RESOLVED 2026-07-18** — Dashboard activity counts now preserve the architecture instead of conflating it: `conversation_count` remains synced transcript rows, while `handoff_session_count` counts idempotent `session_opened` events. Project cards show “synced conversations · handoff sessions · insights,” and normal project deletion/purge no longer treats a handoff-only project as empty.
 
 ### Post-launch v1.X work
 
@@ -143,6 +143,8 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 - 2026-07-18: **Background handoff upload made resilient.** The detached recompute path no longer discards a 30–60 second local compaction after one transient `POST /compact` failure. Only the precomputed upload is retried (three total attempts with bounded backoff); the LLM computation remains single-shot, permanent 4xx failures are not retried, and retry exhaustion serves the last cached handoff.
 
 - 2026-07-18: **Local session persistence uses composite identity.** `SessionStore` moved from ambiguous `<session_id>.json` keys to versioned `(tool, session_id)` paths. Capture-worker lookups now supply both fields; legacy flat files remain readable and are removed only after a matching composite write succeeds. Collision, isolated-delete, migration, unit, and 52-test capture-pipeline checks pass.
+
+- 2026-07-18: **Dashboard counts distinguish both capture pipelines.** Project stats now report synced transcript conversations and event-sourced handoff sessions separately. The home card names both metrics, `purge-empty` excludes projects with either form of captured work, and DELETE returns `PROJECT_NOT_EMPTY` for handoff-only projects. Full workspace tests pass: backend 584, extension 58, frontend 97, MCP 940, plus shared tests.
 
 - 2026-05-18: Shipped per-device CLI keys end-to-end (`a8ecf98` + `34de058`) and fixed 5 install-pipeline bugs (`d3cd771` + `025a814`). Daemon alive locally via launchd; cloud sync blocked by BUG-01.
 - 2026-05-19: Scope re-expansion (COLLAB + TOKEN added). 4-agent research consolidated into `research/SUMMARY.md`. Requirements rewritten. Roadmap created. Slice 1a-prime executed: BUG-02, BUG-03, BUG-04, BUGS.md #12 all closed inline (17 RED → GREEN; commits `19e3f8e` → `9a0db69`).

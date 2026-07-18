@@ -171,6 +171,12 @@ Migration `015_handoff_layer.sql` created `handoff_sessions` and `handoff_issues
 
 ## Closed
 
+### Dashboard reported zero conversations for event-sourced Claude Code work — closed 2026-07-18
+
+The project card's `conversation_count` came only from the transcript-oriented `conversations` table. The handoff pipeline writes Claude Code lifecycle data to `handoff_events`, so users could have active cross-session briefs while the dashboard still displayed “0 conversations.” Counting raw events as conversations would be equally misleading because one session emits many events.
+
+Project stats now expose a separate `handoff_session_count`, derived from the single idempotent `session_opened` event per handoff session. Dashboard cards show “synced conversations · handoff sessions · insights.” Project deletion and `synapsesync purge-empty` use both capture counts, preventing a handoff-only project from being classified as empty. The full workspace suite passes with backend deletion and CLI purge regression coverage.
+
 ### SessionStore keyed sessions by ID without their tool source — closed 2026-07-18
 
 `SessionStore` persisted every captured session as `<session_id>.json`. File adapters and the proxy currently derive IDs differently, so a collision was uncommon, but no invariant prevented two tools from emitting the same ID. The later save would overwrite the first session, and a delete could remove the wrong source's record.

@@ -614,6 +614,7 @@ describe("Full User Journey", () => {
       // We created 2 conversations (one soft-deleted + one import), but soft-deleted are excluded
       // At minimum the imported conversation should still be active
       expect(typeof project.conversation_count).toBe("number");
+      expect(typeof project.handoff_session_count).toBe("number");
       // tools is an array of agent strings derived from conversation metadata
       expect(Array.isArray(project.tools)).toBe(true);
     });

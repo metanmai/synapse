@@ -18,6 +18,7 @@ export interface Project {
   project_members?: ProjectMember[];
   // Stats (enriched by backend)
   conversation_count?: number;
+  handoff_session_count?: number;
   insight_count?: number;
   tools?: string[];
 }
