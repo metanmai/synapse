@@ -58,11 +58,11 @@ The pre-push hook already enforces full-suite green on every push (per `feedback
 | BUG-04 | `runInit` merges into an existing `.mcp.json` preserving other server entries | integration | same | ✅ extend | ⬜ pending |
 | BUG-04 | `runInit` backs up and rewrites for an invalid existing `.mcp.json` (existing `writeMcpJson` corrupt path) | integration | same | ✅ extend | ⬜ pending |
 | BUG-04 | `runInit` calls `ensureGitignore(cwd, ".mcp.json")` whenever cwd `.mcp.json` is written | integration | same | ✅ extend | ⬜ pending |
-| OBS-01 | `scrubPayload` removes `event.extra[k].payload` from synapse-shaped event objects | unit | `cd backend && npx vitest run test/lib/observability.test.ts` | ❌ W0 | ⬜ pending |
-| OBS-01 | `scrubPayload` preserves stack traces and request metadata | unit | same | ❌ W0 | ⬜ pending |
-| OBS-01 | `scrubPayload` returns the same event when no synapse-shaped data is attached | unit | same | ❌ W0 | ⬜ pending |
-| OBS-01 | `scrubPayload` removes `event.request.data` and `event.breadcrumbs[*].data.payload` (Hono body capture path) | unit | same | ❌ W0 | ⬜ pending |
-| OBS-01 (wiring) | `backend/src/index.ts` calls `app.use(sentry(...))` BEFORE CORS and any other middleware | unit (module-level assertion) | `cd backend && npx vitest run test/lib/observability-wiring.test.ts` | ❌ W0 | ⬜ pending |
+| OBS-01 | `scrubPayload` removes `event.extra[k].payload` from synapse-shaped event objects | unit | `cd backend && npx vitest run test/lib/observability.test.ts` | ✅ | ✅ green |
+| OBS-01 | `scrubPayload` preserves stack traces and request metadata | unit | same | ✅ | ✅ green |
+| OBS-01 | `scrubPayload` returns the same event when no synapse-shaped data is attached | unit | same | ✅ | ✅ green |
+| OBS-01 | `scrubPayload` removes `event.request.data` and `event.breadcrumbs[*].data.payload` (Hono body capture path) | unit | same | ✅ | ✅ green |
+| OBS-01 (wiring) | `backend/src/index.ts` calls `app.use(sentry(...))` BEFORE CORS and any other middleware | unit (module-level assertion) | `cd backend && npx vitest run test/lib/observability-wiring.test.ts` | ✅ | ✅ green |
 | BUGS.md #12 | Backoff starts at base delay (10s) | unit (fake timers) | `cd mcp && npx vitest run test/capture/daemon-backoff.test.ts` | ❌ W0 | ⬜ pending |
 | BUGS.md #12 | Backoff doubles on each failure (10→20→40→80→160→300) | unit | same | ❌ W0 | ⬜ pending |
 | BUGS.md #12 | Backoff caps at MAX_DELAY (300s) | unit | same | ❌ W0 | ⬜ pending |
@@ -78,8 +78,8 @@ The pre-push hook already enforces full-suite green on every push (per `feedback
 Test files that MUST exist before any production code change lands (stubs + first failing test):
 
 - [ ] `mcp/test/cli/mcp-command.test.ts` — BUG-03 resolver branches + proxy probe (new file)
-- [ ] `backend/test/lib/observability.test.ts` — OBS-01 `scrubPayload` filtering (new file)
-- [ ] `backend/test/lib/observability-wiring.test.ts` — OBS-01 middleware-order assertion (new file)
+- [x] `backend/test/lib/observability.test.ts` — OBS-01 `scrubPayload` filtering (new file)
+- [x] `backend/test/lib/observability-wiring.test.ts` — OBS-01 middleware-order assertion (new file)
 - [ ] `mcp/test/capture/daemon-backoff.test.ts` — BUGS.md #12 backoff schedule (new file, uses `vi.useFakeTimers`)
 - [ ] Extend `mcp/test/cli/init.test.ts` — BUG-04 (new + merge + corrupt + gitignore paths)
 - [ ] Extend `mcp/test/cli/status.test.ts` — BUG-02 (launchd / systemd / pid-file branches with mocked `execSync`)
