@@ -249,7 +249,7 @@ synapsesync capture proxy enable    # config + daemon restart
 
 ### Pending v1.X follow-ups (smaller items)
 
-- **P1 (BUGS.md)** — Configure SUPABASE_* secrets on metanmai/synapse so CI auto-migrate activates
+- **P1 (BUGS.md) — COMPLETE 2026-07-18:** GitHub `prod` has `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, and `SUPABASE_DB_PASSWORD` configured. Run `29599228105` attempt 2 passed before the database-password secret was added; the next push/rerun remains the proof that auto-migrate consumes it.
 - **P2 (BUGS.md)** — Creem renewal webhook silent drop (defensive `default:` + proper event_type fix)
 - **Insight action items** — orphan `owner_id` rows; `SessionStore` (source, id) keying refactor; bg-recompute POST `/compact` retry
 - **Spike #118** — proxy validation against Cursor / Claude Desktop / ChatGPT Desktop (requires admin password for System keychain install)

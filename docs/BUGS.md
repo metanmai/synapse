@@ -8,35 +8,6 @@ When closing an entry, move it to the `## Closed` section at the bottom with the
 
 ## P1 — Process gaps
 
-### Configure Supabase secrets so CI auto-migrate activates
-
-Phase 2 added a `migrate` job to `.github/workflows/ci.yml` that runs `supabase db push` on every push-to-main. Today it's inert — the job runs but skips the actual `db push` because `SUPABASE_ACCESS_TOKEN` / `SUPABASE_PROJECT_REF` / `SUPABASE_DB_PASSWORD` aren't configured as repo secrets on **metanmai/synapse** yet. Status: scaffolded but gated.
-
-**Why it matters:** This is the same class of problem as P0 BUG-01 (which was about schema drift between repo migrations and prod going undetected). Until secrets are configured, migrations still require manual `supabase db push` from a CF-enabled machine — and "forgetting to push" is exactly how `merge_projects` is currently missing from prod (Phase 2 LinkPicker 5xx's because the function isn't there).
-
-> **⚠️ Near-miss fixed 2026-06-21 (`260621-hsl`):** when `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_REF` were first added (DB password still blank), this job activated and ran `supabase db push **--include-all**`, which forced the out-of-sequence `000_rollback_all.sql` (a DROP-everything teardown) into a **prod** push. It only aborted on a non-CASCADE `DROP FUNCTION update_updated_at()` hitting migration 023's trigger — prod was saved by luck. Fix: (1) the `000_*` maintenance scripts moved to `supabase/maintenance/` (outside the `db push` path); (2) `--include-all` removed (forward-only); (3) the skip guard now requires all THREE secrets so a partial config skips instead of firing. When you finish configuring, the job applies only migrations newer than the remote watermark — teardown scripts can never auto-run.
-
-**One-time setup steps:**
-
-1. Open https://supabase.com/dashboard → **Account → Access Tokens** → "Generate new token" (label it `synapse-ci`). Copy.
-2. Open the Supabase project → **Settings → General** → copy the **Reference ID** (a short slug like `abcdefghijklmnop`).
-3. The DB password is the postgres password from when the project was created. If lost: **Settings → Database → "Reset database password"** (note: this will require updating any other system using the DB password too).
-4. In https://github.com/metanmai/synapse/settings/secrets/actions, add three repository secrets (NOT environment secrets — the migrate job uses `environment: prod` which inherits both repo and env-level secrets, but repo-level is simpler):
-   - `SUPABASE_ACCESS_TOKEN` → the token from step 1
-   - `SUPABASE_PROJECT_REF` → the slug from step 2
-   - `SUPABASE_DB_PASSWORD` → the postgres password from step 3
-5. Trigger a re-run of the latest CI workflow on metanmai (or push any commit) — the `migrate` job should now actually apply pending migrations instead of emitting the "secrets not configured" notice.
-
-**Verification after setup:** the `migrate` job logs should show `Applying migration ...` lines instead of `::notice::Supabase auto-migrate skipped...`. Confirm against prod by running `select version from supabase_migrations.schema_migrations order by version desc limit 5;` in the Dashboard SQL Editor.
-
-**Risk acknowledged:** once active, every push-to-main applies migrations. A careless `drop table` lands in prod with no manual review. Consistent with the solo-dev / merge-directly-to-main workflow per `feedback_no_prs.md`, but worth knowing.
-
-**Code locations:**
-- Job: `.github/workflows/ci.yml` (search for `migrate:` — between `verify:` and `e2e:`)
-- Pending migration today: `supabase/migrations/019_merge_projects.sql` (Phase 2 D-07 RPC; needed for LinkPicker happy-path to stop 5xx-ing in prod)
-
----
-
 ### Configure SYNAPSE_E2E_API_KEY + a provider API key so `happy-flow-e2e` matrix activates
 
 A `happy-flow-e2e` job in `.github/workflows/ci.yml` runs `npm run test:e2e` on **ubuntu-latest + windows-latest** to prove the merge gate's 5 scripts work cross-platform. Same graceful-skip pattern as `migrate` and `e2e` — the job stays GREEN until both secrets land on **metanmai/synapse**, at which point it actually exercises the universal LLM driver + curl-through-proxy + recall paths on each OS.
@@ -201,6 +172,20 @@ Migration `015_handoff_layer.sql` created `handoff_sessions` and `handoff_issues
 ---
 
 ## Closed
+
+### Configure Supabase secrets so CI auto-migrate activates — closed 2026-07-18
+
+Phase 2 added a `migrate` job to `.github/workflows/ci.yml` that runs `supabase db push` on every push to `main`. This process gap is closed: GitHub `prod` now contains all three required secret names—`SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, and `SUPABASE_DB_PASSWORD`. Secret names and presence were verified; no secret value was inspected or recorded.
+
+**Why it mattered:** This was the same class of problem as P0 BUG-01: schema drift between repository migrations and production could go undetected while migrations required a manual push. The 2026-07-17 production close-out applied migration 031 and `20260717170215_harden_public_schema_rls.sql` directly, with reproducible SQL committed in `454af70e`; post-apply checks returned zero Supabase advisor errors.
+
+> **⚠️ Near-miss fixed 2026-06-21 (`260621-hsl`):** when `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_REF` were first added (DB password still blank), this job activated and ran `supabase db push **--include-all**`, which forced the out-of-sequence `000_rollback_all.sql` (a DROP-everything teardown) into a **prod** push. It only aborted on a non-CASCADE `DROP FUNCTION update_updated_at()` hitting migration 023's trigger — prod was saved by luck. Fix: (1) the `000_*` maintenance scripts moved to `supabase/maintenance/` (outside the `db push` path); (2) `--include-all` was removed (forward-only); (3) the skip guard now requires all THREE secrets so a partial configuration skips instead of firing. With all three names configured, the job can apply only migrations newer than the remote watermark; teardown scripts are outside the automatic path.
+
+**Close evidence:** GitHub Actions run `29599228105` attempt 2 concluded successfully. The `SUPABASE_DB_PASSWORD` secret was added afterward, so that successful run does **not** prove the new password was consumed. The next push or rerun must confirm that the `migrate` job reaches `supabase db push` and reconciles the remote migration history rather than emitting the secrets-not-configured notice.
+
+**Risk retained:** Every push to `main` can apply forward migrations to production. A destructive forward migration still requires careful review. The recurrence-level CI lint that rejects new tables without RLS remains deferred.
+
+**Code location:** `.github/workflows/ci.yml` (`migrate:` job between `verify:` and `e2e:`).
 
 Fixed in the 2026-05-18 session:
 

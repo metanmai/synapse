@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: stabilize-for-launch
 status: shipped
-last_updated: "2026-06-10T19:30:00.000Z"
+last_updated: "2026-07-18T00:00:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 3
@@ -15,7 +15,7 @@ progress:
 
 # State — Stabilize-for-Launch Milestone
 
-*Last updated: 2026-05-30 — **MILESTONE SHIPPED in code as of 2026-05-29.** Three phases delivered (Phase 1 slice 1a-prime, Phase 2 Real User Identity, Phase 3 Free/Plus Tier Redesign — Phase 3's original "Telemetry" scope swapped to Tier Redesign mid-milestone). Launch close-out commit `f941dea` (2026-05-29) verified the killer feature — "next session knows where the last one left off" survives ctrl+C / crash / OOM, not just graceful PreCompact / SessionEnd — and closed all 6 Plus/Free gating bugs across two commits (`004b98b` copy/constants + `84b8602` enforcement on 5 quota-bearing paths). Multi-device E2E went from 16/18 to 19/19. Migrations 018+019+025 applied to PROD Supabase (`45cde12`). Pre-launch fixes shipped: 5 critical frontend issues + PII log removal (`7a0b78d`), continuous pull-handoff pre-warm (`a42a604`), cache-freshness window race kill (`739ddcb`). **Phases 4-7 (Cross-User Collab, Token Brokering, Waitlist Launch, Dogfood/Public Open) deferred to v1.X** — see "Deferred Phases" section. Post-launch v1.X work in flight: proxy daemon (Layers 1-9, shipped 2026-05-30) — see "Post-launch v1.X work" section.*
+*Last updated: 2026-07-18 — **MILESTONE SHIPPED in code as of 2026-05-29.** Three phases delivered (Phase 1 slice 1a-prime, Phase 2 Real User Identity, Phase 3 Free/Plus Tier Redesign — Phase 3's original "Telemetry" scope swapped to Tier Redesign mid-milestone). Launch close-out commit `f941dea` (2026-05-29) verified the killer feature — "next session knows where the last one left off" survives ctrl+C / crash / OOM, not just graceful PreCompact / SessionEnd — and closed all 6 Plus/Free gating bugs across two commits (`004b98b` copy/constants + `84b8602` enforcement on 5 quota-bearing paths). Multi-device E2E went from 16/18 to 19/19. Migrations 018+019+025 applied to PROD Supabase (`45cde12`). Pre-launch fixes shipped: 5 critical frontend issues + PII log removal (`7a0b78d`), continuous pull-handoff pre-warm (`a42a604`), cache-freshness window race kill (`739ddcb`). **Phases 4-7 (Cross-User Collab, Token Brokering, Waitlist Launch, Dogfood/Public Open) deferred to v1.X** — see "Deferred Phases" section. Post-launch v1.X work in flight: proxy daemon (Layers 1-9, shipped 2026-05-30) — see "Post-launch v1.X work" section.*
 
 ## Project Reference
 
@@ -25,13 +25,13 @@ progress:
 
 **Current milestone:** Stabilize-for-launch. **Shipped 2026-05-29** (on the original Friday deadline). Phases 4-7 deferred to v1.X.
 
-**Current focus:** Milestone in post-ship maintenance. Active v1.X work: proxy daemon (Layers 1-9 shipped 2026-05-30) — universal session capture via TLS-MITM forward proxy that works with any AI tool honoring `HTTPS_PROXY` + `NODE_EXTRA_CA_CERTS`. Three-command onboarding: `synapsesync capture proxy install` → paste env snippet → `synapsesync capture proxy enable`. Remaining tactical items: SUPABASE_* CI secrets (P1 from BUGS.md), Creem renewal webhook (P2), the post-launch action items in Synapse insights (orphan owner_id rows, recompute retry).
+**Current focus:** Milestone in post-ship maintenance. Production Supabase hardening is complete: migration `20260717170215_harden_public_schema_rls.sql` is live, migration 031 is live, the advisor reports zero errors, and GitHub `prod` now has all three auto-migrate secret names configured. Remaining tactical items are the Creem renewal webhook (P2), post-launch Synapse insight items (orphan owner_id rows, recompute retry), the deferred recurrence-level migration/RLS lint, and two non-critical Supabase warnings (leaked-password protection and `pgvector` in `public`).
 
 ## Current Position
 
 - **Phase:** Phase 2 ✅ SHIPPED, Phase 3 (Free/Plus Tier Redesign) ✅ SHIPPED, Phase 1 slice 1a-prime ✅ COMPLETE. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-enabled machine.
 - **Plan:** Milestone scope complete (in the form actually executed). All in-scope plans landed. Phases 4-7 deferred to v1.X. Post-launch work tracked under "Post-launch v1.X work" below.
-- **Status:** BUG-01 through BUG-04 + BUGS-MD-12 all closed in prod. IDENT-01 + IDENT-02 verified. TIER-01..08 all shipped. Migrations 018+019+025 applied to PROD Supabase (`45cde12` re-triggered CI post-apply). Multi-device E2E 19/19 passing. All 6 Plus/Free gating bypasses closed (`004b98b` + `84b8602`). Pre-launch frontend hardening + PII scrub shipped (`7a0b78d`). Continuous pull-handoff pre-warm (`a42a604`) makes the killer feature survive ctrl+C / crash / OOM. CI green on metanmai across all 4 workspaces (620+ mcp tests after proxy work).
+- **Status:** BUG-01 through BUG-04 + BUGS-MD-12 all closed in prod. IDENT-01 + IDENT-02 verified. TIER-01..08 all shipped. Production Supabase RLS, grants, six analytics views, and seven privileged functions were hardened by `20260717170215_harden_public_schema_rls.sql` (`454af70e`); Metabase read-only and service-role access were preserved, migration 031 was applied, and the Supabase advisor returned zero errors. GitHub Actions run `29599228105` attempt 2 passed; `SUPABASE_DB_PASSWORD` was configured in the `prod` environment afterward, so a future push/rerun—not that earlier run—must prove auto-migrate consumes it.
 - **Roadmap progress:** **3/7 phases shipped, 4 deferred to v1.X.** Of the 16 plans across the 3 in-scope phases, 15/16 complete (only Plan 01-05 Sentry incomplete — Netskope-blocked on this machine).
 
 **Scope reshuffles during milestone (chronological):**
@@ -99,7 +99,8 @@ Default proxy port `7727` (stable for shell rc). Symmetric `proxy disable` and `
 
 **Tactical items still pending (ranked by leverage):**
 
-- **P1 — Configure SUPABASE_* secrets on metanmai/synapse.** Activates the already-scaffolded CI auto-migrate job. ~5 min in GitHub settings. Without this, migrations still require manual `supabase db push` from a CF-enabled machine, which is exactly how schema-vs-code drift sneaks back in.
+- **Supabase follow-up — observe the first post-secret auto-migrate run.** `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, and `SUPABASE_DB_PASSWORD` are configured in GitHub `prod`; the next push/rerun should prove the job consumes the password and reconcile the remote migration watermark. The recurrence-level CI lint that rejects future tables without RLS remains deferred.
+- **Supabase warnings (non-critical).** Enable leaked-password protection in the dashboard; relocate `pgvector` out of `public` only through a coordinated dependency-aware migration.
 - **P2 — Add defensive `default:` to Creem webhook switch.** ~3 lines, no functional risk; surfaces the next missed event_type in `wrangler tail` so the renewal-drop root cause can be diagnosed.
 - **Action item — SessionStore (tool, session_id) keying refactor.** Surfaced during proxy Layer 7 work — `SessionStore` is keyed by `id` alone, not `(source, id)`. File and proxy sources happen to derive IDs differently so collisions don't naturally occur, but the latent fragility is documented in a Synapse insight.
 - **Action item — Orphan owner_id rows.** ~3 projects on user account where `owner_id` is set but no `project_members` entry. Data hygiene from 2026-05-29.
@@ -120,17 +121,20 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 
 ### Quick Tasks Completed
 
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 260621-h13 | Billing/subscription test coverage (webhook transitions, gating filter, valid-HMAC dispatch) | 2026-06-21 | 89e0d875 | [260621-h13-billing-subscription-tests](./quick/260621-h13-billing-subscription-tests/) |
-| 260621-hsl | Neutralize CI migrate prod-wipe landmine (relocate teardown scripts, drop --include-all, 3-secret guard) | 2026-06-21 | 7395a0fe | [260621-hsl-neutralize-ci-migrate-prod-wipe-landmine](./quick/260621-hsl-neutralize-ci-migrate-prod-wipe-landmine/) |
-| 260621-jig | CI e2e driver prefers DeepSeek over OpenRouter (cheaper); cost-guard test; production unchanged | 2026-06-21 | 9fe1b84a | [260621-jig-ci-e2e-driver-prefer-deepseek-over-openr](./quick/260621-jig-ci-e2e-driver-prefer-deepseek-over-openr/) |
-| 260621-kya | Full-chain browser-capture e2e (extension → real daemon ingest); 12 tests; closes the worker↔ingest seam | 2026-06-21 | ab451768 | [260621-kya-full-chain-browser-capture-e2e-extension](./quick/260621-kya-full-chain-browser-capture-e2e-extension/) |
-| 260623-vs2 | Slice A: capture-scoped keys + POST /api/capture/browser (self-sufficient extension foundation) — PUSHED (auto-deploys); migration 031 applied separately by owner | 2026-06-23 | a3805174 | [260623-vs2-slice-a-capture-scoped-key-browser-inges](./quick/260623-vs2-slice-a-capture-scoped-key-browser-inges/) |
-| 260624-vs3 | Slice B: capture-scoped token minting (scope=capture, rotate-on-reauth, device-cap-exempt) + /cli-auth redirect_uri open-redirect guard — PUSHED (auto-deploys Worker+frontend; CLI flow byte-identical) | 2026-06-24 | fc161052 | [260624-vs3-slice-b-scoped-token-mint-redirect](./quick/260624-vs3-slice-b-scoped-token-mint-redirect/) |
-| 260624-vs4 | Slice C: self-sufficient extension — chrome.identity sign-in + direct-POST to /api/capture/browser + daemon fallback + client-side scrub — PUSHED (ff2f8eac; extension-only, no auto-deploy — load-unpacked/store distribution pending) | 2026-06-24 | d5570396 | [260624-vs4-slice-c-extension-self-sufficient-capture](./quick/260624-vs4-slice-c-extension-self-sufficient-capture/) |
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 260621-h13 | Billing/subscription test coverage (webhook transitions, gating filter, valid-HMAC dispatch) | 2026-06-21 | 89e0d875 |  | [260621-h13-billing-subscription-tests](./quick/260621-h13-billing-subscription-tests/) |
+| 260621-hsl | Neutralize CI migrate prod-wipe landmine (relocate teardown scripts, drop --include-all, 3-secret guard) | 2026-06-21 | 7395a0fe |  | [260621-hsl-neutralize-ci-migrate-prod-wipe-landmine](./quick/260621-hsl-neutralize-ci-migrate-prod-wipe-landmine/) |
+| 260621-jig | CI e2e driver prefers DeepSeek over OpenRouter (cheaper); cost-guard test; production unchanged | 2026-06-21 | 9fe1b84a |  | [260621-jig-ci-e2e-driver-prefer-deepseek-over-openr](./quick/260621-jig-ci-e2e-driver-prefer-deepseek-over-openr/) |
+| 260621-kya | Full-chain browser-capture e2e (extension → real daemon ingest); 12 tests; closes the worker↔ingest seam | 2026-06-21 | ab451768 |  | [260621-kya-full-chain-browser-capture-e2e-extension](./quick/260621-kya-full-chain-browser-capture-e2e-extension/) |
+| 260623-vs2 | Slice A: capture-scoped keys + POST /api/capture/browser (self-sufficient extension foundation) — PUSHED (auto-deploys); migration 031 applied separately by owner | 2026-06-23 | a3805174 |  | [260623-vs2-slice-a-capture-scoped-key-browser-inges](./quick/260623-vs2-slice-a-capture-scoped-key-browser-inges/) |
+| 260624-vs3 | Slice B: capture-scoped token minting (scope=capture, rotate-on-reauth, device-cap-exempt) + /cli-auth redirect_uri open-redirect guard — PUSHED (auto-deploys Worker+frontend; CLI flow byte-identical) | 2026-06-24 | fc161052 |  | [260624-vs3-slice-b-scoped-token-mint-redirect](./quick/260624-vs3-slice-b-scoped-token-mint-redirect/) |
+| 260624-vs4 | Slice C: self-sufficient extension — chrome.identity sign-in + direct-POST to /api/capture/browser + daemon fallback + client-side scrub — PUSHED (ff2f8eac; extension-only, no auto-deploy — load-unpacked/store distribution pending) | 2026-06-24 | d5570396 |  | [260624-vs4-slice-c-extension-self-sufficient-capture](./quick/260624-vs4-slice-c-extension-self-sufficient-capture/) |
+| 260718-igd | Reconcile GSD records for completed Supabase production hardening | 2026-07-18 | 454af70e | Verified | [260718-igd-reconcile-gsd-records-for-the-completed-](./quick/260718-igd-reconcile-gsd-records-for-the-completed-/) |
 
 ### Recent activity
+
+- 2026-07-17/18: **Production Supabase security close-out.** Production drift was repaired with `20260717170215_harden_public_schema_rls.sql` (`454af70e`): RLS and browser-role grants were hardened for `project_context` and `deleted_accounts`; six analytics views became security-invoker; seven privileged functions had fixed search paths and restricted execution; Metabase read-only and service-role access were preserved. Migration 031 (`api_keys.scope`) was applied and verified. Supabase advisor errors fell to zero. GitHub Actions run `29599228105` attempt 2 concluded successfully. `SUPABASE_DB_PASSWORD` was added to the GitHub `prod` environment afterward (name/presence confirmed; value not inspected), so the next push/rerun is the proof of password consumption. Remaining non-critical warnings: leaked-password protection and `pgvector` in `public`; recurrence-level migration/RLS lint remains deferred.
 
 - 2026-05-18: Shipped per-device CLI keys end-to-end (`a8ecf98` + `34de058`) and fixed 5 install-pipeline bugs (`d3cd771` + `025a814`). Daemon alive locally via launchd; cloud sync blocked by BUG-01.
 - 2026-05-19: Scope re-expansion (COLLAB + TOKEN added). 4-agent research consolidated into `research/SUMMARY.md`. Requirements rewritten. Roadmap created. Slice 1a-prime executed: BUG-02, BUG-03, BUG-04, BUGS.md #12 all closed inline (17 RED → GREEN; commits `19e3f8e` → `9a0db69`).
@@ -206,7 +210,7 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 
 **Next actions (ranked by user-leverage):**
 
-1. **Highest — configure SUPABASE_ACCESS_TOKEN / SUPABASE_PROJECT_REF / SUPABASE_DB_PASSWORD secrets on metanmai/synapse** per `docs/BUGS.md` P1 setup steps. Activates the already-scaffolded CI auto-migrate job. Without this, every migration still requires manual `supabase db push` from a CF-enabled machine — which is exactly how schema-vs-code drift sneaks in (the BUG-01 / migration 018 saga was this class). ~5 minutes in GitHub repo settings.
+1. **High — verify the first post-secret auto-migrate execution.** All three required secret names are present in GitHub `prod`; on the next push/rerun, confirm the `migrate` job reaches `supabase db push` and reconciles the migration history. Run `29599228105` attempt 2 was green but predated `SUPABASE_DB_PASSWORD`, so it is not evidence that the new password was consumed.
 
 2. **Highest — `synapsesync capture proxy install` + `proxy enable` on this machine.** The proxy daemon is shipped but not yet enabled here. Three commands from the README. Then the user's own claude / cursor / codex sessions get captured through the same backend pipeline as file-watched tools. (Note: re-running `proxy install` on the same machine is idempotent — CA already generated by Layer 9 smoke; keychain install will prompt for confirmation if not already trusted.)
 
@@ -224,7 +228,7 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 
 | Risk | Severity | Phase | Mitigation |
 |------|----------|-------|------------|
-| Manual `supabase db push` requirement → schema drift recurs | High | All | P1 BUGS.md — configure CI secrets |
+| First post-secret auto-migrate execution not yet observed | Medium | All | On the next push/rerun, verify `supabase db push` executes and reconciles the remote migration watermark; recurrence-level migration/RLS lint remains deferred |
 | Creem webhook silent renewal drop → billing card UI lies | Medium | Billing | Defensive `default:` patch (3 lines) then proper diagnosis |
 | `SessionStore` keyed by `id` not `(source, id)` — latent collision risk | Low | Post-Layer 7 | Sources today derive IDs differently so no collisions naturally occur; refactor when convenient |
 | Proxy daemon onboarding requires manual CA install + env vars in shell rc | Medium | v1.X | Three-command flow exists (`proxy install → paste env → enable`); could automate further with `~/.zshrc` line injection |

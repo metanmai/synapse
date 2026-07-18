@@ -48,3 +48,21 @@ PROD apply is a deploy concern, not a code concern. The migration file is the de
 **Class guarded today (instance-level):** `project_context` and `deleted_accounts` are no longer anon-readable in any future scenario where the anon key leaks.
 
 **Class NOT yet guarded (recurrence-level):** A new `create table` in a future migration without RLS would still be a problem. Captured as follow-up #2 above.
+
+## Production close-out — 2026-07-17
+
+The production-apply and post-apply verification follow-ups are now closed. Although migration `027_rls_remaining_tables.sql` was recorded in the remote migration history, production had drifted and both tables still had RLS disabled. The direct 2026-07-17 production repair was captured reproducibly in `20260717170215_harden_public_schema_rls.sql` (`454af70e`).
+
+The broader repair:
+
+- enabled RLS and revoked `anon`/`authenticated` grants on `project_context` and `deleted_accounts`;
+- changed all six analytics views to security-invoker and removed browser-role access;
+- fixed the search paths and restricted execution on seven privileged functions;
+- preserved the dedicated Metabase read-only policies and backend service-role access; and
+- reduced Supabase advisor errors to zero after production verification.
+
+Accordingly, original follow-ups 1 (apply migration 027) and 3 (verify production behavior) are closed/superseded by the direct hardening and its catalog/advisor checks. Original follow-up 2—the recurrence-level CI guard that rejects future tables created without RLS—remains deferred and is not claimed as implemented.
+
+Adjacent operational close-out facts: migration 031 (`api_keys.scope`) was applied and its column/default/check constraint verified in production. GitHub `prod` now contains the `SUPABASE_DB_PASSWORD` secret name (presence confirmed; value not inspected), completing the three-secret auto-migrate configuration. GitHub Actions run `29599228105` attempt 2 was successful before that password was added, so a future push/rerun remains the evidence that the migration job consumes it.
+
+Two non-critical Supabase warnings remain: leaked-password protection is a dashboard setting, and moving `pgvector` out of `public` requires a coordinated dependency-aware migration.
