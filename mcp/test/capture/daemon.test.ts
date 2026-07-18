@@ -34,14 +34,13 @@ describe("handoff daemon loop", () => {
       _spawnPrewarmFn: () => {},
       pull_ms: 100,
       healthcheck_ms: 100,
-      tier_override: "plus",
     });
     await new Promise((r) => setTimeout(r, 250));
     expect(fs.existsSync(path.join(tmp, "daemon.healthcheck"))).toBe(true);
     stop();
   });
 
-  it("processes flush-now signal immediately", async () => {
+  it("processes flush-now immediately without a billing-tier gate", async () => {
     global.fetch = vi.fn(async () => new Response('{"accepted":0}', { status: 200 })) as typeof fetch;
     fs.mkdirSync(path.join(tmp, "projects/p1"), { recursive: true });
     fs.writeFileSync(path.join(tmp, "projects/p1/events.jsonl"), `${JSON.stringify(makeEv())}\n`);
@@ -52,11 +51,12 @@ describe("handoff daemon loop", () => {
       _spawnPrewarmFn: () => {},
       pull_ms: 10000,
       healthcheck_ms: 1000,
-      tier_override: "plus",
     });
     fs.writeFileSync(path.join(tmp, "daemon-flush-now"), "");
     await new Promise((r) => setTimeout(r, 200));
-    expect(vi.mocked(global.fetch).mock.calls.length).toBeGreaterThan(0);
+    const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.endsWith("/api/events/batch"))).toBe(true);
+    expect(urls.some((url) => url.endsWith("/api/billing/status"))).toBe(false);
     stop();
   });
 
@@ -79,7 +79,6 @@ describe("handoff daemon loop", () => {
       _spawnPrewarmFn: () => {},
       pull_ms: 10000,
       healthcheck_ms: 1000,
-      tier_override: "plus",
     });
 
     // Wait long enough for at least one cycle to fire on the empty list.
@@ -133,7 +132,6 @@ describe("handoff daemon loop", () => {
       _spawnPrewarmFn: () => {},
       pull_ms: 10000,
       healthcheck_ms: 1000,
-      tier_override: "plus",
     });
     fs.writeFileSync(path.join(tmp, "daemon-flush-now"), "");
     await new Promise((r) => setTimeout(r, 250));
@@ -183,7 +181,6 @@ describe("handoff daemon loop", () => {
       _spawnPrewarmFn: prewarm,
       pull_ms: 10000,
       healthcheck_ms: 1000,
-      tier_override: "plus",
       user_id: "u1",
     });
     fs.writeFileSync(path.join(tmp, "daemon-flush-now"), "");

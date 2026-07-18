@@ -4,6 +4,8 @@
 **Inputs:** 03-CONTEXT.md, existing codebase
 **Use:** Executor reference for "what does this file's analog look like?" — concrete code excerpts, no re-derivation.
 
+> **Supersession note (2026-07-18):** Auto-sync gate patterns in this historical execution map are obsolete. Commit `3776c154` made daemon continuity available to every tier; the dead policy constant, accessors, billing poll, and test override were removed during GSD reconciliation.
+
 ---
 
 ## Slice 03-01 — Tier Constants Centralization

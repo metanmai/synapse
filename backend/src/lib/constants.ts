@@ -18,7 +18,7 @@ export const DEFAULT_APP_URL = "https://synapsesync.app";
 
 // --- Quota limits ---
 // Phase 03-02: Free expanded from 5 → 50 (parity with Plus). Differentiation
-// moves to per-project capacity + auto-sync + link sharing. See
+// moves to per-project capacity + link sharing. See
 // .planning/phases/03-free-plus-tier-redesign/03-CONTEXT.md.
 export const FREE_MAX_PROJECTS = 50;
 export const PLUS_MAX_PROJECTS = 50;
@@ -31,12 +31,6 @@ export const FREE_INSIGHTS_PER_PROJECT = 10;
 export const PLUS_INSIGHTS_PER_PROJECT = 50;
 export const FREE_CONVERSATIONS_PER_PROJECT = 10;
 export const PLUS_CONVERSATIONS_PER_PROJECT = 50;
-
-// --- Auto-sync gate (tier → daemon cycle behavior) ---
-// Free users sync manually via `synapsesync sync`; Plus runs the 5-min daemon cycle.
-// Hooks (SessionEnd, PreCompact) still push inline regardless of tier — only the
-// background cron-style loop is gated. See slice 03-05 for the daemon wiring.
-export const AUTO_SYNC_TIERS = ["plus"] as const;
 
 // --- Rate limiting ---
 export const RATE_LIMIT_MAX = 120;

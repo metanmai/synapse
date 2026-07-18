@@ -4,6 +4,8 @@
 **Status:** Ready for planning
 **Source:** Inline locked decisions captured during /gsd:plan-phase brainstorm (no separate /gsd:discuss-phase session). All design questions resolved by user.
 
+> **Supersession note (2026-07-18):** The original Plus-only daemon auto-sync decision below was later reversed in `3776c154`. Crash-safe continuity now runs on every tier; tier-revision invalidation is unnecessary. The historical decisions remain below to explain the original plans.
+
 <domain>
 ## Phase Boundary
 

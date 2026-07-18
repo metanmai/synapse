@@ -11,6 +11,9 @@ files_modified:
 autonomous: true
 requirements: [TIER-01]
 
+# Historical note: the auto-sync tier policy in this executed plan was
+# superseded by all-tier daemon continuity in 3776c154. See 03-01-SUMMARY.md.
+
 must_haves:
   truths:
     - "New per-tier capacity constants exist in backend/src/lib/constants.ts: FREE/PLUS_INSIGHTS_PER_PROJECT, FREE/PLUS_CONVERSATIONS_PER_PROJECT, AUTO_SYNC_TIERS"

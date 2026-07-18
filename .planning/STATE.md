@@ -25,13 +25,13 @@ progress:
 
 **Current milestone:** Stabilize-for-launch. **Shipped 2026-05-29** (on the original Friday deadline). Phases 4-7 deferred to v1.X.
 
-**Current focus:** Milestone in post-ship maintenance. Production Supabase hardening and auto-migrate verification are complete: run `29649638136` attempt 2 consumed the configured production secrets, repaired the remote migration watermark, applied migrations 031 and `20260717170215_harden_public_schema_rls.sql`, and passed. Remaining tactical items are the TIER-07 low-latency tier-flip gap, Creem renewal webhook (P2), post-launch Synapse insight items (orphan owner_id rows, recompute retry), the deferred recurrence-level migration/RLS lint, and two non-critical Supabase warnings (leaked-password protection and `pgvector` in `public`).
+**Current focus:** Milestone in post-ship maintenance. Production Supabase hardening and auto-migrate verification are complete: run `29649638136` attempt 2 consumed the configured production secrets, repaired the remote migration watermark, applied migrations 031 and `20260717170215_harden_public_schema_rls.sql`, and passed. Remaining tactical items are the Creem renewal webhook (P2), post-launch Synapse insight items (orphan owner_id rows, recompute retry), the deferred recurrence-level migration/RLS lint, and two non-critical Supabase warnings (leaked-password protection and `pgvector` in `public`).
 
 ## Current Position
 
 - **Phase:** Phase 2 ✅ SHIPPED, Phase 3 (Free/Plus Tier Redesign) ✅ SHIPPED, Phase 1 slice 1a-prime ✅ COMPLETE. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-enabled machine.
 - **Plan:** Milestone scope complete (in the form actually executed). All in-scope plans landed. Phases 4-7 deferred to v1.X. Post-launch work tracked under "Post-launch v1.X work" below.
-- **Status:** BUG-01 through BUG-04 + BUGS-MD-12 all closed in prod. IDENT-01 + IDENT-02 verified. TIER-01..06 and TIER-08 shipped; TIER-07 remains open because the daemon still caches tier for five minutes instead of invalidating within seconds. Production Supabase RLS, grants, six analytics views, and seven privileged functions were hardened by `20260717170215_harden_public_schema_rls.sql` (`454af70e`); Metabase read-only and service-role access were preserved, migration 031 was applied, and the Supabase advisor returned zero errors. GitHub Actions run `29649638136` attempt 2 then proved the `prod` secrets are consumed and the forward migration path is healthy.
+- **Status:** BUG-01 through BUG-04 + BUGS-MD-12 all closed in prod. IDENT-01 + IDENT-02 verified. Phase 3's current tier behavior is shipped; TIER-07 is superseded because daemon auto-sync now runs on every tier, and the obsolete tier cache/billing poll has been removed. Production Supabase RLS, grants, six analytics views, and seven privileged functions were hardened by `20260717170215_harden_public_schema_rls.sql` (`454af70e`); Metabase read-only and service-role access were preserved, migration 031 was applied, and the Supabase advisor returned zero errors. GitHub Actions run `29649638136` attempt 2 then proved the `prod` secrets are consumed and the forward migration path is healthy.
 - **Roadmap progress:** **3/7 phases shipped, 4 deferred to v1.X.** Of the 16 plans across the 3 in-scope phases, 15/16 complete (only Plan 01-05 Sentry incomplete — Netskope-blocked on this machine).
 
 **Scope reshuffles during milestone (chronological):**
@@ -50,7 +50,7 @@ progress:
 - **Phases planned (original):** 7
 - **Phases shipped:** 3 (Phase 1 slice 1a-prime, Phase 2, Phase 3 — Phase 3 reshuffled mid-milestone)
 - **Phases deferred to v1.X:** 4 (Phases 4-7)
-- **Requirements v1 covered:** BUG-01..04, IDENT-01..02, TIER-01..06, and TIER-08 are complete; TIER-07, OBS-01, and OPS-01 remain open; deferred product requirements remain in Phases 4-7.
+- **Requirements v1 covered:** BUG-01..04, IDENT-01..02, and the current Phase 3 tier contract are complete; TIER-07 is superseded by all-tier auto-sync; OBS-01 and OPS-01 remain open; deferred product requirements remain in Phases 4-7.
 - **Post-launch v1.X work shipped (2026-05-30):** Proxy daemon Layers 1-9 (~3,000 LOC + 620 tests)
 
 ## Accumulated Context
@@ -158,7 +158,7 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
   - `2b04178` 5 user-facing CLI error/usage strings fixed to say `synapsesync` instead of `synapse` (handlers.ts:143+175, commands.ts:196, os-service.ts:145, mcp-command.ts:18). Test fixtures referencing the v1.0 `synapse hook X` shape kept as-is — they test the backwards-compat migration detector.
   - **5 critical OPEN issues diagnosed but NOT fixed at the time** — current state in "Critical Open Issues" section above.
 
-- 2026-05-23 to 2026-05-26: **Phase 3 reshuffled.** Original Phase 3 ("Telemetry — Quality & Speed Signals") swapped out for "Free/Plus Tier Redesign" (`40b18f9` scaffold, `aff04e1` planning artifacts inline). User-leverage gap was tier capacity, not measurement. 5 plans across 5 slices: tier constants (`9e5bc88`), 50-project cap (`fb7a8b3` → `8a5d134` → `d1aad53` → `18762c7` → `822f393` → `88febad`), per-project conversation LRU on Free (`7a42c6a`), per-project insight cap with Free LRU + Plus Haiku-consolidate (`3f79efa`), end-to-end machine_id wiring (`35e0eb8` backend → `b5017af` MCP+daemon → `f88def0` wrap-up). Migration 025 (the corresponding schema add) applied to TEST + PROD via Supabase Dashboard SQL Editor; CI re-triggered (`45cde12`). The 2026-07-18 summary backfill verified 7 of 8 tier requirements and reopened TIER-07 because the promised seconds-level tier cache invalidation did not land.
+- 2026-05-23 to 2026-05-26: **Phase 3 reshuffled.** Original Phase 3 ("Telemetry — Quality & Speed Signals") swapped out for "Free/Plus Tier Redesign" (`40b18f9` scaffold, `aff04e1` planning artifacts inline). User-leverage gap was tier capacity, not measurement. 5 plans across 5 slices: tier constants (`9e5bc88`), 50-project cap (`fb7a8b3` → `8a5d134` → `d1aad53` → `18762c7` → `822f393` → `88febad`), per-project conversation LRU on Free (`7a42c6a`), per-project insight cap with Free LRU + Plus Haiku-consolidate (`3f79efa`), end-to-end machine_id wiring (`35e0eb8` backend → `b5017af` MCP+daemon → `f88def0` wrap-up). Migration 025 (the corresponding schema add) applied to TEST + PROD via Supabase Dashboard SQL Editor; CI re-triggered (`45cde12`). A later product correction (`3776c154`) removed the daemon tier gate so crash-safe continuity works for every tier, superseding TIER-07's tier-flip IPC requirement.
 
 - 2026-05-27 to 2026-05-29: **Pre-launch hardening week.** `a42a604` daemon continuous pull-handoff pre-warm — Priority 1 from `docs/HANDOFF-2026-05-28.md` — makes the killer feature ("next session knows where the last one left off") survive ctrl+C / crash / terminal close / OOM, not just graceful PreCompact / SessionEnd. `739ddcb` cache-freshness window kills a multi-device write-back race that the pre-warm exposed (10 boundary tests in `handoff-freshness.test.ts`). `004b98b` aligned marketing copy with what we enforce — drops unenforced maxFiles + maxConnections claims. `84b8602` closes 5 quota-bypass paths on MCP + daemon. `60bf100` raises aggregation token cap 1024→4096 to stop mid-UUID truncation in compaction. `1e90a2f` exposes insight IDs in `list_insights` + enforces brevity in `save_insight`. `549358f` renders markdown in chats, insights, and project context. `af34d75` CI fixture-route unlock for Playwright while keeping prod 404. `7a0b78d` 5 critical frontend fixes + PII log removal (pre-launch sweep). `9528c8e` + `8a7f1db` `doctor --smoke` end-to-end verification CLI for install validation.
 
@@ -210,17 +210,15 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 
 **Next actions (ranked by user-leverage):**
 
-1. **High — close TIER-07.** The Phase 3 summary backfill found the promised near-instant Free→Plus daemon activation never landed: the daemon still caches billing status for five minutes. Implement and test low-latency invalidation without re-enabling periodic Free sync.
+1. **Highest — `synapsesync capture proxy install` + `proxy enable` on this machine.** The proxy daemon is shipped but not yet enabled here. Three commands from the README. Then the user's own claude / cursor / codex sessions get captured through the same backend pipeline as file-watched tools. (Note: re-running `proxy install` on the same machine is idempotent — CA already generated by Layer 9 smoke; keychain install will prompt for confirmation if not already trusted.)
 
-2. **Highest — `synapsesync capture proxy install` + `proxy enable` on this machine.** The proxy daemon is shipped but not yet enabled here. Three commands from the README. Then the user's own claude / cursor / codex sessions get captured through the same backend pipeline as file-watched tools. (Note: re-running `proxy install` on the same machine is idempotent — CA already generated by Layer 9 smoke; keychain install will prompt for confirmation if not already trusted.)
+2. **Medium — add defensive `default:` to Creem webhook switch.** ~3 lines, no functional risk. Will surface the next missed event_type in `wrangler tail` so the renewal-drop root cause becomes diagnosable. Proper fix needs a one-off Creem dashboard look-up to identify the event_type name.
 
-3. **Medium — add defensive `default:` to Creem webhook switch.** ~3 lines, no functional risk. Will surface the next missed event_type in `wrangler tail` so the renewal-drop root cause becomes diagnosable. Proper fix needs a one-off Creem dashboard look-up to identify the event_type name.
+3. **Medium — decide on Phase 4-7 fate.** The 4 deferred phases (Cross-User Collab, Token Brokering, Waitlist Launch, Dogfood/Public Open) are listed in "Deferred Phases" above. Each is a substantial v1.X chunk. Decision: are they part of an upcoming milestone, or descoped indefinitely? The proxy daemon's universal-capture story (Layers 1-9) is a partial alternative to the original "growth" path — claude/cursor/codex/gemini all captured equally — which may shift priorities for Phase 4 collab.
 
-4. **Medium — decide on Phase 4-7 fate.** The 4 deferred phases (Cross-User Collab, Token Brokering, Waitlist Launch, Dogfood/Public Open) are listed in "Deferred Phases" above. Each is a substantial v1.X chunk. Decision: are they part of an upcoming milestone, or descoped indefinitely? The proxy daemon's universal-capture story (Layers 1-9) is a partial alternative to the original "growth" path — claude/cursor/codex/gemini all captured equally — which may shift priorities for Phase 4 collab.
+4. **Low — close the proxy daemon's "Cursor/Claude Desktop/ChatGPT Desktop" spike (task #118).** Requires admin password to install CA in System keychain. Validates the proxy works for GUI tools, not just Node CLIs. ~10 minutes when the user has admin rights handy.
 
-5. **Low — close the proxy daemon's "Cursor/Claude Desktop/ChatGPT Desktop" spike (task #118).** Requires admin password to install CA in System keychain. Validates the proxy works for GUI tools, not just Node CLIs. ~10 minutes when the user has admin rights handy.
-
-6. **Low — address the action items from Synapse insights:** orphan owner_id rows (~3 projects), recompute retry, SessionStore (tool, session_id) keying refactor. None are user-impacting today.
+5. **Low — address the action items from Synapse insights:** orphan owner_id rows (~3 projects), recompute retry, SessionStore (tool, session_id) keying refactor. None are user-impacting today.
 
 **CI invariant:** stay green on metanmai at all times (per `feedback_ci_must_stay_green.md`).
 
@@ -228,7 +226,6 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 
 | Risk | Severity | Phase | Mitigation |
 |------|----------|-------|------------|
-| TIER-07 low-latency tier flip did not land | Medium | Phase 3 | Add and test cache invalidation so Free→Plus activates daemon auto-sync within seconds without restart |
 | Creem webhook silent renewal drop → billing card UI lies | Medium | Billing | Defensive `default:` patch (3 lines) then proper diagnosis |
 | `SessionStore` keyed by `id` not `(source, id)` — latent collision risk | Low | Post-Layer 7 | Sources today derive IDs differently so no collisions naturally occur; refactor when convenient |
 | Proxy daemon onboarding requires manual CA install + env vars in shell rc | Medium | v1.X | Three-command flow exists (`proxy install → paste env → enable`); could automate further with `~/.zshrc` line injection |

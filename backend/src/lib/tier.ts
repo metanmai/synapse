@@ -3,7 +3,6 @@ import type { Context } from "hono";
 import { getActiveSubscription } from "../db/queries/subscriptions";
 import { getTierLimitsFromEnv } from "../db/types";
 import {
-  AUTO_SYNC_TIERS,
   DEFAULT_APP_URL,
   DEFAULT_TIER_PLUS_PRICE,
   DEVICE_LIMIT_FREE,
@@ -153,18 +152,4 @@ export function getDeviceCapForTier(tier: Tier): number {
 export function getDeviceCap(c: Context<{ Bindings: Env }>): number {
   const tier = (c.get("tier") ?? "free") as Tier;
   return getDeviceCapForTier(tier);
-}
-
-// --- Auto-sync gate (Phase 03-01) ---
-// Used by the daemon's cycle() to decide whether to run the periodic
-// flush+pull+prewarm loop. Free returns false → daemon stays idle
-// between hook-driven syncs; Plus returns true → full auto-sync.
-
-export function isAutoSyncEnabledForTier(tier: Tier): boolean {
-  return (AUTO_SYNC_TIERS as readonly string[]).includes(tier);
-}
-
-export function isAutoSyncEnabled(c: Context<{ Bindings: Env }>): boolean {
-  const tier = (c.get("tier") ?? "free") as Tier;
-  return isAutoSyncEnabledForTier(tier);
 }

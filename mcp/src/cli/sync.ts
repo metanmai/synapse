@@ -1,15 +1,11 @@
 /**
  * `synapsesync sync` — manual one-shot sync command (Phase 03-05).
  *
- * Why this exists: on Free, the daemon's 5-min auto-sync cycle is
- * gated off (see daemon.ts tier-gate). Hooks (SessionEnd, PreCompact)
- * still push inline at session boundaries, but cross-session +
- * cross-device continuity needs a kick. `synapsesync sync` is that
- * kick — fires one full flush+pull cycle on demand against the live
- * backend, with streaming progress per step + a final summary line.
- *
- * On Plus, `sync` is also available — useful as a debug tool to force
- * a sync without waiting for the next cron tick.
+ * This is the explicit debug/recovery surface for every tier: it fires one
+ * full flush+pull cycle on demand against the live backend, with streaming
+ * progress per step + a final summary line. The daemon also auto-syncs on
+ * every tier; manual sync is useful when a user does not want to wait for
+ * the next cycle or is diagnosing a stale local queue.
  *
  * Streaming output matches the `doctor --smoke` shape: print step on
  * start, then completion + detail on the same line when done.

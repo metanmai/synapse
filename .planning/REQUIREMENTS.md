@@ -49,13 +49,13 @@
 
 ### Free/Plus tier redesign
 
-- [x] **TIER-01** — Per-tier project, insight, conversation, device, and auto-sync policies are centralized behind tested accessors.
+- [x] **TIER-01** — Per-tier project, insight, conversation, and device policies are centralized behind tested accessors.
 - [x] **TIER-02** — Free and Plus users are capped at 50 owned projects; the 51st create returns `402 PROJECT_QUOTA_EXCEEDED` across backend, CLI/brief, and browser surfaces.
 - [x] **TIER-03** — A Free user's 11th conversation in a project silently evicts the oldest conversation by `updated_at`, including its messages; reads do not refresh LRU order.
 - [x] **TIER-04** — A Free user's 11th active insight evicts the oldest active insight; a Plus user's overflow triggers asynchronous 10-to-3–5 LLM consolidation with scheduled retry on failure.
 - [x] **TIER-05** — Stable per-machine UUIDs prevent duplicate device registration and enforce 3-device Free / 10-device Plus caps with a sign-out recovery flow.
-- [x] **TIER-06** — Free users retain hook-driven boundary pushes and can run `synapsesync sync` manually, while the periodic daemon sync loop is Plus-only.
-- [ ] **TIER-07** — A Free→Plus tier change activates daemon auto-sync within seconds without a daemon restart. *Open: the daemon currently caches billing status for five minutes; the planned `tier_revision` invalidation did not land.*
+- [x] **TIER-06** — Every tier receives periodic daemon sync and hook-driven boundary pushes; `synapsesync sync` provides an explicit one-shot debug/recovery command. *Supersedes the original Free-manual/Plus-auto split because crash-safe continuity is a core feature, not a paid gate.*
+- [x] **TIER-07** — Superseded: tier changes no longer control daemon auto-sync, so Free→Plus needs no cache invalidation or daemon restart. The obsolete tier cache and billing poll were removed after the all-tier continuity decision.
 - [x] **TIER-08** — Project-context summary retrieval and its dashboard surface remain Plus-only while Free conversations and insights remain accessible.
 
 ### Cross-user collaboration
@@ -124,7 +124,7 @@ Each v1 requirement maps to exactly one phase. Coverage: 23/23 ✓.
 | TIER-04 | Phase 3: Free/Plus Tier Redesign | Complete |
 | TIER-05 | Phase 3: Free/Plus Tier Redesign | Complete |
 | TIER-06 | Phase 3: Free/Plus Tier Redesign | Complete |
-| TIER-07 | Phase 3: Free/Plus Tier Redesign | Pending |
+| TIER-07 | Phase 3: Free/Plus Tier Redesign | Superseded by all-tier auto-sync |
 | TIER-08 | Phase 3: Free/Plus Tier Redesign | Complete |
 | MEAS-01 | Phase 3 (retired post-launch) | Deferred |
 | MEAS-02 | Phase 3 (retired post-launch) | Deferred |

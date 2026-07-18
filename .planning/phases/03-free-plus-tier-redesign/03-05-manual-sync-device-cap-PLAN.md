@@ -22,6 +22,10 @@ files_modified:
 autonomous: false
 requirements: [TIER-05, TIER-06, TIER-07]
 
+# Historical note: the daemon tier gate and tier-revision requirement in
+# this executed plan were superseded by all-tier continuity in 3776c154.
+# See 03-05-SUMMARY.md for the final behavior.
+
 must_haves:
   truths:
     - "Daemon's cycle() skips flush/pull/prewarm when user tier is free"

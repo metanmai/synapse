@@ -5,7 +5,6 @@ import {
   getConversationCapForTier,
   getDeviceCapForTier,
   getInsightCapForTier,
-  isAutoSyncEnabledForTier,
 } from "../../src/lib/tier";
 
 /**
@@ -105,7 +104,7 @@ describe("enforceMemberLimitForTier", () => {
  * underlying constants are reorganized.
  *
  * The assertions are deliberately contract-shaped ("plus > free", "free
- * is nonzero", "auto-sync gated on plus") rather than magic-number locked
+ * is nonzero") rather than magic-number locked
  * for the two caps that still change in later slices. The two locked
  * caps (insights, conversations) ship with this slice and can be pinned
  * to their specific values.
@@ -124,10 +123,5 @@ describe("per-tier capacity accessors (Phase 03-01)", () => {
   it("getDeviceCapForTier: free=3, plus>free (specific Plus value changes in slice 03-05)", () => {
     expect(getDeviceCapForTier("free")).toBe(3);
     expect(getDeviceCapForTier("plus")).toBeGreaterThan(getDeviceCapForTier("free"));
-  });
-
-  it("isAutoSyncEnabledForTier: free=false, plus=true", () => {
-    expect(isAutoSyncEnabledForTier("free")).toBe(false);
-    expect(isAutoSyncEnabledForTier("plus")).toBe(true);
   });
 });

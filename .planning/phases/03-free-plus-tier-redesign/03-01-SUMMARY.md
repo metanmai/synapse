@@ -13,15 +13,15 @@ Centralized the Free/Plus capacity policy in `backend/src/lib/constants.ts` and 
 
 ## Shipped
 
-- Per-tier insight, conversation, device, and auto-sync constants.
-- `getInsightCapForTier`, `getConversationCapForTier`, `getDeviceCapForTier`, and `isAutoSyncEnabledForTier` accessors with context delegates.
+- Per-tier insight, conversation, and device constants.
+- `getInsightCapForTier`, `getConversationCapForTier`, and `getDeviceCapForTier` accessors with context delegates.
 - Unit coverage in `backend/test/lib/tier-enforce.test.ts`.
 
 ## Evidence
 
 - Implementation commit in this mirror: `e4fec203`.
-- Current constants remain Free/Plus insights 10/50, conversations 10/50, devices 3/10, and auto-sync Plus-only.
+- Current constants remain Free/Plus insights 10/50, conversations 10/50, and devices 3/10.
 
 ## Deviations
 
-None material. Behavioral limit changes were kept in the later enforcement slices.
+The slice originally introduced a Plus-only auto-sync policy. That policy was later superseded by the all-tier continuity decision in `3776c154`; its now-dead constant and accessors were removed during the 2026-07-18 reconciliation.
