@@ -25,7 +25,7 @@ progress:
 
 **Current milestone:** Stabilize-for-launch. **Shipped 2026-05-29** (on the original Friday deadline). Phases 4-7 deferred to v1.X.
 
-**Current focus:** Milestone in post-ship maintenance. Production Supabase hardening, auto-migrate verification, the `pgvector` schema warning, the Creem renewal webhook parser, and local Node-tool proxy activation are complete. The WSL capture daemon is running on `127.0.0.1:7727`, shell proxy variables are installed in `~/.bashrc`, and the Layer 5 TLS-MITM capture passed. Remaining actionable tactical items are post-launch Synapse insight items (orphan owner_id rows, recompute retry), the SessionStore composite-key refactor, and the deferred recurrence-level migration/RLS lint. Native/GUI system trust still requires the user's sudo password.
+**Current focus:** Milestone in post-ship maintenance. Production Supabase hardening, auto-migrate verification, the `pgvector` schema warning, the Creem renewal webhook parser, local Node-tool proxy activation, and orphan-project cleanup are complete. The WSL capture daemon is running on `127.0.0.1:7727`, shell proxy variables are installed in `~/.bashrc`, and the Layer 5 TLS-MITM capture passed. Remaining actionable tactical items are the background recompute retry, the SessionStore composite-key refactor, and the deferred recurrence-level migration/RLS lint. Native/GUI system trust still requires the user's sudo password.
 
 ## Current Position
 
@@ -106,7 +106,7 @@ Default proxy port `7727` (stable for shell rc). Symmetric `proxy disable` and `
 - **Creem renewal webhook — fixed 2026-07-18.** Creem sends canonical `eventType: subscription.paid` for renewals and `current_period_end_date` in its subscription object. Production read legacy `event_type` and `current_period_end`, so the documented payload missed dispatch and date updates. Canonical fields plus backward-compatible fallbacks and a signed worker-level regression test are now in place; stale-date UI copy is also guarded.
 - **Local Node-tool proxy activation — complete 2026-07-18.** CA generated, proxy enabled, daemon listening on port 7727, shell exports installed, and Layer 5 capture passed. Native/GUI trust remains an explicit sudo-required user step; the CLI now correctly reports the current CA as not system-trusted instead of confusing an old anchor for the active CA.
 - **Action item — SessionStore (tool, session_id) keying refactor.** Surfaced during proxy Layer 7 work — `SessionStore` is keyed by `id` alone, not `(source, id)`. File and proxy sources happen to derive IDs differently so collisions don't naturally occur, but the latent fragility is documented in a Synapse insight.
-- **Action item — Orphan owner_id rows.** ~3 projects on user account where `owner_id` is set but no `project_members` entry. Data hygiene from 2026-05-29.
+- **Orphan owner_id rows — cleaned and recurrence fixed 2026-07-18.** Four generated E2E projects (`E2E-Quota-*` / `multi-account-*`) with no memberships were deleted with their synthetic cascades; the live orphan count is zero. Migration `20260718160229_ensure_project_owner_membership.sql` creates owner membership in the project insert transaction, and application follow-up writes are idempotent upserts for rolling-deploy compatibility.
 - **Action item — Add retry to bg recompute's POST /compact.** Transient network blip silently loses ~30s of claude compaction work. From 2026-05-27 Synapse insight.
 
 ### Deferred Phases (originally Phases 4-7 of the 7-phase plan, deferred to v1.X)
@@ -217,7 +217,7 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 
 2. **Low — close the proxy daemon's "Cursor/Claude Desktop/ChatGPT Desktop" spike (task #118).** Requires the user's sudo/admin password to replace the stale system CA with the current CA. Validates the proxy for native/GUI tools, not just Node CLIs. ~10 minutes when the user has admin rights handy.
 
-3. **Low — address the action items from Synapse insights:** orphan owner_id rows (~3 projects), recompute retry, SessionStore (tool, session_id) keying refactor. None are user-impacting today.
+3. **Low — address the remaining action items from Synapse insights:** recompute retry and SessionStore (tool, session_id) keying refactor. Neither is user-impacting today.
 
 **CI invariant:** stay green on metanmai at all times (per `feedback_ci_must_stay_green.md`).
 

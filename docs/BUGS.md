@@ -171,6 +171,12 @@ Migration `015_handoff_layer.sql` created `handoff_sessions` and `handoff_issues
 
 ## Closed
 
+### Projects could commit without their owner membership — closed 2026-07-18
+
+Project creation used two independent database writes: insert `projects`, then insert the owner's `project_members` row. A failure between them left an invisible orphan project. The production audit found four such rows; all were generated `E2E-Quota-*` / `multi-account-*` artifacts, so the exact projects and their cascaded synthetic rows were deleted. The post-cleanup invariant returned zero projects whose `owner_id` lacked an owner membership.
+
+Migration `20260718160229_ensure_project_owner_membership.sql` adds an `AFTER INSERT` trigger so the owner membership is created in the same database transaction. Both application creation paths now follow with an idempotent membership upsert, preserving compatibility before and after the migration during a rolling deploy. A production-schema transaction dry run created a project, asserted its owner membership, and rolled back successfully.
+
 ### Supabase pgvector extension exposed through `public` — closed 2026-07-18
 
 Supabase's security advisor warned that pgvector was installed in the API-facing `public` schema. A direct schema move was not safe: the vector `<=>` operator moves with the extension, while `match_conversations` and `find_merge_candidates` had hardened `search_path = pg_catalog, public` settings. A transaction-only dry run caught the resulting `operator does not exist` failure and rolled back before production changed.

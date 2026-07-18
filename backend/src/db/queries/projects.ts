@@ -9,7 +9,7 @@ export async function createProject(db: SupabaseClient, name: string, ownerId: s
   // Add owner as a member
   const { error: memberError } = await db
     .from("project_members")
-    .insert({ project_id: project.id, user_id: ownerId, role: "owner" });
+    .upsert({ project_id: project.id, user_id: ownerId, role: "owner" }, { onConflict: "project_id,user_id" });
   if (memberError) throw memberError;
 
   return project as Project;
@@ -328,7 +328,7 @@ export async function findOrCreateProjectByGit(
 
   const { error: memberErr } = await db
     .from("project_members")
-    .insert({ project_id: createdId, user_id: userId, role: "owner" });
+    .upsert({ project_id: createdId, user_id: userId, role: "owner" }, { onConflict: "project_id,user_id" });
   if (memberErr) throw memberErr;
 
   return createdId;

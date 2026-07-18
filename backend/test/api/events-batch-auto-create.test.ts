@@ -116,12 +116,12 @@ describe("POST /api/events/batch — auto-create project (structural)", () => {
       //   2. projects.select.eq.eq (Tier 1b owner-only) → null (no existing)
       //   3. countOwnedProjects → 0 (under quota)
       //   4. projects.insert → returns the new project row
-      //   5. project_members.insert → success
+      //   5. project_members.upsert → success (idempotent with DB trigger)
       db.tables.project_members = {
         // memberships query: awaited directly → returns empty array
         select: () => ({ data: [], error: null }),
-        // insert (adding owner as member) succeeds
-        insert: () => ({ data: null, error: null }),
+        // upsert (ensuring owner membership) succeeds
+        upsert: () => ({ data: null, error: null }),
       };
       db.tables.projects = {
         // Tier 1b lookup returns null → no existing project

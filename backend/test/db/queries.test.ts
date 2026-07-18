@@ -283,13 +283,18 @@ describe("projects queries", () => {
       // 1st call: insert project
       expect(db.from).toHaveBeenNthCalledWith(1, "projects");
       expect(db.chains[0].insert).toHaveBeenCalledWith({ name: "myproject", owner_id: "u1" });
-      // 2nd call: insert owner as member
+      // 2nd call: idempotently ensure the owner membership. A database
+      // trigger creates it atomically on migrated databases; the upsert keeps
+      // rolling deploys and older databases compatible.
       expect(db.from).toHaveBeenNthCalledWith(2, "project_members");
-      expect(db.chains[1].insert).toHaveBeenCalledWith({
-        project_id: "proj1",
-        user_id: "u1",
-        role: "owner",
-      });
+      expect(db.chains[1].upsert).toHaveBeenCalledWith(
+        {
+          project_id: "proj1",
+          user_id: "u1",
+          role: "owner",
+        },
+        { onConflict: "project_id,user_id" },
+      );
     });
 
     it("throws if project insert fails", async () => {
