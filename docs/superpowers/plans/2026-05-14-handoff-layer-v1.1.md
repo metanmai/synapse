@@ -8,7 +8,7 @@
 
 **Tech Stack:** unchanged from v1 (TypeScript, Hono on Cloudflare Workers, Supabase, Vitest, Biome).
 
-**Prior context:** Spec at `docs/superpowers/specs/2026-05-14-handoff-layer-v1.1-design.md`. v1 plan at `docs/superpowers/plans/2026-05-11-claude-code-handoff-layer.md`. Dead-code scan at `.planning/dead-code-scan-2026-05-14.md`.
+**Prior context:** Spec at `docs/superpowers/specs/2026-05-14-handoff-layer-v1.1-design.md`. v1 plan at `docs/superpowers/plans/2026-05-11-claude-code-handoff-layer.md`. Dead-code scan at `.planning/milestones/archive/dead-code-scan-2026-05-14.md`.
 
 **Working from:** the existing v1 worktree `handoff-layer-v1` at `/Users/Tanmai.N/Documents/synapse/.claude/worktrees/handoff-layer-v1`. v1.1 commits continue on the same branch. Final merge / split decision is the user's call.
 

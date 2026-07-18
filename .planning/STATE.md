@@ -25,13 +25,13 @@ progress:
 
 **Current milestone:** Stabilize-for-launch. **Shipped 2026-05-29** (on the original Friday deadline). Phases 4-7 deferred to v1.X.
 
-**Current focus:** Milestone in post-ship maintenance. Production Supabase hardening is complete: migration `20260717170215_harden_public_schema_rls.sql` is live, migration 031 is live, the advisor reports zero errors, and GitHub `prod` now has all three auto-migrate secret names configured. Remaining tactical items are the Creem renewal webhook (P2), post-launch Synapse insight items (orphan owner_id rows, recompute retry), the deferred recurrence-level migration/RLS lint, and two non-critical Supabase warnings (leaked-password protection and `pgvector` in `public`).
+**Current focus:** Milestone in post-ship maintenance. Production Supabase hardening and auto-migrate verification are complete: run `29649638136` attempt 2 consumed the configured production secrets, repaired the remote migration watermark, applied migrations 031 and `20260717170215_harden_public_schema_rls.sql`, and passed. Remaining tactical items are the TIER-07 low-latency tier-flip gap, Creem renewal webhook (P2), post-launch Synapse insight items (orphan owner_id rows, recompute retry), the deferred recurrence-level migration/RLS lint, and two non-critical Supabase warnings (leaked-password protection and `pgvector` in `public`).
 
 ## Current Position
 
 - **Phase:** Phase 2 ✅ SHIPPED, Phase 3 (Free/Plus Tier Redesign) ✅ SHIPPED, Phase 1 slice 1a-prime ✅ COMPLETE. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-enabled machine.
 - **Plan:** Milestone scope complete (in the form actually executed). All in-scope plans landed. Phases 4-7 deferred to v1.X. Post-launch work tracked under "Post-launch v1.X work" below.
-- **Status:** BUG-01 through BUG-04 + BUGS-MD-12 all closed in prod. IDENT-01 + IDENT-02 verified. TIER-01..08 all shipped. Production Supabase RLS, grants, six analytics views, and seven privileged functions were hardened by `20260717170215_harden_public_schema_rls.sql` (`454af70e`); Metabase read-only and service-role access were preserved, migration 031 was applied, and the Supabase advisor returned zero errors. GitHub Actions run `29599228105` attempt 2 passed; `SUPABASE_DB_PASSWORD` was configured in the `prod` environment afterward, so a future push/rerun—not that earlier run—must prove auto-migrate consumes it.
+- **Status:** BUG-01 through BUG-04 + BUGS-MD-12 all closed in prod. IDENT-01 + IDENT-02 verified. TIER-01..06 and TIER-08 shipped; TIER-07 remains open because the daemon still caches tier for five minutes instead of invalidating within seconds. Production Supabase RLS, grants, six analytics views, and seven privileged functions were hardened by `20260717170215_harden_public_schema_rls.sql` (`454af70e`); Metabase read-only and service-role access were preserved, migration 031 was applied, and the Supabase advisor returned zero errors. GitHub Actions run `29649638136` attempt 2 then proved the `prod` secrets are consumed and the forward migration path is healthy.
 - **Roadmap progress:** **3/7 phases shipped, 4 deferred to v1.X.** Of the 16 plans across the 3 in-scope phases, 15/16 complete (only Plan 01-05 Sentry incomplete — Netskope-blocked on this machine).
 
 **Scope reshuffles during milestone (chronological):**
@@ -50,7 +50,7 @@ progress:
 - **Phases planned (original):** 7
 - **Phases shipped:** 3 (Phase 1 slice 1a-prime, Phase 2, Phase 3 — Phase 3 reshuffled mid-milestone)
 - **Phases deferred to v1.X:** 4 (Phases 4-7)
-- **Requirements v1 covered:** ~14 of 23 (BUG-01..04, OBS-01 partial, IDENT-01..02, TIER-01..08; deferred: COLLAB-01..03, TOKEN-01..04, LAUNCH-01..03, DOG-01)
+- **Requirements v1 covered:** BUG-01..04, IDENT-01..02, TIER-01..06, and TIER-08 are complete; TIER-07, OBS-01, and OPS-01 remain open; deferred product requirements remain in Phases 4-7.
 - **Post-launch v1.X work shipped (2026-05-30):** Proxy daemon Layers 1-9 (~3,000 LOC + 620 tests)
 
 ## Accumulated Context
@@ -99,7 +99,7 @@ Default proxy port `7727` (stable for shell rc). Symmetric `proxy disable` and `
 
 **Tactical items still pending (ranked by leverage):**
 
-- **Supabase follow-up — observe the first post-secret auto-migrate run.** `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, and `SUPABASE_DB_PASSWORD` are configured in GitHub `prod`; the next push/rerun should prove the job consumes the password and reconcile the remote migration watermark. The recurrence-level CI lint that rejects future tables without RLS remains deferred.
+- **Supabase auto-migrate — verified 2026-07-18.** Run `29649638136` attempt 2 reached `supabase db push`, removed the stale remote-only `000 delete_user` ledger row, applied migrations 031 and `20260717170215`, and passed. The recurrence-level CI lint that rejects future tables without RLS remains deferred.
 - **Supabase warnings (non-critical).** Enable leaked-password protection in the dashboard; relocate `pgvector` out of `public` only through a coordinated dependency-aware migration.
 - **P2 — Add defensive `default:` to Creem webhook switch.** ~3 lines, no functional risk; surfaces the next missed event_type in `wrangler tail` so the renewal-drop root cause can be diagnosed.
 - **Action item — SessionStore (tool, session_id) keying refactor.** Surfaced during proxy Layer 7 work — `SessionStore` is keyed by `id` alone, not `(source, id)`. File and proxy sources happen to derive IDs differently so collisions don't naturally occur, but the latent fragility is documented in a Synapse insight.
@@ -134,7 +134,7 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 
 ### Recent activity
 
-- 2026-07-17/18: **Production Supabase security close-out.** Production drift was repaired with `20260717170215_harden_public_schema_rls.sql` (`454af70e`): RLS and browser-role grants were hardened for `project_context` and `deleted_accounts`; six analytics views became security-invoker; seven privileged functions had fixed search paths and restricted execution; Metabase read-only and service-role access were preserved. Migration 031 (`api_keys.scope`) was applied and verified. Supabase advisor errors fell to zero. GitHub Actions run `29599228105` attempt 2 concluded successfully. `SUPABASE_DB_PASSWORD` was added to the GitHub `prod` environment afterward (name/presence confirmed; value not inspected), so the next push/rerun is the proof of password consumption. Remaining non-critical warnings: leaked-password protection and `pgvector` in `public`; recurrence-level migration/RLS lint remains deferred.
+- 2026-07-17/18: **Production Supabase security and automation close-out.** Production drift was repaired with `20260717170215_harden_public_schema_rls.sql` (`454af70e`): RLS and browser-role grants were hardened for `project_context` and `deleted_accounts`; six analytics views became security-invoker; seven privileged functions had fixed search paths and restricted execution; Metabase read-only and service-role access were preserved. Migration 031 (`api_keys.scope`) was applied and verified. Supabase advisor errors fell to zero. After `SUPABASE_DB_PASSWORD` was added to GitHub `prod`, run `29649638136` attempt 2 reached `supabase db push`, reconciled the stale remote-only `000 delete_user` migration ledger entry, applied the two outstanding migrations, and passed. Remaining non-critical warnings: leaked-password protection and `pgvector` in `public`; recurrence-level migration/RLS lint remains deferred.
 
 - 2026-05-18: Shipped per-device CLI keys end-to-end (`a8ecf98` + `34de058`) and fixed 5 install-pipeline bugs (`d3cd771` + `025a814`). Daemon alive locally via launchd; cloud sync blocked by BUG-01.
 - 2026-05-19: Scope re-expansion (COLLAB + TOKEN added). 4-agent research consolidated into `research/SUMMARY.md`. Requirements rewritten. Roadmap created. Slice 1a-prime executed: BUG-02, BUG-03, BUG-04, BUGS.md #12 all closed inline (17 RED → GREEN; commits `19e3f8e` → `9a0db69`).
@@ -158,7 +158,7 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
   - `2b04178` 5 user-facing CLI error/usage strings fixed to say `synapsesync` instead of `synapse` (handlers.ts:143+175, commands.ts:196, os-service.ts:145, mcp-command.ts:18). Test fixtures referencing the v1.0 `synapse hook X` shape kept as-is — they test the backwards-compat migration detector.
   - **5 critical OPEN issues diagnosed but NOT fixed at the time** — current state in "Critical Open Issues" section above.
 
-- 2026-05-23 to 2026-05-26: **Phase 3 reshuffled.** Original Phase 3 ("Telemetry — Quality & Speed Signals") swapped out for "Free/Plus Tier Redesign" (`40b18f9` scaffold, `aff04e1` planning artifacts inline). User-leverage gap was tier capacity, not measurement. 5 plans across 5 slices: tier constants (`9e5bc88`), 50-project cap (`fb7a8b3` → `8a5d134` → `d1aad53` → `18762c7` → `822f393` → `88febad`), per-project conversation LRU on Free (`7a42c6a`), per-project insight cap with Free LRU + Plus Haiku-consolidate (`3f79efa`), end-to-end machine_id wiring (`35e0eb8` backend → `b5017af` MCP+daemon → `f88def0` wrap-up). Migration 025 (the corresponding schema add) applied to TEST + PROD via Supabase Dashboard SQL Editor; CI re-triggered (`45cde12`). 8 tier requirements (TIER-01..08) covered.
+- 2026-05-23 to 2026-05-26: **Phase 3 reshuffled.** Original Phase 3 ("Telemetry — Quality & Speed Signals") swapped out for "Free/Plus Tier Redesign" (`40b18f9` scaffold, `aff04e1` planning artifacts inline). User-leverage gap was tier capacity, not measurement. 5 plans across 5 slices: tier constants (`9e5bc88`), 50-project cap (`fb7a8b3` → `8a5d134` → `d1aad53` → `18762c7` → `822f393` → `88febad`), per-project conversation LRU on Free (`7a42c6a`), per-project insight cap with Free LRU + Plus Haiku-consolidate (`3f79efa`), end-to-end machine_id wiring (`35e0eb8` backend → `b5017af` MCP+daemon → `f88def0` wrap-up). Migration 025 (the corresponding schema add) applied to TEST + PROD via Supabase Dashboard SQL Editor; CI re-triggered (`45cde12`). The 2026-07-18 summary backfill verified 7 of 8 tier requirements and reopened TIER-07 because the promised seconds-level tier cache invalidation did not land.
 
 - 2026-05-27 to 2026-05-29: **Pre-launch hardening week.** `a42a604` daemon continuous pull-handoff pre-warm — Priority 1 from `docs/HANDOFF-2026-05-28.md` — makes the killer feature ("next session knows where the last one left off") survive ctrl+C / crash / terminal close / OOM, not just graceful PreCompact / SessionEnd. `739ddcb` cache-freshness window kills a multi-device write-back race that the pre-warm exposed (10 boundary tests in `handoff-freshness.test.ts`). `004b98b` aligned marketing copy with what we enforce — drops unenforced maxFiles + maxConnections claims. `84b8602` closes 5 quota-bypass paths on MCP + daemon. `60bf100` raises aggregation token cap 1024→4096 to stop mid-UUID truncation in compaction. `1e90a2f` exposes insight IDs in `list_insights` + enforces brevity in `save_insight`. `549358f` renders markdown in chats, insights, and project context. `af34d75` CI fixture-route unlock for Playwright while keeping prod 404. `7a0b78d` 5 critical frontend fixes + PII log removal (pre-launch sweep). `9528c8e` + `8a7f1db` `doctor --smoke` end-to-end verification CLI for install validation.
 
@@ -210,7 +210,7 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 
 **Next actions (ranked by user-leverage):**
 
-1. **High — verify the first post-secret auto-migrate execution.** All three required secret names are present in GitHub `prod`; on the next push/rerun, confirm the `migrate` job reaches `supabase db push` and reconciles the migration history. Run `29599228105` attempt 2 was green but predated `SUPABASE_DB_PASSWORD`, so it is not evidence that the new password was consumed.
+1. **High — close TIER-07.** The Phase 3 summary backfill found the promised near-instant Free→Plus daemon activation never landed: the daemon still caches billing status for five minutes. Implement and test low-latency invalidation without re-enabling periodic Free sync.
 
 2. **Highest — `synapsesync capture proxy install` + `proxy enable` on this machine.** The proxy daemon is shipped but not yet enabled here. Three commands from the README. Then the user's own claude / cursor / codex sessions get captured through the same backend pipeline as file-watched tools. (Note: re-running `proxy install` on the same machine is idempotent — CA already generated by Layer 9 smoke; keychain install will prompt for confirmation if not already trusted.)
 
@@ -228,7 +228,7 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 
 | Risk | Severity | Phase | Mitigation |
 |------|----------|-------|------------|
-| First post-secret auto-migrate execution not yet observed | Medium | All | On the next push/rerun, verify `supabase db push` executes and reconciles the remote migration watermark; recurrence-level migration/RLS lint remains deferred |
+| TIER-07 low-latency tier flip did not land | Medium | Phase 3 | Add and test cache invalidation so Free→Plus activates daemon auto-sync within seconds without restart |
 | Creem webhook silent renewal drop → billing card UI lies | Medium | Billing | Defensive `default:` patch (3 lines) then proper diagnosis |
 | `SessionStore` keyed by `id` not `(source, id)` — latent collision risk | Low | Post-Layer 7 | Sources today derive IDs differently so no collisions naturally occur; refactor when convenient |
 | Proxy daemon onboarding requires manual CA install + env vars in shell rc | Medium | v1.X | Three-command flow exists (`proxy install → paste env → enable`); could automate further with `~/.zshrc` line injection |

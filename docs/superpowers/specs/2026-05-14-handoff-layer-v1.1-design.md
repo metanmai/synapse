@@ -17,7 +17,7 @@ Four categories of work:
 
 - **A. Wire-up fixes** — v1 shipped non-functional CLI/daemon entry points (tests passed at unit level, integration was broken). v1.1 makes them actually invocable.
 - **B. Friction fixes** — drop the AI cost-cap config knob, default-on inference, free heuristic fallback for when LLM isn't available, auto-create project on first event, invite flow, slash command files installed by `synapse init`.
-- **C. Dead-code removal** — ~140 lines of unused exports, helpers, and stale TODOs (per dead-code scan `.planning/dead-code-scan-2026-05-14.md`).
+- **C. Dead-code removal** — ~140 lines of unused exports, helpers, and stale TODOs (per archived dead-code scan `.planning/milestones/archive/dead-code-scan-2026-05-14.md`).
 - **D. Architectural cleanup** — retire duplicated/legacy paths (`capture hook-install`, `cli/brief.ts`, `SYNAPSE_PASSPHRASE` encryption, most legacy MCP server handlers).
 
 Net repo size change: approximately **-1100 lines deleted, ~500 added** for new features = **net ~-600 lines smaller**.

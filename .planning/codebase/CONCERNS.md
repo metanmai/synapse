@@ -4,7 +4,7 @@
 
 This document catalogs technical debt, latent bugs, security gaps, performance bottlenecks, and fragile areas as of the v1.1 handoff-layer merge. Each item is severity-labeled. Verified file paths are included so the planner can navigate directly to remediation sites.
 
-A prior dead-code audit (`.planning/dead-code-scan-2026-05-14.md`) is the parent reference for items 1, 2, 12, 13 and 14 below — many of its findings have since been resolved by v1.1 follow-up commits (e.g. `daemon` is now wired in `HANDLERS`, the FK on `handoff_events.session_id` was dropped in migration 016, etc.). The list below reflects current state.
+A prior dead-code audit (`.planning/milestones/archive/dead-code-scan-2026-05-14.md`) is the parent reference for items 1, 2, 12, 13 and 14 below — many of its findings have since been resolved by v1.1 follow-up commits (e.g. `daemon` is now wired in `HANDLERS`, the FK on `handoff_events.session_id` was dropped in migration 016, etc.). The list below reflects current state.
 
 ## Tech Debt
 
@@ -13,7 +13,7 @@ A prior dead-code audit (`.planning/dead-code-scan-2026-05-14.md`) is the parent
 - **Issue:** `resolveProject`, `ResolvedProject`, and `BackendResolveResponse` in `mcp/src/cli/resolve-project.ts` are imported only by `mcp/test/unit/resolve-project.test.ts`. No production caller exists. The runtime resolution path (`resolveProjectFromCwd` in `mcp/src/cli/handlers.ts:77`) uses a different algorithm (local map → `cwd_<hash>` placeholder → backend auto-create), making this module's three-tier resolver dead.
 - **Files:** `mcp/src/cli/resolve-project.ts:1-63`, `mcp/test/unit/resolve-project.test.ts`
 - **Impact:** ~63 lines of unused production code + test file. Confuses future maintainers about which resolver is canonical.
-- **Fix approach:** Delete the file and its test. Deferred from v1.1 cleanup (see `dead-code-scan-2026-05-14.md` §3) because the test still passes and removal is not blocking.
+- **Fix approach:** Delete the file and its test. Deferred from v1.1 cleanup (see `.planning/milestones/archive/dead-code-scan-2026-05-14.md` §3) because the test still passes and removal is not blocking.
 
 ### Asymmetric test coupling: `writeDaemonCcProfile` — Low / Tracked
 

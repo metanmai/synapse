@@ -14,7 +14,7 @@
 
 - [~] **Phase 1: Stabilize Backend & Observability** — Slice 1a-prime ✅ shipped (BUG-01..04, BUGS-MD-12); slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-enabled machine
 - [x] **Phase 2: Real User Identity** — Events carry authenticated `user_id`; same-user cross-device sync works (`f941dea` verifies E2E 19/19)
-- [x] **Phase 3: Free/Plus Tier Redesign** — *(scope swap from original "Telemetry"; original retired indefinitely.)* TIER-01..08 shipped: 50-project cap, per-project conversation/insight LRU on Free, Plus Haiku consolidation, 3/10-device caps, manual `sync` CLI on Free, tier-flip IPC propagation
+- [ ] **Phase 3: Free/Plus Tier Redesign** — *(scope swap from original "Telemetry"; original retired indefinitely.)* TIER-01..06 and TIER-08 shipped: 50-project cap, per-project conversation/insight LRU on Free, Plus Haiku consolidation, 3/10-device caps, manual `sync` CLI on Free, and Plus-only project context. TIER-07 low-latency tier-flip propagation remains open.
 - [ ] **Phase 4: Cross-User Collaboration** — DEFERRED to v1.X. Owners invite teammates by email; invitees accept; briefs show per-actor view
 - [ ] **Phase 5: Token Brokering MVP** — DEFERRED to v1.X. Plus subscribers opt-in to lend LLM tokens; one Synapse-internal call routes through the broker with attribution
 - [ ] **Phase 6: Waitlist Launch & Cold-Laptop Rehearsal** — DEFERRED to v1.X. Public signup queues to waitlist; admin admits; fresh-laptop walkthrough documents and fixes friction
@@ -65,7 +65,7 @@ Plans:
 **Research needed:** yes — daemon currently emits `"default"` placeholder; need to study how `~/.synapse/config.json` is set vs. read, and what the cross-device sync flow looks like for events the daemon hasn't yet pulled. `/gsd:discuss-phase 2` should invoke a researcher before planning.
 **UI hint**: no
 
-### Phase 3: Free/Plus Tier Redesign ✅ SHIPPED
+### Phase 3: Free/Plus Tier Redesign — 7/8 requirements shipped
 **Mode:** standard
 **Goal:** Free tier is substantively usable for a solo single-device user; Plus differentiates on per-project capacity, auto-sync, link sharing, and project context — not on project count. Telemetry (the original Phase 3) is retired indefinitely; surface it later as a separate phase if user feedback warrants.
 **Depends on:** Phase 2 (tier model + per-user identity already wired). Independent of Phase 4-7.
@@ -79,7 +79,7 @@ Plans:
   6. Free user's daemon does NOT run the 5-min auto-sync cycle. Hooks still push inline at session boundaries (PreCompact, SessionEnd). `synapsesync sync` CLI fires one cycle on demand with streaming progress lines + final summary, exit 0 on success / 1 on any step failure.
   7. Tier-flip (free→plus) propagates to daemon within seconds via an IPC channel — no daemon restart required.
   8. Free user remains paywalled out of project context summaries; Plus user gets them automatically.
-**Plans:** 5 plans (all shipped 2026-05-22 → 2026-05-29)
+**Plans:** 5 plans (03-01 through 03-04 complete; 03-05 partial because TIER-07 remains open)
 - [x] 03-01-tier-constants-PLAN.md — Centralize per-tier capacity constants + accessors (`9e5bc88`)
 - [x] 03-02-project-cap-PLAN.md — 50-project cap on both tiers + `PROJECT_QUOTA_EXCEEDED` (`8a5d134` backend → `d1aad53` CLI → `18762c7` UI → `822f393` + `88febad` tests)
 - [x] 03-03-conversation-lru-PLAN.md — Per-project conversation LRU on Free (`7a42c6a`)
@@ -195,13 +195,13 @@ Phase 1 (Stabilize) ─┬─► Phase 2 (Identity) ─┬─► Phase 4 (Collab
 | Workers tier (OPS-01) | 1 | 1 | ⏳ slice 1b deferred to v1.X |
 | Identity (IDENT-01..02) | 2 | 2 | ✅ shipped |
 | ~~Telemetry (MEAS-01..04)~~ | ~~4~~ | ~~3~~ | 🚫 retired — original Phase 3 scope swapped out 2026-05-22 |
-| **Free/Plus Tier (TIER-01..08)** | **8** | **3 (swapped in)** | ✅ shipped |
+| **Free/Plus Tier (TIER-01..08)** | **8** | **3 (swapped in)** | 7 complete, TIER-07 open |
 | Collaboration (COLLAB-01..03) | 3 | 4 | ⏳ deferred to v1.X |
 | Token brokering (TOKEN-01..04) | 4 | 5 | ⏳ deferred to v1.X |
 | Public launch (LAUNCH-01..03) | 3 | 6 | ⏳ deferred to v1.X |
 | Dogfood (DOG-01) | 1 | 7 | ⏳ deferred to v1.X |
 
-**Shipped:** ~15 requirements (BUG-01..04, IDENT-01..02, TIER-01..08 — Sentry/OPS deferred).
+**Shipped:** BUG-01..04, IDENT-01..02, TIER-01..06, and TIER-08. TIER-07, Sentry/OBS-01, and OPS-01 remain open; Phases 4-7 are deferred.
 **Deferred:** 11 requirements across Phases 4-7 + slice 1b.
 
 ---
@@ -249,7 +249,7 @@ synapsesync capture proxy enable    # config + daemon restart
 
 ### Pending v1.X follow-ups (smaller items)
 
-- **P1 (BUGS.md) — COMPLETE 2026-07-18:** GitHub `prod` has `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, and `SUPABASE_DB_PASSWORD` configured. Run `29599228105` attempt 2 passed before the database-password secret was added; the next push/rerun remains the proof that auto-migrate consumes it.
+- **P1 (BUGS.md) — COMPLETE 2026-07-18:** GitHub `prod` has all three migration secrets configured, and run `29649638136` attempt 2 reached `supabase db push`, reconciled the remote migration history, applied the outstanding migrations, and passed.
 - **P2 (BUGS.md)** — Creem renewal webhook silent drop (defensive `default:` + proper event_type fix)
 - **Insight action items** — orphan `owner_id` rows; `SessionStore` (source, id) keying refactor; bg-recompute POST `/compact` retry
 - **Spike #118** — proxy validation against Cursor / Claude Desktop / ChatGPT Desktop (requires admin password for System keychain install)

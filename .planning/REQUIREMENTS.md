@@ -12,10 +12,10 @@
 
 ### Backend stabilization
 
-- [ ] **BUG-01** — Backend `POST /api/events/batch` no longer throws unhandled Cloudflare 1101 on real event payloads. Daemon flushes succeed end-to-end against production. *Acceptance: `node mcp/scripts/test-cli-flow.mjs` (or equivalent) produces "all events flushed, 0 errors" against `api.synapsesync.app` for a 3-project / 100-event batch.*
-- [ ] **BUG-02** — `synapse capture status` accurately reports daemon state when the daemon is running under launchd or systemd. *Acceptance: with a launchd-supervised daemon alive, `synapse capture status` shows "Daemon: running" + the launchd PID.*
-- [ ] **BUG-03** — Wizard's MCP configs work on proxy-restricted networks (Netskope, corporate firewalls). *Acceptance: fresh wizard run on a network where `npx` returns 403 produces a `.mcp.json` whose `command` field resolves to a binary on disk, and the MCP server starts successfully when Claude Code opens.*
-- [ ] **BUG-04** — `synapse init` writes the project-local `.mcp.json` (in addition to hooks + service + config), so the MCP server is reachable from Claude Code in this project. *Acceptance: after `synapse init --api-key X` and a Claude Code restart, `mcp__synapse__tree()` returns successfully.*
+- [x] **BUG-01** — Backend `POST /api/events/batch` no longer throws unhandled Cloudflare 1101 on real event payloads. Daemon flushes succeed end-to-end against production. *Acceptance: `node mcp/scripts/test-cli-flow.mjs` (or equivalent) produces "all events flushed, 0 errors" against `api.synapsesync.app` for a 3-project / 100-event batch.*
+- [x] **BUG-02** — `synapse capture status` accurately reports daemon state when the daemon is running under launchd or systemd. *Acceptance: with a launchd-supervised daemon alive, `synapse capture status` shows "Daemon: running" + the launchd PID.*
+- [x] **BUG-03** — Wizard's MCP configs work on proxy-restricted networks (Netskope, corporate firewalls). *Acceptance: fresh wizard run on a network where `npx` returns 403 produces a `.mcp.json` whose `command` field resolves to a binary on disk, and the MCP server starts successfully when Claude Code opens.*
+- [x] **BUG-04** — `synapse init` writes the project-local `.mcp.json` (in addition to hooks + service + config), so the MCP server is reachable from Claude Code in this project. *Acceptance: after `synapse init --api-key X` and a Claude Code restart, `mcp__synapse__tree()` returns successfully.*
 
 ### Observability
 
@@ -44,8 +44,19 @@
 
 ### Multi-device & identity
 
-- [ ] **IDENT-01** — Events carry the real authenticated `actor.user_id` (the user's UUID from `public.users`), not the placeholder `"default"` currently emitted by the daemon. Daemon reads its identity from `~/.synapse/config.json` (set by `synapse init`); backend verifies via `authMiddleware`. *Acceptance: events flushed by the daemon for an authenticated user have `actor_user_id` equal to that user's UUID in `handoff_events`; no `"default"` rows after this lands.*
-- [ ] **IDENT-02** — Same-user cross-device sync: signing in on a second machine produces a daemon that pulls existing `ProjectStatus` from the backend and renders briefs that include context from the first machine. *Acceptance: on machine B (fresh install), `synapse init` + a Claude Code SessionStart for a project that has events from machine A produces a brief mentioning machine-A activity within 1 cycle.*
+- [x] **IDENT-01** — Events carry the real authenticated `actor.user_id` (the user's UUID from `public.users`), not the placeholder `"default"` currently emitted by the daemon. Daemon reads its identity from `~/.synapse/config.json` (set by `synapse init`); backend verifies via `authMiddleware`. *Acceptance: events flushed by the daemon for an authenticated user have `actor_user_id` equal to that user's UUID in `handoff_events`; no `"default"` rows after this lands.*
+- [x] **IDENT-02** — Same-user cross-device sync: signing in on a second machine produces a daemon that pulls existing `ProjectStatus` from the backend and renders briefs that include context from the first machine. *Acceptance: on machine B (fresh install), `synapse init` + a Claude Code SessionStart for a project that has events from machine A produces a brief mentioning machine-A activity within 1 cycle.*
+
+### Free/Plus tier redesign
+
+- [x] **TIER-01** — Per-tier project, insight, conversation, device, and auto-sync policies are centralized behind tested accessors.
+- [x] **TIER-02** — Free and Plus users are capped at 50 owned projects; the 51st create returns `402 PROJECT_QUOTA_EXCEEDED` across backend, CLI/brief, and browser surfaces.
+- [x] **TIER-03** — A Free user's 11th conversation in a project silently evicts the oldest conversation by `updated_at`, including its messages; reads do not refresh LRU order.
+- [x] **TIER-04** — A Free user's 11th active insight evicts the oldest active insight; a Plus user's overflow triggers asynchronous 10-to-3–5 LLM consolidation with scheduled retry on failure.
+- [x] **TIER-05** — Stable per-machine UUIDs prevent duplicate device registration and enforce 3-device Free / 10-device Plus caps with a sign-out recovery flow.
+- [x] **TIER-06** — Free users retain hook-driven boundary pushes and can run `synapsesync sync` manually, while the periodic daemon sync loop is Plus-only.
+- [ ] **TIER-07** — A Free→Plus tier change activates daemon auto-sync within seconds without a daemon restart. *Open: the daemon currently caches billing status for five minutes; the planned `tier_revision` invalidation did not land.*
+- [x] **TIER-08** — Project-context summary retrieval and its dashboard surface remain Plus-only while Free conversations and insights remain accessible.
 
 ### Cross-user collaboration
 
@@ -99,22 +110,22 @@ Each v1 requirement maps to exactly one phase. Coverage: 23/23 ✓.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BUG-01 | Phase 1: Stabilize Backend & Observability | Pending |
-| BUG-02 | Phase 1: Stabilize Backend & Observability | Pending |
-| BUG-03 | Phase 1: Stabilize Backend & Observability | Pending |
-| BUG-04 | Phase 1: Stabilize Backend & Observability | Pending |
+| BUG-01 | Phase 1: Stabilize Backend & Observability | Complete |
+| BUG-02 | Phase 1: Stabilize Backend & Observability | Complete |
+| BUG-03 | Phase 1: Stabilize Backend & Observability | Complete |
+| BUG-04 | Phase 1: Stabilize Backend & Observability | Complete |
 | OBS-01 | Phase 1: Stabilize Backend & Observability | Pending |
 | OPS-01 | Phase 1: Stabilize Backend & Observability | Pending |
-| IDENT-01 | Phase 2: Real User Identity | Pending |
-| IDENT-02 | Phase 2: Real User Identity | Pending |
-| TIER-01 | Phase 3: Free/Plus Tier Redesign | Pending |
-| TIER-02 | Phase 3: Free/Plus Tier Redesign | Pending |
-| TIER-03 | Phase 3: Free/Plus Tier Redesign | Pending |
-| TIER-04 | Phase 3: Free/Plus Tier Redesign | Pending |
-| TIER-05 | Phase 3: Free/Plus Tier Redesign | Pending |
-| TIER-06 | Phase 3: Free/Plus Tier Redesign | Pending |
+| IDENT-01 | Phase 2: Real User Identity | Complete |
+| IDENT-02 | Phase 2: Real User Identity | Complete |
+| TIER-01 | Phase 3: Free/Plus Tier Redesign | Complete |
+| TIER-02 | Phase 3: Free/Plus Tier Redesign | Complete |
+| TIER-03 | Phase 3: Free/Plus Tier Redesign | Complete |
+| TIER-04 | Phase 3: Free/Plus Tier Redesign | Complete |
+| TIER-05 | Phase 3: Free/Plus Tier Redesign | Complete |
+| TIER-06 | Phase 3: Free/Plus Tier Redesign | Complete |
 | TIER-07 | Phase 3: Free/Plus Tier Redesign | Pending |
-| TIER-08 | Phase 3: Free/Plus Tier Redesign | Pending |
+| TIER-08 | Phase 3: Free/Plus Tier Redesign | Complete |
 | MEAS-01 | Phase 3 (retired post-launch) | Deferred |
 | MEAS-02 | Phase 3 (retired post-launch) | Deferred |
 | MEAS-03 | Phase 3 (retired post-launch) | Deferred |
