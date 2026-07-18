@@ -365,7 +365,7 @@ describe("Capture Pipeline E2E", () => {
       expect(s.updatedAt).toBeTruthy();
 
       // Verify stored
-      const stored = store.load(s.id);
+      const stored = store.load(s.tool, s.id);
       expect(stored).not.toBeNull();
       expect(stored?.id).toBe(s.id);
     });
@@ -506,7 +506,7 @@ describe("Capture Pipeline E2E", () => {
       expect(s.tool).toBe("cline");
       expect(s.messages.length).toBeGreaterThan(0);
 
-      const stored = store.load(s.id);
+      const stored = store.load(s.tool, s.id);
       expect(stored).not.toBeNull();
       expect(stored?.id).toBe(s.id);
     });
@@ -546,7 +546,7 @@ describe("Capture Pipeline E2E", () => {
       expect(s.tool).toBe("roo-code");
       expect(s.messages.length).toBeGreaterThan(0);
 
-      const stored = store.load(s.id);
+      const stored = store.load(s.tool, s.id);
       expect(stored).not.toBeNull();
       expect(stored?.id).toBe(s.id);
     });
@@ -587,7 +587,7 @@ describe("Capture Pipeline E2E", () => {
       expect(s.projectPath).toBe("/tmp/copilot-proj");
       expect(s.messages.length).toBeGreaterThan(0);
 
-      const stored = store.load(s.id);
+      const stored = store.load(s.tool, s.id);
       expect(stored).not.toBeNull();
       expect(stored?.id).toBe(s.id);
     });
@@ -1484,7 +1484,7 @@ describe("Capture Pipeline E2E", () => {
       const s = makeSession("ses_dddd111122222222", "2026-04-02T10:00:00Z");
       store.save(s);
 
-      const loaded = store.load("ses_dddd111122222222");
+      const loaded = store.load("claude-code", "ses_dddd111122222222");
       expect(loaded).not.toBeNull();
       expect(loaded?.id).toBe(s.id);
       expect(loaded?.tool).toBe(s.tool);
@@ -1497,10 +1497,10 @@ describe("Capture Pipeline E2E", () => {
       const s = makeSession("ses_eeee111122222222", "2026-04-02T10:00:00Z");
       store.save(s);
 
-      expect(store.load("ses_eeee111122222222")).not.toBeNull();
+      expect(store.load("claude-code", "ses_eeee111122222222")).not.toBeNull();
 
-      store.delete("ses_eeee111122222222");
-      expect(store.load("ses_eeee111122222222")).toBeNull();
+      store.delete("claude-code", "ses_eeee111122222222");
+      expect(store.load("claude-code", "ses_eeee111122222222")).toBeNull();
     });
 
     it("list after delete shows one fewer session", () => {
@@ -1512,14 +1512,14 @@ describe("Capture Pipeline E2E", () => {
 
       expect(store.list().length).toBe(2);
 
-      store.delete("ses_fff1111122222222");
+      store.delete("claude-code", "ses_fff1111122222222");
       expect(store.list().length).toBe(1);
       expect(store.list()[0].id).toBe("ses_ggg1111122222222");
     });
 
     it("load non-existent session returns null", () => {
       const store = new SessionStore(storeTmp);
-      expect(store.load("ses_nonexistent00000")).toBeNull();
+      expect(store.load("claude-code", "ses_nonexistent00000")).toBeNull();
     });
   });
 

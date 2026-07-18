@@ -171,6 +171,12 @@ Migration `015_handoff_layer.sql` created `handoff_sessions` and `handoff_issues
 
 ## Closed
 
+### SessionStore keyed sessions by ID without their tool source — closed 2026-07-18
+
+`SessionStore` persisted every captured session as `<session_id>.json`. File adapters and the proxy currently derive IDs differently, so a collision was uncommon, but no invariant prevented two tools from emitting the same ID. The later save would overwrite the first session, and a delete could remove the wrong source's record.
+
+New records now use a versioned `v2/<tool>/<session_id>.json` hierarchy, and `load`/`delete` require both identity fields. Legacy flat files remain readable; a matching legacy file is removed only after its composite-key replacement is written successfully. Regression coverage verifies same-ID coexistence, isolated deletion, and legacy migration, and the 52-test capture pipeline passes.
+
 ### Background recompute could lose completed handoff on one upload blip — closed 2026-07-18
 
 The detached `pull-handoff` process could spend 30–60 seconds generating a local handoff and then make exactly one precomputed `POST /api/conversations/:id/compact`. A network exception or transient 408, 429, or 5xx response discarded that completed work; the next session received the stale cached handoff and had to recompute again.

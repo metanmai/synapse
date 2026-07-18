@@ -48,7 +48,7 @@ async function main(): Promise<void> {
     if (!session) return;
 
     // Load from store (may have more recent data)
-    const stored = store.load(session.id);
+    const stored = store.load(session.tool, session.id);
     if (!stored) return;
 
     // Compaction is no longer triggered here — it's owned by the pull path

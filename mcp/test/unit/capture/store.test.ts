@@ -33,14 +33,14 @@ describe("SessionStore", () => {
   it("saves and loads a session", () => {
     const session = makeSession();
     store.save(session);
-    const loaded = store.load("ses_test1");
+    const loaded = store.load("claude-code", "ses_test1");
     expect(loaded).not.toBeNull();
     expect(loaded?.id).toBe("ses_test1");
     expect(loaded?.messages).toHaveLength(1);
   });
 
   it("returns null for nonexistent session", () => {
-    expect(store.load("ses_nonexistent")).toBeNull();
+    expect(store.load("claude-code", "ses_nonexistent")).toBeNull();
   });
 
   it("lists saved sessions sorted by updatedAt descending", () => {
@@ -68,15 +68,41 @@ describe("SessionStore", () => {
         ],
       }),
     );
-    const loaded = store.load("ses_1");
+    const loaded = store.load("claude-code", "ses_1");
     expect(loaded?.messages).toHaveLength(2);
   });
 
   it("deletes a session", () => {
     store.save(makeSession({ id: "ses_del" }));
-    expect(store.load("ses_del")).not.toBeNull();
-    store.delete("ses_del");
-    expect(store.load("ses_del")).toBeNull();
+    expect(store.load("claude-code", "ses_del")).not.toBeNull();
+    store.delete("claude-code", "ses_del");
+    expect(store.load("claude-code", "ses_del")).toBeNull();
+  });
+
+  it("stores the same session ID independently for different tools", () => {
+    store.save(makeSession({ id: "shared-id", tool: "claude-code" }));
+    store.save(makeSession({ id: "shared-id", tool: "codex", messages: [] }));
+
+    expect(store.load("claude-code", "shared-id")?.messages).toHaveLength(1);
+    expect(store.load("codex", "shared-id")?.messages).toHaveLength(0);
+    expect(store.list()).toHaveLength(2);
+
+    store.delete("claude-code", "shared-id");
+    expect(store.load("claude-code", "shared-id")).toBeNull();
+    expect(store.load("codex", "shared-id")).not.toBeNull();
+  });
+
+  it("reads a legacy flat-file session and migrates it on the next save", () => {
+    const legacy = makeSession({ id: "ses_legacy", tool: "cursor" });
+    const legacyPath = path.join(tmpDir, "ses_legacy.json");
+    fs.writeFileSync(legacyPath, JSON.stringify(legacy));
+
+    expect(store.load("cursor", "ses_legacy")?.id).toBe("ses_legacy");
+    expect(store.load("claude-code", "ses_legacy")).toBeNull();
+
+    store.save(legacy);
+    expect(fs.existsSync(legacyPath)).toBe(false);
+    expect(store.load("cursor", "ses_legacy")?.id).toBe("ses_legacy");
   });
 
   describe("default-dir resolution (Windows regression guard)", () => {
@@ -107,11 +133,11 @@ describe("SessionStore", () => {
         // We don't assert the EXACT path (would clobber the user's real
         // ~/.synapse/sessions in dev) — instead we read it back and confirm
         // the load roundtrip works from the default location.
-        const loaded = s.load("ses_default_dir");
+        const loaded = s.load("claude-code", "ses_default_dir");
         expect(loaded?.id).toBe("ses_default_dir");
 
         // Cleanup the test session from the real homedir so we don't leak.
-        s.delete("ses_default_dir");
+        s.delete("claude-code", "ses_default_dir");
       } finally {
         process.chdir(origCwd);
         fs.rmSync(sandbox, { recursive: true, force: true });
