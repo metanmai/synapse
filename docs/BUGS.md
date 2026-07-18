@@ -173,6 +173,14 @@ Migration `015_handoff_layer.sql` created `handoff_sessions` and `handoff_issues
 
 ## Closed
 
+### Supabase pgvector extension exposed through `public` — closed 2026-07-18
+
+Supabase's security advisor warned that pgvector was installed in the API-facing `public` schema. A direct schema move was not safe: the vector `<=>` operator moves with the extension, while `match_conversations` and `find_merge_candidates` had hardened `search_path = pg_catalog, public` settings. A transaction-only dry run caught the resulting `operator does not exist` failure and rolled back before production changed.
+
+Migration `20260718154701_move_vector_extension.sql` atomically moved pgvector to `extensions`, qualified the vector operator and HNSW operator class, recreated the conversation RPCs, and restricted all vector RPCs to `service_role`. The audit also found migration-ledger drift from `005_pgvector.sql`: production lacked `entries.embedding`, `entries_embedding_idx`, and `match_entries` even though migration 005 was recorded. The same forward migration restored those objects. Live zero-vector smoke calls passed for `match_entries`, `match_conversations`, and `find_merge_candidates`; the advisor's `extension_in_public` warning disappeared.
+
+The only remaining Supabase advisor warning is leaked-password protection. Enabling `password_hibp_enabled` returned HTTP 402 because this project is on Supabase Free; the feature requires a paid plan. No Auth settings were changed.
+
 ### Configure Supabase secrets so CI auto-migrate activates — closed 2026-07-18
 
 Phase 2 added a `migrate` job to `.github/workflows/ci.yml` that runs `supabase db push` on every push to `main`. This process gap is closed: GitHub `prod` now contains all three required secret names—`SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, and `SUPABASE_DB_PASSWORD`. Secret names and presence were verified; no secret value was inspected or recorded.
