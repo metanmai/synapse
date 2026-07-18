@@ -47,7 +47,7 @@ PROD apply is a deploy concern, not a code concern. The migration file is the de
 
 **Class guarded today (instance-level):** `project_context` and `deleted_accounts` are no longer anon-readable in any future scenario where the anon key leaks.
 
-**Class NOT yet guarded (recurrence-level):** A new `create table` in a future migration without RLS would still be a problem. Captured as follow-up #2 above.
+**Class NOT yet guarded at the time (recurrence-level):** A new `create table` in a future migration without RLS would still be a problem. Captured as follow-up #2 above and closed in the 2026-07-18 recurrence close-out below.
 
 ## Production close-out — 2026-07-17
 
@@ -66,3 +66,9 @@ Accordingly, original follow-ups 1 (apply migration 027) and 3 (verify productio
 Adjacent operational close-out facts: migration 031 (`api_keys.scope`) was applied and its column/default/check constraint verified in production. GitHub `prod` now contains the `SUPABASE_DB_PASSWORD` secret name (presence confirmed; value not inspected), completing the three-secret auto-migrate configuration. GitHub Actions run `29599228105` attempt 2 was successful before that password was added, so a future push/rerun remains the evidence that the migration job consumes it.
 
 Two non-critical Supabase warnings remain: leaked-password protection is a dashboard setting, and moving `pgvector` out of `public` requires a coordinated dependency-aware migration.
+
+## Recurrence close-out — 2026-07-18
+
+Original follow-up 2 is now closed. `scripts/lint-migration-rls.mjs` evaluates the ordered `supabase/migrations/*.sql` chain and fails when any surviving public table ends with Row-Level Security disabled. It accounts for RLS enabled in a later migration, later disables, dropped tables, schema qualification, quoted identifiers, comments, strings, and dollar-quoted function bodies. `npm run lint:migrations` runs the repository audit plus parser regression tests; it is part of local `npm run verify` and the Linux/Windows CI verify matrix. The current chain contains 24 public tables and all pass.
+
+This is intentionally a recurrence guard for table-level RLS enablement, not a complete SQL security analyzer: policy correctness, grants, security-definer functions, views, and destructive data transformations still require migration review and Supabase advisor checks.

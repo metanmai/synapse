@@ -45,6 +45,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Migration RLS lint
+        run: npm run lint:migrations
+
       - name: Typecheck
         run: npm run typecheck
 

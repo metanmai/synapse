@@ -207,7 +207,7 @@ Phase 2 added a `migrate` job to `.github/workflows/ci.yml` that runs `supabase 
 
 **Close evidence:** GitHub Actions run `29649638136` attempt 2 reached `supabase db push`, reconciled the stale remote-only `000 delete_user` ledger entry, applied `031_api_key_scope.sql` and `20260717170215_harden_public_schema_rls.sql`, and concluded successfully. This is the first run that proves the configured `SUPABASE_DB_PASSWORD` is consumed by the production migration workflow.
 
-**Risk retained:** Every push to `main` can apply forward migrations to production. A destructive forward migration still requires careful review. The recurrence-level CI lint that rejects new tables without RLS remains deferred.
+**Risk retained:** Every push to `main` can apply forward migrations to production, so destructive forward migrations still require careful review. The recurrence-level RLS gap is now guarded by `npm run lint:migrations`: it rejects a migration chain where any surviving public table ends without RLS, and runs in both CI verify jobs. This static check does not judge whether a migration's data transformation is destructive or whether its RLS policies are semantically correct.
 
 **Code location:** `.github/workflows/ci.yml` (`migrate:` job between `verify:` and `e2e:`).
 
