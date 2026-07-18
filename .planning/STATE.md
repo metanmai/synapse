@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: stabilize-for-launch
 status: shipped
-last_updated: "2026-07-18T00:00:00.000Z"
+last_updated: "2026-07-18T16:50:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 3
@@ -25,14 +25,14 @@ progress:
 
 **Current milestone:** Stabilize-for-launch. **Shipped 2026-05-29** (on the original Friday deadline). Phases 4-7 deferred to v1.X.
 
-**Current focus:** Milestone in post-ship maintenance. Production Supabase hardening, auto-migrate verification, the `pgvector` schema warning, the Creem renewal webhook parser, local Node-tool proxy activation, orphan-project cleanup, transient retry for background handoff uploads, SessionStore composite keying, and the migration/RLS recurrence guard are complete. The WSL capture daemon is running on `127.0.0.1:7727`, shell proxy variables are installed in `~/.bashrc`, and the Layer 5 TLS-MITM capture passed. No tactical code item from this maintenance sweep remains. Native/GUI system trust still requires the user's sudo password, and leaked-password protection requires a paid Supabase plan.
+**Current focus:** Milestone in post-ship maintenance. Production Supabase hardening, auto-migrate verification, the `pgvector` schema warning, the Creem renewal webhook parser, local Node-tool proxy activation, orphan-project cleanup, transient retry for background handoff uploads, SessionStore composite keying, the migration/RLS recurrence guard, dashboard handoff-session counts, and Phase 1 Plan 05 Sentry code are complete. The Sentry integration is intentionally disabled until a project DSN is supplied; OBS-01 still requires secret configuration, deployment, and a deliberate-throw delivery check. Native/GUI system trust still requires the user's sudo password, leaked-password protection requires a paid Supabase plan, and OPS-01 requires a Cloudflare dashboard tier check.
 
 ## Current Position
 
-- **Phase:** Phase 2 ✅ SHIPPED, Phase 3 (Free/Plus Tier Redesign) ✅ SHIPPED, Phase 1 slice 1a-prime ✅ COMPLETE. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-enabled machine.
-- **Plan:** Milestone scope complete (in the form actually executed). All in-scope plans landed. Phases 4-7 deferred to v1.X. Post-launch work tracked under "Post-launch v1.X work" below.
+- **Phase:** Phase 2 ✅ SHIPPED, Phase 3 (Free/Plus Tier Redesign) ✅ SHIPPED, Phase 1 implementation 5/5 plans ✅ CODE COMPLETE. Phase 1 remains operationally open on OBS-01 live Sentry delivery and OPS-01 Paid-tier verification.
+- **Plan:** All 16 planned implementation plans now have summaries. Plan 01-05 is code-complete with external activation pending. Phases 4-7 remain deferred to v1.X; post-launch work is tracked below.
 - **Status:** BUG-01 through BUG-04 + BUGS-MD-12 all closed in prod. IDENT-01 + IDENT-02 verified. Phase 3's current tier behavior is shipped; TIER-07 is superseded because daemon auto-sync now runs on every tier, and the obsolete tier cache/billing poll has been removed. Production Supabase RLS, grants, six analytics views, and seven privileged functions were hardened by `20260717170215_harden_public_schema_rls.sql` (`454af70e`); Metabase read-only and service-role access were preserved, migration 031 was applied, and the Supabase advisor returned zero errors. GitHub Actions run `29649638136` attempt 2 then proved the `prod` secrets are consumed and the forward migration path is healthy.
-- **Roadmap progress:** **3/7 phases shipped, 4 deferred to v1.X.** Of the 16 plans across the 3 in-scope phases, 15/16 complete (only Plan 01-05 Sentry incomplete — Netskope-blocked on this machine).
+- **Roadmap progress:** **3/7 phases shipped, 4 deferred to v1.X.** All 16 implementation plans are code-complete; OBS-01 and OPS-01 remain external operational checks rather than code tasks.
 
 **Scope reshuffles during milestone (chronological):**
 - **2026-05-19**: Cross-user collab + token brokering moved IN scope, deadline slipped EoW (2026-05-22/23) → Friday 2026-05-29.
@@ -50,7 +50,7 @@ progress:
 - **Phases planned (original):** 7
 - **Phases shipped:** 3 (Phase 1 slice 1a-prime, Phase 2, Phase 3 — Phase 3 reshuffled mid-milestone)
 - **Phases deferred to v1.X:** 4 (Phases 4-7)
-- **Requirements v1 covered:** BUG-01..04, IDENT-01..02, and the current Phase 3 tier contract are complete; TIER-07 is superseded by all-tier auto-sync; OBS-01 and OPS-01 remain open; deferred product requirements remain in Phases 4-7.
+- **Requirements v1 covered:** BUG-01..04, IDENT-01..02, and the current Phase 3 tier contract are complete; TIER-07 is superseded by all-tier auto-sync. OBS-01 is code-complete but awaits live Sentry verification, OPS-01 awaits a dashboard tier check, and deferred product requirements remain in Phases 4-7.
 - **Post-launch v1.X work shipped (2026-05-30):** Proxy daemon Layers 1-9 (~3,000 LOC + 620 tests)
 
 ## Accumulated Context
@@ -62,6 +62,7 @@ progress:
 - **Waitlist = throttled-access (Linear / OpenAI API style)**, not marketing-waitlist (Dropbox / Robinhood). Synapse needs to LIMIT, not GROW.
 - **Telemetry rides existing event pipeline.** Zero new tables, zero new endpoints. New EventKinds: `BriefRendered`, `BriefRated`, `FirstNonOrientationPrompt`.
 - **Sentry over toucan-js.** `@sentry/cloudflare` + `@sentry/hono`; toucan archived 2026-01-12.
+- **Sentry SDKs pinned together at 10.65.0 (2026-07-18).** Payload bodies are scrubbed before delivery, the middleware is first in the Hono chain, and a missing DSN is an explicit disabled state.
 - **Solo dogfood is the only pre-launch user signal.** Cold-laptop rehearsal is the bounded compromise against confirmation bias.
 
 ### Open questions / TODOs
@@ -121,7 +122,7 @@ These four phases from the original roadmap were not shipped in the milestone. E
 
 ### Blockers
 
-None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-enabled machine.
+External actions remain: retrieve the Sentry project DSN so the agent can configure/deploy/verify OBS-01; confirm the Workers Paid tier in the Cloudflare dashboard for OPS-01; enter sudo for native CA replacement if GUI trust is desired; upgrade Supabase if leaked-password protection is required.
 
 ### Quick Tasks Completed
 
@@ -220,11 +221,13 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 
 **Next actions (ranked by user-leverage):**
 
-1. **Medium — decide on Phase 4-7 fate.** The 4 deferred phases (Cross-User Collab, Token Brokering, Waitlist Launch, Dogfood/Public Open) are listed in "Deferred Phases" above. Each is a substantial v1.X chunk. Decision: are they part of an upcoming milestone, or descoped indefinitely? The proxy daemon's universal-capture story (Layers 1-9) is a partial alternative to the original "growth" path — claude/cursor/codex/gemini all captured equally — which may shift priorities for Phase 4 collab.
+1. **High — activate and live-verify Sentry (OBS-01).** User retrieves the backend project DSN from Sentry. The agent then stores it with `wrangler secret put SENTRY_DSN`, deploys, runs a controlled deliberate throw, confirms the real stack trace arrives within one minute, removes the throw, and redeploys.
 
-2. **Low — close the proxy daemon's "Cursor/Claude Desktop/ChatGPT Desktop" spike (task #118).** Requires the user's sudo/admin password to replace the stale system CA with the current CA. Validates the proxy for native/GUI tools, not just Node CLIs. ~10 minutes when the user has admin rights handy.
+2. **High — verify Cloudflare Workers Paid tier (OPS-01).** `wrangler whoami` confirms authentication but not the account plan; the remaining evidence must come from the Cloudflare Workers dashboard/billing surface.
 
-3. **Low — address the remaining action items from Synapse insights:** recompute retry and SessionStore (tool, session_id) keying refactor. Neither is user-impacting today.
+3. **Medium — decide on Phase 4-7 fate.** The 4 deferred phases (Cross-User Collab, Token Brokering, Waitlist Launch, Dogfood/Public Open) are listed in "Deferred Phases" above. Each is a substantial v1.X chunk. Decide whether they form the upcoming milestone or are descoped indefinitely.
+
+4. **Low — close the proxy daemon's native/GUI trust spike.** Requires the user's sudo/admin password to replace the stale system CA with the current CA. Node CLIs already use the current CA and work.
 
 **CI invariant:** stay green on metanmai at all times (per `feedback_ci_must_stay_green.md`).
 

@@ -12,7 +12,7 @@
 
 ## Phases
 
-- [~] **Phase 1: Stabilize Backend & Observability** — Slice 1a-prime ✅ shipped (BUG-01..04, BUGS-MD-12); slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-enabled machine
+- [~] **Phase 1: Stabilize Backend & Observability** — 5/5 implementation plans complete; BUG-01..04 and BUGS-MD-12 shipped. OBS-01 awaits DSN/deploy/live delivery verification, and OPS-01 awaits a Paid-tier dashboard check.
 - [x] **Phase 2: Real User Identity** — Events carry authenticated `user_id`; same-user cross-device sync works (`f941dea` verifies E2E 19/19)
 - [x] **Phase 3: Free/Plus Tier Redesign** — *(scope swap from original "Telemetry"; original retired indefinitely.)* Shipped: 50-project cap, per-project conversation/insight LRU on Free, Plus Haiku consolidation, 3/10-device caps, manual `sync` CLI, and Plus-only project context. The planned tier-flip IPC became unnecessary when auto-sync was made available to every tier.
 - [ ] **Phase 4: Cross-User Collaboration** — DEFERRED to v1.X. Owners invite teammates by email; invitees accept; briefs show per-actor view
@@ -35,12 +35,12 @@
   3. A fresh `synapse init` / wizard run on a proxy-restricted (Netskope) network produces a `.mcp.json` whose MCP server starts when Claude Code opens
   4. A deliberately-thrown unhandled rejection in `events-batch.ts` appears in Sentry within one minute with the real stack trace
   5. Production Worker is verified on the Paid tier before any further launch work begins (`wrangler whoami` + dashboard screenshot)
-**Plans:** 5 plans (slice 1a — wrangler-free SHIPPED; slice 1b — CF-machine work DEFERRED to v1.X)
+**Plans:** 5/5 implementation plans complete. External activation/verification remains for OBS-01 and OPS-01.
 - [x] 01-01-wave0-scaffolding-PLAN.md — Wave 0 test scaffolding + production stubs (Wave 1)
 - [x] 01-02-daemon-supervisor-backoff-PLAN.md — BUG-02 + BUGS.md #12 daemon supervisor + exponential backoff (Wave 2)
 - [x] 01-03-mcp-command-resolver-PLAN.md — BUG-03 proxy-resilient MCP command resolver (Wave 2)
 - [x] 01-04-init-writes-mcp-json-PLAN.md — BUG-04 `runInit` writes `.mcp.json` + ensures gitignore (Wave 2)
-- [ ] 01-05-sentry-observability-PLAN.md — OBS-01 Sentry SDK + Hono middleware + scrubPayload (DEFERRED — `npm install @sentry/*` is Netskope-blocked on the primary terminal; deferred to v1.X / CF-enabled machine)
+- [x] 01-05-sentry-observability-PLAN.md — Sentry SDK + first Hono middleware + privacy scrubber complete (`10.65.0`); DSN/deploy/deliberate-throw verification remains external
 
 **Research status:** covered by `research/SUMMARY.md` (D1, D2, D9, D10, D11)
 **UI hint**: no
@@ -148,7 +148,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Stabilize Backend & Observability | 4/5 | ✅ Slice 1a-prime shipped; 1b (Sentry) deferred to v1.X | 2026-05-19 → 2026-05-20 |
+| 1. Stabilize Backend & Observability | 5/5 | 🟡 Code complete; OBS-01 live check + OPS-01 tier check pending | 2026-05-19 → 2026-07-18 |
 | 2. Real User Identity | 6/6 | ✅ SHIPPED | 2026-05-20 |
 | 3. Free/Plus Tier Redesign *(swap from "Telemetry")* | 5/5 | ✅ SHIPPED | 2026-05-22 → 2026-05-29 |
 | 4. Cross-User Collaboration | 0/0 | ⏳ DEFERRED to v1.X | - |
@@ -156,7 +156,7 @@ Plans:
 | 6. Waitlist Launch & Cold-Laptop Rehearsal | 0/0 | ⏳ DEFERRED to v1.X | - |
 | 7. Dogfood & Public Open | 0/0 | ⏳ DEFERRED to v1.X | - |
 
-**Total: 15 of 16 in-scope plans shipped (94%). 4 of 7 phases deferred to v1.X.**
+**Total: 16 of 16 in-scope implementation plans code-complete (100%). 4 of 7 phases deferred to v1.X; 2 Phase 1 operational checks remain.**
 
 ---
 
@@ -191,7 +191,7 @@ Phase 1 (Stabilize) ─┬─► Phase 2 (Identity) ─┬─► Phase 4 (Collab
 | Category | Reqs | Phase | Status |
 |----------|------|-------|--------|
 | Backend stabilization (BUG-01..04) | 4 | 1 | ✅ shipped |
-| Observability (OBS-01) | 1 | 1 | ⏳ slice 1b deferred to v1.X |
+| Observability (OBS-01) | 1 | 1 | 🟡 code complete; DSN/deploy/live event check pending |
 | Workers tier (OPS-01) | 1 | 1 | ⏳ slice 1b deferred to v1.X |
 | Identity (IDENT-01..02) | 2 | 2 | ✅ shipped |
 | ~~Telemetry (MEAS-01..04)~~ | ~~4~~ | ~~3~~ | 🚫 retired — original Phase 3 scope swapped out 2026-05-22 |
@@ -201,8 +201,8 @@ Phase 1 (Stabilize) ─┬─► Phase 2 (Identity) ─┬─► Phase 4 (Collab
 | Public launch (LAUNCH-01..03) | 3 | 6 | ⏳ deferred to v1.X |
 | Dogfood (DOG-01) | 1 | 7 | ⏳ deferred to v1.X |
 
-**Shipped:** BUG-01..04, IDENT-01..02, and Phase 3's current tier behavior. TIER-07 is superseded by all-tier auto-sync; Sentry/OBS-01 and OPS-01 remain open; Phases 4-7 are deferred.
-**Deferred:** 11 requirements across Phases 4-7 + slice 1b.
+**Shipped:** BUG-01..04, IDENT-01..02, and Phase 3's current tier behavior. TIER-07 is superseded by all-tier auto-sync. Sentry code is complete, but OBS-01 and OPS-01 remain open on external verification; Phases 4-7 are deferred.
+**Deferred:** 11 product requirements across Phases 4-7; 2 Phase 1 operational checks remain.
 
 ---
 
