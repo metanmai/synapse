@@ -55,7 +55,12 @@ describe("dispatchCreemWebhookEvent — lifecycle transition matrix (the money p
     expectCancelAtPeriodEnd?: boolean;
   }> = [
     { event: "subscription.active", obj: { id: "sub_123" }, expectStatus: "active", expectCancelAtPeriodEnd: false },
-    { event: "subscription.paid", obj: { id: "sub_123" }, expectStatus: "active", expectCancelAtPeriodEnd: false },
+    {
+      event: "subscription.paid",
+      obj: { id: "sub_123", current_period_end_date: "2026-08-01T00:00:00.000Z" },
+      expectStatus: "active",
+      expectCancelAtPeriodEnd: false,
+    },
     {
       event: "subscription.canceled",
       obj: { id: "sub_123" },
@@ -88,6 +93,17 @@ describe("dispatchCreemWebhookEvent — lifecycle transition matrix (the money p
     if (expectCancelAtPeriodEnd !== undefined) {
       expect(payload?.cancel_at_period_end).toBe(expectCancelAtPeriodEnd);
     }
+  });
+
+  it("subscription.paid reads Creem's current_period_end_date field", async () => {
+    const db = dbWithExisting(EXISTING);
+
+    await dispatchCreemWebhookEvent(db.client, "subscription.paid", {
+      id: "sub_123",
+      current_period_end_date: "2026-08-01T00:00:00.000Z",
+    });
+
+    expect(upsertPayload(db)?.current_period_end).toBe("2026-08-01T00:00:00.000Z");
   });
 
   it("canceled/expired clear current_period_end (no lingering paid-through date)", async () => {
@@ -135,13 +151,9 @@ describe("dispatchCreemWebhookEvent — guards", () => {
     expect(upsertPayload(db)).toBeUndefined();
   });
 
-  it("an UNHANDLED event type (e.g. a renewal event) changes no state", async () => {
-    // Bug class: Creem's actual monthly-renewal event_type isn't yet known
-    // (`invoice.paid` / `subscription.renewed` / `invoice.succeeded`). Until
-    // a case is added, such events MUST be observably inert — handled:false
-    // and zero writes. The day a renewal case lands, this test flips RED and
-    // forces the matrix above to be extended. That red is the signal, not a
-    // failure.
+  it("an UNHANDLED event type changes no state", async () => {
+    // Creem documents renewals as subscription.paid. A genuinely unknown
+    // event must remain observably inert: handled:false and zero writes.
     const db = dbWithExisting(EXISTING);
     const result = await dispatchCreemWebhookEvent(db.client, "invoice.paid", { id: "sub_123" });
 

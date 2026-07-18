@@ -68,11 +68,11 @@ The roundtrip test waits 40s after a tool exits before scanning capture.log. Pro
 
 ## P2 — Coverage gaps
 
-### Creem webhook silently drops renewal events — `subscriptions` rows go stale after initial signup
+### Creem webhook silently dropped renewal events — closed 2026-07-18
 
-**Defensive patch shipped 2026-05-30 in commit `57d475a`** — switch was extracted into a pure `dispatchCreemWebhookEvent` function with a `default:` branch that logs `unhandled Creem webhook event_type` to `wrangler tail` with event_type + sub_id + customer_id breadcrumbs. The **proper fix** (add a case for the actual renewal event_type Creem fires) still needs the Creem dashboard data described below.
+**Defensive patch shipped 2026-05-30 in commit `57d475a`** — the switch was extracted into a pure `dispatchCreemWebhookEvent` function with a diagnostic `default:` branch. The proper fix landed 2026-07-18 after comparing production code with Creem's current webhook contract.
 
-The defensive patch alone makes the silent drop diagnostic-able; the next missed renewal event will now show up immediately in the worker logs instead of returning a silent 200.
+The diagnostic branch remains useful: any genuinely new event type now appears in Worker logs instead of returning a silent 200.
 
 Every active `provider='creem'` row in production has `updated_at == created_at`, meaning the row has never been touched since the original `checkout.completed` webhook landed. Confirmed via SQL on 2026-05-23:
 
@@ -82,25 +82,23 @@ Every active `provider='creem'` row in production has `updated_at == created_at`
 | 1a26dee0… (real customer) | sub_5J1fe0K3ILt48oUYOeAmXm | active | 2026-04-01 | 2026-05-01 (22d stale) | 2026-04-01 |
 | bd5be0f2… (churned) | sub_3zczzl4C75f3u8rkPZyhLH | inactive | 2026-03-29 | 2026-04-29 | 2026-04-13 |
 
-The churned row (`bd5be0f2`) updated once — almost certainly on the `subscription.canceled` event — proving the webhook endpoint is reachable and the signature check passes. So renewal events specifically are being lost.
+The churned row (`bd5be0f2`) updated once — almost certainly on the `subscription.canceled` event — proving the webhook endpoint was reachable and the signature check passed. Renewal payloads were the path being lost.
 
-**Likely root cause (need Creem dashboard data to confirm):** `backend/src/api/billing.ts:37-115` switch only handles `checkout.completed`, `subscription.{active,paid,scheduled_cancel,canceled,expired,past_due}`. There is **no case** for what Creem fires on monthly renewal — likely `subscription.renewed` or `invoice.paid` or `invoice.succeeded`. And there is **no `default:` branch**, so unknown event_types fall through to `return c.json({ received: true })` with no log line — invisible from both Creem's side (200 OK) and ours (no entry in `wrangler tail`).
+**Root cause:** Creem documents renewals as `subscription.paid`, which the switch already handled. The integration broke one level earlier and one level later: Creem's envelope uses camelCase `eventType`, while the handler read only `event_type`; Creem's subscription object uses `current_period_end_date`, while the handler read only `current_period_end`. Consequently documented renewal payloads dispatched as unknown, and even a directly dispatched `subscription.paid` payload could not advance the stored date.
 
-**User-visible symptom:** account page billing card shows a renewal date in the past (e.g., "renews April 29, 2026" when viewed in May). The user still has Plus access because tier resolution uses status, not period_end — but a future churn would also drop silently.
+**User-visible symptom:** the account page showed a renewal date in the past. Plus access remained intact because tier resolution uses status, not `current_period_end`. The UI now labels a past date as "renewal status is updating" instead of presenting it as a future renewal.
 
-**Diagnostic steps deferred:** open Creem dashboard, look up `sub_cxnPAzSODdVKgJh93fQ4Z`, check (a) does Creem report a future next_billing_date — i.e. did Creem actually attempt renewal, (b) Webhooks → Logs delivery history 2026-04-28 to 2026-05-01, capture the exact event_type Creem fires on monthly renewal, (c) the response status our endpoint returned. Repeat for `sub_5J1fe0K3ILt48oUYOeAmXm` if needed.
+**Fix:** the handler now prefers the documented `eventType` and `current_period_end_date` fields while retaining both legacy snake_case fallbacks. A signed, worker-level regression test uses Creem's documented `subscription.paid` renewal shape and asserts the database upsert advances `current_period_end`. Existing stale rows retain Plus access and will refresh on a subsequent paid event; operators may also replay a historical `subscription.paid` delivery from the Creem dashboard.
 
-**Defensive patch worth shipping before the proper fix:** add `default:` to the switch with `console.warn("[billing] unhandled webhook event_type", { event_type, sub_id })` so the next missed event leaves breadcrumbs in `wrangler tail`. ~3 lines, no functional risk.
-
-**Proper fix:** once Creem dashboard reveals the renewal event_type name, add a case that updates `current_period_end` from `obj.current_period_end` (matching the shape used in `billing.ts:67`).
+The diagnostic `default:` remains in place for genuinely new provider event types and still returns 200 to avoid a retry storm.
 
 **Code refs:**
-- `backend/src/api/billing.ts:37` — switch (the missing case lives here)
-- `backend/src/api/billing.ts:115` — fall-through to silent 200 (the missing default lives here)
+- `backend/src/api/billing.ts` — canonical envelope parsing and subscription lifecycle dispatch
+- `backend/test/api/billing-webhook-integration.test.ts` — signed canonical renewal regression test
 - `backend/src/db/queries/subscriptions.ts:5` — `getActiveSubscription` filters by status — not affected, but explains why users keep Plus access despite stale period_end
 - `frontend/src/lib/components/account/BillingCard.svelte` — renders the stale date directly without checking whether it's in the past
 
-**Adjacent UI bug worth folding into the fix:** BillingCard doesn't check if `current_period_end` is in the past — should render "expired" / "renewal pending" rather than showing a date in the past as if it's a future renewal.
+**Adjacent UI fix:** both account billing surfaces now detect a past `current_period_end` and render a neutral status-update message rather than a false future-renewal claim.
 
 ---
 

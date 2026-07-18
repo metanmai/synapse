@@ -28,8 +28,11 @@ billing.post("/webhook", async (c) => {
     throw new AppError("Invalid webhook signature", 400, "VALIDATION_ERROR");
   }
 
-  const event = JSON.parse(body);
-  const eventType = event.event_type as string;
+  const event = JSON.parse(body) as { eventType?: unknown; event_type?: unknown; object?: unknown };
+  // Creem's current webhook envelope uses `eventType`. Keep the legacy
+  // snake_case fallback for already-recorded fixtures and older deliveries.
+  const rawEventType = event.eventType ?? event.event_type;
+  const eventType = typeof rawEventType === "string" ? rawEventType : "unknown";
   const obj = event.object;
 
   const db = c.get("db");
@@ -46,21 +49,29 @@ billing.post("/webhook", async (c) => {
  *
  * Returns `{ handled }` so callers can metric handled/unhandled rates.
  * Currently the handler ignores the return value (still returns 200), but
- * test code asserts on it to guard the bug class "an event_type Creem
+ * test code asserts on it to guard the bug class "an event type Creem
  * starts emitting falls through silently."
  *
  * @param db   the Hono-context-derived `db` client (real SupabaseClient in
  *             production, mock object in tests).
- * @param eventType  Creem's `event_type` string.
+ * @param eventType  Creem's canonical `eventType` string.
  * @param obj  Creem's `object` payload (subscription / checkout shape).
  */
 export async function dispatchCreemWebhookEvent(
   // biome-ignore lint/suspicious/noExplicitAny: db client is typed at the Hono Bindings layer; pure-fn export keeps shape generic for tests.
   db: any,
   eventType: string,
-  // biome-ignore lint/suspicious/noExplicitAny: obj shape varies per event_type (Creem's API isn't typed in our deps).
+  // biome-ignore lint/suspicious/noExplicitAny: obj shape varies per event type (Creem's API isn't typed in our deps).
   obj: any,
 ): Promise<{ handled: boolean }> {
+  // Current Creem subscription payloads use the `_date` suffix. The fallback
+  // preserves compatibility with older payloads that used `current_period_end`.
+  const currentPeriodEnd = (value: unknown): string | null | undefined => {
+    if (!value || typeof value !== "object") return undefined;
+    const payload = value as { current_period_end_date?: string | null; current_period_end?: string | null };
+    return payload.current_period_end_date ?? payload.current_period_end;
+  };
+
   switch (eventType) {
     case "checkout.completed": {
       const userId = obj.metadata?.synapse_user_id;
@@ -75,7 +86,7 @@ export async function dispatchCreemWebhookEvent(
         provider_subscription_id: obj.subscription?.id ?? obj.id,
         provider_customer_id: obj.customer?.id ?? null,
         status: "active",
-        current_period_end: obj.subscription?.current_period_end ?? null,
+        current_period_end: currentPeriodEnd(obj.subscription) ?? null,
         cancel_at_period_end: false,
       });
       return { handled: true };
@@ -91,7 +102,7 @@ export async function dispatchCreemWebhookEvent(
         provider_subscription_id: obj.id,
         provider_customer_id: obj.customer?.id ?? existing.provider_customer_id,
         status: "active",
-        current_period_end: obj.current_period_end ?? existing.current_period_end,
+        current_period_end: currentPeriodEnd(obj) ?? existing.current_period_end,
         cancel_at_period_end: false,
       });
       return { handled: true };
@@ -105,7 +116,7 @@ export async function dispatchCreemWebhookEvent(
         user_id: existing.user_id,
         provider_subscription_id: obj.id,
         status: existing.status,
-        current_period_end: obj.current_period_end ?? existing.current_period_end,
+        current_period_end: currentPeriodEnd(obj) ?? existing.current_period_end,
         cancel_at_period_end: true,
       });
       return { handled: true };
@@ -134,23 +145,16 @@ export async function dispatchCreemWebhookEvent(
         user_id: existing.user_id,
         provider_subscription_id: obj.id,
         status: "past_due",
-        current_period_end: obj.current_period_end ?? existing.current_period_end,
+        current_period_end: currentPeriodEnd(obj) ?? existing.current_period_end,
         cancel_at_period_end: existing.cancel_at_period_end,
       });
       return { handled: true };
     }
 
     default: {
-      // Bug-class diagnostic: production has rows where created_at ==
-      // updated_at on every active Creem subscription — renewal events
-      // are firing but no case here handles them, so they fall through
-      // and we silently return 200 OK with no log line. Without this
-      // default, the next missed event leaves zero breadcrumbs in
-      // `wrangler tail`. Once Creem dashboard reveals the actual
-      // renewal event_type (likely `subscription.renewed`, `invoice
-      // .paid`, or `invoice.succeeded`), add a case above to update
-      // current_period_end. See docs/BUGS.md "Creem webhook silently
-      // drops renewal events" for the diagnostic trail.
+      // Keep unknown events observable while still returning 200 to avoid a
+      // retry storm. Creem documents renewals as `subscription.paid`; unknown
+      // events now indicate a genuinely new or malformed provider payload.
       console.warn("[billing] unhandled Creem webhook event_type", {
         event_type: eventType,
         sub_id: obj?.id ?? obj?.subscription?.id ?? null,

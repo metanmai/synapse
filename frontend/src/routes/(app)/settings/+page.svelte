@@ -1,6 +1,7 @@
 <script lang="ts">
 import { enhance } from "$app/forms";
 import { page } from "$app/stores";
+import { isExpired } from "$lib/components/account/account-helpers";
 
 let { data, form } = $props();
 
@@ -22,6 +23,7 @@ const renewalDate = $derived(
       })
     : null,
 );
+const renewalDateIsPast = $derived(isExpired(data.subscription?.current_period_end ?? null));
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "Never";
@@ -92,7 +94,11 @@ function formatDate(dateStr: string | null): string {
       </form>
     {:else if data.subscription?.cancel_at_period_end}
       <p class="plan-desc">
-        Your Plus subscription is active until <strong>{renewalDate}</strong>. It will not renew.
+        {#if renewalDateIsPast}
+          Your Plus subscription is awaiting a billing status update.
+        {:else}
+          Your Plus subscription is active until <strong>{renewalDate}</strong>. It will not renew.
+        {/if}
       </p>
       <form method="POST" action="?/portal" use:enhance={() => {
         portalLoading = true;
@@ -114,7 +120,11 @@ function formatDate(dateStr: string | null): string {
       </form>
     {:else if data.tier === "plus"}
       <p class="plan-desc">
-        Plus plan — renews <strong>{renewalDate}</strong>.
+        {#if renewalDateIsPast}
+          Plus plan — renewal status is updating.
+        {:else}
+          Plus plan — renews <strong>{renewalDate}</strong>.
+        {/if}
       </p>
       <form method="POST" action="?/portal" use:enhance={() => {
         portalLoading = true;

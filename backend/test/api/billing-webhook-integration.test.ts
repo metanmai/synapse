@@ -61,11 +61,11 @@ describe("POST /api/billing/webhook — valid-signature happy path", () => {
     setMockDb(db);
 
     const body = JSON.stringify({
-      event_type: "checkout.completed",
+      eventType: "checkout.completed",
       object: {
         id: "chk_int",
         metadata: { synapse_user_id: "user-int" },
-        subscription: { id: "sub_int", current_period_end: "2026-09-01T00:00:00.000Z" },
+        subscription: { id: "sub_int", current_period_end_date: "2026-09-01T00:00:00.000Z" },
         customer: { id: "cust_int" },
       },
     });
@@ -78,13 +78,48 @@ describe("POST /api/billing/webhook — valid-signature happy path", () => {
     expect(upsert, "dispatch should have upserted the subscription").toBeDefined();
     expect((upsert?.args as Record<string, unknown>).status).toBe("active");
     expect((upsert?.args as Record<string, unknown>).user_id).toBe("user-int");
+    expect((upsert?.args as Record<string, unknown>).current_period_end).toBe("2026-09-01T00:00:00.000Z");
+  });
+
+  it("a documented subscription.paid renewal advances the current period end", async () => {
+    const db = makeMockSupabase();
+    db.tables.subscriptions = {
+      single: () => ({
+        data: {
+          user_id: "user-int",
+          provider: "creem",
+          provider_subscription_id: "sub_int",
+          provider_customer_id: "cust_int",
+          status: "active",
+          current_period_end: "2026-09-01T00:00:00.000Z",
+          cancel_at_period_end: false,
+        },
+        error: null,
+      }),
+    };
+    setMockDb(db);
+
+    const body = JSON.stringify({
+      eventType: "subscription.paid",
+      object: {
+        id: "sub_int",
+        customer: { id: "cust_int" },
+        current_period_end_date: "2026-10-01T00:00:00.000Z",
+      },
+    });
+    const res = await postWebhook(body, await sign(body, WEBHOOK_SECRET), webhookEnv());
+
+    expect(res.status).toBe(200);
+    const upsert = db.calls.find((c) => c.op === "upsert" && c.table === "subscriptions");
+    expect((upsert?.args as Record<string, unknown>).status).toBe("active");
+    expect((upsert?.args as Record<string, unknown>).current_period_end).toBe("2026-10-01T00:00:00.000Z");
   });
 
   it("a correctly-signed UNKNOWN event returns 200 (no Creem retry storm) but writes nothing", async () => {
     const db = makeMockSupabase();
     setMockDb(db);
 
-    const body = JSON.stringify({ event_type: "invoice.paid", object: { id: "sub_int" } });
+    const body = JSON.stringify({ eventType: "invoice.paid", object: { id: "sub_int" } });
     const res = await postWebhook(body, await sign(body, WEBHOOK_SECRET), webhookEnv());
 
     expect(res.status).toBe(200);

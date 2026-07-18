@@ -2,8 +2,8 @@
 //
 // Pure-function tests for the Creem webhook dispatch switch.
 //
-// Bug class under guard: "Creem starts emitting a new event_type (e.g.
-// the monthly-renewal event), our switch has no case for it, and we
+// Bug class under guard: "Creem starts emitting a new event type,
+// our switch has no case for it, and we
 // return 200 OK with zero log lines. Production sees rows where
 // created_at == updated_at on every active subscription — see
 // docs/BUGS.md 'Creem webhook silently drops renewal events'."
@@ -32,10 +32,8 @@ const fakeDb = {} as never;
 
 describe("dispatchCreemWebhookEvent — default branch (bug-class guard)", () => {
   it("returns { handled: false } for an unknown event_type", async () => {
-    // Bug class: Creem starts emitting `subscription.renewed` (or
-    // whatever Creem's monthly-renewal event_type turns out to be) and
-    // our switch silently swallows it. The defensive default branch
-    // makes this observable.
+    // Bug class: Creem starts emitting a new event and our switch silently
+    // swallows it. The defensive default branch makes this observable.
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const result = await dispatchCreemWebhookEvent(

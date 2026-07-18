@@ -25,7 +25,7 @@ progress:
 
 **Current milestone:** Stabilize-for-launch. **Shipped 2026-05-29** (on the original Friday deadline). Phases 4-7 deferred to v1.X.
 
-**Current focus:** Milestone in post-ship maintenance. Production Supabase hardening, auto-migrate verification, and the `pgvector` schema warning are complete. Migration `20260718154701_move_vector_extension.sql` moved pgvector to `extensions`, repaired the missing entry-semantic-search objects, preserved all three backend RPCs, and cleared the advisor warning. Leaked-password protection is unavailable on the current Supabase Free plan (the enable request returned HTTP 402), so the remaining actionable tactical items are the Creem renewal webhook (P2), post-launch Synapse insight items (orphan owner_id rows, recompute retry), and the deferred recurrence-level migration/RLS lint.
+**Current focus:** Milestone in post-ship maintenance. Production Supabase hardening, auto-migrate verification, the `pgvector` schema warning, and the Creem renewal webhook parser are complete. Creem renewals are documented `subscription.paid` events; the handler now accepts canonical `eventType` and `current_period_end_date` fields with legacy fallbacks, and both billing surfaces avoid presenting stale dates as future renewals. Remaining actionable tactical items are post-launch Synapse insight items (orphan owner_id rows, recompute retry), the SessionStore composite-key refactor, local proxy activation, and the deferred recurrence-level migration/RLS lint.
 
 ## Current Position
 
@@ -77,7 +77,7 @@ The 5 critical issues diagnosed 2026-05-21/22 during UAT walkthrough:
 
 1. ✅ **RESOLVED** — `/api/events/batch` Cloudflare 1101 on flush. Migrations 018+019+025 applied to PROD Supabase (`45cde12` re-triggered CI post-apply). Queued events flush cleanly.
 
-2. ⏳ **STILL OPEN** — Creem webhook silently drops renewal events. Tracked in `docs/BUGS.md` P2. ~3-line defensive `default:` patch worth shipping any time (surfaces the next missed event in `wrangler tail`); proper fix needs a Creem dashboard look-up to identify which event_type Creem fires on monthly renewal. Plus users still have access (status check uses tier, not period_end), but billing card shows stale date.
+2. ✅ **RESOLVED 2026-07-18** — Creem renewal events are documented `subscription.paid` payloads. The handler incorrectly read `event_type` instead of `eventType` and `current_period_end` instead of `current_period_end_date`. Canonical parsing, legacy fallbacks, signed worker-level tests, and stale-date UI copy are now in place.
 
 3. ❓ **UNVERIFIED** — Test pollution in `~/.synapse/project-map.json`. Not surfaced in recent commits as a known issue; may have been swept during pre-launch hardening. Worth a one-line check next time `~/.synapse/` is inspected.
 
@@ -101,7 +101,7 @@ Default proxy port `7727` (stable for shell rc). Symmetric `proxy disable` and `
 
 - **Supabase auto-migrate — verified 2026-07-18.** Run `29649638136` attempt 2 reached `supabase db push`, removed the stale remote-only `000 delete_user` ledger row, applied migrations 031 and `20260717170215`, and passed. The recurrence-level CI lint that rejects future tables without RLS remains deferred.
 - **Supabase warnings — code-actionable work complete 2026-07-18.** Migration `20260718154701_move_vector_extension.sql` moved pgvector from `public` to `extensions`, qualified all vector operators, restored the missing `entries.embedding`/index/`match_entries` objects, and passed live RPC + advisor checks. The sole remaining warning is leaked-password protection; Supabase returned HTTP 402 because it requires a paid plan, so enabling it is an account-plan decision rather than a repository task.
-- **P2 — Add defensive `default:` to Creem webhook switch.** ~3 lines, no functional risk; surfaces the next missed event_type in `wrangler tail` so the renewal-drop root cause can be diagnosed.
+- **Creem renewal webhook — fixed 2026-07-18.** Creem sends canonical `eventType: subscription.paid` for renewals and `current_period_end_date` in its subscription object. Production read legacy `event_type` and `current_period_end`, so the documented payload missed dispatch and date updates. Canonical fields plus backward-compatible fallbacks and a signed worker-level regression test are now in place; stale-date UI copy is also guarded.
 - **Action item — SessionStore (tool, session_id) keying refactor.** Surfaced during proxy Layer 7 work — `SessionStore` is keyed by `id` alone, not `(source, id)`. File and proxy sources happen to derive IDs differently so collisions don't naturally occur, but the latent fragility is documented in a Synapse insight.
 - **Action item — Orphan owner_id rows.** ~3 projects on user account where `owner_id` is set but no `project_members` entry. Data hygiene from 2026-05-29.
 - **Action item — Add retry to bg recompute's POST /compact.** Transient network blip silently loses ~30s of claude compaction work. From 2026-05-27 Synapse insight.
@@ -212,13 +212,11 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 
 1. **Highest — `synapsesync capture proxy install` + `proxy enable` on this machine.** The proxy daemon is shipped but not yet enabled here. Three commands from the README. Then the user's own claude / cursor / codex sessions get captured through the same backend pipeline as file-watched tools. (Note: re-running `proxy install` on the same machine is idempotent — CA already generated by Layer 9 smoke; keychain install will prompt for confirmation if not already trusted.)
 
-2. **Medium — add defensive `default:` to Creem webhook switch.** ~3 lines, no functional risk. Will surface the next missed event_type in `wrangler tail` so the renewal-drop root cause becomes diagnosable. Proper fix needs a one-off Creem dashboard look-up to identify the event_type name.
+2. **Medium — decide on Phase 4-7 fate.** The 4 deferred phases (Cross-User Collab, Token Brokering, Waitlist Launch, Dogfood/Public Open) are listed in "Deferred Phases" above. Each is a substantial v1.X chunk. Decision: are they part of an upcoming milestone, or descoped indefinitely? The proxy daemon's universal-capture story (Layers 1-9) is a partial alternative to the original "growth" path — claude/cursor/codex/gemini all captured equally — which may shift priorities for Phase 4 collab.
 
-3. **Medium — decide on Phase 4-7 fate.** The 4 deferred phases (Cross-User Collab, Token Brokering, Waitlist Launch, Dogfood/Public Open) are listed in "Deferred Phases" above. Each is a substantial v1.X chunk. Decision: are they part of an upcoming milestone, or descoped indefinitely? The proxy daemon's universal-capture story (Layers 1-9) is a partial alternative to the original "growth" path — claude/cursor/codex/gemini all captured equally — which may shift priorities for Phase 4 collab.
+3. **Low — close the proxy daemon's "Cursor/Claude Desktop/ChatGPT Desktop" spike (task #118).** Requires admin password to install CA in System keychain. Validates the proxy works for GUI tools, not just Node CLIs. ~10 minutes when the user has admin rights handy.
 
-4. **Low — close the proxy daemon's "Cursor/Claude Desktop/ChatGPT Desktop" spike (task #118).** Requires admin password to install CA in System keychain. Validates the proxy works for GUI tools, not just Node CLIs. ~10 minutes when the user has admin rights handy.
-
-5. **Low — address the action items from Synapse insights:** orphan owner_id rows (~3 projects), recompute retry, SessionStore (tool, session_id) keying refactor. None are user-impacting today.
+4. **Low — address the action items from Synapse insights:** orphan owner_id rows (~3 projects), recompute retry, SessionStore (tool, session_id) keying refactor. None are user-impacting today.
 
 **CI invariant:** stay green on metanmai at all times (per `feedback_ci_must_stay_green.md`).
 
@@ -226,7 +224,6 @@ None active. Slice 1b residual (OPS-01 + Plan 05 Sentry) deferred to v1.X / CF-e
 
 | Risk | Severity | Phase | Mitigation |
 |------|----------|-------|------------|
-| Creem webhook silent renewal drop → billing card UI lies | Medium | Billing | Defensive `default:` patch (3 lines) then proper diagnosis |
 | `SessionStore` keyed by `id` not `(source, id)` — latent collision risk | Low | Post-Layer 7 | Sources today derive IDs differently so no collisions naturally occur; refactor when convenient |
 | Proxy daemon onboarding requires manual CA install + env vars in shell rc | Medium | v1.X | Three-command flow exists (`proxy install → paste env → enable`); could automate further with `~/.zshrc` line injection |
 | `~/.synapse/proxy/ca.pem` is a 10-year self-signed CA on user's keychain | Low | v1.X | Documented; rotation is a future slice |
